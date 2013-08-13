@@ -6,13 +6,6 @@ Module "System.Threading" "1.0.0"
 
 namespace "System"
 
-create = coroutine.create
-resume = coroutine.resume
-running = coroutine.running
-status = coroutine.status
-wrap = coroutine.wrap
-yield = coroutine.yield
-
 interface "Threading"
 
 	doc [======[

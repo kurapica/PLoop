@@ -7,10 +7,6 @@ Module "System.Logger" "1.0.0"
 
 namespace "System"
 
-floor = math.floor
-date = date or os.date
-strmatch = strmatch or string.match
-
 class "Logger"
 	inherit "Object"
 
@@ -182,7 +178,6 @@ class "Logger"
 	------------------------------------------------------
 	-- Property
 	------------------------------------------------------
-	-- LogLevel
 	property "LogLevel" {
 		Set = function(self, lvl)
 			if lvl < 0 then lvl = 0 end
@@ -194,7 +189,7 @@ class "Logger"
 		end,
 		Type = Number,
 	}
-	-- MaxLog
+
 	property "MaxLog" {
 		Set = function(self, maxv)
 			if maxv < 1 then maxv = 1 end
@@ -215,6 +210,7 @@ class "Logger"
 		end,
 		Type = Number,
 	}
+
 	doc [======[
 		@name TimeFormat
 		@type property

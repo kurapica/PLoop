@@ -2,7 +2,7 @@
 -- Create Date : 2012/08/10
 -- ChangeLog   :
 
-Module "System.IFIterator" "1.0.0"
+Module "System.IFIterator" "1.0.1"
 
 namespace "System"
 

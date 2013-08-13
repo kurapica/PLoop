@@ -6,9 +6,6 @@ Module "System.Error" "0.1.0"
 
 namespace "System"
 
-error = error
-type = type
-
 class "Error"
 	doc [======[
 		@name Error
