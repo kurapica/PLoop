@@ -1,0 +1,9 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
+    <Script file="Class.lua"/>
+    <Script file="Error.lua"/>
+    <Script file="IFIterator.lua"/>
+	<Script file="Array.lua"/>
+    <Script file="Threading.lua"/>
+    <Script file="Logger.lua"/>
+    <Script file="Recycle.lua"/>
+</Ui>
