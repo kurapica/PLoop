@@ -5068,86 +5068,69 @@ do
 				error("The module is disposed", 2)
 			end
 
-			if type(version) == "string" then
+			-- Check version
+			if type(version) == "number" then
+				version = tostring(version)
+			elseif type(version) == "string" then
 				version = strtrim(version)
 
-				if version == "" then
-					version = nil
-				end
+				if version == "" then version = nil end
+			end
 
-				if tonumber(version) and not version:match("[%.]+") then
-					version = tonumber(version)
-				elseif version then
-					local pre, number = version:match("^([_%a]+).-([%d%.]+)$")
+			if type(version) == "string" then
+				local number = version:match("^.-(%d+[%d%.]*).-$")
 
-					if pre and number then
-						pre = pre:lower()
+				if number then
+					number = number:match("^(.-)[%.]*$")
 
-						if type(info.Version) == "number" then
-							return false
-						elseif type(info.Version) == "string" then
-							local opre, onumber = info.Version:match("^([_%a]+).-([%d%.]+)$")
+					if info.Version then
+						local onumber = info.Version:match("^.-(%d+[%d%.]*).-$")
 
-							if opre	and onumber then
-								if opre < pre then
-									return true
-								elseif opre == pre then
-									local f1 = onumber:gmatch("%d+")
-									local f2 = number:gmatch("%d+")
+						if onumber then
+							onumber = onumber:match("^(.-)[%.]*$")
 
-									local v1 = f1 and f1()
-									local v2 = f2 and f2()
+							local f1 = onumber:gmatch("%d+")
+							local f2 = number:gmatch("%d+")
 
-									local pass = false
+							local v1 = f1 and f1()
+							local v2 = f2 and f2()
 
-									while true do
-										v1 = tonumber(v1)
-										v2 = tonumber(v2)
+							local pass = false
 
-										if not v1 then
-											if v2 then pass = true end
-											break
-										elseif not v2 then
-											break
-										elseif v1 < v2 then
-											pass = true
-											break
-										elseif v1 > v2 then
-											break
-										end
+							while true do
+								v1 = tonumber(v1)
+								v2 = tonumber(v2)
 
-										v1 = f1 and f1()
-										v2 = f2 and f2()
-									end
-
-									-- Clear
-									while f1 and f1() do end
-									while f2 and f2() do end
-
-									-- Check falg
-									return pass
-								else
-									return false
+								if not v1 then
+									if v2 then pass = true end
+									break
+								elseif not v2 then
+									break
+								elseif v1 < v2 then
+									pass = true
+									break
+								elseif v1 > v2 then
+									break
 								end
-							else
+
+								v1 = f1 and f1()
+								v2 = f2 and f2()
+							end
+
+							-- Clear
+							while f1 and f1() do end
+							while f2 and f2() do end
+
+							-- Check falg
+							if pass then
 								return true
 							end
 						else
 							return true
 						end
 					else
-						return false
+						return true
 					end
-				end
-			end
-
-			if type(version) == "number" then
-				if type(info.Version) == "string" then
-					return false
-				elseif type(info.Version) == "number" then
-					return info.Version < version
-				else
-					return true
 				end
 			end
 
@@ -5447,99 +5430,75 @@ do
 			end
 
 			-- Check version
-			if version then
-				if type(version) == "string" then
-					version = strtrim(version)
+			if type(version) == "number" then
+				version = tostring(version)
+			elseif type(version) == "string" then
+				version = strtrim(version)
 
-					if version == "" then
-						version = nil
-					end
+				if version == "" then version = nil end
+			end
 
-					if tonumber(version) then
-						version = tonumber(version)
-					elseif version then
-						local pre, number = version:match("^([_%a]+).-([%d%.]+)$")
+			if type(version) == "string" then
+				local number = version:match("^.-(%d+[%d%.]*).-$")
 
-						if pre and number then
-							pre = pre:lower()
+				if number then
+					number = number:match("^(.-)[%.]*$")
 
-							if type(info.Version) == "number" then
-								error("The version type is conflicted with the current version of the module.", 2)
-							elseif type(info.Version) == "string" then
-								local opre, onumber = info.Version:match("^([_%a]+).-([%d%.]+)$")
+					if info.Version then
+						local onumber = info.Version:match("^.-(%d+[%d%.]*).-$")
 
-								if opre	and onumber then
-									if opre < pre then
-										info.Version = pre .. " " .. tostring(number)
-									elseif opre == pre then
-										local f1 = onumber:gmatch("%d+")
-										local f2 = number:gmatch("%d+")
+						if onumber then
+							onumber = onumber:match("^(.-)[%.]*$")
 
-										local v1 = f1 and f1()
-										local v2 = f2 and f2()
+							local f1 = onumber:gmatch("%d+")
+							local f2 = number:gmatch("%d+")
 
-										local pass = false
+							local v1 = f1 and f1()
+							local v2 = f2 and f2()
 
-										while true do
-											v1 = tonumber(v1)
-											v2 = tonumber(v2)
+							local pass = false
 
-											if not v1 then
-												if v2 then pass = true end
-												break
-											elseif not v2 then
-												break
-											elseif v1 < v2 then
-												pass = true
-												break
-											elseif v1 > v2 then
-												break
-											end
+							while true do
+								v1 = tonumber(v1)
+								v2 = tonumber(v2)
 
-											v1 = f1 and f1()
-											v2 = f2 and f2()
-										end
-
-										-- Clear
-										while f1 and f1() do end
-										while f2 and f2() do end
-
-										-- Check falg
-										if pass then
-											info.Version = pre .. " " .. tostring(number)
-										else
-											error("The version must be greater than the current version of the module.", 2)
-										end
-									else
-										error("The version must be greater than the current version of the module.", 2)
-									end
-								else
-									info.Version = pre .. " " .. tostring(number)
+								if not v1 then
+									if v2 then pass = true end
+									break
+								elseif not v2 then
+									break
+								elseif v1 < v2 then
+									pass = true
+									break
+								elseif v1 > v2 then
+									break
 								end
-							else
-								info.Version = pre .. " " .. tostring(number)
-							end
-						else
-							error("The version string should be started with alphabet and end with number, like 'v108'.")
-						end
-					else
-						if info.Version then
-							error("An available version is need for the module.", 2)
-						end
-					end
-				end
 
-				if type(version) == "number" then
-					if type(info.Version) == "string" then
-						error("The version type is conflicted with the current version of the module.", 2)
-					elseif type(info.Version) == "number" then
-						if info.Version >= version then
-							error("The version number must be greater than the current version of the module.", 2)
+								v1 = f1 and f1()
+								v2 = f2 and f2()
+							end
+
+							-- Clear
+							while f1 and f1() do end
+							while f2 and f2() do end
+
+							-- Check falg
+							if pass then
+								info.Version = version
+							else
+								error("The version must be greater than the current version of the module.", 2)
+							end
 						else
 							info.Version = version
 						end
+					else
+						info.Version = version
 					end
+				else
+					error("The version string should contain version numbers like 'Ver 1.2323.13'.")
 				end
+			elseif info.Version then
+				error("An available version is need for the module.", 2)
 			end
 
 			setfenv(depth + 1, self)
