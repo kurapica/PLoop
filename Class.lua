@@ -5078,7 +5078,7 @@ do
 				if tonumber(version) and not version:match("[%.]+") then
 					version = tonumber(version)
 				elseif version then
-					local pre, number = version:match("^(%a+).-([%d%.]+)$")
+					local pre, number = version:match("^([_%a]+).-([%d%.]+)$")
 
 					if pre and number then
 						pre = pre:lower()
@@ -5086,7 +5086,7 @@ do
 						if type(info.Version) == "number" then
 							return false
 						elseif type(info.Version) == "string" then
-							local opre, onumber = info.Version:match("^(%a+).-([%d%.]+)$")
+							local opre, onumber = info.Version:match("^([_%a]+).-([%d%.]+)$")
 
 							if opre	and onumber then
 								if opre < pre then
@@ -5458,7 +5458,7 @@ do
 					if tonumber(version) then
 						version = tonumber(version)
 					elseif version then
-						local pre, number = version:match("^(%a+).-([%d%.]+)$")
+						local pre, number = version:match("^([_%a]+).-([%d%.]+)$")
 
 						if pre and number then
 							pre = pre:lower()
@@ -5466,11 +5466,11 @@ do
 							if type(info.Version) == "number" then
 								error("The version type is conflicted with the current version of the module.", 2)
 							elseif type(info.Version) == "string" then
-								local opre, onumber = info.Version:match("^(%a+).-([%d%.]+)$")
+								local opre, onumber = info.Version:match("^([_%a]+).-([%d%.]+)$")
 
 								if opre	and onumber then
 									if opre < pre then
-										info.Version = pre .. tostring(number)
+										info.Version = pre .. " " .. tostring(number)
 									elseif opre == pre then
 										local f1 = onumber:gmatch("%d+")
 										local f2 = number:gmatch("%d+")
@@ -5506,7 +5506,7 @@ do
 
 										-- Check falg
 										if pass then
-											info.Version = pre .. tostring(number)
+											info.Version = pre .. " " .. tostring(number)
 										else
 											error("The version must be greater than the current version of the module.", 2)
 										end
@@ -5514,10 +5514,10 @@ do
 										error("The version must be greater than the current version of the module.", 2)
 									end
 								else
-									info.Version = pre .. tostring(number)
+									info.Version = pre .. " " .. tostring(number)
 								end
 							else
-								info.Version = pre .. tostring(number)
+								info.Version = pre .. " " .. tostring(number)
 							end
 						else
 							error("The version string should be started with alphabet and end with number, like 'v108'.")

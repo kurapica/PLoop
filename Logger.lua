@@ -3,7 +3,7 @@
 -- ChangeLog   :
 --				2011/03/17	the msg can be formatted string.
 
-Module "System.Logger" "v1"
+Module "System.Logger" "1.0.0"
 
 namespace "System"
 

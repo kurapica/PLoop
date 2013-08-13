@@ -2,7 +2,7 @@
 -- Create Date : 2012/08/31
 -- ChangeLog   :
 
-Module "System.Recycle" "Version 1.0.0"
+Module "System.Recycle" "1.0.0"
 
 namespace "System"
 

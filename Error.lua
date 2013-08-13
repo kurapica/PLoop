@@ -2,7 +2,7 @@
 -- Create Date : 2012/06/03
 -- ChangeLog   :
 
-Module "System.Error" "Version 1.0.0"
+Module "System.Error" "0.1.0"
 
 namespace "System"
 

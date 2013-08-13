@@ -5,7 +5,7 @@
 --               2012/07/31 Struct supported
 --               2012/09/18 Contain method added
 
-Module "System.Array" "Version 1.0.0"
+Module "System.Array" "1.0.0"
 
 namespace "System"
 
