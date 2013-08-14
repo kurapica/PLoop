@@ -3238,7 +3238,7 @@ do
 	struct "String"
 		function Validate(value)
 			if type(value) ~= "string" then
-				error(format("%s must be a string, got %s.", "%s", type(value)))
+				error(("%s must be a string, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
@@ -3247,7 +3247,7 @@ do
 	struct "Number"
 		function Validate(value)
 			if type(value) ~= "number" then
-				error(format("%s must be a number, got %s.", "%s", type(value)))
+				error(("%s must be a number, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
@@ -3256,7 +3256,7 @@ do
 	struct "Function"
 		function Validate(value)
 			if type(value) ~= "function" then
-				error(format("%s must be a function, got %s.", "%s", type(value)))
+				error(("%s must be a function, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
@@ -3265,7 +3265,7 @@ do
 	struct "Table"
 		function Validate(value)
 			if type(value) ~= "table" then
-				error(format("%s must be a table, got %s.", "%s", type(value)))
+				error(("%s must be a table, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
@@ -3274,7 +3274,7 @@ do
 	struct "Userdata"
 		function Validate(value)
 			if type(value) ~= "userdata" then
-				error(format("%s must be a userdata, got %s.", "%s", type(value)))
+				error(("%s must be a userdata, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
@@ -3283,7 +3283,7 @@ do
 	struct "Thread"
 		function Validate(value)
 			if type(value) ~= "thread" then
-				error(format("%s must be a thread, got %s.", "%s", type(value)))
+				error(("%s must be a thread, got %s."):format("%s", type(value)))
 			end
 			return value
 		end
