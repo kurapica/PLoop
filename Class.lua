@@ -80,6 +80,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/06/26 keyword script -> event
 --               2013/08/05 Remove version check, seal the definition environment
 --               2013/08/12 System.Module is added to create an environment for oop system
+--               2013/08/27 System.Object's method ThreadCall will use the running thread instead of create new one
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -175,7 +176,7 @@ end
 -- Constant Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 72
+	LUA_OOP_VERSION = 73
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -4821,6 +4822,7 @@ do
 		local create = coroutine.create
 		local resume = coroutine.resume
 		local status = coroutine.status
+		local running = coroutine.running
 
 		------------------------------------------------------
 		-- Method
@@ -4977,8 +4979,12 @@ do
 			end
 
 			if type(method) == "function" then
-				local thread = create(method)
-				return resume(thread, self, ...)
+				if not running() then
+					local thread = create(method)
+					return resume(thread, self, ...)
+				else
+					return method(self, ...)
+				end
 			end
 		end
 	endclass "Object"
