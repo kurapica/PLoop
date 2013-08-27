@@ -4980,8 +4980,7 @@ do
 
 			if type(method) == "function" then
 				if not running() then
-					local thread = create(method)
-					return resume(thread, self, ...)
+					return resume(create(method), self, ...)
 				else
 					return method(self, ...)
 				end
