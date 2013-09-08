@@ -46,15 +46,8 @@ class "Error"
 		@type property
 		@desc The error message
 	]======]
-	property "Message" {
-		Get = function(self)
-			return self.__Message
-		end,
-		Set = function(self, value)
-			self.__Message = value
-		end,
-		Type = System.String,
-	}
+	__Auto__{ Storage = "__Message", Type = System.String + nil }
+	property "Message" {}
 
 	--------------------------------------
 	--- Constructor
