@@ -300,6 +300,28 @@ do
 		end
 
 		_MetaNS.__newindex = function(self, key, value)
+			local info = _NSInfo[self]
+
+			if info.Type == TYPE_CLASS and __Attribute__._IsDefined(self, AttributeTargets.Class, __Expandable__) and type(key) == "string" and type(value) == "function" then
+				if not info.Cache4Method[key] and info.ClassEnv[key] == nil then
+					info.Method[key] = value
+					info.ClassEnv[key] = value
+
+					return RefreshCache(self)
+				else
+					error("Can't override the existed features.", 2)
+				end
+			elseif info.Type == TYPE_INTERFACE and __Attribute__._IsDefined(self, AttributeTargets.Interface, __Expandable__) and type(key) == "string" and type(value) == "function" then
+				if not info.Cache4Method[key] and info.InterfaceEnv[key] == nil then
+					info.Method[key] = value
+					info.InterfaceEnv[key] = value
+
+					return RefreshCache(self)
+				else
+					error("Can't override the existed features.", 2)
+				end
+			end
+
 			error(("can't set value for %s, it's readonly."):format(tostring(self)), 2)
 		end
 
@@ -920,7 +942,8 @@ do
 			if info.BaseEnv then
 				local value = info.BaseEnv[key]
 
-				if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				if value ~= nil then
 					rawset(self, key, value)
 				end
 
@@ -1615,7 +1638,8 @@ do
 			if info.BaseEnv then
 				local value = info.BaseEnv[key]
 
-				if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				if value ~= nil then
 					rawset(self, key, value)
 				end
 
@@ -2787,7 +2811,8 @@ do
 			if info.BaseEnv then
 				local value = info.BaseEnv[key]
 
-				if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				if value ~= nil then
 					rawset(self, key, value)
 				end
 
@@ -3427,6 +3452,15 @@ do
 
 				if not info then
 					-- do nothing
+				elseif info.Type == TYPE_STRUCT then
+					-- Check if the value is an enumeration value of this structure
+					flag, new = pcall(ValidateStruct, ns, value)
+
+					if flag then
+						return new
+					end
+
+					new = strtrim(new:match(":%d+:(.*)$") or new)
 				elseif info.Type == TYPE_CLASS then
 					-- Check if the value is an instance of this class
 					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then
@@ -3471,15 +3505,6 @@ do
 					end
 
 					new = ("%s must be a value of [enum]%s ( %s )."):format("%s", tostring(ns), GetShortEnumInfo(ns))
-				elseif info.Type == TYPE_STRUCT then
-					-- Check if the value is an enumeration value of this structure
-					flag, new = pcall(ValidateStruct, ns, value)
-
-					if flag then
-						return new
-					end
-
-					new = strtrim(new:match(":%d+:(.*)$") or new)
 				end
 
 				if new and not msg then
@@ -7385,6 +7410,20 @@ do
 		end
 	endclass "__StructType__"
 
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class}
+	__Final__()
+	__Unique__()
+	class "__Expandable__"
+		inherit "__Attribute__"
+		doc [======[
+			@name __Expandable__
+			@type class
+			@desc Mark the class|interface can receive functions as new methods like :
+				System.Object.Print = function(self) print(self) end, give all object of System.Object a new method.
+				The cost should be expensive, use it carefully.
+		]======]
+	endclass "__Expandable__"
+
 	------------------------------------------------------
 	-- System.Object
 	------------------------------------------------------
@@ -7985,7 +8024,8 @@ do
 			if info.Parent then
 				local value = info.Parent[key]
 
-				if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				if value ~= nil then
 					rawset(self, key, value)
 				end
 
@@ -7996,14 +8036,13 @@ do
 				end
 
 				local value = _G[key]
-				if value then
-					if type(value) == "userdata" or type(value) == "function" or type(value) == "table" then
-						rawset(self, key, value)
-						return rawget(self, key)
-					end
 
-					return value
+				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
+				if value ~= nil then
+					rawset(self, key, value)
 				end
+
+				return value
 			end
 		end
 
