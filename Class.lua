@@ -4189,9 +4189,15 @@ do
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local ret = {}
 
-				for i, v in pairs(noSuper and info.Method or info.Cache4Method) do
-					if v then
-						tinsert(ret, i)
+				for k, v in pairs(noSuper and info.Method or info.Cache4Method) do
+					tinsert(ret, k)
+				end
+
+				if not noSuper then
+					for k, v in pairs(info.Method) do
+						if k:match("^_") then
+							tinsert(ret, k)
+						end
 					end
 				end
 
@@ -4258,7 +4264,8 @@ do
 			local info = ns and _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				return type(info.Cache4Property[propName].Get) == "function"
+				local prop = info.Cache4Property[propName]
+				return (prop.Get or prop.GetMethod or prop.Storage) and true or false
 			end
 		end
 
@@ -4277,7 +4284,8 @@ do
 			local info = ns and _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				return type(info.Cache4Property[propName].Set) == "function"
+				local prop = info.Cache4Property[propName]
+				return (prop.Set or prop.SetMethod or prop.Storage) and true or false
 			end
 		end
 
