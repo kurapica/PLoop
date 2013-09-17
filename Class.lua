@@ -88,6 +88,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/09/08 Reduce the cpu cost for methods, properties, events system
 --               2013/09/09 Improve the property system
 --               2013/09/08 New property system
+--               2013/09/09 Improve the cache system to improve performance
+--               2013/09/11 Fix Reflector.Help & ParseEnum
+--               2013/09/17 The basic structs can validate values like custom structs now
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -207,7 +210,7 @@ end
 -- Constant Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 74
+	LUA_OOP_VERSION = 76
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -3059,6 +3062,20 @@ do
 			end
 		end
 
+		if max == 1 and type(info.UserValidate) == "function"  then
+			local ok, ret = pcall(info.UserValidate, ...)
+
+			if not ok then
+				ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+
+				ret = ret:gsub("%%s", "[".. info.Name .."]")
+
+				error(ret, 3)
+			end
+
+			return ret
+		end
+
 		error(("struct '%s' is abstract."):format(tostring(strt)), 3)
 	end
 
@@ -3799,6 +3816,7 @@ do
 		doc [======[
 			@name FireObjectEvent
 			@type method
+			@method interface
 			@desc Fire an object's event, to trigger the object's event handlers
 			@param object the object
 			@param event the event name
@@ -3806,7 +3824,12 @@ do
 			@return nil
 		]======]
 		function FireObjectEvent(self, sc, ...)
-			if not GetObjectClass(self) then
+			-- No more check , just fire the event as quick as we can
+			local handler = rawget(self, "__Events")
+			handler = handler and handler[sc]
+			return handler and handler(self, ...)
+
+			--[[if not GetObjectClass(self) then
 				error("Usage : Reflector.FireObjectEvent(object, event[, ...]) : 'object' - object expected.")
 			end
 
@@ -3816,12 +3839,13 @@ do
 
 			if rawget(self, "__Events") and rawget(self.__Events, sc) then
 				return rawget(self.__Events, sc)(self, ...)
-			end
+			end--]]
 		end
 
 		doc [======[
 			@name GetCurrentNameSpace
 			@type method
+			@method interface
 			@desc Get the namespace used by the environment
 			@param env table
 			@param rawOnly boolean, rawget data from the env if true
@@ -3836,6 +3860,7 @@ do
 		doc [======[
 			@name SetCurrentNameSpace
 			@type method
+			@method interface
 			@desc set the namespace used by the environment
 			@param ns the namespace that set for the environment
 			@param env table
@@ -3850,6 +3875,7 @@ do
 		doc [======[
 			@name ForName
 			@type method
+			@method interface
 			@desc Get the namespace for the name
 			@param name the namespace's name, split by "."
 			@return namespace the namespace
@@ -3862,6 +3888,7 @@ do
 		doc [======[
 			@name GetType
 			@type method
+			@method interface
 			@desc Get the class|enum|struct|interface for the namespace
 			@param name the namespace
 			@return type
@@ -3876,6 +3903,7 @@ do
 		doc [======[
 			@name GetName
 			@type method
+			@method interface
 			@desc Get the name for the namespace
 			@param namespace the namespace to query
 			@return name
@@ -3890,6 +3918,7 @@ do
 		doc [======[
 			@name GetFullName
 			@type method
+			@method interface
 			@desc Get the full name for the namespace
 			@param namespace the namespace to query
 			@return fullname
@@ -3904,6 +3933,7 @@ do
 		doc [======[
 			@name GetSuperClass
 			@type method
+			@method interface
 			@desc Get the superclass for the class
 			@param class the class object to query
 			@return superclass
@@ -3918,6 +3948,7 @@ do
 		doc [======[
 			@name IsNameSpace
 			@type method
+			@method interface
 			@desc Check if the object is a NameSpace
 			@param object the object to query
 			@return boolean true if the object is a NameSpace
@@ -3932,6 +3963,7 @@ do
 		doc [======[
 			@name IsClass
 			@type method
+			@method interface
 			@desc Check if the namespace is a class
 			@param object
 			@return boolean true if the object is a class
@@ -3946,6 +3978,7 @@ do
 		doc [======[
 			@name IsStruct
 			@type method
+			@method interface
 			@desc Check if the namespace is a struct
 			@param object
 			@return boolean true if the object is a struct
@@ -3960,6 +3993,7 @@ do
 		doc [======[
 			@name IsEnum
 			@type method
+			@method interface
 			@desc Check if the namespace is an enum
 			@param object
 			@return boolean true if the object is a enum
@@ -3974,6 +4008,7 @@ do
 		doc [======[
 			@name IsInterface
 			@type method
+			@method interface
 			@desc Check if the namespace is an interface
 			@param object
 			@return boolean true if the object is an Interface
@@ -3988,6 +4023,7 @@ do
 		doc [======[
 			@name IsFinal
 			@type method
+			@method interface
 			@desc Check if the class|interface is final, can't be re-defined
 			@param object
 			@return boolean true if the class|interface is final
@@ -4002,6 +4038,7 @@ do
 		doc [======[
 			@name IsNonInheritable
 			@type method
+			@method interface
 			@desc Check if the class|interface is non-inheritable
 			@param object
 			@return boolean true if the class|interface is non-inheritable
@@ -4016,6 +4053,7 @@ do
 		doc [======[
 			@name GetSubNamespace
 			@type method
+			@method interface
 			@desc Get the sub namespace of the namespace
 			@param namespace
 			@return table the sub-namespace list
@@ -4042,6 +4080,7 @@ do
 		doc [======[
 			@name GetExtendInterfaces
 			@type method
+			@method interface
 			@desc Get the extend interfaces of the class
 			@param class
 			@return table the extend interface list
@@ -4066,6 +4105,7 @@ do
 		doc [======[
 			@name GetAllExtendInterfaces
 			@type method
+			@method interface
 			@desc Get all the extend interfaces of the class
 			@param class
 			@return table the full extend interface list in the inheritance tree
@@ -4090,6 +4130,7 @@ do
 		doc [======[
 			@name GetChildClasses
 			@type method
+			@method interface
 			@desc Get the child classes of the class
 			@param class
 			@return table the child class list
@@ -4114,6 +4155,7 @@ do
 		doc [======[
 			@name GetEvents
 			@type method
+			@method interface
 			@desc Get the events of the class
 			@format class|interface[, noSuper]
 			@param class|interface the class or interface to query
@@ -4144,6 +4186,7 @@ do
 		doc [======[
 			@name GetProperties
 			@type method
+			@method interface
 			@desc Get the properties of the class
 			@format class|interface[, noSuper]
 			@param class|interface the class or interface to query
@@ -4174,6 +4217,7 @@ do
 		doc [======[
 			@name GetMethods
 			@type method
+			@method interface
 			@desc Get the methods of the class
 			@format class|interface[, noSuper]
 			@param class|interface the class or interface to query
@@ -4210,6 +4254,7 @@ do
 		doc [======[
 			@name GetPropertyType
 			@type method
+			@method interface
 			@desc Get the property type of the class
 			@param class|interface
 			@param propName the property name
@@ -4231,6 +4276,7 @@ do
 		doc [======[
 			@name HasProperty
 			@type method
+			@method interface
 			@desc whether the property is existed
 			@param class|interface
 			@param propName
@@ -4252,6 +4298,7 @@ do
 		doc [======[
 			@name IsPropertyReadable
 			@type method
+			@method interface
 			@desc whether the property is readable
 			@param class|interface
 			@param propName
@@ -4272,6 +4319,7 @@ do
 		doc [======[
 			@name IsPropertyWritable
 			@type method
+			@method interface
 			@desc whether the property is writable
 			@param class|interface
 			@param propName
@@ -4292,6 +4340,7 @@ do
 		doc [======[
 			@name GetEnums
 			@type method
+			@method interface
 			@desc Get the enums of the enum
 			@param enum
 			@return table the enum index list
@@ -4318,6 +4367,7 @@ do
 		doc [======[
 			@name ParseEnum
 			@type method
+			@method interface
 			@desc Get the enum index of the enum value
 			@param enum
 			@param value
@@ -4331,9 +4381,17 @@ do
 				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(value) == "number" then
 					local ret = {}
 
-					for n, v in pairs(_NSInfo[ns].Enum) do
-						if ValidateFlags(v, value) then
-							tinsert(ret, n)
+					if value == 0 then
+						for n, v in pairs(_NSInfo[ns].Enum) do
+							if v == value then
+								return n
+							end
+						end
+					else
+						for n, v in pairs(_NSInfo[ns].Enum) do
+							if ValidateFlags(v, value) then
+								tinsert(ret, n)
+							end
 						end
 					end
 
@@ -4351,6 +4409,7 @@ do
 		doc [======[
 			@name ValidateFlags
 			@type method
+			@method interface
 			@desc  hether the value is contains on the target value
 			@param checkValue like 1, 2, 4, 8, ...
 			@param targetValue like 3 : (1 + 2)
@@ -4364,6 +4423,7 @@ do
 		doc [======[
 			@name HasEvent
 			@type method
+			@method interface
 			@desc Check if the class|interface has that event
 			@param class|interface
 			@param event the event handler name
@@ -4383,6 +4443,7 @@ do
 		doc [======[
 			@name GetStructType
 			@type method
+			@method interface
 			@desc Get the type of the struct
 			@param struct
 			@return string
@@ -4400,6 +4461,7 @@ do
 		doc [======[
 			@name GetStructArrayElement
 			@type method
+			@method interface
 			@desc Get the array element type of the struct
 			@param ns
 			@return type the array element's type
@@ -4417,6 +4479,7 @@ do
 		doc [======[
 			@name GetStructParts
 			@type method
+			@method interface
 			@desc Get the parts of the struct
 			@param struct
 			@return table struct part name list
@@ -4441,6 +4504,7 @@ do
 		doc [======[
 			@name GetStructPart
 			@type method
+			@method interface
 			@desc Get the part's type of the struct
 			@param struct
 			@param part the part's name
@@ -4464,6 +4528,7 @@ do
 		doc [======[
 			@name IsSuperClass
 			@type method
+			@method interface
 			@desc Check if this first arg is a child class of the next arg
 			@param childclass
 			@param superclass
@@ -4480,6 +4545,7 @@ do
 		doc [======[
 			@name IsExtendedInterface
 			@type method
+			@method interface
 			@desc Check if the class is extended from the interface
 			@param class|interface
 			@param interface
@@ -4496,6 +4562,7 @@ do
 		doc [======[
 			@name GetObjectClass
 			@type method
+			@method interface
 			@desc Get the class type of this object
 			@param object
 			@return class the object's class
@@ -4508,6 +4575,7 @@ do
 		doc [======[
 			@name ObjectIsClass
 			@type method
+			@method interface
 			@desc Check if this object is an instance of the class
 			@param object
 			@param class
@@ -4522,6 +4590,7 @@ do
 		doc [======[
 			@name ObjectIsInterface
 			@type method
+			@method interface
 			@desc Check if this object is an instance of the interface
 			@param object
 			@param interface
@@ -4536,6 +4605,7 @@ do
 		doc [======[
 			@name ActiveThread
 			@type method
+			@method interface
 			@desc Active thread mode for special events.
 			@param object
 			@param ... event handler name list
@@ -4560,6 +4630,7 @@ do
 		doc [======[
 			@name IsThreadActivated
 			@type method
+			@method interface
 			@desc Whether the thread mode is activated for special events.
 			@param obect
 			@param event
@@ -4580,6 +4651,7 @@ do
 		doc [======[
 			@name InactiveThread
 			@type method
+			@method interface
 			@desc Inactive thread mode for special events.
 			@param object
 			@param ... event name list
@@ -4604,6 +4676,7 @@ do
 		doc [======[
 			@name BlockEvent
 			@type method
+			@method interface
 			@desc Block event for object
 			@param object
 			@param ... the event handler name list
@@ -4628,6 +4701,7 @@ do
 		doc [======[
 			@name IsEventBlocked
 			@type method
+			@method interface
 			@desc Whether the event is blocked for object
 			@param object
 			@param event
@@ -4648,6 +4722,7 @@ do
 		doc [======[
 			@name UnBlockEvent
 			@type method
+			@method interface
 			@desc Un-Block event for object
 			@param object
 			@param ... event handler name list
@@ -4698,6 +4773,7 @@ do
 		doc [======[
 			@name Validate
 			@type method
+			@method interface
 			@desc Validating the value to the given type.
 			@format type, value, name[, prefix[, stacklevel]]
 			@param type such like Object+String+nil
@@ -4770,6 +4846,7 @@ do
 		doc [======[
 			@name EnableDocumentSystem
 			@type method
+			@method interface
 			@desc Enable or disbale the document system, only effect later created document
 			@param enabled true to enable the document system
 			@return nil
@@ -4782,6 +4859,7 @@ do
 		doc [======[
 			@name IsDocumentSystemEnabled
 			@type method
+			@method interface
 			@desc Whether the document system is enabled
 			@return boolean
 		]======]
@@ -4792,6 +4870,7 @@ do
 		doc [======[
 			@name GetDocument
 			@type method
+			@method interface
 			@desc Get the document settings
 			@format namespace, docType, name[, part]
 			@param namespace
@@ -4811,6 +4890,7 @@ do
 		doc [======[
 			@name HasDocument
 			@type method
+			@method interface
 			@desc Check if has the document
 			@param namespace
 			@param doctype
@@ -4824,6 +4904,7 @@ do
 		doc [======[
 			@name Help
 			@type method
+			@method interface
 			@desc Get the document detail
 			@format class|interface[, event|property|method, name]
 			@format class|interface, name
@@ -4833,6 +4914,103 @@ do
 			@param name the name to query
 			@return string the detail information
 		]======]
+
+		-- The cache for constructor parameters
+		_BuildSubNamespaceCache = setmetatable({}, {
+			__call = function(self, key)
+				if type(key) == "table" then
+					wipe(key)
+					tinsert(self, key)
+				else
+					if #self > 0 then
+						return tremove(self)
+					else
+						local ret = {}
+
+						return ret
+					end
+				end
+			end,
+		})
+
+		local function buildSubNamespace(ns)
+			local result = ""
+
+			local _Enums = _BuildSubNamespaceCache()
+			local _Structs = _BuildSubNamespaceCache()
+			local _Classes = _BuildSubNamespaceCache()
+			local _Interfaces = _BuildSubNamespaceCache()
+			local _Namespaces = _BuildSubNamespaceCache()
+
+			local subNS = GetSubNamespace(ns)
+
+			if subNS and next(subNS) then
+				for _, sns in ipairs(subNS) do
+					sns = ns[sns]
+
+					if IsEnum(sns) then
+						tinsert(_Enums, sns)
+					elseif IsStruct(sns) then
+						tinsert(_Structs, sns)
+					elseif IsInterface(sns) then
+						tinsert(_Interfaces, sns)
+					elseif IsClass(sns) then
+						tinsert(_Classes, sns)
+					else
+						tinsert(_Namespaces, sns)
+					end
+				end
+
+				if next(_Enums) then
+					result = result .. "\n\n Sub Enum :"
+
+					for _, sns in ipairs(_Enums) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Structs) then
+					result = result .. "\n\n Sub Struct :"
+
+					for _, sns in ipairs(_Structs) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Interfaces) then
+					result = result .. "\n\n Sub Interface :"
+
+					for _, sns in ipairs(_Interfaces) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Classes) then
+					result = result .. "\n\n Sub Class :"
+
+					for _, sns in ipairs(_Classes) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Namespaces) then
+					result = result .. "\n\n Sub NameSpace :"
+
+					for _, sns in ipairs(_Namespaces) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+			end
+
+			_BuildSubNamespaceCache(_Enums)
+			_BuildSubNamespaceCache(_Structs)
+			_BuildSubNamespaceCache(_Classes)
+			_BuildSubNamespaceCache(_Interfaces)
+			_BuildSubNamespaceCache(_Namespaces)
+
+			return result
+		end
+
 		function Help(ns, doctype, name)
 			if type(ns) == "string" then ns = ForName(ns) end
 
@@ -4841,8 +5019,15 @@ do
 
 				if info.Type == TYPE_ENUM then
 					-- Enum
-					local result = "[Enum] " .. GetFullName(ns) .. " :"
+					local result
 					local value
+
+					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
+						result = "[Enum][__Flags__] " .. GetFullName(ns) .. " :"
+					else
+						result = "[Enum] " .. GetFullName(ns) .. " :"
+					end
+
 					for _, enums in ipairs(GetEnums(ns)) do
 						value = ns[enums]
 
@@ -4860,12 +5045,7 @@ do
 					local result = "[Struct] " .. GetFullName(ns) .. " :"
 
 					-- SubNameSpace
-					if info.SubNS and next(info.SubNS) then
-						result = result .. "\n  Sub NameSpace :"
-						for _, sns in ipairs(GetSubNamespace(ns)) do
-							result = result .. "\n    " .. sns
-						end
-					end
+					result = result .. buildSubNamespace(ns)
 
 					if info.SubType == _STRUCT_TYPE_MEMBER then
 						-- Part
@@ -4873,7 +5053,7 @@ do
 						local parts = GetStructParts(ns)
 
 						if parts and next(parts) then
-							result = result .. "\n  Member:"
+							result = result .. "\n\n  Member:"
 
 							for _, name in ipairs(parts) do
 								parttype = GetStructPart(ns, name)
@@ -4904,7 +5084,7 @@ do
 								result = result .. "\n    " .. name .. " =" .. typestring
 							end
 						else
-							result = result .. "\n  Basic Element"
+							result = result .. "\n\n  Basic Element"
 						end
 					elseif info.SubType == _STRUCT_TYPE_ARRAY then
 						local parttype = info.ArrayElement
@@ -4932,18 +5112,26 @@ do
 								typestring = typestring:sub(3, -1)
 							end
 
-							result = result .. "\n  Element :\n    Type =" .. typestring
+							result = result .. "\n\n  Element :\n    Type =" .. typestring
 						end
 					end
 					return result
 				elseif info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
 					-- Interface & Class
 					if type(doctype) ~= "string" then
-						local result
+						local result = ""
 						local desc
 
 						if info.Type == TYPE_INTERFACE then
-							result = "[Interface] " .. GetFullName(ns) .. " :"
+							if info.IsFinal then
+								result = result .. "[__Final__]\n"
+							end
+
+							if info.IsNonInheritable then
+								result = result .. "[__NonInheritable__]\n"
+							end
+
+							result = result .. "[Interface] " .. GetFullName(ns) .. " :"
 
 							if HasDocumentPart(ns, "interface", GetName(ns)) then
 								desc = GetDocumentPart(ns, "interface", GetName(ns), "desc")
@@ -4951,7 +5139,37 @@ do
 								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
 							end
 						else
-							result = "[Class] " .. GetFullName(ns) .. " :"
+							if info.IsFinal then
+								result = result .. "[__Final__]\n"
+							end
+
+							if info.IsNonInheritable then
+								result = result .. "[__NonInheritable__]\n"
+							end
+
+							if __Attribute__._IsDefined(ns, AttributeTargets.Class, __Unique__) then
+								result = result .. "[__Unique__]\n"
+							end
+
+							if IsChildClass(__Attribute__, ns) then
+								local usage = __Attribute__._GetClassAttribute(ns, __AttributeUsage__)
+
+								if usage then
+									result = result .. "[__AttributeUsage__{ "
+
+									result = result .. "AttributeTarget = " .. Serialize(AttributeTargets, usage.AttributeTarget) .. ", "
+
+									result = result .. "Inherited = " .. tostring(usage.Inherited and true or false) .. ", "
+
+									result = result .. "AllowMultiple = " .. tostring(usage.AllowMultiple and true or false) .. ", "
+
+									result = result .. "RunOnce = " .. tostring(usage.RunOnce and true or false)
+
+									result = result .. " }]\n"
+								end
+							end
+
+							result = result .. "[Class] " .. GetFullName(ns) .. " :"
 
 							if HasDocumentPart(ns, "class", GetName(ns)) then
 								desc = GetDocumentPart(ns, "class", GetName(ns), "desc")
@@ -4963,33 +5181,28 @@ do
 						-- Desc
 						desc = desc and desc()
 						if desc then
-							result = result .. "\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
+							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
 						end
 
 						-- Inherit
 						if info.SuperClass then
-							result = result .. "\n  Super Class :\n    " .. GetFullName(info.SuperClass)
+							result = result .. "\n\n  Super Class :\n    " .. GetFullName(info.SuperClass)
 						end
 
 						-- Extend
 						if info.ExtendInterface and next(info.ExtendInterface) then
-							result = result .. "\n  Extend Interface :"
+							result = result .. "\n\n  Extend Interface :"
 							for _, IF in ipairs(info.ExtendInterface) do
 								result = result .. "\n    " .. GetFullName(IF)
 							end
 						end
 
 						-- SubNameSpace
-						if info.SubNS and next(info.SubNS) then
-							result = result .. "\n  Sub NameSpace :"
-							for _, sns in ipairs(GetSubNamespace(ns)) do
-								result = result .. "\n    " .. sns
-							end
-						end
+						result = result .. buildSubNamespace(ns)
 
 						-- Event
 						if next(info.Event) then
-							result = result .. "\n  Event :"
+							result = result .. "\n\n  Event :"
 							for sc in pairs(info.Event) do
 								result = result .. "\n    " .. sc
 							end
@@ -4997,7 +5210,7 @@ do
 
 						-- Property
 						if next(info.Property) then
-							result = result .. "\n  Property :"
+							result = result .. "\n\n  Property :"
 							for prop in pairs(info.Property) do
 								result = result .. "\n    " .. prop
 							end
@@ -5005,7 +5218,7 @@ do
 
 						-- Method
 						if next(info.Method) then
-							result = result .. "\n  Method :"
+							result = result .. "\n\n  Method :"
 							for method in pairs(info.Method) do
 								result = result .. "\n    " .. method
 							end
@@ -5013,10 +5226,10 @@ do
 
 						-- Need
 						if info.Type == TYPE_INTERFACE then
-							desc = GetDocumentPart(ns, "interface", GetName(ns), "need")
+							desc = GetDocumentPart(ns, "interface", GetName(ns), "overridable")
 
 							if desc then
-								result = result .. "\n  Need :"
+								result = result .. "\n\n  Overridable :"
 
 								for need, info in desc do
 									if info and info:len() > 0 then
@@ -5051,7 +5264,7 @@ do
 
 								if desc then
 									-- Constructor
-									result = result .. "\n  Constructor :"
+									result = result .. "\n\n  Constructor :"
 									if isFormat then
 										for fmt in desc do
 											result = result .. "\n    " .. GetName(ns) .. "(" .. fmt .. ")"
@@ -5076,7 +5289,7 @@ do
 									-- Params
 									desc = GetDocumentPart(ns, "class", GetName(ns), "param") or GetDocumentPart(ns, "default", GetName(ns), "param")
 									if desc then
-										result = result .. "\n  Parameter :"
+										result = result .. "\n\n  Parameter :"
 										for param, info in desc do
 											if info and info:len() > 0 then
 												result = result .. "\n    " .. param .. " - " .. info
@@ -5136,19 +5349,19 @@ do
 						local desc = hasDocument and GetDocumentPart(ns, doctype, name, "desc")
 						desc = desc and desc()
 						if desc then
-							result = result .. "\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
+							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
 						end
 
 						if querytype == "event" then
 							-- Format
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
 							if desc then
-								result = result .. "\n  Format :"
+								result = result .. "\n\n  Format :"
 								for fmt in desc do
 									result = result .. "\n    " .. "function object:" .. name .. "(" .. fmt .. ")\n        -- Handle the event\n    end"
 								end
 							else
-								result = result .. "\n  Format :\n    function object:" .. name .. "("
+								result = result .. "\n\n  Format :\n    function object:" .. name .. "("
 
 								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
 
@@ -5171,7 +5384,7 @@ do
 							-- Params
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
 							if desc then
-								result = result .. "\n  Parameter :"
+								result = result .. "\n\n  Parameter :"
 								for param, info in desc do
 									if info and info:len() > 0 then
 										result = result .. "\n    " .. param .. " - " .. info
@@ -5208,31 +5421,29 @@ do
 									typestring = typestring:sub(3, -1)
 								end
 
-								result = result .. "\n  Type :\n    " .. typestring
+								result = result .. "\n\n  Type :\n    " .. typestring
 							end
 
 							-- Readonly
-							result = result .. "\n  Readable :\n    " .. tostring(IsPropertyReadable(ns, name))
+							result = result .. "\n\n  Readable :\n    " .. tostring(IsPropertyReadable(ns, name))
 
 							-- Writable
-							result = result .. "\n  Writable :\n    " .. tostring(IsPropertyWritable(ns, name))
+							result = result .. "\n\n  Writable :\n    " .. tostring(IsPropertyWritable(ns, name))
 						elseif querytype == "method" then
 							local isGlobal = false
 
-							if info.Type == TYPE_INTERFACE then
-								if name:match("^_") then
+							if name:match("^_") then
+								isGlobal = true
+							else
+								desc = hasDocument and GetDocumentPart(ns, doctype, name, "method")
+								if desc and desc() == "interface" then
 									isGlobal = true
-								else
-									desc = hasDocument and GetDocumentPart(ns, doctype, name, "method")
-									if desc and desc() == "interface" then
-										isGlobal = true
-									end
 								end
 							end
 
 							-- Format
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
-							result = result .. "\n  Format :"
+							result = result .. "\n\n  Format :"
 							if desc then
 								for fmt in desc do
 									if isGlobal then
@@ -5269,7 +5480,7 @@ do
 							-- Params
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
 							if desc then
-								result = result .. "\n  Parameter :"
+								result = result .. "\n\n  Parameter :"
 								for param, info in desc do
 									if info and info:len() > 0 then
 										result = result .. "\n    " .. param .. " - " .. info
@@ -5282,7 +5493,7 @@ do
 							-- ReturnFormat
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "returnformat")
 							if desc then
-								result = result .. "\n  Return Format :"
+								result = result .. "\n\n  Return Format :"
 								for fmt in desc do
 									result = result .. "\n    " .. fmt
 								end
@@ -5291,7 +5502,7 @@ do
 							-- Returns
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "return")
 							if desc then
-								result = result .. "\n  Return :"
+								result = result .. "\n\n  Return :"
 								for ret, info in desc do
 									if info and info:len() > 0 then
 										result = result .. "\n    " .. ret .. " - " .. info
@@ -5307,7 +5518,7 @@ do
 						-- Usage
 						desc = hasDocument and GetDocumentPart(ns, doctype, name, "usage")
 						if desc then
-							result = result .. "\n  Usage :"
+							result = result .. "\n\n  Usage :"
 							for usage in desc do
 								result = result .. "\n    " .. usage:gsub("<br>", "\n    ")
 							end
@@ -5328,16 +5539,11 @@ do
 					-- Desc
 					desc = desc and desc()
 					if desc then
-						result = result .. "\n  Description :\n    " .. desc
+						result = result .. "\n\n  Description :\n    " .. desc
 					end
 
 					-- SubNameSpace
-					if info.SubNS and next(info.SubNS) then
-						result = result .. "\n  Sub NameSpace :"
-						for _, sns in ipairs(GetSubNamespace(ns)) do
-							result = result .. "\n    " .. sns
-						end
-					end
+					result = result .. buildSubNamespace(ns)
 
 					return result
 				end
@@ -5347,6 +5553,7 @@ do
 		doc [======[
 			@name Serialize
 			@type method
+			@method interface
 			@desc Serialize the data
 			@param type the data't type
 			@param data the data
@@ -5368,9 +5575,24 @@ do
 			if not rawget(_NSInfo, ns) then return end
 
 			if Reflector.IsEnum(ns) then
-				local str = Reflector.ParseEnum(ns, data)
+				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(data) == "number" then
+					local ret = {Reflector.ParseEnum(ns, data)}
 
-				return str and (tostring(ns) .. "." .. str)
+					local result = ""
+
+					for i, str in ipairs(ret) do
+						if i > 1 then
+							result = result .. " + "
+						end
+						result = result .. (tostring(ns) .. "." .. str)
+					end
+
+					return result
+				else
+					local str = Reflector.ParseEnum(ns, data)
+
+					return str and (tostring(ns) .. "." .. str)
+				end
 			elseif Reflector.IsClass(ns) then
 				-- Class handle the serialize itself with __tostring
 				return tostring(data)
@@ -7619,9 +7841,9 @@ do
 		------------------------------------------------------
 		-- Meta-methods
 		------------------------------------------------------
-		function __tostring(self)
+		--[[function __tostring(self)
 			return "[Object]" .. tostring(getmetatable(self)) .. "()"
-		end
+		end--]]
 	endclass "Object"
 
 	------------------------------------------------------
@@ -8180,15 +8402,15 @@ do
 
 	function Install_OOP(env)
 		if type(env) == "table" then
-			env.partinterface = partinterface
-			env.partclass = partclass
-			env.interface = interface
-			env.class = class
-			env.enum = enum
-			env.namespace = namespace
-			env.struct = struct
-			env.import = import_install
-			env.Module = Module
+			env.partinterface = env.partinterface or partinterface
+			env.partclass = env.partclass or partclass
+			env.interface = env.interface or interface
+			env.class = env.class or class
+			env.enum = env.enum or enum
+			env.namespace = env.namespace or namespace
+			env.struct = env.struct or struct
+			env.import = env.import or import_install
+			env.Module = env.Module or Module
 		end
 	end
 
