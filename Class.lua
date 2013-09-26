@@ -91,6 +91,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/09/09 Improve the cache system to improve performance
 --               2013/09/11 Fix Reflector.Help & ParseEnum
 --               2013/09/17 The basic structs can validate values like custom structs now
+--               2013/09/24 No single class/interface environment limit
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -210,7 +211,7 @@ end
 -- Constant Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 76
+	LUA_OOP_VERSION = 78
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -306,22 +307,20 @@ do
 			local info = _NSInfo[self]
 
 			if info.Type == TYPE_CLASS and __Attribute__._IsDefined(self, AttributeTargets.Class, __Expandable__) and type(key) == "string" and type(value) == "function" then
-				if not info.Cache4Method[key] and info.ClassEnv[key] == nil then
+				if not info.Cache4Method[key] then
 					info.Method[key] = value
-					info.ClassEnv[key] = value
 
 					return RefreshCache(self)
 				else
-					error("Can't override the existed features.", 2)
+					error("Can't override the existed method.", 2)
 				end
 			elseif info.Type == TYPE_INTERFACE and __Attribute__._IsDefined(self, AttributeTargets.Interface, __Expandable__) and type(key) == "string" and type(value) == "function" then
-				if not info.Cache4Method[key] and info.InterfaceEnv[key] == nil then
+				if not info.Cache4Method[key] then
 					info.Method[key] = value
-					info.InterfaceEnv[key] = value
 
 					return RefreshCache(self)
 				else
-					error("Can't override the existed features.", 2)
+					error("Can't override the existed method.", 2)
 				end
 			end
 
@@ -736,27 +735,10 @@ do
 			end
 		end
 
-		function CloneWithoutOverride4Method(dest, src, method, owner)
-			if method then
-				for key, prototype in pairs(method) do
-					if type(src[key]) == "function" then
-						if __Attribute__ and prototype ~= src[key] then
-							src[key] = __Attribute__._CloneAttributes(prototype, src[key], AttributeTargets.Method, owner, key, true) or src[key]
-							method[key] = src[key]
-						end
-
-						if not key:match("^_") then
-							dest[key] = method[key]
-						end
-					else
-						method[key] = nil
-					end
-				end
-			else
-				for key, value in pairs(src) do
-					if dest[key] == nil then
-						dest[key] = value
-					end
+		function CloneWithoutOverride4Method(dest, src)
+			for key, value in pairs(src) do
+				if not dest[key] and not key:match("^_") then
+					dest[key] = src[key]
 				end
 			end
 		end
@@ -805,7 +787,7 @@ do
 			-- Cache4Method
 			wipe(info.Cache4Method)
 			--- self method
-			CloneWithoutOverride4Method(info.Cache4Method, info.ClassEnv or info.InterfaceEnv, info.Method, info.Owner)
+			CloneWithoutOverride4Method(info.Cache4Method, info.Method)
 			--- superclass method
 			if info.SuperClass then
 				CloneWithoutOverride4Method(info.Cache4Method, _NSInfo[info.SuperClass].Cache4Method)
@@ -900,6 +882,7 @@ do
 	do
 		_MetaIFEnv.__index = function(self, key)
 			local info = _IFEnv2Info[self]
+			local value
 
 			-- Check owner
 			if key == info.Name then
@@ -914,11 +897,13 @@ do
 			-- Check namespace
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
-					rawset(self, key, info.NameSpace)
-					return rawget(self, key)
+					value = info.NameSpace
+					rawset(self, key, value)
+					return value
 				elseif info.NameSpace[key] then
-					rawset(self, key, info.NameSpace[key])
-					return rawget(self, key)
+					value = info.NameSpace[key]
+					rawset(self, key, value)
+					return value
 				end
 			end
 
@@ -926,31 +911,32 @@ do
 			if info.Import4Env then
 				for _, ns in ipairs(info.Import4Env) do
 					if key == _NSInfo[ns].Name then
-						rawset(self, key, ns)
-						return rawget(self, key)
+						value = ns
+						rawset(self, key, value)
+						return value
 					elseif ns[key] then
-						rawset(self, key, ns[key])
-						return rawget(self, key)
+						value = ns[key]
+						rawset(self, key, value)
+						return value
 					end
 				end
 			end
 
 			-- Check base namespace
-			if GetNameSpace(GetDefaultNameSpace(), key) then
-				rawset(self, key, GetNameSpace(GetDefaultNameSpace(), key))
-				return rawget(self, key)
+			value = GetNameSpace(GetDefaultNameSpace(), key)
+			if value then
+				rawset(self, key, value)
+				return value
 			end
 
 			-- Check Base
-			if info.BaseEnv then
-				local value = info.BaseEnv[key]
+			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+				value = info[self][key]
 
-				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
 				if value ~= nil then
 					rawset(self, key, value)
+					return value
 				end
-
-				return value
 			end
 		end
 
@@ -963,16 +949,16 @@ do
 
 			if key == info.Name then
 				if type(value) == "function" then
-					rawset(info, "Constructor", value)
+					info.Initializer = value
 					return
 				else
-					error(("'%s' must be a function to initialize the object."):format(key), 2)
+					error(("'%s' must be a function as the Initializer."):format(key), 2)
 				end
 			end
 
 			if key == DISPOSE_METHOD then
 				if type(value) == "function" then
-					rawset(info, DISPOSE_METHOD, value)
+					info[DISPOSE_METHOD] = value
 					return
 				else
 					error(("'%s' must be a function as dispose method."):format(DISPOSE_METHOD), 2)
@@ -1032,13 +1018,14 @@ do
 				end
 
 				if _NSInfo[IF].BaseEnv and _NSInfo[IF].BaseEnv ~= fenv then
-					error(("%s is defined in another environment, can't be defined here."):format(name), 3)
+					-- Other environment can't do the clearance
+					asPart = true
 				end
 			end
 		else
 			IF = fenv[name]
 
-			if not(_NSInfo[IF] and _NSInfo[IF].BaseEnv == fenv and _NSInfo[IF].NameSpace == nil and _NSInfo[IF].Type == TYPE_INTERFACE) then
+			if not (IF and _NSInfo[IF] and _NSInfo[IF].BaseEnv == fenv and _NSInfo[IF].NameSpace == nil and _NSInfo[IF].Type == TYPE_INTERFACE ) then
 				IF = BuildNameSpace(nil, name)
 			end
 		end
@@ -1052,7 +1039,7 @@ do
 
 		-- Check if the class is final
 		if info.IsFinal then
-			error("The interface is a final interface, can't be re-defined.", 3)
+			error("The interface is final, can't be re-defined.", 3)
 		end
 
 		info.Type = TYPE_INTERFACE
@@ -1065,24 +1052,34 @@ do
 		-- save interface to the environment
 		rawset(fenv, name, IF)
 
-		info.InterfaceEnv = info.InterfaceEnv or setmetatable({}, _MetaIFEnv)
-		_IFEnv2Info[info.InterfaceEnv] = info
+		-- Generate the interface environment
+		local interfaceEnv
+
+		for env, base in pairs(info) do
+			if type(env) == "table" and base == fenv then
+				interfaceEnv = env
+				break
+			end
+		end
+		interfaceEnv = interfaceEnv or setmetatable({}, _MetaIFEnv)
+		_IFEnv2Info[interfaceEnv] = info
+		info[interfaceEnv] = fenv
 
 		-- Clear
 		if not asPart then
-			info.Constructor = nil
+			info.Initializer = nil
 			wipe(info.Property)
 			wipe(info.Event)
 			wipe(info.Method)
-			for i, v in pairs(info.InterfaceEnv) do
+			for i, v in pairs(interfaceEnv) do
 				if type(v) == "function" then
-					info.InterfaceEnv[i] = nil
+					interfaceEnv[i] = nil
 				end
 			end
 		end
 
 		-- Set namespace
-		SetNameSpace4Env(info.InterfaceEnv, IF)
+		SetNameSpace4Env(interfaceEnv, IF)
 
 		-- Cache
 		info.Cache4Event = info.Cache4Event or {}
@@ -1120,7 +1117,7 @@ do
 		end
 
 		-- Set the environment to interface's environment
-		setfenv(3, info.InterfaceEnv)
+		setfenv(3, interfaceEnv)
 	end
 
 	------------------------------------
@@ -1433,7 +1430,7 @@ do
 		local info = _IFEnv2Info[env]
 
 		if info.Name == name then
-			setfenv(2, info.BaseEnv)
+			setfenv(2, info[env])
 			RefreshCache(info.Owner)
 		else
 			error(("%s is not closed."):format(info.Name), 2)
@@ -1530,8 +1527,8 @@ do
 
 			for _, IF in ipairs(_NSInfo[cls].Cache4Interface) do
 				info = _NSInfo[IF]
-				if info.Constructor then
-					ok, msg = pcall(info.Constructor, obj)
+				if info.Initializer then
+					ok, msg = pcall(info.Initializer, obj)
 
 					if not ok then
 						errorhandler(msg)
@@ -1579,8 +1576,6 @@ do
 			end
 
 			-- Clear the table
-			-- setmetatable(self, nil)
-
 			wipe(self)
 
 			rawset(self, "Disposed", true)
@@ -1592,6 +1587,7 @@ do
 	do
 		_MetaClsEnv.__index = function(self, key)
 			local info = _ClsEnv2Info[self]
+			local value
 
 			-- Check owner
 			if key == info.Name then
@@ -1599,7 +1595,13 @@ do
 			end
 
 			if key == _SuperIndex then
-				return info.SuperClass or error("No super class for this class.", 2)
+				value = info.SuperClass
+				if value then
+					rawset(self, _SuperIndex, value)
+					return value
+				else
+					error("No super class for the class.", 2)
+				end
 			end
 
 			-- Check keywords
@@ -1610,11 +1612,13 @@ do
 			-- Check namespace
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
-					rawset(self, key, info.NameSpace)
-					return rawget(self, key)
+					value = info.NameSpace
+					rawset(self, key, value)
+					return value
 				elseif info.NameSpace[key] then
-					rawset(self, key, info.NameSpace[key])
-					return rawget(self, key)
+					value = info.NameSpace[key]
+					rawset(self, key, value)
+					return value
 				end
 			end
 
@@ -1622,44 +1626,45 @@ do
 			if info.Import4Env then
 				for _, ns in ipairs(info.Import4Env) do
 					if key == _NSInfo[ns].Name then
-						rawset(self, key, ns)
-						return rawget(self, key)
+						value = ns
+						rawset(self, key, value)
+						return value
 					elseif ns[key] then
-						rawset(self, key, ns[key])
-						return rawget(self, key)
+						value = ns[key]
+						rawset(self, key, value)
+						return value
 					end
 				end
 			end
 
 			-- Check base namespace
-			if GetNameSpace(GetDefaultNameSpace(), key) then
-				rawset(self, key, GetNameSpace(GetDefaultNameSpace(), key))
-				return rawget(self, key)
+			value = GetNameSpace(GetDefaultNameSpace(), key)
+			if value then
+				rawset(self, key, value)
+				return value
 			end
 
 			-- Check Base
-			if info.BaseEnv then
-				local value = info.BaseEnv[key]
+			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+				value = info[self][key]
 
-				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
 				if value ~= nil then
 					rawset(self, key, value)
+					return value
 				end
-
-				return value
 			end
 		end
 
 		_MetaClsEnv.__newindex = function(self, key, value)
 			local info = _ClsEnv2Info[self]
 
-			if _KeyWord4ClsEnv[key] or key == _SuperIndex then
+			if _KeyWord4ClsEnv[key] then
 				error(("'%s' is a keyword."):format(key), 2)
 			end
 
 			if key == info.Name then
 				if type(value) == "function" then
-					rawset(info, "Constructor", value)
+					info.Constructor = value
 
 					if __Attribute__ and info.Owner ~= __Attribute__ then
 						__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Constructor, info.SuperClass)
@@ -1673,7 +1678,7 @@ do
 
 			if key == DISPOSE_METHOD then
 				if type(value) == "function" then
-					rawset(info, DISPOSE_METHOD, value)
+					info[DISPOSE_METHOD] = value
 					return
 				else
 					error(("'%s' must be a function as dispose method."):format(DISPOSE_METHOD), 2)
@@ -1740,12 +1745,6 @@ do
 		end
 	end
 
-	function CallEventWithoutCreate(self, eventName, ...)
-		if rawget(self, "__Events") and rawget(self.__Events, eventName) then
-			return self[eventName](self, ...)
-		end
-	end
-
 	function TrySetProperty(self, name, value)
 		self[name] = value
 	end
@@ -1753,16 +1752,14 @@ do
 	-- The cache for constructor parameters
 	_Class2ObjCache = setmetatable({}, {
 		__call = function(self, key)
-			if type(key) == "table" then
+			if key then
 				wipe(key)
 				tinsert(self, key)
 			else
 				if #self > 0 then
 					return tremove(self)
 				else
-					local ret = {}
-
-					return ret
+					return {}
 				end
 			end
 		end,
@@ -2007,15 +2004,15 @@ do
 					error(("%s is existed as %s, not class."):format(name, tostring(_NSInfo[cls].Type)), 3)
 				end
 
-				-- @todo, will class can be changed in other environment?
 				if _NSInfo[cls].BaseEnv and _NSInfo[cls].BaseEnv ~= fenv then
-					error(("%s is defined in another environment, can't be defined here."):format(name), 3)
+					-- Other environment can't do the clearance
+					asPart = true
 				end
 			end
 		else
 			cls = fenv[name]
 
-			if not(_NSInfo[cls] and _NSInfo[cls].BaseEnv == fenv and _NSInfo[cls].NameSpace == nil and _NSInfo[cls].Type == TYPE_CLASS) then
+			if not ( cls and _NSInfo[cls] and _NSInfo[cls].BaseEnv == fenv and _NSInfo[cls].NameSpace == nil and _NSInfo[cls].Type == TYPE_CLASS ) then
 				cls = BuildNameSpace(nil, name)
 			end
 		end
@@ -2029,7 +2026,7 @@ do
 
 		-- Check if the class is final
 		if info.IsFinal then
-			error("The class is a final class, can't be re-defined.", 3)
+			error("The class is final, can't be re-defined.", 3)
 		end
 
 		info.Type = TYPE_CLASS
@@ -2042,8 +2039,18 @@ do
 		-- save class to the environment
 		rawset(fenv, name, cls)
 
-		info.ClassEnv = info.ClassEnv or setmetatable({}, _MetaClsEnv)
-		_ClsEnv2Info[info.ClassEnv] = info
+		local classEnv
+
+		for env, base in pairs(info) do
+			if type(env) == "table" and base == fenv then
+				classEnv = env
+				break
+			end
+		end
+
+		classEnv = classEnv or setmetatable({}, _MetaClsEnv)
+		_ClsEnv2Info[classEnv] = info
+		info[classEnv] = fenv
 
 		-- Clear
 		if not asPart then
@@ -2051,15 +2058,15 @@ do
 			wipe(info.Property)
 			wipe(info.Event)
 			wipe(info.Method)
-			for i, v in pairs(info.ClassEnv) do
+			for i, v in pairs(classEnv) do
 				if type(v) == "function" then
-					info.ClassEnv[i] = nil
+					classEnv[i] = nil
 				end
 			end
 		end
 
 		-- Set namespace
-		SetNameSpace4Env(info.ClassEnv, cls)
+		SetNameSpace4Env(classEnv, cls)
 
 		-- Cache
 		info.Cache4Event = info.Cache4Event or {}
@@ -2282,7 +2289,7 @@ do
 		end
 
 		-- Set the environment to class's environment
-		setfenv(3, info.ClassEnv)
+		setfenv(3, classEnv)
 	end
 
 	------------------------------------
@@ -2385,6 +2392,9 @@ do
 		superInfo.ChildClass = superInfo.ChildClass or {}
 		superInfo.ChildClass[info.Owner] = true
 		info.SuperClass = superCls
+
+		-- Keep to the environmenet
+		rawset(env, _SuperIndex, superCls)
 
 		-- Copy Metatable
 		local rMeta
@@ -2615,7 +2625,7 @@ do
 		local info = _ClsEnv2Info[env]
 
 		if info.Name == name then
-			setfenv(2, info.BaseEnv)
+			setfenv(2, info[env])
 			RefreshCache(info.Owner)
 
 			if not info.Constructor then
@@ -2739,6 +2749,12 @@ do
 
 		-- Build enm
 		local info = _NSInfo[enm]
+
+		-- Check if the enum is final
+		if info.IsFinal then
+			error("The enum is final, can't be re-defined.", 3)
+		end
+
 		info.Type = TYPE_ENUM
 		info.NameSpace = ns
 
@@ -2765,6 +2781,7 @@ do
 	do
 		_MetaStrtEnv.__index = function(self, key)
 			local info = _StructEnv2Info[self]
+			local value
 
 			-- Check owner
 			if key == info.Name then
@@ -2783,11 +2800,13 @@ do
 			-- Check namespace
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
-					rawset(self, key, info.NameSpace)
-					return rawget(self, key)
+					value = info.NameSpace
+					rawset(self, key, value)
+					return value
 				elseif info.NameSpace[key] then
-					rawset(self, key, info.NameSpace[key])
-					return rawget(self, key)
+					value = info.NameSpace[key]
+					rawset(self, key, value)
+					return value
 				end
 			end
 
@@ -2795,31 +2814,32 @@ do
 			if info.Import4Env then
 				for _, ns in ipairs(info.Import4Env) do
 					if key == _NSInfo[ns].Name then
-						rawset(self, key, ns)
-						return rawget(self, key)
+						value = ns
+						rawset(self, key, value)
+						return value
 					elseif ns[key] then
-						rawset(self, key, ns[key])
-						return rawget(self, key)
+						value = ns[key]
+						rawset(self, key, value)
+						return value
 					end
 				end
 			end
 
 			-- Check base namespace
-			if GetNameSpace(GetDefaultNameSpace(), key) then
-				rawset(self, key, GetNameSpace(GetDefaultNameSpace(), key))
-				return rawget(self, key)
+			value = GetNameSpace(GetDefaultNameSpace(), key)
+			if value then
+				rawset(self, key, value)
+				return value
 			end
 
 			-- Check Base
-			if info.BaseEnv then
-				local value = info.BaseEnv[key]
+			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+				value = info[self][key]
 
-				--if type(value) == "userdata" or type(value) == "table" or type(value) == "function" then
 				if value ~= nil then
 					rawset(self, key, value)
+					return value
 				end
-
-				return value
 			end
 		end
 
@@ -2833,7 +2853,7 @@ do
 			if key == info.Name then
 				-- error(("the '%s' is the struct name, can't be used."):format(key), 2)
 				if type(value) == "function" then
-					rawset(info, "Constructor", value)
+					info.Constructor = value
 					return
 				else
 					error(("'%s' must be a function as constructor."):format(key), 2)
@@ -2849,35 +2869,36 @@ do
 				end
 			end
 
-			-- Cache the method for the struct data
-			if type(key) == "string" and type(value) == "function" then
-				info.Cache4Method = info.Cache4Method or {}
+			if type(key) == "string"  then
+				if type(value) == "function" then
+					-- Cache the method for the struct data
+					info.Cache4Method = info.Cache4Method or {}
 
-				-- keep function in env, just register the method
-				if __Attribute__ and info.Owner ~= __Attribute__ then
-					value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, nil, info.Owner, key) or value
-				end
-
-				info.Cache4Method[key] = value
-			end
-
-			if type(key) == "string" and (value == nil or IsType(value) or IsNameSpace(value)) then
-				local ok, ret = pcall(BuildType, value, key)
-
-				if ok then
-					rawset(self, key, ret)
-
-					if info.SubType == _STRUCT_TYPE_MEMBER then
-						info.Members = info.Members or {}
-						tinsert(info.Members, key)
-					elseif info.SubType == _STRUCT_TYPE_ARRAY then
-						info.ArrayElement = ret
+					-- keep function in env, just register the method
+					if __Attribute__ and info.Owner ~= __Attribute__ then
+						value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, nil, info.Owner, key) or value
 					end
 
-					return
-				else
-					ret = strtrim(ret:match(":%d+:(.*)$") or ret)
-					error(ret, 2)
+					info.Cache4Method[key] = value
+
+				elseif (value == nil or IsType(value) or IsNameSpace(value)) then
+					local ok, ret = pcall(BuildType, value, key)
+
+					if ok then
+						rawset(self, key, ret)
+
+						if info.SubType == _STRUCT_TYPE_MEMBER then
+							info.Members = info.Members or {}
+							tinsert(info.Members, key)
+						elseif info.SubType == _STRUCT_TYPE_ARRAY then
+							info.ArrayElement = ret
+						end
+
+						return
+					else
+						ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+						error(ret, 2)
+					end
 				end
 			end
 
@@ -3124,15 +3145,11 @@ do
 				if _NSInfo[strt].Type and _NSInfo[strt].Type ~= TYPE_STRUCT then
 					error(("%s is existed as %s, not struct."):format(name, tostring(_NSInfo[strt].Type)), 2)
 				end
-
-				if _NSInfo[strt].BaseEnv and _NSInfo[strt].BaseEnv ~= fenv then
-					error(("%s is defined in another environment, can't be defined here."):format(name), 2)
-				end
 			end
 		else
 			strt = fenv[name]
 
-			if not(_NSInfo[strt] and _NSInfo[strt].BaseEnv == fenv and _NSInfo[strt].NameSpace == nil and _NSInfo[strt].Type == TYPE_STRUCT) then
+			if not ( strt and _NSInfo[strt] and _NSInfo[strt].BaseEnv == fenv and _NSInfo[strt].NameSpace == nil and _NSInfo[strt].Type == TYPE_STRUCT ) then
 				strt = BuildNameSpace(nil, name)
 			end
 		end
@@ -3146,9 +3163,14 @@ do
 
 		-- Build class
 		info = _NSInfo[strt]
+
+		-- Check if the struct is final
+		if info.IsFinal then
+			error("The struct is final, can't be re-defined.", 3)
+		end
+
 		info.Type = TYPE_STRUCT
 		info.NameSpace = ns
-		info.BaseEnv = info.BaseEnv or fenv
 		info.Members = nil
 		info.ArrayElement = nil
 		info.UserValidate = nil
@@ -3156,8 +3178,10 @@ do
 		info.SubType = _STRUCT_TYPE_MEMBER
 		info.Cache4Method = nil
 
+		info.BaseEnv = fenv
 		info.StructEnv = info.StructEnv or setmetatable({}, _MetaStrtEnv)
 		_StructEnv2Info[info.StructEnv] = info
+		info[info.StructEnv] = fenv
 
 		-- Clear
 		info.Constructor = nil
@@ -3244,23 +3268,6 @@ do
 			local info = _StructEnv2Info[env]
 
 			if info.Name == name then
-				-- Refersh for the Cache4Method
-				if info.Cache4Method then
-					for key, prototype in pairs(info.Cache4Method) do
-						local value = rawget(env, key)
-						if type(value) == "function" then
-							if __Attribute__ and prototype ~= value then
-								value = __Attribute__._CloneAttributes(prototype, value, AttributeTargets.Method, info.Owner, key, true) or value
-							end
-
-							env[key] = value
-							info.Cache4Method[key] = value
-						else
-							info.Cache4Method[key] = nil
-						end
-					end
-				end
-
 				setfenv(2, info.BaseEnv)
 				return
 			end
@@ -5181,7 +5188,7 @@ do
 						-- Desc
 						desc = desc and desc()
 						if desc then
-							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
+							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n        "):gsub("  %s+", "\n        "):gsub("\t+", "\n        ")
 						end
 
 						-- Inherit
@@ -5203,24 +5210,50 @@ do
 						-- Event
 						if next(info.Event) then
 							result = result .. "\n\n  Event :"
-							for sc in pairs(info.Event) do
-								result = result .. "\n    " .. sc
+							for _, evt in ipairs(GetEvents(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "event", evt) and GetDocument(ns, "event", evt, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = "　-　" .. desc
+								else
+									desc = ""
+								end
+
+								result = result .. "\n    " .. evt .. desc
 							end
 						end
 
 						-- Property
 						if next(info.Property) then
 							result = result .. "\n\n  Property :"
-							for prop in pairs(info.Property) do
-								result = result .. "\n    " .. prop
+							for _, prop in ipairs(GetProperties(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "property", prop) and GetDocument(ns, "property", prop, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = "　-　" .. desc
+								else
+									desc = ""
+								end
+
+								result = result .. "\n    " .. prop .. desc
 							end
 						end
 
 						-- Method
 						if next(info.Method) then
 							result = result .. "\n\n  Method :"
-							for method in pairs(info.Method) do
-								result = result .. "\n    " .. method
+							for _, method in ipairs(GetMethods(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "method", method) and GetDocument(ns, "method", method, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = "　-　" .. desc
+								else
+									desc = ""
+								end
+								result = result .. "\n    " .. method .. desc
 							end
 						end
 
@@ -6995,7 +7028,7 @@ do
 		]======]
 
 		function ApplyAttribute(self, target, targetType)
-			if Reflector.IsClass(target) or Reflector.IsInterface(target) then
+			if rawget(_NSInfo, target) then
 				_NSInfo[target].IsFinal = true
 			end
 		end
@@ -7054,10 +7087,24 @@ do
 		------------------------------------------------------
 		local objFinal = __Final__()
 		local objNonInheritable = __NonInheritable__()
+		__Attribute__._ClearPreparedAttributes()
+
+		------------------------------------------------------
+		-- For structs
+		------------------------------------------------------
+		objFinal:ApplyAttribute(Boolean, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(String, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Number, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Function, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Table, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Userdata, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Thread, AttributeTargets.Struct)
+		objFinal:ApplyAttribute(Any, AttributeTargets.Struct)
 
 		-- System.AttributeTargets
 		__Flags__()
 		__Attribute__._ConsumePreparedAttributes(AttributeTargets, AttributeTargets.Enum)
+		objFinal:ApplyAttribute(AttributeTargets, AttributeTargets.Enum)
 
 		-- System.__Attribute__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.All}
@@ -7065,14 +7112,14 @@ do
 		objFinal:ApplyAttribute(__Attribute__, AttributeTargets.Class)
 
 		-- System.__Unique__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
 		__Unique__()
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
 		__Attribute__._ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
 		objFinal:ApplyAttribute(__Unique__, AttributeTargets.Class)
 
 		-- System.__Flags__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false}
 		__Unique__()
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false}
 		__Attribute__._ConsumePreparedAttributes(__Flags__, AttributeTargets.Class)
 		objFinal:ApplyAttribute(__Flags__, AttributeTargets.Class)
 
@@ -7083,14 +7130,14 @@ do
 		objNonInheritable:ApplyAttribute(__AttributeUsage__, AttributeTargets.Class)
 
 		-- System.__Final__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
 		__Unique__()
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
 		objFinal:ApplyAttribute(__Final__, AttributeTargets.Class)
 
 		-- System.__NonInheritable__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
 		__Unique__()
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__NonInheritable__, AttributeTargets.Class)
 		objFinal:ApplyAttribute(__NonInheritable__, AttributeTargets.Class)
 
@@ -8370,9 +8417,14 @@ do
 			__Attribute__._ClearPreparedAttributes()
 		end
 
+		--[[
 		function __tostring(self)
-			return tostring(Module) .. "( " .. _ModuleInfo[self].Name .. " ) " .. (_ModuleInfo[self].Version or "")
-		end
+			if _ModuleInfo[self].Name then
+				return tostring(Module) .. "( " .. _ModuleInfo[self].Name .. " ) " .. (_ModuleInfo[self].Version or "")
+			else
+				return tostring(Module) .. "( Anonymous ) "
+			end
+		end--]]
 	endclass "Module"
 end
 

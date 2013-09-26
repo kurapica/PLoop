@@ -147,7 +147,7 @@ First, an example used to show how to create a new enum type :
 	-- Acees the values as table field, just case ignored
 	print( Week.sunday )
 	print( Week.Sunday )
-	print( Week.sundDay )
+	print( Week.sunDay )
 
 	-- Output : 'None'
 	print( Week.none )
@@ -1376,18 +1376,569 @@ So, the rule is :
 
 * For the dispose : just reversed order of the init.
 
+
 How to use
 ----
 
+The oop system is used to describe any real world object into data, using the property to represent the object's state like person's name, birthday, sex, and etc, using the methods to represent what the object can do, like walking, talking and more.
 
+The class is used to descrbie a group of objects with same behaviors. Like *Person* for human beings.
+
+The interface don't represent a group of objects, it don't know what objects will use the features of it, but it know what can be used by the objects.
+
+Take the game as an example, to display the health points of the player, we may display it in text, or something like the health orb in the Diablo, and if using text, we may display it in percent, or some short format like '101.3 k'. So, the text or texture is the objects that used to display the data, and we can use an interface to provide the data like :
+
+	interface "IFHealth"
+
+		_IFHealthObjs = {}
+
+		-- Object method
+		function SetValue(self, value)
+		end
+
+		-- Interface method
+		function _SetValue(value)
+			-- Refresh all objects's value
+			for _, obj in ipairs(_IFHealthObjs) do
+				obj:SetValue(value)
+			end
+		end
+
+		-- Dispose
+		function Dispose(self)
+			-- Remove the object
+			for i, obj in ipairs(_IFHealthObjs) do
+				if obj == self then
+					return table.remove(_IFHealthObjs, i)
+				end
+			end
+		end
+
+		-- Initializer
+		function IFHealth(self)
+			-- Register the object
+			table.insert(_IFHealthObjs, self)
+		end
+
+	endinterface "IFHealth"
+
+In the interface, a empty method *SetValue* is defined, it will be override by the classes that extended from the *IFHealth*, so in the *_SetValue* interface method, there is no need to check whether the object has a *SetValue* method.
+
+And for a text to display the health point, if we have a *Label* class used to display strings with a *SetText* method to display, we can create a new class to do the job like :
+
+	class "HealthText"
+		inherit "Label"
+		extend "IFHealth"
+
+		-- Override the method
+		function SetValue(self, value)
+			self:SetText( ("%d"):format(value) )
+		end
+	endclass "HealthText"
+
+So, when a *HealthText*'s object is created, it will be stored into the *_IFHealthObjs* table, and when the system call
+
+	IFHealth._SetValue(10000)
+
+The text of the *HealthText* object would be refreshed to the new value.
+
+
+
+Document
+====
+
+*System.Object* and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments to those features.
+
+So, take the *System.Object* as an example :
+
+	import "System"
+
+	print( System.Reflector.Help( System.Object ) )
+
+And you should get :
+
+	[__Final__]
+	[Class] System.Object :
+
+		Description :
+			The root class of other classes. Object class contains several methodes for common use.
+
+		Event :
+			OnEventHandlerChanged　-　Fired when the event handler is cheanged
+
+		Method :
+			ActiveThread　-　Active the thread mode for special events
+			BlockEvent　-　Block some events for the object
+			Fire　-　Fire an object's event, to trigger the object's event handlers
+			GetClass　-　Get the class type of the object
+			HasEvent　-　Check if the event type is supported by the object
+			InactiveThread　-　Turn off the thread mode for the events
+			IsClass　-　Check if the object is an instance of the class
+			IsEventBlocked　-　Check if the event is blocked for the object
+			IsInterface　-　Check if the object is extend from the interface
+			IsThreadActivated　-　Check if the thread mode is actived for the event
+			ThreadCall　-　Call method or function as a thread
+			UnBlockEvent　-　Un-Block some events for the object
+
+
+Here is a document for the *System.Object*.
+
+* The first line : [__Final__] means the class is a final class, it can't be re-defined, it's an attribute description, will be explained later.
+
+* The next part is the description for the class.
+
+* The rest is event, property, method list, since the class has no property, only event and method are displayed.
+
+Also, details of the event, property, method can be get by the *Help* method :
+
+	print( System.Reflector.Help( System.Object, "OnEventHandlerChanged" ) )
+
+	-- Ouput :
+	[Class] System.Object - [Event] OnEventHandlerChanged :
+
+		Description :
+			Fired when the event handler is cheanged
+
+		Format :
+			function object:OnEventHandlerChanged(name)
+				-- Handle the event
+			end
+
+		Parameter :
+			name - the changed event handler's event name
+
+	---------------------------------------------------------------
+	print( System.Reflector.Help( System.Object, "Fire" ) )
+
+	-- Ouput :
+	[Class] System.Object - [Method] Fire :
+
+		Description :
+			Fire an object's event, to trigger the object's event handlers
+
+		Format :
+			object:Fire(event, ...)
+
+		Parameter :
+			event - the event name
+			... - the event's arguments
+
+		Return :
+			nil
+
+
+Here is a full example to show how to make documents for all features in the Loop system.
+
+
+	interface "IFName"
+
+		doc [======[
+			@name IFName
+			@type interface
+			@desc Mark the objects should have a "Name" property and "OnNameChanged" event
+		]======]
+
+		------------------------------------------------------
+		-- Event
+		------------------------------------------------------
+		doc [======[
+			@name OnNameChanged
+			@type event
+			@desc Fired when the object's name is changed
+			@param old string, the old name of the object
+			@param new string, the new name of the object
+		]======]
+		event "OnNameChanged"
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		doc [======[
+			@name SetName
+			@type method
+			@desc Set the object's name
+			@param name string, the object's name
+			@return nil
+		]======]
+		function SetName(self, name)
+			local oldname = self.Name
+
+			self.__Name = name
+
+			System.Reflector.FireObjectEvent( self, oldname, self.Name)
+		end
+
+		doc [======[
+			@name GetName
+			@type method
+			@desc Get the object's name
+			@return string the object's name
+		]======]
+		function GetName(self, ...)
+			return self.__Name or "Anonymous"
+		end
+
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc [======[
+			@name Name
+			@type property
+			@desc The name of the object
+		]======]
+		property "Name" {
+			Get = "GetName",
+			Set = "SetName",
+			Type = System.String + nil,
+		}
+	endinterface "IFName"
+
+	class "Person"
+		inherit "System.Object"
+		extend "IFName"
+
+		-- Total person count
+		_PersonCount = _PersonCount or 0
+
+		-- Total person count of same name
+		_NameCount = _NameCount or {}
+
+		doc [======[
+			@name Person
+			@type class
+			@desc Used to represent a person object
+			@param name string, the person's name
+		]======]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		doc [======[
+			@name _GetPersonCount
+			@type method
+			@desc Get the person count of the same name or all person count if no name is set
+			@format [name]
+			@param name string, the person's name
+			@return number the person's count
+		]======]
+		function _GetPersonCount(name)
+			if name then
+				return _NameCount[name] or 0
+			else
+				return _PersonCount
+			end
+		end
+
+		------------------------------------------------------
+		-- Dispose
+		------------------------------------------------------
+		function Dispose(self)
+			if self.Name then
+				_NameCount[self.Name] = _NameCount[self.Name] - 1
+			end
+			_PersonCount = _PersonCount - 1
+		end
+
+		------------------------------------------------------
+		-- Event Handler
+		------------------------------------------------------
+		local function OnNameChanged(self, old, new)
+			if old then
+				_NameCount[old] = _NameCount[old] - 1
+			end
+
+			if new then
+				_NameCount[new] = (_NameCount[new] or 0) + 1
+			end
+		end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+	    function Person(self, name)
+	    	self.OnNameChanged = self.OnNameChanged + OnNameChanged
+
+	    	_PersonCount = _PersonCount + 1
+	    	self.Name = name
+	    end
+	endclass "Person"
+
+
+Normally, the struct and enum's structure can show the use of them, so no document for them. In the class/interface environment, *doc* function can be used to declare documents for the class/interface. it's simple to replace the *doc* by *--*, so just change the whole document as a comment.
+
+The *doc* receive a format string as the document. Using "@" as seperate of each line, the line breaker would be ignored. After the "@" is the part name, here is a list of those part :
+
+* name - The feature's name
+* type - The feature's type, like 'interface', 'class', 'event', 'property', 'method'.
+* desc - The description
+* format - The function format of the constructor(type is 'class' only), event hanlder(type is 'event') or the method(type is 'method')
+* param - The parameters of the function, it receive two part string seperate by the first space, the first part is the parameter's name, the second part is the description.
+* return - The return value, also receive two part string seperate by the first space, the first part is the name or type of the value, the second part is the description.
+* The documents can be put in any places of the class/interface, no need to put before it's features.
+
+So, we can use the *System.Reflector.Help* to see the details of the *Person* class like :
+
+	print( System.Reflector.Help( Person ) )
+
+	-- Output :
+	[Class] Person :
+
+		Description :
+			Used to represent a person object
+
+		Super Class :
+			System.Object
+
+		Extend Interface :
+			IFName
+
+		Method :
+			_GetPersonCount　-　Get the person count of the same name or all person count if no name is set
+
+		Constructor :
+			Person(name)
+
+		Parameter :
+			name - string, the person's name
+
+	-------------------------------------------
+
+	print( System.Reflector.Help( Person, "_GetPersonCount" ) )
+
+	-- Ouput :
+
+	[Class] Person - [Method] _GetPersonCount :
+
+		Description :
+			Get the person count of the same name or all person count if no name is set
+
+		Format :
+			Person._GetPersonCount([name])
+
+		Parameter :
+			name - string, the person's name
+
+		Return :
+			number - the person's count
+
+	-------------------------------------------
+
+	print( System.Reflector.Help( Person, "SetName" ))
+
+	-- Output :
+
+	[Class] Person - [Method] SetName :
+
+	Description :
+		Set the object's name
+
+	Format :
+		object:SetName(name)
+
+	Parameter :
+		name - string, the object's name
+
+	Return :
+		nil
+
+So, you can see the class method and object method's format are different.
+
+The last part, let's get a view of the *System* namespace.
+
+	print( System.Reflector.Help( System ))
+
+	-- Output :
+
+	[NameSpace] System :
+
+		Sub Enum :
+			AttributeTargets
+			StructType
+
+		Sub Struct :
+			Any
+			Boolean
+			Function
+			Number
+			String
+			Table
+			Thread
+			Userdata
+
+		Sub Interface :
+			Reflector
+
+		Sub Class :
+			Argument
+			Event
+			EventHandler
+			Module
+			Object
+			Type
+			__Arguments__
+			__AttributeUsage__
+			__Attribute__
+			__Auto__
+			__Cache__
+			__Expandable__
+			__Final__
+			__Flags__
+			__NonInheritable__
+			__StructType__
+			__Thread__
+			__Unique__
+
+
+* The *AttributeTargets* is used by the attribute system, explained later.
+* The *StructType* is used by *__StructType__* attribtue, in the struct part, an example already existed.
+* The structs are basic structs, so no need to care about the non-table value structs.
+* The *Reflector* is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
+* The *Argument* class is used with *__Arguments__* attribtue to describe the arguments of one mehtod or the constructor, explained later.
+* The *Event* and *EventHandler* classes are used to create the whole event system. No need to use it yourself.
+* The *Module* class is used to build private environment for common using, explained later.
+* The *Object* class may be the root class of others, several useful methods.
+* The *Type* class, when using *System.Number + System.String + nil*, the result is a *Type* object, used to validate values.
+* The rest classes that started with "__" and end with "__" are the attribute classes, explained later.
 
 
 
 Module
 ====
 
+Private environment
+----
 
-Attribute
+The Loop system is built by manipulate the lua's environment with getfenv / setfenv function. Like
+
+	-- Output : table: 0x7fd9fb403f30	table: 0x7fd9fb403f30
+	print( getfenv( 1 ), _G)
+
+	class "A"
+		-- Output : table: 0x7fd9fb4a2480	table: 0x7fd9fb403f30
+		print( getfenv( 1 ), _G)
+	endclass "A"
+
+	-- Output : table: 0x7fd9fb403f30
+	print(getfenv( 1 ))
+
+So, in the class definition, the environment is a private environment belonged to the class *A*. That's why the system can gather events, properties and methods settings for the class, and the *endclass* will set back the environment.
+
+Beside the definition, the private environment also provide a simple way to access namespaces :
+
+	import "System"
+
+	-- Ouput : System.Object
+	print( System.Object )
+
+	-- Ouput : nil
+	print( Object )
+
+	namespace "Windows.Forms.DataGrid"
+
+	class "A"
+		----------------------------------
+		-- Ouput : System
+		print( System )
+
+		-- Ouput : Windows.Forms
+		print(Windows.Forms)
+
+		-- Ouput : nil
+		print( Object )
+
+		----------------------------------
+		-- Import a namespace
+		import "System"
+
+		-- Output : System.Object
+		print( Object )
+		----------------------------------
+	endclass "A"
+
+* Any root namespace can be accessed directly in the private environment, so we can access the *System* and *Windows* directly.
+* When import a namespace, any namespace in it can be accessed directly in the private environment.
+
+Since it's a private environment, so, why *print* and other global vars can be accessed in the environment. As a simple example, the things works like :
+
+	local base = getfenv( 1 )
+
+	env = setmetatable ( {}, { __index = function (self, key)
+		local value = base[ key ]
+
+		if value ~=  nil and type(key) == "string" and ( key == "_G" or not key:match("^_")) then
+			rawset(self, key, value)
+		end
+
+		return value
+	end })
+
+When access anything not defined in the private environment, the *__index* would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
+
+Why the key can't be started with "_", its because sometimes we need a global vars that used to stored datas between different version class (interface .etc), like :
+
+	class "A"
+		_Names = _Names or {}
+	endclass "A"
+
+But if there is a *_Names* that defined in the _G, the value'll be used and it's not what we wanted.
+
+And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the *__index* again and again, it's useful to reduce the cpu cost.
+
+Like the definition environment, the Loop system also provide a *Module* class to create private environment for common using. Unlike the other classes in the *System* namespace, the *Module* class will be saved to the _G at the same time the Loop system is installed.
+
+So, we can use it directly with format :
+
+	Module "ModuleA[.ModuleB[.ModuleC ... ]]" "version number"
+
+The *Module(name)* will create a *Module* object, and call the object with a string version will change the current environment to the object itself, a module can contains child-modules, the child-modules can access featrues defined in it's parent module, so the *name* can be a full path of the modules, the ModuleB should be a child-module of the ModuleA, the ModuleC is a child-module of the ModuleB, so ModuleC can access all features in ModuleA and ModuleB.
+
+So, what the detail of the Module :
+
+	print( System.Reflector.Help( Module ) )
+
+	-- Output :
+
+	[__Final__]
+	[Class] System.Module :
+
+		Description :
+			Used to create an hierarchical environment with class system settings, like : Module "Root.ModuleA" "v72"
+
+
+		Super Class :
+			System.Object
+
+		Event :
+			OnDispose　-　Fired when the module is disposed
+
+		Property :
+			_M　-　The module itself
+			_Name　-　The module's name
+			_Parent　-　The module's parent module
+			_Version　-　The module's version
+
+		Method :
+			GetModule　-　Get the child-module with the name
+			GetModules　-　Get all child-modules of the module
+			ValidateVersion　-　Return true if the version is greater than the current version of the module
+
+
+Take an example as the start (Don't forget *do ... end* if using in the interactive programming environment) :
+
+	-- Output : table: 0x7fe1e9403f30
+	print( getfenv( 1 ) )
+
+	Module "A" "v1.0"
+
+	-- Output : table: 0x7fe1e947f500	table: 0x7fe1e947f500
+	print( getfenv( 1 ), _M )
+
+As you can see, it's special to use the properties of the object, in the module environment, all properties can be used directly, the *_M* is just like the *_G* in the *_G* table.
+
+
+
+
+System.__Attribute__
 ====
 
 
