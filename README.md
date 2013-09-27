@@ -1815,10 +1815,10 @@ The last part, let's get a view of the *System* namespace.
 
 
 * The *AttributeTargets* is used by the attribute system, explained later.
-* The *StructType* is used by *__StructType__* attribtue, in the struct part, an example already existed.
+* The *StructType* is used by `__StructType__` attribtue, in the struct part, an example already existed.
 * The structs are basic structs, so no need to care about the non-table value structs.
 * The *Reflector* is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
-* The *Argument* class is used with *__Arguments__* attribtue to describe the arguments of one mehtod or the constructor, explained later.
+* The *Argument* class is used with `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
 * The *Event* and *EventHandler* classes are used to create the whole event system. No need to use it yourself.
 * The *Module* class is used to build private environment for common using, explained later.
 * The *Object* class may be the root class of others, several useful methods.
@@ -2021,7 +2021,7 @@ So, the anonymous modules can't be reused, it's better to use anonymous modules 
 System.__Attribute__
 ====
 
-In the previous examples, *__Flags__* is used for enum, *__StructType__* is used for struct, and you can find many attribute classes in the *System*.
+In the previous examples, `__Flags__` is used for enum, `__StructType__` is used for struct, and you can find many attribute classes in the *System*.
 
 The attribute classes's objects are used to make some description for features like class, enum, struct. Unlike the document system, those marks can be used by the system or the custom functions to do some analysis or some special operations.
 
@@ -2092,9 +2092,9 @@ The first line show the class is a final class, *System.__Final__* is a class in
 	class "A"
 	endclass "A"
 
-So, creating an object of the *__Final__* class before the definition, then the features should be set to final.
+So, creating an object of the `__Final__` class before the definition, then the features should be set to final.
 
-Like how to use the *__Final__*, using any attribtue class is just create an object with init values before its target.
+Like how to use the `__Final__`, using any attribtue class is just create an object with init values before its target.
 
 
 System.__AttributeUsage__
@@ -2137,7 +2137,7 @@ For the attribute system, attributes can be applied to several types (Defined in
 
 * All - for all below features :
 * Class - for the class
-* Constructor - for the class's constructor, now, only *__Arguments__* attribute needed to set the arguments count and type for the constructor.
+* Constructor - for the class's constructor, now, only `__Arguments__` attribute needed to set the arguments count and type for the constructor.
 * Eum - for the enum
 * Event - for the class / interface's event
 * Interface - for the interface
@@ -2145,7 +2145,7 @@ For the attribute system, attributes can be applied to several types (Defined in
 * Property - for the property of the class and interface
 * Struct - for the struct
 
-So, take the *__Final__* class as an example to show how the *__AttributeUsage__* is used :
+So, take the `__Final__` class as an example to show how the `__AttributeUsage__` is used :
 
 	[__Final__]
 	[__Unique__]
@@ -2174,7 +2174,7 @@ As the previous example in the enum part, that's the using of the *System.__Flag
 System.__Unique__
 ----
 
-In the list of the *__Final__*, a new attribute is set, the *System.__Unique__* attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
+In the list of the `__Final__`, a new attribute is set, the *System.__Unique__* attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
 
 Like :
 
@@ -2198,7 +2198,7 @@ Like :
 
 It's useful to pass init table to modify the unique object.
 
-The *__Unique__* attribute normally used on attribute classes, avoid creating too many same functionality objects.
+The `__Unique__` attribute normally used on attribute classes, avoid creating too many same functionality objects.
 
 
 System.__NonInheritable__
@@ -2219,7 +2219,7 @@ The *System.__NonInheritable__* attribute is used to mark the classs/interface c
 		inherit "A"
 	endclass "B"
 
-BTW. if using the *__Unique__* attribute, the class is also non-inheritable, since it can only have one unique object.
+BTW. if using the `__Unique__` attribute, the class is also non-inheritable, since it can only have one unique object.
 
 
 System.__Arguments__
@@ -2283,7 +2283,7 @@ So, take a method as the example first :
 
 So, you can see, the system would do the arguments validation for the method.
 
-The *__Arguments__* is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the *__Arguments__*, some special vars in the init table should be take to the constructor:
+The `__Arguments__` is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the `__Arguments__`, some special vars in the init table should be take to the constructor:
 
 	Module "E" ""
 
@@ -2402,7 +2402,7 @@ Sometimes we may want to expand the existed class/interface with a simple way, l
 	-- Output : Hello World
 	obj:Greet()
 
-BTW, mark a class/interface with *__Final__* and *__Expandable__* attribute, so the class/interface can't be re-defined, but can be expanded.
+BTW, mark a class/interface with `__Final__` and `__Expandable__` attribute, so the class/interface can't be re-defined, but can be expanded.
 
 
 Custom Attributes
@@ -2491,9 +2491,9 @@ First, two attribute classes are defined here :
 		}
 	endclass "__Field__"
 
-The *__Table__* attribute is used on the class, used to mark the class with the datatable's name, so we can bind it to the real table in the database.
+The `__Table__` attribute is used on the class, used to mark the class with the datatable's name, so we can bind it to the real table in the database.
 
-The *__Field__* attribute is used on the property, used to mark the property to a field of a datatable, the *Name* to the field's name, *Index* to the field's display index, and the *Type* to the field's type (not the type of the Loop).
+The `__Field__` attribute is used on the property, used to mark the property to a field of a datatable, the *Name* to the field's name, *Index* to the field's display index, and the *Type* to the field's type (not the type of the Loop).
 
 So, here re-define the *Person* class :
 
@@ -2585,7 +2585,7 @@ The final result is :
 Some points about the function :
 
 * getmetatable(objs[1]), using getmetatable on an object, would get the object's class, it's a quick way to get the class.
-* __Attribute__._GetClassAttribute(cls, __Table__) will try to get class attribute of the *__Table__* for the cls, the return value is an object of the *__Table__* if existed. So, then we could get the datatable's name.
+* __Attribute__._GetClassAttribute(cls, __Table__) will try to get class attribute of the `__Table__` for the cls, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
 * Reflector.GetProperties used to get a sorted name list of the class/interface's all properties, if pass *true* as the second argument, only properties defined in the class/interface will be get, since there is no super class of the *Person*, so get all properties is simple enough. You can use *Help* to see the detail of it.
 * __Attribute__._GetPropertyAttribute(cls, prop, __Field__) like *_GetClassAttribute*, only need a more argument : the property's name.
 
