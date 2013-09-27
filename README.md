@@ -39,7 +39,7 @@ Now we create a class with a __Greet__ method and a __Name__ property. Then we c
 		ob.Name = 123
 	end
 
-Here I use *do ... end* because you may try those code in an interactive programming environment, many definitions like class, struct, interface's definitions should be kept in one piece. After here, I'll not use *do ... end* again, but just remember to add it yourself.
+Here I use __do ... end__ because you may try those code in an interactive programming environment, many definitions like class, struct, interface's definitions should be kept in one piece. After here, I'll not use __do ... end__ again, but just remember to add it yourself.
 
 
 
@@ -1952,7 +1952,7 @@ Here is a list of the features in the __Module__ :
 			ValidateVersion　-　Return true if the version is greater than the current version of the module
 
 
-Take an example as the start (Don't forget *do ... end* if using in the interactive programming environment) :
+Take an example as the start (Don't forget __do ... end__ if using in the interactive programming environment) :
 
 	-- Output : table: 0x7fe1e9403f30
 	print( getfenv( 1 ) )
