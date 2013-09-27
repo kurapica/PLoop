@@ -6449,7 +6449,7 @@ do
 		end
 
 		doc [======[
-			@name _CloneAttributes(source, target, targetType)
+			@name _CloneAttributes
 			@type method
 			@desc Clone the attributes
 			@param source the source
@@ -7719,7 +7719,7 @@ do
 		doc [======[
 			@name OnEventHandlerChanged
 			@type event
-			@desc Fired when the event handler is cheanged
+			@desc Fired when an event's handler is changed
 			@param name the changed event handler's event name
 		]======]
 		event "OnEventHandlerChanged"

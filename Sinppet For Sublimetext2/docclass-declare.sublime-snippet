@@ -1,0 +1,12 @@
+<snippet>
+	<content><![CDATA[
+doc [======[
+	@name ${1:class_name}
+	@type class
+	@desc ${2:description}
+]======]
+]]></content>
+    <tabTrigger>docclass</tabTrigger>
+    <scope>source.lua</scope>
+    <description>doc for class</description>
+</snippet>

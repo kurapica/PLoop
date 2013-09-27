@@ -1392,7 +1392,7 @@ Take the game as an example, to display the health points of the player, we may 
 
 		_IFHealthObjs = {}
 
-		-- Object method
+		-- Object method, need override
 		function SetValue(self, value)
 		end
 
@@ -1447,9 +1447,9 @@ The text of the *HealthText* object would be refreshed to the new value.
 Document
 ====
 
-*System.Object* and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments to those features.
+*System.Object* and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments for those features.
 
-So, take the *System.Object* as an example :
+Take the *System.Object* as an example :
 
 	import "System"
 
@@ -1464,7 +1464,7 @@ And you should get :
 			The root class of other classes. Object class contains several methodes for common use.
 
 		Event :
-			OnEventHandlerChanged　-　Fired when the event handler is cheanged
+			OnEventHandlerChanged　-　Fired when an event's handler is changed
 
 		Method :
 			ActiveThread　-　Active the thread mode for special events
@@ -1481,8 +1481,6 @@ And you should get :
 			UnBlockEvent　-　Un-Block some events for the object
 
 
-Here is a document for the *System.Object*.
-
 * The first line : [__Final__] means the class is a final class, it can't be re-defined, it's an attribute description, will be explained later.
 
 * The next part is the description for the class.
@@ -1497,7 +1495,7 @@ Also, details of the event, property, method can be get by the *Help* method :
 	[Class] System.Object - [Event] OnEventHandlerChanged :
 
 		Description :
-			Fired when the event handler is cheanged
+			Fired when an event's handler is changed
 
 		Format :
 			function object:OnEventHandlerChanged(name)
@@ -1536,6 +1534,8 @@ Here is a full example to show how to make documents for all features in the Loo
 			@name IFName
 			@type interface
 			@desc Mark the objects should have a "Name" property and "OnNameChanged" event
+			@overridable SetName method, used to set the object's name
+			@overridable GetName method, used to get the object's name
 		]======]
 
 		------------------------------------------------------
@@ -1674,9 +1674,34 @@ The *doc* receive a format string as the document. Using "@" as seperate of each
 * format - The function format of the constructor(type is 'class' only), event hanlder(type is 'event') or the method(type is 'method')
 * param - The parameters of the function, it receive two part string seperate by the first space, the first part is the parameter's name, the second part is the description.
 * return - The return value, also receive two part string seperate by the first space, the first part is the name or type of the value, the second part is the description.
+* overridable - The features that can be overrided in the interface.
 * The documents can be put in any places of the class/interface, no need to put before it's features.
 
-So, we can use the *System.Reflector.Help* to see the details of the *Person* class like :
+So, we can use the *System.Reflector.Help* to see the details of the *IFName* and *Person* class like :
+
+	print(System.Reflector.Help(IFName))
+
+	-- Output :
+	[Interface] IFName :
+
+	Description :
+		Mark the objects should have a "Name" property and "OnNameChanged" event
+
+	Event :
+		OnNameChanged　-　Fired when the object's name is changed
+
+	Property :
+		Name　-　The name of the object
+
+	Method :
+		GetName　-　Get the object's name
+		SetName　-　Set the object's name
+
+	Overridable :
+		SetName - method, used to set the object's name
+		GetName - method, used to get the object's name
+
+	-------------------------------------------
 
 	print( System.Reflector.Help( Person ) )
 
@@ -1884,6 +1909,10 @@ But if there is a *_Names* that defined in the _G, the value'll be used and it's
 
 And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the *__index* again and again, it's useful to reduce the cpu cost.
 
+
+System.Module
+----
+
 Like the definition environment, the Loop system also provide a *Module* class to create private environment for common using. Unlike the other classes in the *System* namespace, the *Module* class will be saved to the _G at the same time the Loop system is installed.
 
 So, we can use it directly with format :
@@ -1892,7 +1921,7 @@ So, we can use it directly with format :
 
 The *Module(name)* will create a *Module* object, and call the object with a string version will change the current environment to the object itself, a module can contains child-modules, the child-modules can access featrues defined in it's parent module, so the *name* can be a full path of the modules, the ModuleB should be a child-module of the ModuleA, the ModuleC is a child-module of the ModuleB, so ModuleC can access all features in ModuleA and ModuleB.
 
-So, what the detail of the Module :
+Here is a list of the features in the *Module* :
 
 	print( System.Reflector.Help( Module ) )
 
@@ -1935,11 +1964,631 @@ Take an example as the start (Don't forget *do ... end* if using in the interact
 
 As you can see, it's special to use the properties of the object, in the module environment, all properties can be used directly, the *_M* is just like the *_G* in the *_G* table.
 
+When the environment changed to the private environment, you can do whatever you'll do in the _G, any global vars defined in it will only be stored in the private environment, and you can access the namespaces just like in a definition environment.
+
+
+Version Check
+----
+
+When using a same module twice with version settings, there should be a version check :
+
+	do
+		Module "A" "v1.0"
+	end
+
+	do
+		-- Error : The version must be greater than the current version of the module.
+		Module "A" "v1.0"
+	end
+
+If the existed module has a version, the next version must be greater than the first one, the compare is using the numbers in the tail of the version, like "v1.0.12323.1", the version number is "1.0.12323.1" and '1.0.2' is greater than it.
+
+If you want to skip the version check, just keep empty version like :
+
+	do
+		Module "B" ""
+
+		function a() end
+	end
+
+	do
+		Module "B" ""
+
+		-- Output : function: 0x7faac2c5d8f0
+		print( a )
+	end
+
+Sometimes you may want an anonymous module, that used once. Just keep the name and version all empty :
+
+	do
+		Module "" ""
+
+		-- Ouput : table: 0x7faac2c8ff10
+		print( _M )
+	end
+
+	do
+		Module "" ""
+
+		-- Ouput : table: 0x7faac2c8c620
+		print( _M )
+	end
+
+So, the anonymous modules can't be reused, it's better to use anonymous modules to create features that you don't want anybody touch it.
 
 
 
 System.__Attribute__
 ====
+
+In the previous examples, *__Flags__* is used for enum, *__StructType__* is used for struct, and you can find many attribute classes in the *System*.
+
+The attribute classes's objects are used to make some description for features like class, enum, struct. Unlike the document system, those marks can be used by the system or the custom functions to do some analysis or some special operations.
+
+The attribute class's behavior is quite different from normal classes, Since in lua, we can't do it like
+
+	[SerializableAttribute]
+	[ComVisibleAttribute(true)]
+	[AttributeUsageAttribute(AttributeTargets.Enum, Inherited = false)]
+	public class FlagsAttribute : Attribute
+
+in .Net. The Loop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
+
+The whole attribute system is built on the *System.__Attribute__* class. Here is a list of it :
+
+	[__Final__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
+	[Class] System.__Attribute__ :
+
+		Description :
+			The __Attribute__ class associates predefined system information or user-defined custom information with a target element.
+
+
+		Method :
+			------------ The method could be overrided by the attribute class
+			ApplyAttribute　-　Apply the attribute to the target, overridable
+
+			------------ The class method called by the Loop system, don't use them
+			_ClearPreparedAttributes　-　Clear the prepared attributes
+			_CloneAttributes　-　Clone the attributes
+			_ConsumePreparedAttributes　-　Set the prepared attributes for target
+			_GetCustomAttribute　-　Return the attributes of the given type for the target
+			_IsDefined　-　Check whether the target contains such type attribute
+
+			------------ The class method used by the custom programs
+			_GetClassAttribute　-　Return the attributes of the given type for the class
+			_GetConstructorAttribute　-　Return the attributes of the given type for the class's constructor
+			_GetEnumAttribute　-　Return the attributes of the given type for the enum
+			_GetEventAttribute　-　Return the attributes of the given type for the class|interface's event
+			_GetInterfaceAttribute　-　Return the attributes of the given type for the interface
+			_GetMethodAttribute　-　Return the attributes of the given type for the class|interface's method
+			_GetPropertyAttribute　-　Return the attributes of the given type for the class|interface's property
+			_GetStructAttribute　-　Return the attributes of the given type for the struct
+
+			_IsClassAttributeDefined　-　Check whether the target contains such type attribute
+			_IsConstructorAttributeDefined　-　Check whether the target contains such type attribute
+			_IsEnumAttributeDefined　-　Check whether the target contains such type attribute
+			_IsEventAttributeDefined　-　Check whether the target contains such type attribute
+			_IsInterfaceAttributeDefined　-　Check whether the target contains such type attribute
+			_IsMethodAttributeDefined　-　Check whether the target contains such type attribute
+			_IsPropertyAttributeDefined　-　Check whether the target contains such type attribute
+			_IsStructAttributeDefined　-　Check whether the target contains such type attribute
+
+
+System.__Final__
+----
+
+The first line show the class is a final class, *System.__Final__* is a class inherited from the *System.__Attribute__* and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using *Module* as the environment :
+
+	Module "A" ""
+
+	import "System"
+
+	__Final__()
+	class "A"
+	endclass "A"
+
+	-- Error : The class is final, can't be re-defined.
+	class "A"
+	endclass "A"
+
+So, creating an object of the *__Final__* class before the definition, then the features should be set to final.
+
+Like how to use the *__Final__*, using any attribtue class is just create an object with init values before its target.
+
+
+System.__AttributeUsage__
+----
+
+The second line :
+
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
+
+The *System.__AttributeUsage__* is also an attribute class inherited from the *System.__Attribute__*, it can be used on an attribute class, and used to describe how the attribute class can be used.
+
+	[__Final__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS, Inherited = false, AllowMultiple = false, RunOnce = false }]
+	[Class] System.__AttributeUsage__ :
+
+	Description :
+		Specifies the usage of another attribute class.
+
+	Super Class :
+		System.__Attribute__
+
+	Property :
+		AllowMultiple　-　whether multiple instances of your attribute can exist on an element. default false
+		AttributeTarget　-　The attribute target type, default AttributeTargets.All
+		Inherited　-　Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true
+		RunOnce　-　Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation
+
+For the attribute system, attributes can be applied to several types (Defined in System.AttributeTargets) :
+
+	[Enum][__Flags__] System.AttributeTargets :
+	    ALL = 0
+	    CLASS = 1
+	    CONSTRUCTOR = 2
+	    ENUM = 4
+	    EVENT = 8
+	    INTERFACE = 16
+	    METHOD = 32
+	    PROPERTY = 64
+	    STRUCT = 128
+
+* All - for all below features :
+* Class - for the class
+* Constructor - for the class's constructor, now, only *__Arguments__* attribute needed to set the arguments count and type for the constructor.
+* Eum - for the enum
+* Event - for the class / interface's event
+* Interface - for the interface
+* Method - for the method of the class, struct and interface
+* Property - for the property of the class and interface
+* Struct - for the struct
+
+So, take the *__Final__* class as an example to show how the *__AttributeUsage__* is used :
+
+	[__Final__]
+	[__Unique__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ENUM + System.AttributeTargets.INTERFACE + System.AttributeTargets.CLASS + System.AttributeTargets.STRUCT, Inherited = false, AllowMultiple = false, RunOnce = true }]
+	[Class] System.__Final__ :
+
+	Description :
+		Mark the class|interface to be final, and can't be re-defined again
+
+
+	Super Class :
+		System.__Attribute__
+
+	Method :
+		ApplyAttribute　-　Apply the attribute to the target, overridable
+
+Since the *AttributeTargets* is a flag enum, the *AttributeTarget* property can be assigned a value combined from several enum values.
+
+
+System.__Flags__
+----
+
+As the previous example in the enum part, that's the using of the *System.__Flags__*.
+
+
+System.__Unique__
+----
+
+In the list of the *__Final__*, a new attribute is set, the *System.__Unique__* attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
+
+Like :
+
+	Module "B" ""
+
+	import "System"
+
+	__Unique__()
+	class "A"
+	endclass "A"
+
+	obj = A{ Name = "AA" }
+
+	-- Output : table: 0x7f8ed149a290	AA
+	print(obj, obj.Name)
+
+	obj = A{ Name = "BB" }
+
+	-- Output : table: 0x7f8ed149a290	BB
+	print(obj, obj.Name)
+
+It's useful to pass init table to modify the unique object.
+
+The *__Unique__* attribute normally used on attribute classes, avoid creating too many same functionality objects.
+
+
+System.__NonInheritable__
+----
+
+The *System.__NonInheritable__* attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
+
+	Module "C" ""
+
+	import "System"
+
+	__NonInheritable__()
+	class "A"
+	endclass "A"
+
+	class "B"
+		-- Error : A is non-inheritable.
+		inherit "A"
+	endclass "B"
+
+BTW. if using the *__Unique__* attribute, the class is also non-inheritable, since it can only have one unique object.
+
+
+System.__Arguments__
+----
+
+	[__Final__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CONSTRUCTOR + System.AttributeTargets.METHOD, Inherited = true, AllowMultiple = false, RunOnce = false }]
+	[Class] System.__Arguments__ :
+
+		Description :
+			The argument definitions of the target method or class's constructor
+
+
+		Super Class :
+			System.__Attribute__
+
+		Method :
+			ApplyAttribute　-　Apply the attribute to the target, overridable
+
+The *System.__Arguments__* attribute is used on constructor or method, it's used to mark the arguments's name and types, it use *System.Argument* class as a partner :
+
+	[__Final__]
+	[Class] System.Argument :
+
+		Description :
+			The argument description object
+
+
+		Property :
+			Default　-　The defalut value of the argument
+			IsList　-　Whether the rest are a list of the same type argument, only used for the last argument
+			Name　-　The name of the argument
+			Type　-　The type of the argument
+
+So, take a method as the example first :
+
+	Module "D" ""
+
+	import "System"
+
+	class "A"
+
+		__Arguments__{
+			Argument{ Name = "Count", Type = Number },
+			Argument{ Name = "...", Type = String, IsList = true }
+		}
+		function Add(self, count, ...)
+			for i = 1, count do
+				self[i] = select(i, ...)
+			end
+		end
+	endclass "A"
+
+	obj = A()
+
+	-- Error : Usage : A:Add(Count, ...) - Count must be a number, got nil.
+	obj:Add()
+
+	-- Error : Usage : A:Add(Count, ...) - ... must be a string, got number.
+	obj:Add(3, "hi", 2, 3)
+
+So, you can see, the system would do the arguments validation for the method.
+
+The *__Arguments__* is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the *__Arguments__*, some special vars in the init table should be take to the constructor:
+
+	Module "E" ""
+
+	import "System"
+
+	class "A"
+
+		__Arguments__{
+			Argument{ Name = "Name", Type = String, Default = "Anonymous" },
+		}
+		function A(self, name)
+			print("Init A with name " .. name)
+		end
+	endclass "A"
+
+	-- Output : Init A with name Hello
+	obj = A { Name = "Hello" }
+
+	-- Output : nil
+	print(obj.Name)
+
+	-- Output : Init A with name Anonymous
+	obj = A {}
+
+	-- Error : Usage : A(Name = "Anonymous") - Name must be a string, got number.
+	obj = A { Name = 123 }
+
+So, the constructor would take what it need to do the init, and the vars also removed from the init table.
+
+
+System.__StructType__
+----
+
+Introduced in the struct part.
+
+
+System.__Cache__
+----
+
+In the class system, all methods(include inherited) are stored in a class cache for objects to use. Normally, it's enough for the require. But in some background, we need a quick acces for those methods, sure you do it like :
+
+	class "A"
+		function Greet(self) end
+	endclass "A"
+
+	obj = A()
+	obj.Greet = obj.Greet  -- so next time access the 'Greet' is just a table field
+
+But write the code everytime is just a pain. So, here comes the *System.__Cache__* attribute :
+
+	[__Final__]
+	[__Unique__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS + System.AttributeTargets.METHOD, Inherited = true, AllowMultiple = false, RunOnce = false }]
+	[Class] System.__Cache__ :
+
+		Description :
+			Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created
+
+
+		Super Class :
+			System.__Attribute__
+
+It can be used on the class or methods, when used on the class, all its objects will cache a method when they access the method for the first time. When used on a method, the method should be saved to the object when the object is created :
+
+	Module "F" ""
+
+	import "System"
+
+	__Cache__()
+	class "A"
+		function Greet(self) end
+	endclass "A"
+
+	obj = A()
+
+	-- Output : nil
+	print(rawget(obj, "Greet"))
+
+	obj:Greet()
+
+	-- Output : function: 0x7feb0842d110
+	print(rawget(obj, "Greet"))
+
+	---------------------------
+
+	class "B"
+		__Cache__()
+		function Greet(self) end
+	endclass "B"
+
+	obj = B()
+
+	-- Output : function: function: 0x7feb084884d0
+	print(rawget(obj, "Greet"))
+
+It's would be very useful to mark some most used methods with the attribute.
+
+
+System.__Expandable__
+----
+
+Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the *System.__Expandable__* attribute.
+
+	Module "G" ""
+
+	import "System"
+
+	__Expandable__()
+	class "A"
+	endclass "A"
+
+	obj = A()
+
+	A.Greet = function(self) print("Hello World") end
+
+	-- Output : Hello World
+	obj:Greet()
+
+BTW, mark a class/interface with *__Final__* and *__Expandable__* attribute, so the class/interface can't be re-defined, but can be expanded.
+
+
+Custom Attributes
+----
+
+The above attributes are all used by the core system of the Loop. But also this is a powerful system for common using.
+
+Take a database table as example, a lua table(object) can be used to store the field data of one row of the data table. So, here are the datas :
+
+	DataTable = {
+		[1] = {
+			ID = 1,
+			Name = "Ann",
+			Age = 22,
+		},
+		[2] = {
+			ID = 2,
+			Name = "King",
+			Age = 33,
+		},
+		[3] = {
+			ID = 3,
+			Name = "Sam",
+			Age = 18,
+		}
+	}
+
+Now, I need a function to manipulate the datatable, but I don't know the detail of the datatable like the field count, type and orders.
+
+So, the best way is the data can tell us what datatable it is and also the field informations.
+
+We could define a class used to represent one row of the datatable like :
+
+	Module "DataTable" ""
+
+	import "System"
+
+	class "Person"
+		property "ID" {
+			Storage = "__ID",
+			Type = Number,
+		}
+		property "Name" {
+			Storage = "__Name",
+			Type = String,
+		}
+		property "Age" {
+			Storage = "__Age",
+			Type = Number,
+		}
+	endclass "Person"
+
+But since the function won't know how to use the *Person* table ( we don't want a function to handle only one data type ), we need use some attributes to describe them.
+
+First, two attribute classes are defined here :
+
+	Module "DataTable" ""
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class}
+	class "__Table__"
+		inherit "__Attribute__"
+
+		property "Name" {
+			Storage = "__Name",
+			Type = String,
+		}
+	endclass "__Table__"
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property}
+	class "__Field__"
+		inherit "__Attribute__"
+
+		property "Name" {
+			Storage = "__Name",
+			Type = String,
+		}
+
+		property "Index" {
+			Storage = "__Index",
+			Type = Number,
+		}
+
+		property "Type" {
+			Storage = "__Type",
+			Type = String,
+		}
+	endclass "__Field__"
+
+The *__Table__* attribute is used on the class, used to mark the class with the datatable's name, so we can bind it to the real table in the database.
+
+The *__Field__* attribute is used on the property, used to mark the property to a field of a datatable, the *Name* to the field's name, *Index* to the field's display index, and the *Type* to the field's type (not the type of the Loop).
+
+So, here re-define the *Person* class :
+
+	Module "DataTable" ""
+
+	__Table__{ Name = "Persons" }
+	class "Person"
+		__Field__{ Name = "No.", Index = 1, Type = "NUMBER(10, 0)" }
+		property "ID" {
+			Storage = "__ID",
+			Type = Number,
+		}
+
+		__Field__{ Name = "Name", Index = 2, Type = "VARCHAR2(30)" }
+		property "Name" {
+			Storage = "__Name",
+			Type = String,
+		}
+
+		__Field__{ Name = "Age", Index = 3, Type = "NUMBER(3, 0)" }
+		property "Age" {
+			Storage = "__Age",
+			Type = Number,
+		}
+	endclass "Person"
+
+Now, we can use them to store the datatable and make a common function to display the datas :
+
+	Module "DataTable" ""
+
+	data = {
+		Person { ID = 1, Name = "Ann", Age = 22 },
+		Person { ID = 2, Name = "King", Age = 33 },
+		Person { ID = 3, Name = "Sam", Age = 18, },
+	}
+
+	function PrintData(objs)
+		local cls = getmetatable(objs[1])
+
+		local tbl = __Attribute__._GetClassAttribute(cls, __Table__)
+
+		if tbl then
+			print("Table : " .. tbl.Name)
+			print("-----------------------")
+		end
+
+		local cols = {}
+		local colnames = {}
+
+		for _, prop in ipairs(Reflector.GetProperties(cls)) do
+			local field = __Attribute__._GetPropertyAttribute(cls, prop, __Field__)
+
+			if field then
+				cols[field.Index] = prop
+				colnames[field.Index] = field.Name
+			end
+		end
+
+		local str = ""
+
+		for i, name in ipairs(colnames) do
+			str = str == "" and (str .. name) or (str .. "\t\t" .. name)
+		end
+
+		print(str)
+
+		for i, data in ipairs(objs) do
+			str = ""
+
+			for _, prop in ipairs(cols) do
+				str = str == "" and (str .. data[prop]) or (str .. "\t\t" .. data[prop])
+			end
+
+			print(str)
+		end
+	end
+
+	PrintData(data)
+
+The final result is :
+
+	Table : Persons
+	-----------------------
+	No.		Name		Age
+	1		Ann			22
+	2		King		33
+	3		Sam			18
+
+Some points about the function :
+
+* getmetatable(objs[1]), using getmetatable on an object, would get the object's class, it's a quick way to get the class.
+* __Attribute__._GetClassAttribute(cls, __Table__) will try to get class attribute of the *__Table__* for the cls, the return value is an object of the *__Table__* if existed. So, then we could get the datatable's name.
+* Reflector.GetProperties used to get a sorted name list of the class/interface's all properties, if pass *true* as the second argument, only properties defined in the class/interface will be get, since there is no super class of the *Person*, so get all properties is simple enough. You can use *Help* to see the detail of it.
+* __Attribute__._GetPropertyAttribute(cls, prop, __Field__) like *_GetClassAttribute*, only need a more argument : the property's name.
+
 
 
 Tips

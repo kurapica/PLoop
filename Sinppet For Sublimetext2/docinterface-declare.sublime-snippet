@@ -1,0 +1,12 @@
+<snippet>
+	<content><![CDATA[
+doc [======[
+	@name ${1:interface_name}
+	@type interface
+	@desc ${2:description}
+]======]
+]]></content>
+    <tabTrigger>docinterface</tabTrigger>
+    <scope>source.lua</scope>
+    <description>doc for interface</description>
+</snippet>

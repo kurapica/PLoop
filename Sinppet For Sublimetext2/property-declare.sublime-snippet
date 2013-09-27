@@ -1,0 +1,22 @@
+<snippet>
+	<content><![CDATA[
+doc [======[
+	@name ${1:property_name}
+	@type property
+	@desc ${2:description}
+]======]
+property "${1:property_name}" {
+	Storage = "__${1:property_name}",
+	Get = "Get${1:property_name}" or function(self)
+		${4:return self.__${1:property_name}}
+	end,
+	Set = "Set${1:property_name}" or function(self, value)
+		${5:self.__${1:property_name} = value}
+	end,
+	Type = ${3:System.Any},
+}
+]]></content>
+    <tabTrigger>property</tabTrigger>
+    <scope>source.lua</scope>
+    <description>property</description>
+</snippet>

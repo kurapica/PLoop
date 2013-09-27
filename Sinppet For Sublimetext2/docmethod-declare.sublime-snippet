@@ -1,0 +1,14 @@
+<snippet>
+	<content><![CDATA[
+doc [======[
+	@name ${1:function_name}
+	@type method
+	@desc ${2:description}
+	@param ${3:...}
+	${4:@return nil}
+]======]
+]]></content>
+    <tabTrigger>docmethod</tabTrigger>
+    <scope>source.lua</scope>
+    <description>doc for method</description>
+</snippet>
