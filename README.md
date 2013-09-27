@@ -960,7 +960,7 @@ The __inherit__ keyword can only be used in the class definition. In the previou
 
 	If override the property definition in the child-class, the superclass's property will be removed from the child-class.
 
-* Like the object methods, override the metamethods is the same, take __call__ as example, __super.__call__ can be used to retrieve the superclass's __call__ metamethod.
+* Like the object methods, override the metamethods is the same, take **__call** as example, **super.__call** can be used to retrieve the superclass's **__call** metamethod.
 
 * When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any vars defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
 
