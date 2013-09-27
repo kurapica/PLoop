@@ -25,7 +25,7 @@ Use loadfile or require to load the class.lua file in the folder. Then you can t
 		endclass "MyClass"
 	end
 
-Now we create a class with a *Greet* method and a *Name* property. Then we can use it like :
+Now we create a class with a __Greet__ method and a __Name__ property. Then we can use it like :
 
 	do
 		-- Create the class's object, also with init settings, the init table can contains properties settings
@@ -58,17 +58,17 @@ There are some keywords that released into the _G :
 * partinterface
 * Module
 
-The *namespace* & *import* are used to control the namespace system used to store classes, interfaces, structs and enums.
+The __namespace__ & __import__ are used to control the namespace system used to store classes, interfaces, structs and enums.
 
-The *enum* is used to define an enum type.
+The __enum__ is used to define an enum type.
 
-The *struct* is used to start the definition of a struct type. A data of a struct type, is a normal table in lua, without metatable settings or basic lua type data like string, number, thread, function, userdata, boolean. The struct types are used to validate or create the values that follow the explicitly structure that defined in the struct types.
+The __struct__ is used to start the definition of a struct type. A data of a struct type, is a normal table in lua, without metatable settings or basic lua type data like string, number, thread, function, userdata, boolean. The struct types are used to validate or create the values that follow the explicitly structure that defined in the struct types.
 
-The *class* & *partclass* are used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to tell it do some jobs, also would have properties to store the data used to mark the object's state. A class is an abstract of objects, and can be used to create objects with the same properties and methods settings.
+The __class__ & __partclass__ are used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to tell it do some jobs, also would have properties to store the data used to mark the object's state. A class is an abstract of objects, and can be used to create objects with the same properties and methods settings.
 
-The *interface* & *partinterface* are used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like we may need every objects have a *Name* property to used to show all objects's name. So, the interface is bring in to provide such features. Define an interface is the same like define a class, but no objects can be created from an interface.
+The __interface__ & __partinterface__ are used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like we may need every objects have a __Name__ property to used to show all objects's name. So, the interface is bring in to provide such features. Define an interface is the same like define a class, but no objects can be created from an interface.
 
-The *Module* is used to start a standalone environment with version check, and make the development with the lua-oop system more easily, like we don't need to write down full path of namespaces. This topic will be discussed at last.
+The __Module__ is used to start a standalone environment with version check, and make the development with the lua-oop system more easily, like we don't need to write down full path of namespaces. This topic will be discussed at last.
 
 
 
@@ -79,10 +79,10 @@ In an oop project, there would be hundred or thousand classes or other data type
 
 In the namespace system, we can access those features like classes, interfaces, structs with a path string.
 
-A full path looks like *System.Forms.EditBox*, a combination of words separated by '.', in the example, *System*, *System.Forms* and *System.Forms.EditBox* are all namespaces, the namespace can be a pure namespace used only to contains other namespaces, but also can be classes, interfaces, structs or enums, only eums can't contains other namespaces.
+A full path looks like __System.Forms.EditBox__, a combination of words separated by '.', in the example, __System__, __System.Forms__ and __System.Forms.EditBox__ are all namespaces, the namespace can be a pure namespace used only to contains other namespaces, but also can be classes, interfaces, structs or enums, only eums can't contains other namespaces.
 
 
-The *import* function is used to save the target namespace into current environment, the 1st paramter is a string that contains the full path of the target namespace, so we can share the classes and other features in many lua environments, the 2nd paramter is a boolean, if true, then all the sub-namespace of the target will be saved to the current environment too.
+The __import__ function is used to save the target namespace into current environment, the 1st paramter is a string that contains the full path of the target namespace, so we can share the classes and other features in many lua environments, the 2nd paramter is a boolean, if true, then all the sub-namespace of the target will be saved to the current environment too.
 
     import (name[, all])
 
@@ -99,13 +99,13 @@ If you already load the class.lua, you can try some example :
 
 	print( Object )          -- Output : System.Object
 
-The System is a root namespace defined in the class.lua file, some basic features are defined in the namespace, such like *System.Object*, used as the super class of other classes.
+The System is a root namespace defined in the class.lua file, some basic features are defined in the namespace, such like __System.Object__, used as the super class of other classes.
 
-Also you can see, *Object* is a sub-namespace in *System*, we can access it just like a field in the *System*.
+Also you can see, __Object__ is a sub-namespace in __System__, we can access it just like a field in the __System__.
 
 ---
 
-The *namespace* function is used to declare a default namespace for the current environment, so any classes, interfaces, structs and enums that defined after it, will be stored in the namespace as sub-namespaces.
+The __namespace__ function is used to declare a default namespace for the current environment, so any classes, interfaces, structs and enums that defined after it, will be stored in the namespace as sub-namespaces.
 
 	namespace ( name )
 
@@ -159,11 +159,11 @@ The true format of the 'enum' function is
 
 	enum( name )( table )
 
-The *name* is a common string word, *enum(name)* should return a function to receive a table as the definition of the enum data type.
+The __name__ is a common string word, __enum(name)__ should return a function to receive a table as the definition of the enum data type.
 
-In the *table*, for each key-value pairs, if the key is *string*, the key would be used as the value's name, if the key is a number and the value is a string, the value should be used as the value's name, so the 'None' is the value's name in the enum *Week*.
+In the __table__, for each key-value pairs, if the key is __string__, the key would be used as the value's name, if the key is a number and the value is a string, the value should be used as the value's name, so the 'None' is the value's name in the enum __Week__.
 
-In the last line of the example, *System.Reflecotr* is an interface used to provide some internal informations of the system. Here, *ParseEnum* is used to get the key of a enum's value.
+In the last line of the example, __System.Reflecotr__ is an interface used to provide some internal informations of the system. Here, __ParseEnum__ is used to get the key of a enum's value.
 
 ---
 
@@ -203,7 +203,7 @@ Here is the full example :
 
 First, the enum values should be 2^n, and the system would provide auto values if no value is set, so the Week.None is 128.
 
-The *ParseEnum* function can return multi-values of the combination, and *ValidateFlags* can be used to validate the values.
+The __ParseEnum__ function can return multi-values of the combination, and __ValidateFlags__ can be used to validate the values.
 
 
 
@@ -212,7 +212,7 @@ struct
 
 The main purpose of the struct system is used to validate values, for lua, the values can be boolean, number, string, function, userdata, thread and table.
 
-And in the *System* namespace, all basic data type have a struct :
+And in the __System__ namespace, all basic data type have a struct :
 
 * System.Boolean - The value should be mapped to true or false, no validation
 * System.String  - means the value should match : type(value) == "string"
@@ -222,7 +222,7 @@ And in the *System* namespace, all basic data type have a struct :
 * System.Thread  - means the value should match : type(value) == "thread"
 * System.Table  - means the value should match : type(value) == "table"
 
-Those are the *basic* struct types, take the *System.Number* as an example to show the basic using :
+Those are the __basic__ struct types, take the __System.Number__ as an example to show the basic using :
 
 	import "System"
 
@@ -234,9 +234,9 @@ Those are the *basic* struct types, take the *System.Number* as an example to sh
 
 All structs can used to validate values. ( Normally, you won't need to write the 'validation' code yourselves.)
 
-When the value is a table, and we may expect the table contains fields with the expected type values, and the *System.Table* can only be used to check whether the value is a table.
+When the value is a table, and we may expect the table contains fields with the expected type values, and the __System.Table__ can only be used to check whether the value is a table.
 
-Take a position table as the example, we may expect the table has two fields : *x* - the horizontal position, *y* - the vertical position, and the fields' values should all be numbers. So, we can declare a *member* struct type like :
+Take a position table as the example, we may expect the table has two fields : __x__ - the horizontal position, __y__ - the vertical position, and the fields' values should all be numbers. So, we can declare a __member__ struct type like :
 
 	import "System"
 
@@ -245,9 +245,9 @@ Take a position table as the example, we may expect the table has two fields : *
 		y = System.Number
 	endstruct "Position"
 
-Here, *struct* keyword is used to begin the declaration, and *endstruct* keyword is used to end the declaration. Anything defined between them will be definition of the struct.
+Here, __struct__ keyword is used to begin the declaration, and __endstruct__ keyword is used to end the declaration. Anything defined between them will be definition of the struct.
 
-The expression *x = System.Number*, the left part *x* is the member name, the right part *System.Number* is the member's type, the type can be any classes, interfaces, enums or structs :
+The expression *x = System.Number*, the left part __x__ is the member name, the right part __System.Number__ is the member's type, the type can be any classes, interfaces, enums or structs :
 
 * For a given class, the value should be objects that created from the class.
 * For a given interface, the value should be objects whose class extend from the interface.
@@ -273,7 +273,7 @@ So, we can test the custom struct now :
 
 ---
 
-In the previous example, the *x* and *y* field can't be nil, we can re-define it to make the field accpet nil value :
+In the previous example, the __x__ and __y__ field can't be nil, we can re-define it to make the field accpet nil value :
 
 	struct "Position"
 		x = System.Number + nil
@@ -283,11 +283,11 @@ In the previous example, the *x* and *y* field can't be nil, we can re-define it
 	-- No error now
 	pos = Position {x = 111}
 
-Normally, the type part can be a combination of lots types seperated by '+', *nil* used to mark the value can be nil, so *System.Number + System.String + nil* means the value can be number or string or nil.
+Normally, the type part can be a combination of lots types seperated by '+', __nil__ used to mark the value can be nil, so *System.Number + System.String + nil* means the value can be number or string or nil.
 
 ---
 
-If we want default values for the fields, we can add a *Validate* method in the definition, this is a special method used to do custom validations, so we can do some changes in the method, and just remeber to return the value in the *Validate* method.
+If we want default values for the fields, we can add a __Validate__ method in the definition, this is a special method used to do custom validations, so we can do some changes in the method, and just remeber to return the value in the __Validate__ method.
 
 	struct "Position"
 		x = System.Number + nil
@@ -341,7 +341,7 @@ There are many disadvantages in using the constructor, so, just leave the table 
 
 ---
 
-In sometimes, we need validate the values and fire new errors, those operations also can be done in the *Validate* method. Take a struct with two members : *min*, *max*, the *min* value can't be greater than the *max* value, so we should write :
+In sometimes, we need validate the values and fire new errors, those operations also can be done in the __Validate__ method. Take a struct with two members : __min__, __max__, the __min__ value can't be greater than the __max__ value, so we should write :
 
 	struct "MinMax"
 		min = System.Number
@@ -375,7 +375,7 @@ We also may want to validate numeric index table of a same type values, like a t
 
 	a = {"Hello", "This", "is", "a", "index", "table"}
 
-We can declare a *array* struct for those types (A special attribtue for the struct):
+We can declare a __array__ struct for those types (A special attribtue for the struct):
 
 	import "System"
 
@@ -387,11 +387,11 @@ We can declare a *array* struct for those types (A special attribtue for the str
 	-- Error : Usage : StringTable(...) - [3] must be a string, got number.
 	a = StringTable{"Hello", "World", 3}
 
-It's looks like the *member* struct, but the member name *element* has no means, it's just used to decalre the element's type, you can use *element*, *ele* or anything else.
+It's looks like the __member__ struct, but the member name __element__ has no means, it's just used to decalre the element's type, you can use __element__, __ele__ or anything else.
 
 ---
 
-The last part about the struct is the struct methods. Any functions that defined in the struct definition, if the name is not the *Validate* and the struct's name, will be treated as the struct methods, and those methods will be copyed to the values when created.
+The last part about the struct is the struct methods. Any functions that defined in the struct definition, if the name is not the __Validate__ and the struct's name, will be treated as the struct methods, and those methods will be copyed to the values when created.
 
 	struct "Position"
 		x = System.Number
@@ -434,19 +434,19 @@ Let's use an example to show how to create a new class :
 	class "Person"
 	endclass "Person"
 
-Like defining a struct, *class* keyword is used to start the definition of the class, it receive a string word as the class's name, and the *endclass* keyword is used to end the definition of the class, also it need the same name as the parameter, *class*, *endclass* and all keywords in the loop are fake keywords, they are only functions with some lua environment tricks, so we can't use the *end* to do the job for the best.
+Like defining a struct, __class__ keyword is used to start the definition of the class, it receive a string word as the class's name, and the __endclass__ keyword is used to end the definition of the class, also it need the same name as the parameter, __class__, __endclass__ and all keywords in the loop are fake keywords, they are only functions with some lua environment tricks, so we can't use the __end__ to do the job for the best.
 
 Now, we can create an object of the class :
 
 	obj = Person()
 
-Since the *Person* class is a empty class, the *obj* just works like a normal table.
+Since the __Person__ class is a empty class, the __obj__ just works like a normal table.
 
 
 Method
 ----
 
-Calling an object's method is like sending a message to the object, so the object can do some operations. Take the *Person* class as an example, re-define it :
+Calling an object's method is like sending a message to the object, so the object can do some operations. Take the __Person__ class as an example, re-define it :
 
 	class "Person"
 
@@ -460,9 +460,9 @@ Calling an object's method is like sending a message to the object, so the objec
 
 	endclass "Person"
 
-Any global functions that defined in the class definition with name not start with "_" are the methods of the class's objects. The object methods should have *self* as the first paramter to receive the object.
+Any global functions that defined in the class definition with name not start with "_" are the methods of the class's objects. The object methods should have __self__ as the first paramter to receive the object.
 
-Here two methods are defined for the *Person*'s objects. *GetName* used to get the person's name, and *SetName* used to set the person's name. The objects are lua tables with special metatable settings, so the name value are stored in the person object itself in the field *__Name*, also you can use a special table to store the name value like :
+Here two methods are defined for the __Person__'s objects. __GetName__ used to get the person's name, and __SetName__ used to set the person's name. The objects are lua tables with special metatable settings, so the name value are stored in the person object itself in the field ____Name__, also you can use a special table to store the name value like :
 
 	class "Person"
 
@@ -496,7 +496,7 @@ So, we can used it like :
 Constructor
 ----
 
-Well, it's better to give the name to a person object when objects are created. When define a global function with the class name, the function will be treated as the constructor function, like the object methods, it use *self* as the first paramter to receive the objecet, and all other paramters passed in.
+Well, it's better to give the name to a person object when objects are created. When define a global function with the class name, the function will be treated as the constructor function, like the object methods, it use __self__ as the first paramter to receive the objecet, and all other paramters passed in.
 
 	class "Person"
 
@@ -564,13 +564,13 @@ Any global functions defined in the class's definition with name start with "_" 
 	print("Person Count : " .. Person._GetPersonCount())
 
 
-Notice a global variable *_PersonCount* is used to count the persons, it can be decalred as local, but keep global is simple, and when re-define the class, the class won't lose informations about the old version objects(run the code again, you should get 6).
+Notice a global variable ___PersonCount__ is used to count the persons, it can be decalred as local, but keep global is simple, and when re-define the class, the class won't lose informations about the old version objects(run the code again, you should get 6).
 
 
 Property & Init with table
 ----
 
-Properties are used to access the object's state, like *name*, *age* for a person. Normally, we can do this just using the lua table's field, but that lack the value validation and we won't know how and when the states are changed. So, the property system bring in like the other oop system.
+Properties are used to access the object's state, like __name__, __age__ for a person. Normally, we can do this just using the lua table's field, but that lack the value validation and we won't know how and when the states are changed. So, the property system bring in like the other oop system.
 
 So, here is the full definition format for a property :
 
@@ -589,7 +589,7 @@ So, here is the full definition format for a property :
 
 * Type - optional, just like define member types in the struct, if set, when write the property, the value would be validated by the type settings.
 
-So, re-define the *Person* class with the property :
+So, re-define the __Person__ class with the property :
 
 	class "Person"
 
@@ -607,9 +607,9 @@ With the property system, we can create objects with a new format, called *Init 
 	-- Output : A	A	20
 	print( obj.Name, obj.__Name, obj.Age )
 
-If only a normal table passed to the class to create the object, the object will be created with no parameters, and then any key-value paris in the table will be tried to write to the object (just like obj[key] = value). If you want some parameters be passed into the class's constructor, the features will be added in the *Attribute* system.
+If only a normal table passed to the class to create the object, the object will be created with no parameters, and then any key-value paris in the table will be tried to write to the object (just like obj[key] = value). If you want some parameters be passed into the class's constructor, the features will be added in the __Attribute__ system.
 
-With the *Storage*, the reading and writing are the quickest, but normally, we need to do more things when the object's properties are accessed, like return a default value when data not existed. So, here is a full example to show *Get* and *Set* :
+With the __Storage__, the reading and writing are the quickest, but normally, we need to do more things when the object's properties are accessed, like return a default value when data not existed. So, here is a full example to show __Get__ and __Set__ :
 
 	class "Person"
 
@@ -638,7 +638,7 @@ With the *Storage*, the reading and writing are the quickest, but normally, we n
 
 	endclass "Person"
 
-So, the *Get* part is using the object method *GetName*, and the *Set* part is using an anonymous function to do the job.
+So, the __Get__ part is using the object method __GetName__, and the __Set__ part is using an anonymous function to do the job.
 
 	obj = Person()
 
@@ -653,7 +653,7 @@ The events are used to let the outside know changes happened in the objects. The
 
 	event "name"
 
-The *event* keyword is used to declare an event with the event name. So, here we declare an event *OnNameChanged* fired when the *Person*'s *Name* property is changed.
+The __event__ keyword is used to declare an event with the event name. So, here we declare an event __OnNameChanged__ fired when the __Person__'s __Name__ property is changed.
 
 	class "Person"
 
@@ -679,7 +679,7 @@ The *event* keyword is used to declare an event with the event name. So, here we
 		}
 	endclass "Person"
 
-It looks like we just give the object a *OnNameChanged* method, and call it when needed. The truth is the *self.OnNameChanged* is an object created from *System.EventHandler* class. It's used to control all event handlers (functions), there are two type event handlers :
+It looks like we just give the object a __OnNameChanged__ method, and call it when needed. The truth is the __self.OnNameChanged__ is an object created from __System.EventHandler__ class. It's used to control all event handlers (functions), there are two type event handlers :
 
 * Stackable event handler
 
@@ -762,9 +762,9 @@ So, we can get detail from the example :
 * Any handler return true will stop the calling operation, any handlers after it won't be called.
 
 
-It's not good to use the *EventHandler* directly, anytime access the object's *EventHandler*, the object will create the *EventHandler* when not existed. So, fire an event without any handlers will be a greate waste of memeory. There are two ways to do it :
+It's not good to use the __EventHandler__ directly, anytime access the object's __EventHandler__, the object will create the __EventHandler__ when not existed. So, fire an event without any handlers will be a greate waste of memeory. There are two ways to do it :
 
-* Using *System.Reflector.FireObjectEvent*, for the previous example :
+* Using __System.Reflector.FireObjectEvent__, for the previous example :
 
 		self:OnNameChanged(oldName, self.Name)
 
@@ -772,7 +772,7 @@ It's not good to use the *EventHandler* directly, anytime access the object's *E
 
 		System.Reflector.FireObjectEvent(self, "OnNameChanged", oldName, self.Name)
 
-* Inherit from *System.Object*, then using the *Fire* method :
+* Inherit from __System.Object__, then using the __Fire__ method :
 
 		class "Person"
 			inherit "System.Object"  -- Explained later
@@ -800,15 +800,15 @@ It's not good to use the *EventHandler* directly, anytime access the object's *E
 
 The inheritance Systems is a powerful feature in the object-oriented program, it makes the class can using the features in its super class.
 
-Here, the *System.Object* class is a class that should be other classes's super class, contains many useful method, the *Fire* method is used to fire an event, it won't create the *EventHandler* object when not needed.
+Here, the __System.Object__ class is a class that should be other classes's super class, contains many useful method, the __Fire__ method is used to fire an event, it won't create the __EventHandler__ object when not needed.
 
 
 Meta-method
 ----
 
-In lua, a table can have many metatable settings, like *__call* use the table as a function, more details can be found in [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/manual.html#2.8).
+In lua, a table can have many metatable settings, like ____call__ use the table as a function, more details can be found in [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/manual.html#2.8).
 
-Since the objects are lua tables with special metatable set by the Loop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the *__call* as an example :
+Since the objects are lua tables with special metatable set by the Loop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the ____call__ as an example :
 
 	class "Person"
 
@@ -832,7 +832,7 @@ So, just declare a global function with the meta-method's name, and it can be us
 	-- Output : Hello, Sam, it's Dean
 	obj("Sam")
 
-All metamethod can used include the *__index* and *__newindex*. Also a new metamethod used by the Loop system : *__exist*, the *__exist* method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
+All metamethod can used include the ____index__ and ____newindex__. Also a new metamethod used by the Loop system : ____exist__, the ____exist__ method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
 
 	class "Person"
 
@@ -870,9 +870,9 @@ The format is
 
 	inherit "superclass path"
 
-The *inherit* keyword can only be used in the class definition. In the previous example, the *Person* class inherit from *System.Object* class, so it can use the *Fire* method defined in it. One class can only have one super class.
+The __inherit__ keyword can only be used in the class definition. In the previous example, the __Person__ class inherit from __System.Object__ class, so it can use the __Fire__ method defined in it. One class can only have one super class.
 
-* In many scene, the class should override its superclass's method, and also want to use the origin method in it. The key features is, in the class definition, a var named *Super* can be used as the superclass, so here is an example :
+* In many scene, the class should override its superclass's method, and also want to use the origin method in it. The key features is, in the class definition, a var named __Super__ can be used as the superclass, so here is an example :
 
 		class "A"
 
@@ -918,7 +918,7 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 
 		endclass "B"
 
-	But when re-define the *A* class, the *oldPrint* would point to an old version *Print* method, it's better to avoid, unless you don't need to re-define any features.
+	But when re-define the __A__ class, the __oldPrint__ would point to an old version __Print__ method, it's better to avoid, unless you don't need to re-define any features.
 
 * With the inheritance system, go back to the property definition :
 
@@ -929,7 +929,7 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 			Type = types,
 		}
 
-	Normally, if want the property accessors can be changed in the child-classes, it's better to define the get & set object methods, and using the name of the methods as the *Get* & *Set* part's value in the property definition, so the child-class only need to override the object methods to change the behavior of the property accesses. Like the *Person* class :
+	Normally, if want the property accessors can be changed in the child-classes, it's better to define the get & set object methods, and using the name of the methods as the __Get__ & __Set__ part's value in the property definition, so the child-class only need to override the object methods to change the behavior of the property accesses. Like the __Person__ class :
 
 		class "Person"
 
@@ -956,11 +956,11 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 
 		endclass "Person"
 
-	So, when a child-class of the *Person* re-define the *GetName* or *SetName*, there is no need to override the property *Name*.
+	So, when a child-class of the __Person__ re-define the __GetName__ or __SetName__, there is no need to override the property __Name__.
 
 	If override the property definition in the child-class, the superclass's property will be removed from the child-class.
 
-* Like the object methods, override the metamethods is the same, take *__call* as example, *super.__call* can be used to retrieve the superclass's *__call* metamethod.
+* Like the object methods, override the metamethods is the same, take ____call__ as example, __super.__call__ can be used to retrieve the superclass's ____call__ metamethod.
 
 * When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any vars defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
 
@@ -1026,7 +1026,7 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 			end
 		endclass "Person"
 
-	Here is a *Person* class definition, it has two properties, one *Name* used to storage a person's name, a *GUID* used to mark the unique person, so we can diff two person with the same name. When a new person add to the system, we create the object with a new guid like :
+	Here is a __Person__ class definition, it has two properties, one __Name__ used to storage a person's name, a __GUID__ used to mark the unique person, so we can diff two person with the same name. When a new person add to the system, we create the object with a new guid like :
 
 		person = Person { Name = "Jane" }
 
@@ -1034,7 +1034,7 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 
 		person = Person { Name = "Jane", GUID = "C2022B9F-ADC2-BBA6-B911-2F670757AD12" }
 
-	The *Person* class is a simple class used as the root class, we can create many child-class like *Child* and *Adult*, so *Child* should have a *Guardian* property point to another person object, and so on. So, there is an event *OnNameChanged* that fired when the person's name is changed. Now we define a *Member* class inherited from the *Person*, also it will count person based on the name.
+	The __Person__ class is a simple class used as the root class, we can create many child-class like __Child__ and __Adult__, so __Child__ should have a __Guardian__ property point to another person object, and so on. So, there is an event __OnNameChanged__ that fired when the person's name is changed. Now we define a __Member__ class inherited from the __Person__, also it will count person based on the name.
 
 		class "Member"
 			inherit "Person"
@@ -1063,7 +1063,7 @@ The *inherit* keyword can only be used in the class definition. In the previous 
 			end
 		endclass "Member"
 
-	So, in the *Member* class, a stackable handler is added for the object, normally, the stackable handler is used in the child-class's definition, so the child-class won't remove any handler added by its super classes.
+	So, in the __Member__ class, a stackable handler is added for the object, normally, the stackable handler is used in the child-class's definition, so the child-class won't remove any handler added by its super classes.
 
 	And for the final using, normal handler is easy to write, and the user won't need to know anything about the stackable handlers.
 
@@ -1204,7 +1204,7 @@ Using the interface is like the class, the format is
 
 	extend "interface path" "interface2 path" "interface3 path" ...
 
-The definition of an interface is started with *interface* and end with *endinterface* :
+The definition of an interface is started with __interface__ and end with __endinterface__ :
 
 	-- Define an interface has one method
 	interface "IFGreet"
@@ -1248,7 +1248,7 @@ Define an interface is just like define a class with little different :
 
 * Re-define interface is like re-define a class, any features would be passed to classes that extend from it.
 
-* like the *partclass*, *partinterface* is used to re-define the interface without clearance.
+* like the __partclass__, __partinterface__ is used to re-define the interface without clearance.
 
 
 Init & Dispose
@@ -1258,7 +1258,7 @@ In class, there may be a constructor, in interface, there may be a initializer, 
 
 Normally, if in the definition, we use some table to cache the object's data, when clear the object, we should clear the cache tables, so no reference will keep the object away from garbage collector.
 
-There are a special method used by all objects named *Dispose*, and any class, interface can define a *Dispose* method to clear reference for themselves.
+There are a special method used by all objects named __Dispose__, and any class, interface can define a __Dispose__ method to clear reference for themselves.
 
 Take one class as the first example :
 
@@ -1285,7 +1285,7 @@ Take one class as the first example :
 	obj:Dispose()
 	obj = nil
 
-If your class or interface won't add any reference to the object, there is no need to decalre a *Dispose* method. And remember, the obj.Dispose is not A.Dispose, all objects use a same method, and the method would call the *Dispose* method that defined in the classes and interfaces.
+If your class or interface won't add any reference to the object, there is no need to decalre a __Dispose__ method. And remember, the obj.Dispose is not A.Dispose, all objects use a same method, and the method would call the __Dispose__ method that defined in the classes and interfaces.
 
 So, that leave one problem, what's the order of the init and dispose in the inheritance system. Just an example will show :
 
@@ -1382,7 +1382,7 @@ How to use
 
 The oop system is used to describe any real world object into data, using the property to represent the object's state like person's name, birthday, sex, and etc, using the methods to represent what the object can do, like walking, talking and more.
 
-The class is used to descrbie a group of objects with same behaviors. Like *Person* for human beings.
+The class is used to descrbie a group of objects with same behaviors. Like __Person__ for human beings.
 
 The interface don't represent a group of objects, it don't know what objects will use the features of it, but it know what can be used by the objects.
 
@@ -1422,9 +1422,9 @@ Take the game as an example, to display the health points of the player, we may 
 
 	endinterface "IFHealth"
 
-In the interface, a empty method *SetValue* is defined, it will be override by the classes that extended from the *IFHealth*, so in the *_SetValue* interface method, there is no need to check whether the object has a *SetValue* method.
+In the interface, a empty method __SetValue__ is defined, it will be override by the classes that extended from the __IFHealth__, so in the ___SetValue__ interface method, there is no need to check whether the object has a __SetValue__ method.
 
-And for a text to display the health point, if we have a *Label* class used to display strings with a *SetText* method to display, we can create a new class to do the job like :
+And for a text to display the health point, if we have a __Label__ class used to display strings with a __SetText__ method to display, we can create a new class to do the job like :
 
 	class "HealthText"
 		inherit "Label"
@@ -1436,20 +1436,20 @@ And for a text to display the health point, if we have a *Label* class used to d
 		end
 	endclass "HealthText"
 
-So, when a *HealthText*'s object is created, it will be stored into the *_IFHealthObjs* table, and when the system call
+So, when a __HealthText__'s object is created, it will be stored into the ___IFHealthObjs__ table, and when the system call
 
 	IFHealth._SetValue(10000)
 
-The text of the *HealthText* object would be refreshed to the new value.
+The text of the __HealthText__ object would be refreshed to the new value.
 
 
 
 Document
 ====
 
-*System.Object* and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments for those features.
+__System.Object__ and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments for those features.
 
-Take the *System.Object* as an example :
+Take the __System.Object__ as an example :
 
 	import "System"
 
@@ -1487,7 +1487,7 @@ And you should get :
 
 * The rest is event, property, method list, since the class has no property, only event and method are displayed.
 
-Also, details of the event, property, method can be get by the *Help* method :
+Also, details of the event, property, method can be get by the __Help__ method :
 
 	print( System.Reflector.Help( System.Object, "OnEventHandlerChanged" ) )
 
@@ -1664,9 +1664,9 @@ Here is a full example to show how to make documents for all features in the Loo
 	endclass "Person"
 
 
-Normally, the struct and enum's structure can show the use of them, so no document for them. In the class/interface environment, *doc* function can be used to declare documents for the class/interface. it's simple to replace the *doc* by *--*, so just change the whole document as a comment.
+Normally, the struct and enum's structure can show the use of them, so no document for them. In the class/interface environment, __doc__ function can be used to declare documents for the class/interface. it's simple to replace the __doc__ by __--__, so just change the whole document as a comment.
 
-The *doc* receive a format string as the document. Using "@" as seperate of each line, the line breaker would be ignored. After the "@" is the part name, here is a list of those part :
+The __doc__ receive a format string as the document. Using "@" as seperate of each line, the line breaker would be ignored. After the "@" is the part name, here is a list of those part :
 
 * name - The feature's name
 * type - The feature's type, like 'interface', 'class', 'event', 'property', 'method'.
@@ -1677,7 +1677,7 @@ The *doc* receive a format string as the document. Using "@" as seperate of each
 * overridable - The features that can be overrided in the interface.
 * The documents can be put in any places of the class/interface, no need to put before it's features.
 
-So, we can use the *System.Reflector.Help* to see the details of the *IFName* and *Person* class like :
+So, we can use the __System.Reflector.Help__ to see the details of the __IFName__ and __Person__ class like :
 
 	print(System.Reflector.Help(IFName))
 
@@ -1768,7 +1768,7 @@ So, we can use the *System.Reflector.Help* to see the details of the *IFName* an
 
 So, you can see the class method and object method's format are different.
 
-The last part, let's get a view of the *System* namespace.
+The last part, let's get a view of the __System__ namespace.
 
 	print( System.Reflector.Help( System ))
 
@@ -1814,15 +1814,15 @@ The last part, let's get a view of the *System* namespace.
 			__Unique__
 
 
-* The *AttributeTargets* is used by the attribute system, explained later.
-* The *StructType* is used by `__StructType__` attribtue, in the struct part, an example already existed.
+* The __AttributeTargets__ is used by the attribute system, explained later.
+* The __StructType__ is used by `__StructType__` attribtue, in the struct part, an example already existed.
 * The structs are basic structs, so no need to care about the non-table value structs.
-* The *Reflector* is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
-* The *Argument* class is used with `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
-* The *Event* and *EventHandler* classes are used to create the whole event system. No need to use it yourself.
-* The *Module* class is used to build private environment for common using, explained later.
-* The *Object* class may be the root class of others, several useful methods.
-* The *Type* class, when using *System.Number + System.String + nil*, the result is a *Type* object, used to validate values.
+* The __Reflector__ is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
+* The __Argument__ class is used with `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
+* The __Event__ and __EventHandler__ classes are used to create the whole event system. No need to use it yourself.
+* The __Module__ class is used to build private environment for common using, explained later.
+* The __Object__ class may be the root class of others, several useful methods.
+* The __Type__ class, when using *System.Number + System.String + nil*, the result is a __Type__ object, used to validate values.
 * The rest classes that started with "__" and end with "__" are the attribute classes, explained later.
 
 
@@ -1846,7 +1846,7 @@ The Loop system is built by manipulate the lua's environment with getfenv / setf
 	-- Output : table: 0x7fd9fb403f30
 	print(getfenv( 1 ))
 
-So, in the class definition, the environment is a private environment belonged to the class *A*. That's why the system can gather events, properties and methods settings for the class, and the *endclass* will set back the environment.
+So, in the class definition, the environment is a private environment belonged to the class __A__. That's why the system can gather events, properties and methods settings for the class, and the __endclass__ will set back the environment.
 
 Beside the definition, the private environment also provide a simple way to access namespaces :
 
@@ -1880,10 +1880,10 @@ Beside the definition, the private environment also provide a simple way to acce
 		----------------------------------
 	endclass "A"
 
-* Any root namespace can be accessed directly in the private environment, so we can access the *System* and *Windows* directly.
+* Any root namespace can be accessed directly in the private environment, so we can access the __System__ and __Windows__ directly.
 * When import a namespace, any namespace in it can be accessed directly in the private environment.
 
-Since it's a private environment, so, why *print* and other global vars can be accessed in the environment. As a simple example, the things works like :
+Since it's a private environment, so, why __print__ and other global vars can be accessed in the environment. As a simple example, the things works like :
 
 	local base = getfenv( 1 )
 
@@ -1897,7 +1897,7 @@ Since it's a private environment, so, why *print* and other global vars can be a
 		return value
 	end })
 
-When access anything not defined in the private environment, the *__index* would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
+When access anything not defined in the private environment, the ____index__ would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
 
 Why the key can't be started with "_", its because sometimes we need a global vars that used to stored datas between different version class (interface .etc), like :
 
@@ -1905,23 +1905,23 @@ Why the key can't be started with "_", its because sometimes we need a global va
 		_Names = _Names or {}
 	endclass "A"
 
-But if there is a *_Names* that defined in the _G, the value'll be used and it's not what we wanted.
+But if there is a ___Names__ that defined in the _G, the value'll be used and it's not what we wanted.
 
-And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the *__index* again and again, it's useful to reduce the cpu cost.
+And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the ____index__ again and again, it's useful to reduce the cpu cost.
 
 
 System.Module
 ----
 
-Like the definition environment, the Loop system also provide a *Module* class to create private environment for common using. Unlike the other classes in the *System* namespace, the *Module* class will be saved to the _G at the same time the Loop system is installed.
+Like the definition environment, the Loop system also provide a __Module__ class to create private environment for common using. Unlike the other classes in the __System__ namespace, the __Module__ class will be saved to the _G at the same time the Loop system is installed.
 
 So, we can use it directly with format :
 
 	Module "ModuleA[.ModuleB[.ModuleC ... ]]" "version number"
 
-The *Module(name)* will create a *Module* object, and call the object with a string version will change the current environment to the object itself, a module can contains child-modules, the child-modules can access featrues defined in it's parent module, so the *name* can be a full path of the modules, the ModuleB should be a child-module of the ModuleA, the ModuleC is a child-module of the ModuleB, so ModuleC can access all features in ModuleA and ModuleB.
+The __Module(name)__ will create a __Module__ object, and call the object with a string version will change the current environment to the object itself, a module can contains child-modules, the child-modules can access featrues defined in it's parent module, so the __name__ can be a full path of the modules, the ModuleB should be a child-module of the ModuleA, the ModuleC is a child-module of the ModuleB, so ModuleC can access all features in ModuleA and ModuleB.
 
-Here is a list of the features in the *Module* :
+Here is a list of the features in the __Module__ :
 
 	print( System.Reflector.Help( Module ) )
 
@@ -1962,7 +1962,7 @@ Take an example as the start (Don't forget *do ... end* if using in the interact
 	-- Output : table: 0x7fe1e947f500	table: 0x7fe1e947f500
 	print( getfenv( 1 ), _M )
 
-As you can see, it's special to use the properties of the object, in the module environment, all properties can be used directly, the *_M* is just like the *_G* in the *_G* table.
+As you can see, it's special to use the properties of the object, in the module environment, all properties can be used directly, the ___M__ is just like the ___G__ in the ___G__ table.
 
 When the environment changed to the private environment, you can do whatever you'll do in the _G, any global vars defined in it will only be stored in the private environment, and you can access the namespaces just like in a definition environment.
 
@@ -2021,7 +2021,7 @@ So, the anonymous modules can't be reused, it's better to use anonymous modules 
 System.__Attribute__
 ====
 
-In the previous examples, `__Flags__` is used for enum, `__StructType__` is used for struct, and you can find many attribute classes in the *System*.
+In the previous examples, `__Flags__` is used for enum, `__StructType__` is used for struct, and you can find many attribute classes in the __System__.
 
 The attribute classes's objects are used to make some description for features like class, enum, struct. Unlike the document system, those marks can be used by the system or the custom functions to do some analysis or some special operations.
 
@@ -2034,7 +2034,7 @@ The attribute class's behavior is quite different from normal classes, Since in 
 
 in .Net. The Loop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
 
-The whole attribute system is built on the *System.__Attribute__* class. Here is a list of it :
+The whole attribute system is built on the __System.__Attribute____ class. Here is a list of it :
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
@@ -2078,7 +2078,7 @@ The whole attribute system is built on the *System.__Attribute__* class. Here is
 System.__Final__
 ----
 
-The first line show the class is a final class, *System.__Final__* is a class inherited from the *System.__Attribute__* and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using *Module* as the environment :
+The first line show the class is a final class, __System.__Final____ is a class inherited from the __System.__Attribute____ and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using __Module__ as the environment :
 
 	Module "A" ""
 
@@ -2104,7 +2104,7 @@ The second line :
 
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
 
-The *System.__AttributeUsage__* is also an attribute class inherited from the *System.__Attribute__*, it can be used on an attribute class, and used to describe how the attribute class can be used.
+The __System.__AttributeUsage____ is also an attribute class inherited from the __System.__Attribute____, it can be used on an attribute class, and used to describe how the attribute class can be used.
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS, Inherited = false, AllowMultiple = false, RunOnce = false }]
@@ -2162,19 +2162,19 @@ So, take the `__Final__` class as an example to show how the `__AttributeUsage__
 	Method :
 		ApplyAttribute　-　Apply the attribute to the target, overridable
 
-Since the *AttributeTargets* is a flag enum, the *AttributeTarget* property can be assigned a value combined from several enum values.
+Since the __AttributeTargets__ is a flag enum, the __AttributeTarget__ property can be assigned a value combined from several enum values.
 
 
 System.__Flags__
 ----
 
-As the previous example in the enum part, that's the using of the *System.__Flags__*.
+As the previous example in the enum part, that's the using of the __System.__Flags____.
 
 
 System.__Unique__
 ----
 
-In the list of the `__Final__`, a new attribute is set, the *System.__Unique__* attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
+In the list of the `__Final__`, a new attribute is set, the __System.__Unique____ attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
 
 Like :
 
@@ -2204,7 +2204,7 @@ The `__Unique__` attribute normally used on attribute classes, avoid creating to
 System.__NonInheritable__
 ----
 
-The *System.__NonInheritable__* attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
+The __System.__NonInheritable____ attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
 
 	Module "C" ""
 
@@ -2239,7 +2239,7 @@ System.__Arguments__
 		Method :
 			ApplyAttribute　-　Apply the attribute to the target, overridable
 
-The *System.__Arguments__* attribute is used on constructor or method, it's used to mark the arguments's name and types, it use *System.Argument* class as a partner :
+The __System.__Arguments____ attribute is used on constructor or method, it's used to mark the arguments's name and types, it use __System.Argument__ class as a partner :
 
 	[__Final__]
 	[Class] System.Argument :
@@ -2332,7 +2332,7 @@ In the class system, all methods(include inherited) are stored in a class cache 
 	obj = A()
 	obj.Greet = obj.Greet  -- so next time access the 'Greet' is just a table field
 
-But write the code everytime is just a pain. So, here comes the *System.__Cache__* attribute :
+But write the code everytime is just a pain. So, here comes the __System.__Cache____ attribute :
 
 	[__Final__]
 	[__Unique__]
@@ -2385,7 +2385,7 @@ It's would be very useful to mark some most used methods with the attribute.
 System.__Expandable__
 ----
 
-Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the *System.__Expandable__* attribute.
+Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the __System.__Expandable____ attribute.
 
 	Module "G" ""
 
@@ -2455,7 +2455,7 @@ We could define a class used to represent one row of the datatable like :
 		}
 	endclass "Person"
 
-But since the function won't know how to use the *Person* table ( we don't want a function to handle only one data type ), we need use some attributes to describe them.
+But since the function won't know how to use the __Person__ table ( we don't want a function to handle only one data type ), we need use some attributes to describe them.
 
 First, two attribute classes are defined here :
 
@@ -2493,9 +2493,9 @@ First, two attribute classes are defined here :
 
 The `__Table__` attribute is used on the class, used to mark the class with the datatable's name, so we can bind it to the real table in the database.
 
-The `__Field__` attribute is used on the property, used to mark the property to a field of a datatable, the *Name* to the field's name, *Index* to the field's display index, and the *Type* to the field's type (not the type of the Loop).
+The `__Field__` attribute is used on the property, used to mark the property to a field of a datatable, the __Name__ to the field's name, __Index__ to the field's display index, and the __Type__ to the field's type (not the type of the Loop).
 
-So, here re-define the *Person* class :
+So, here re-define the __Person__ class :
 
 	Module "DataTable" ""
 
@@ -2584,10 +2584,10 @@ The final result is :
 
 Some points about the function :
 
-* getmetatable(objs[1]), using getmetatable on an object, would get the object's class, it's a quick way to get the class.
-* __Attribute__._GetClassAttribute(cls, __Table__) will try to get class attribute of the `__Table__` for the cls, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
-* Reflector.GetProperties used to get a sorted name list of the class/interface's all properties, if pass *true* as the second argument, only properties defined in the class/interface will be get, since there is no super class of the *Person*, so get all properties is simple enough. You can use *Help* to see the detail of it.
-* __Attribute__._GetPropertyAttribute(cls, prop, __Field__) like *_GetClassAttribute*, only need a more argument : the property's name.
+* `getmetatable(objs[1])`, using getmetatable on an object, would get the object's class, it's a quick way to get the class.
+* `__Attribute__._GetClassAttribute(cls, __Table__)` will try to get class attribute of the `__Table__` for the cls, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
+* `Reflector.GetProperties` used to get a sorted name list of the class/interface's all properties, if pass __true__ as the second argument, only properties defined in the class/interface will be get, since there is no super class of the __Person__, so get all properties is simple enough. You can use __Help__ to see the detail of it.
+* `__Attribute__._GetPropertyAttribute(cls, prop, __Field__)` like ___GetClassAttribute__, only need a more argument : the property's name.
 
 
 
