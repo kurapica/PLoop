@@ -462,7 +462,7 @@ Calling an object's method is like sending a message to the object, so the objec
 
 Any global functions that defined in the class definition with name not start with "_" are the methods of the class's objects. The object methods should have __self__ as the first paramter to receive the object.
 
-Here two methods are defined for the __Person__'s objects. __GetName__ used to get the person's name, and __SetName__ used to set the person's name. The objects are lua tables with special metatable settings, so the name value are stored in the person object itself in the field ____Name__, also you can use a special table to store the name value like :
+Here two methods are defined for the __Person__'s objects. __GetName__ used to get the person's name, and __SetName__ used to set the person's name. The objects are lua tables with special metatable settings, so the name value are stored in the person object itself in the field __Name__, also you can use a special table to store the name value like :
 
 	class "Person"
 
@@ -806,9 +806,9 @@ Here, the __System.Object__ class is a class that should be other classes's supe
 Meta-method
 ----
 
-In lua, a table can have many metatable settings, like ____call__ use the table as a function, more details can be found in [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/manual.html#2.8).
+In lua, a table can have many metatable settings, like __call__ use the table as a function, more details can be found in [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/manual.html#2.8).
 
-Since the objects are lua tables with special metatable set by the Loop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the ____call__ as an example :
+Since the objects are lua tables with special metatable set by the Loop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the __call__ as an example :
 
 	class "Person"
 
@@ -832,7 +832,7 @@ So, just declare a global function with the meta-method's name, and it can be us
 	-- Output : Hello, Sam, it's Dean
 	obj("Sam")
 
-All metamethod can used include the ____index__ and ____newindex__. Also a new metamethod used by the Loop system : ____exist__, the ____exist__ method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
+All metamethod can used include the __index__ and __newindex__. Also a new metamethod used by the Loop system : __exist__, the __exist__ method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
 
 	class "Person"
 
@@ -960,7 +960,7 @@ The __inherit__ keyword can only be used in the class definition. In the previou
 
 	If override the property definition in the child-class, the superclass's property will be removed from the child-class.
 
-* Like the object methods, override the metamethods is the same, take ____call__ as example, __super.__call__ can be used to retrieve the superclass's ____call__ metamethod.
+* Like the object methods, override the metamethods is the same, take __call__ as example, __super.__call__ can be used to retrieve the superclass's __call__ metamethod.
 
 * When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any vars defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
 
@@ -1897,7 +1897,7 @@ Since it's a private environment, so, why __print__ and other global vars can be
 		return value
 	end })
 
-When access anything not defined in the private environment, the ____index__ would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
+When access anything not defined in the private environment, the __index__ would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
 
 Why the key can't be started with "_", its because sometimes we need a global vars that used to stored datas between different version class (interface .etc), like :
 
@@ -1907,7 +1907,7 @@ Why the key can't be started with "_", its because sometimes we need a global va
 
 But if there is a ___Names__ that defined in the _G, the value'll be used and it's not what we wanted.
 
-And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the ____index__ again and again, it's useful to reduce the cpu cost.
+And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the __index__ again and again, it's useful to reduce the cpu cost.
 
 
 System.Module
@@ -2034,7 +2034,7 @@ The attribute class's behavior is quite different from normal classes, Since in 
 
 in .Net. The Loop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
 
-The whole attribute system is built on the __System.__Attribute____ class. Here is a list of it :
+The whole attribute system is built on the __System.__Attribute__ class. Here is a list of it :
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
@@ -2078,7 +2078,7 @@ The whole attribute system is built on the __System.__Attribute____ class. Here 
 System.__Final__
 ----
 
-The first line show the class is a final class, __System.__Final____ is a class inherited from the __System.__Attribute____ and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using __Module__ as the environment :
+The first line show the class is a final class, __System.__Final__ is a class inherited from the __System.__Attribute__ and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using __Module__ as the environment :
 
 	Module "A" ""
 
@@ -2104,7 +2104,7 @@ The second line :
 
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
 
-The __System.__AttributeUsage____ is also an attribute class inherited from the __System.__Attribute____, it can be used on an attribute class, and used to describe how the attribute class can be used.
+The __System.__AttributeUsage__ is also an attribute class inherited from the __System.__Attribute__, it can be used on an attribute class, and used to describe how the attribute class can be used.
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS, Inherited = false, AllowMultiple = false, RunOnce = false }]
@@ -2168,13 +2168,13 @@ Since the __AttributeTargets__ is a flag enum, the __AttributeTarget__ property 
 System.__Flags__
 ----
 
-As the previous example in the enum part, that's the using of the __System.__Flags____.
+As the previous example in the enum part, that's the using of the __System.__Flags__.
 
 
 System.__Unique__
 ----
 
-In the list of the `__Final__`, a new attribute is set, the __System.__Unique____ attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
+In the list of the `__Final__`, a new attribute is set, the __System.__Unique__ attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
 
 Like :
 
@@ -2204,7 +2204,7 @@ The `__Unique__` attribute normally used on attribute classes, avoid creating to
 System.__NonInheritable__
 ----
 
-The __System.__NonInheritable____ attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
+The __System.__NonInheritable__ attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
 
 	Module "C" ""
 
@@ -2239,7 +2239,7 @@ System.__Arguments__
 		Method :
 			ApplyAttribute　-　Apply the attribute to the target, overridable
 
-The __System.__Arguments____ attribute is used on constructor or method, it's used to mark the arguments's name and types, it use __System.Argument__ class as a partner :
+The __System.__Arguments__ attribute is used on constructor or method, it's used to mark the arguments's name and types, it use __System.Argument__ class as a partner :
 
 	[__Final__]
 	[Class] System.Argument :
@@ -2332,7 +2332,7 @@ In the class system, all methods(include inherited) are stored in a class cache 
 	obj = A()
 	obj.Greet = obj.Greet  -- so next time access the 'Greet' is just a table field
 
-But write the code everytime is just a pain. So, here comes the __System.__Cache____ attribute :
+But write the code everytime is just a pain. So, here comes the __System.__Cache__ attribute :
 
 	[__Final__]
 	[__Unique__]
@@ -2385,7 +2385,7 @@ It's would be very useful to mark some most used methods with the attribute.
 System.__Expandable__
 ----
 
-Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the __System.__Expandable____ attribute.
+Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the __System.__Expandable__ attribute.
 
 	Module "G" ""
 
