@@ -962,7 +962,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 
 * Like the object methods, override the metamethods is the same, take **__call** as example, **super.__call** can be used to retrieve the superclass's **__call** metamethod.
 
-* When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any vars defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
+* When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any variables defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
 
 		class "A"
 			function A(self)
@@ -1120,7 +1120,7 @@ partclass & re-define
 		-- Error : attempt to call method 'Hi' (a nil value)
 		obj:Hi()
 
-* Any global vars with no function values should be kept in the class definition's environment, so we can used it again :
+* Any global variables with no function values should be kept in the class definition's environment, so we can used it again :
 
 		class "A"
 			_Objs = _Objs or {}
@@ -1805,9 +1805,9 @@ The last part, let's get a view of the **System** namespace.
 			__Attribute__
 			__Auto__
 			__Cache__
-			__Expandable__
 			__Final__
 			__Flags__
+			__NonExpandable__
 			__NonInheritable__
 			__StructType__
 			__Thread__
@@ -1883,31 +1883,23 @@ Beside the definition, the private environment also provide a simple way to acce
 * Any root namespace can be accessed directly in the private environment, so we can access the **System** and **Windows** directly.
 * When import a namespace, any namespace in it can be accessed directly in the private environment.
 
-Since it's a private environment, so, why **print** and other global vars can be accessed in the environment. As a simple example, the things works like :
+Since it's a private environment, so, why **print** and other global variables can be accessed in the environment. As a simple example, the things works like :
 
 	local base = getfenv( 1 )
 
 	env = setmetatable ( {}, { __index = function (self, key)
 		local value = base[ key ]
 
-		if value ~=  nil and type(key) == "string" and ( key == "_G" or not key:match("^_")) then
+		if value ~=  nil then
 			rawset(self, key, value)
 		end
 
 		return value
 	end })
 
-When access anything not defined in the private environment, the **__index** would try to get the value from its base environment ( normally _G ), and if the value is not nil, and the key is a string not started with "_" or the key is "_G", the value would be stored in the private environment.
+When access anything not defined in the private environment, the **__index** would try to get the value from its base environment ( normally _G ), and if the value is not nil, the value would be stored in the private environment.
 
-Why the key can't be started with "_", its because sometimes we need a global vars that used to stored datas between different version class (interface .etc), like :
-
-	class "A"
-		_Names = _Names or {}
-	endclass "A"
-
-But if there is a **_Names** that defined in the _G, the value'll be used and it's not what we wanted.
-
-And when using the class/interface in the program, as the time passed, all vars that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the **__index** again and again, it's useful to reduce the cpu cost.
+When using the class/interface in the program, as the time passed, all variables that needed from the outside will be stored into the private environment, and since then the private environment will be steady, so no need to call the **__index** again and again, it's useful to reduce the cpu cost.
 
 
 System.Module
@@ -1964,7 +1956,25 @@ Take an example as the start (Don't forget **do ... end** if using in the intera
 
 As you can see, it's special to use the properties of the object, in the module environment, all properties can be used directly, the **_M** is just like the **_G** in the **_G** table.
 
-When the environment changed to the private environment, you can do whatever you'll do in the _G, any global vars defined in it will only be stored in the private environment, and you can access the namespaces just like in a definition environment.
+When the environment changed to the private environment, you can do whatever you'll do in the _G, any global variables defined in it will only be stored in the private environment, and you can access the namespaces just like in a definition environment. There is only one more rule for the module environment :
+
+* Global variables with the name started with "_" can't be accessed by the module environment except the "_G". Take an example to see :
+
+	do
+		_Names = {}
+
+		-- Output : table: 0x7fe1e9483500
+		print( _Names )
+
+		Module "A" ""
+
+		_Names = _Names or {}
+
+		-- Output : table: 0x7fe1e9483530
+		print( _Names )
+	end
+
+So, the **_Names** in the Module "A" is a private table not the one in the **_G**, it's a good way to define some private variables, just mark the variables with a name started with "_".
 
 
 Version Check
@@ -2015,6 +2025,7 @@ Sometimes you may want an anonymous module, that used once. Just keep the name a
 	end
 
 So, the anonymous modules can't be reused, it's better to use anonymous modules to create features that you don't want anybody touch it.
+
 
 
 
@@ -2281,9 +2292,9 @@ So, take a method as the example first :
 	-- Error : Usage : A:Add(Count, ...) - ... must be a string, got number.
 	obj:Add(3, "hi", 2, 3)
 
-So, you can see, the system would do the arguments validation for the method.
+So, you can see, the system would do the arguments validation for the method, since the lua is dynamic type language, this is not recommend.
 
-The `__Arguments__` is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the `__Arguments__`, some special vars in the init table should be take to the constructor:
+The `__Arguments__` is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the `__Arguments__`, some special variables in the init table should be take to the constructor:
 
 	Module "E" ""
 
@@ -2311,7 +2322,7 @@ The `__Arguments__` is very powerful for the constructor part, when talking abou
 	-- Error : Usage : A(Name = "Anonymous") - Name must be a string, got number.
 	obj = A { Name = 123 }
 
-So, the constructor would take what it need to do the init, and the vars also removed from the init table.
+So, the constructor would take what it need to do the init, and the variables also removed from the init table. So using the **__Arguments__** attribute is a good way to combine the **constructor** and the **init with table** abilities. It's recommended.
 
 
 System.__StructType__
@@ -2382,16 +2393,15 @@ It can be used on the class or methods, when used on the class, all its objects 
 It's would be very useful to mark some most used methods with the attribute.
 
 
-System.__Expandable__
+System.__NonExpandable__
 ----
 
-Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, need mark the class/interface with the **System.__Expandable__** attribute.
+Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, we can set a function value to the class/interface as a field, if there is no other method with the field name, the function will be added as a method :
 
 	Module "G" ""
 
 	import "System"
 
-	__Expandable__()
 	class "A"
 	endclass "A"
 
@@ -2402,7 +2412,22 @@ Sometimes we may want to expand the existed class/interface with a simple way, l
 	-- Output : Hello World
 	obj:Greet()
 
-BTW, mark a class/interface with `__Final__` and `__Expandable__` attribute, so the class/interface can't be re-defined, but can be expanded.
+If want forbidden those features, the **__NonExpandable__** attribute is used :
+
+	Module "G2" ""
+
+	import "System"
+
+	__NonExpandable__()
+	class "A"
+	endclass "A"
+
+	obj = A()
+
+	-- Error : Can't set value for A, it's readonly.
+	A.Greet = function(self) end
+
+BTW, mark a class/interface with `__Final__` attribute, the class/interface still can be expanded.
 
 
 Custom Attributes
@@ -2588,6 +2613,32 @@ Some points about the function :
 * `__Attribute__._GetClassAttribute(cls, __Table__)` will try to get class attribute of the `__Table__` for the cls, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
 * `Reflector.GetProperties` used to get a sorted name list of the class/interface's all properties, if pass **true** as the second argument, only properties defined in the class/interface will be get, since there is no super class of the **Person**, so get all properties is simple enough. You can use **Help** to see the detail of it.
 * `__Attribute__._GetPropertyAttribute(cls, prop, __Field__)` like **_GetClassAttribute**, only need a more argument : the property's name.
+
+
+
+Thread
+====
+
+In the **System.Object** class, there is methods like **ActiveThread**, **ThreadCall**, also an attribute **System.__Thread__**, those features are used to bring the coroutine system into the Loop system.
+
+System.Object.ThreadCall
+----
+
+	[Class] System.Object - [Method] ThreadCall :
+
+		Description :
+			Call method or function as a thread
+
+		Format :
+			object:ThreadCall(methodname|function, ...)
+
+		Parameter :
+			methodname|function
+			... - the arguments
+
+		Return :
+			nil
+
 
 
 

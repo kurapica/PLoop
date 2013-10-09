@@ -92,6 +92,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/09/11 Fix Reflector.Help & ParseEnum
 --               2013/09/17 The basic structs can validate values like custom structs now
 --               2013/09/24 No single class/interface environment limit
+--               2013/10/02 __Expandable__ attribute removed, __NonExpandable__ attribute added, now expandable is default attribute to all classes/interfaces
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -177,6 +178,7 @@ do
 		end
 	end
 
+	tblconcat = tblconcat or table.concat
 	tinsert = tinsert or table.insert
 	tremove = tremove or table.remove
 	sort = sort or table.sort
@@ -211,7 +213,7 @@ end
 -- Constant Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 78
+	LUA_OOP_VERSION = 79
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -228,6 +230,19 @@ do
 	NAMESPACE_FIELD = "__LOOP_NameSpace"
 
 	WEAK_KEY = {__mode = "k"}
+
+	CACHE_TABLE = setmetatable({}, {
+		__call = function(self, key)
+			if key then
+				wipe(key)
+				tinsert(self, key)
+			elseif next(self) then
+				return tremove(self)
+			else
+				return {}
+			end
+		end,
+	})
 end
 
 ------------------------------------------------------
@@ -306,7 +321,7 @@ do
 		_MetaNS.__newindex = function(self, key, value)
 			local info = _NSInfo[self]
 
-			if info.Type == TYPE_CLASS and __Attribute__._IsDefined(self, AttributeTargets.Class, __Expandable__) and type(key) == "string" and type(value) == "function" then
+			if info.Type == TYPE_CLASS and not __Attribute__._IsDefined(self, AttributeTargets.Class, __NonExpandable__) and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
 					info.Method[key] = value
 
@@ -314,7 +329,7 @@ do
 				else
 					error("Can't override the existed method.", 2)
 				end
-			elseif info.Type == TYPE_INTERFACE and __Attribute__._IsDefined(self, AttributeTargets.Interface, __Expandable__) and type(key) == "string" and type(value) == "function" then
+			elseif info.Type == TYPE_INTERFACE and not __Attribute__._IsDefined(self, AttributeTargets.Interface, __NonExpandable__) and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
 					info.Method[key] = value
 
@@ -324,7 +339,7 @@ do
 				end
 			end
 
-			error(("can't set value for %s, it's readonly."):format(tostring(self)), 2)
+			error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
 		end
 
 		_MetaNS.__add = function(v1, v2)
@@ -401,7 +416,7 @@ do
 		local info = cls and _NSInfo[cls]
 		local parent = cls
 
-		for name in namelist:gmatch("[^%.]+") do
+		for name in namelist:gmatch("[_%w]+") do
 			name = name:match("[_%w]+")
 
 			if not name or name == "" then
@@ -446,7 +461,7 @@ do
 
 		local cls = ns
 
-		for name in namelist:gmatch("[^%.]+") do
+		for name in namelist:gmatch("[_%w]+") do
 			name = name:match("[_%w]+")
 
 			if not name or name == "" then
@@ -930,14 +945,14 @@ do
 			end
 
 			-- Check Base
-			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
-				value = info[self][key]
+			-- if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+			value = info[self][key]
 
-				if value ~= nil then
-					rawset(self, key, value)
-					return value
-				end
+			if value ~= nil then
+				rawset(self, key, value)
+				return value
 			end
+			-- end
 		end
 
 		_MetaIFEnv.__newindex = function(self, key, value)
@@ -1165,8 +1180,7 @@ do
 			IF = GetNameSpace(info.NameSpace, name) or env[name]
 
 			if not IF then
-				for subname in name:gmatch("[^%.]+") do
-					subname = subname:match("[_%w]+")
+				for subname in name:gmatch("[_%w]+") do
 
 					if not subname or subname == "" then
 						error("the namespace's name must be composed with number, string or '_'.", 2)
@@ -1645,14 +1659,14 @@ do
 			end
 
 			-- Check Base
-			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
-				value = info[self][key]
+			--if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+			value = info[self][key]
 
-				if value ~= nil then
-					rawset(self, key, value)
-					return value
-				end
+			if value ~= nil then
+				rawset(self, key, value)
+				return value
 			end
+			--end
 		end
 
 		_MetaClsEnv.__newindex = function(self, key, value)
@@ -1750,26 +1764,11 @@ do
 	end
 
 	-- The cache for constructor parameters
-	_Class2ObjCache = setmetatable({}, {
-		__call = function(self, key)
-			if key then
-				wipe(key)
-				tinsert(self, key)
-			else
-				if #self > 0 then
-					return tremove(self)
-				else
-					return {}
-				end
-			end
-		end,
-	})
-
 	function Class2Obj(cls, ...)
 		local info = _NSInfo[cls]
 		local obj, isUnique
 		local ok, msg, args
-		local cache = _Class2ObjCache()
+		local cache = CACHE_TABLE()
 		local max = select('#', ...)
 		local init = select(1, ...)
 
@@ -1807,7 +1806,7 @@ do
 							ok, value = pcall(arg.Type.Validate, arg.Type, value)
 
 							if not ok then
-								_Class2ObjCache(cache)
+								CACHE_TABLE(cache)
 
 								value = strtrim(value:match(":%d+:(.*)$") or value)
 
@@ -1847,7 +1846,7 @@ do
 							ok, value = pcall(arg.Type.Validate, arg.Type, value)
 
 							if not ok then
-								_Class2ObjCache(cache)
+								CACHE_TABLE(cache)
 
 								value = strtrim(value:match(":%d+:(.*)$") or value)
 
@@ -1868,7 +1867,7 @@ do
 								ok, value = pcall(arg.Type.Validate, arg.Type, value)
 
 								if not ok then
-									_Class2ObjCache(cache)
+									CACHE_TABLE(cache)
 
 									value = strtrim(value:match(":%d+:(.*)$") or value)
 
@@ -1905,7 +1904,7 @@ do
 				obj = info.UniqueObject
 
 				pcall(obj, unpack(cache, 1, max))
-				_Class2ObjCache(cache)
+				CACHE_TABLE(cache)
 
 				-- Try set properties
 				if type(init) == "table" then
@@ -1931,7 +1930,7 @@ do
 			ok, obj = pcall(info.MetaTable.__exist, unpack(cache, 1, max))
 
 			if type(obj) == "table" then
-				_Class2ObjCache(cache)
+				CACHE_TABLE(cache)
 				if getmetatable(obj) == cls then
 					return obj
 				else
@@ -1949,7 +1948,7 @@ do
 			obj = nil
 		end
 
-		_Class2ObjCache(cache)
+		CACHE_TABLE(cache)
 
 		if not obj then return nil end
 
@@ -2352,8 +2351,7 @@ do
 			superCls = GetNameSpace(info.NameSpace, name) or env[name]
 
 			if not superCls then
-				for subname in name:gmatch("[^%.]+") do
-					subname = subname:match("[_%w]+")
+				for subname in name:gmatch("[_%w]+") do
 
 					if not subname or subname == "" then
 						error("the namespace's name must be composed with number, string or '_'.", 2)
@@ -2438,8 +2436,7 @@ do
 			IF = GetNameSpace(info.NameSpace, name) or env[name]
 
 			if not IF then
-				for subname in name:gmatch("[^%.]+") do
-					subname = subname:match("[_%w]+")
+				for subname in name:gmatch("[_%w]+") do
 
 					if not subname or subname == "" then
 						error("the namespace's name must be composed with number, string or '_'.", 2)
@@ -2833,14 +2830,14 @@ do
 			end
 
 			-- Check Base
-			if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
-				value = info[self][key]
+			--if info[self] ~= _G or type(key) ~= "string" or key == "_G" or not strfind(key, "^_") then
+			value = info[self][key]
 
-				if value ~= nil then
-					rawset(self, key, value)
-					return value
-				end
+			if value ~= nil then
+				rawset(self, key, value)
+				return value
 			end
+			--end
 		end
 
 		_MetaStrtEnv.__newindex = function(self, key, value)
@@ -2856,7 +2853,7 @@ do
 					info.Constructor = value
 					return
 				else
-					error(("'%s' must be a function as constructor."):format(key), 2)
+					error(("'%s' must be a function as the constructor."):format(key), 2)
 				end
 			end
 
@@ -2909,7 +2906,7 @@ do
 	function ValidateStruct(strt, value)
 		local info = _NSInfo[strt]
 
-		if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+		if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
 			assert(type(value) == "table", ("%s must be a table, got %s."):format("%s", type(value)))
 
 			for _, n in ipairs(info.Members) do
@@ -2921,9 +2918,10 @@ do
 			assert(type(value) == "table", ("%s must be a table, got %s."):format("%s", type(value)))
 
 			local flag, ret
+			local ele = info.ArrayElement
 
 			for i, v in ipairs(value) do
-				flag, ret = pcall(info.ArrayElement.Validate, info.ArrayElement, v)
+				flag, ret = pcall(ele.Validate, ele, v)
 
 				if flag then
 					value[i] = ret
@@ -2968,7 +2966,7 @@ do
 			local ok, value = pcall(ValidateStruct, strt, init)
 
 			if ok then
-				if info.Cache4Method then
+				if info.Cache4Method and type(value) == "table" then
 					for k, v in pairs(info.Cache4Method) do
 						value[k] = v
 					end
@@ -3007,7 +3005,7 @@ do
 		if type(info.Constructor) == "function" then
 			local ok, ret = pcall(info.Constructor, ...)
 			if ok then
-				if info.Cache4Method then
+				if info.Cache4Method and type(ret) == "table" then
 					for k, v in pairs(info.Cache4Method) do
 						ret[k] = v
 					end
@@ -3020,11 +3018,13 @@ do
 			end
 		end
 
-		if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+		if info.SubType == _STRUCT_TYPE_MEMBER then
 			local ret = {}
 
-			for i, n in ipairs(info.Members) do
-				ret[n] = select(i, ...)
+			if info.Members then
+				for i, n in ipairs(info.Members) do
+					ret[n] = select(i, ...)
+				end
 			end
 
 			local ok, value = pcall(ValidateStruct, strt, ret)
@@ -3059,7 +3059,7 @@ do
 			end
 		end
 
-		if info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+		if info.SubType == _STRUCT_TYPE_ARRAY then
 			local ret = {}
 
 			for i = 1, select('#', ...) do
@@ -3083,7 +3083,8 @@ do
 			end
 		end
 
-		if max == 1 and type(info.UserValidate) == "function"  then
+		-- For custom at last
+		if type(info.UserValidate) == "function"  then
 			local ok, ret = pcall(info.UserValidate, ...)
 
 			if not ok then
@@ -3220,7 +3221,7 @@ do
 		local info = _StructEnv2Info[env]
 
 		if not info then
-			error("can't use import here.", 2)
+			error("Can't use import here.", 2)
 		end
 
 		local ns
@@ -3232,7 +3233,7 @@ do
 		end
 
 		if not ns then
-			error(("no namespace is found with name : %s"):format(name), 2)
+			error(("No namespace is found with name : %s"):format(name), 2)
 		end
 
 		info.Import4Env = info.Import4Env or {}
@@ -3275,10 +3276,32 @@ do
 			env = info.BaseEnv
 		end
 
-		error(("no struct is found with name: %s"):format(name), 2)
+		error(("No struct is found with name: %s"):format(name), 2)
+	end
+
+	function structtype(_type_)
+		local info = _StructEnv2Info[getfenv(2)]
+
+		_type_ = _type_:upper()
+
+		if _type_ == _STRUCT_TYPE_MEMBER then
+			-- use member list, default type
+			info.SubType = _STRUCT_TYPE_MEMBER
+			info.ArrayElement = nil
+		elseif _type_ == _STRUCT_TYPE_ARRAY then
+			-- user array list
+			info.SubType = _STRUCT_TYPE_ARRAY
+			info.Members = nil
+		else
+			-- else all custom
+			info.SubType = _STRUCT_TYPE_CUSTOM
+			info.Members = nil
+			info.ArrayElement = nil
+		end
 	end
 
 	_KeyWord4StrtEnv.struct = struct
+	_KeyWord4StrtEnv.structtype = structtype
 	_KeyWord4StrtEnv.import = import_STRT
 	_KeyWord4StrtEnv.endstruct = endstruct
 end
@@ -3312,12 +3335,16 @@ do
 	-- Base structs
 	------------------------------------------------------
 	struct "Boolean"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			return value and true or false
 		end
 	endstruct "Boolean"
 
 	struct "String"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "string" then
 				error(("%s must be a string, got %s."):format("%s", type(value)))
@@ -3327,6 +3354,8 @@ do
 	endstruct "String"
 
 	struct "Number"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "number" then
 				error(("%s must be a number, got %s."):format("%s", type(value)))
@@ -3336,6 +3365,8 @@ do
 	endstruct "Number"
 
 	struct "Function"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "function" then
 				error(("%s must be a function, got %s."):format("%s", type(value)))
@@ -3345,6 +3376,8 @@ do
 	endstruct "Function"
 
 	struct "Table"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "table" then
 				error(("%s must be a table, got %s."):format("%s", type(value)))
@@ -3354,6 +3387,8 @@ do
 	endstruct "Table"
 
 	struct "Userdata"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "userdata" then
 				error(("%s must be a userdata, got %s."):format("%s", type(value)))
@@ -3363,6 +3398,8 @@ do
 	endstruct "Userdata"
 
 	struct "Thread"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			if type(value) ~= "thread" then
 				error(("%s must be a thread, got %s."):format("%s", type(value)))
@@ -3372,6 +3409,8 @@ do
 	endstruct "Thread"
 
 	struct "Any"
+		structtype "CUSTOM"
+
 		function Validate(value)
 			return value
 		end
@@ -3793,6 +3832,32 @@ do
 
 		function __unm(v1)
 			error("Can't use unary '-' before a Type", 2)
+		end
+
+		function __tostring(self)
+			local ret = ""
+
+			for _, tns in ipairs(self) do
+				ret = ret .. " + " .. GetFullName4NS(tns)
+			end
+
+			local index = -1
+			while self[index] do
+				ret = ret .. " - " .. GetFullName4NS(self[index])
+
+				index = index - 1
+			end
+
+			-- Allow nil
+			if self.AllowNil then
+				ret = ret .. " + nil"
+			end
+
+			if ret:sub(1, 2) == " +" then
+				ret = ret:sub(4, -1)
+			end
+
+			return ret
 		end
 	endclass "Type"
 
@@ -4755,23 +4820,16 @@ do
 		_Validate_Type = setmetatable({}, {
 			__call = function(self, key)
 				if key then
-					if type(key) == "table" and self[key] then
-						key.AllowNil = nil
-						key[1] = nil
-						key.Name = nil
+					key.AllowNil = nil
+					key[1] = nil
+					key.Name = nil
 
-						tinsert(self, key)
-					end
+					tinsert(self, key)
 				else
-					if #self > 0 then
-						return tremove(self, #self)
+					if next(self) then
+						return tremove(self)
 					else
-						local ret = BuildType(nil)
-
-						-- Mark it as recycle table
-						self[ret] = true
-
-						return ret
+						return BuildType(nil)
 					end
 				end
 			end,
@@ -4923,31 +4981,14 @@ do
 		]======]
 
 		-- The cache for constructor parameters
-		_BuildSubNamespaceCache = setmetatable({}, {
-			__call = function(self, key)
-				if type(key) == "table" then
-					wipe(key)
-					tinsert(self, key)
-				else
-					if #self > 0 then
-						return tremove(self)
-					else
-						local ret = {}
-
-						return ret
-					end
-				end
-			end,
-		})
-
 		local function buildSubNamespace(ns)
 			local result = ""
 
-			local _Enums = _BuildSubNamespaceCache()
-			local _Structs = _BuildSubNamespaceCache()
-			local _Classes = _BuildSubNamespaceCache()
-			local _Interfaces = _BuildSubNamespaceCache()
-			local _Namespaces = _BuildSubNamespaceCache()
+			local _Enums = CACHE_TABLE()
+			local _Structs = CACHE_TABLE()
+			local _Classes = CACHE_TABLE()
+			local _Interfaces = CACHE_TABLE()
+			local _Namespaces = CACHE_TABLE()
 
 			local subNS = GetSubNamespace(ns)
 
@@ -5009,11 +5050,11 @@ do
 				end
 			end
 
-			_BuildSubNamespaceCache(_Enums)
-			_BuildSubNamespaceCache(_Structs)
-			_BuildSubNamespaceCache(_Classes)
-			_BuildSubNamespaceCache(_Interfaces)
-			_BuildSubNamespaceCache(_Namespaces)
+			CACHE_TABLE(_Enums)
+			CACHE_TABLE(_Structs)
+			CACHE_TABLE(_Classes)
+			CACHE_TABLE(_Interfaces)
+			CACHE_TABLE(_Namespaces)
 
 			return result
 		end
@@ -5056,70 +5097,20 @@ do
 
 					if info.SubType == _STRUCT_TYPE_MEMBER then
 						-- Part
-						local parttype, typestring
 						local parts = GetStructParts(ns)
 
 						if parts and next(parts) then
 							result = result .. "\n\n  Member:"
 
 							for _, name in ipairs(parts) do
-								parttype = GetStructPart(ns, name)
-
-								typestring = ""
-
-								for _, tns in ipairs(parttype) do
-									typestring = typestring .. " + " .. GetFullName(tns)
-								end
-
-								-- NameSpace
-								local index = -1
-								while parttype[index] do
-									typestring = typestring .. " - " .. GetFullName(parttype[index])
-
-									index = index - 1
-								end
-
-								-- Allow nil
-								if parttype.AllowNil then
-									typestring = typestring .. " + nil"
-								end
-
-								if typestring:sub(1, 2) == " +" then
-									typestring = typestring:sub(3, -1)
-								end
-
-								result = result .. "\n    " .. name .. " =" .. typestring
+								result = result .. "\n    " .. name .. " = " .. tostring(GetStructPart(ns, name))
 							end
 						else
 							result = result .. "\n\n  Basic Element"
 						end
 					elseif info.SubType == _STRUCT_TYPE_ARRAY then
-						local parttype = info.ArrayElement
-						local typestring = ""
-
-						if parttype then
-							for _, tns in ipairs(parttype) do
-								typestring = typestring .. " + " .. GetFullName(tns)
-							end
-
-							-- NameSpace
-							local index = -1
-							while parttype[index] do
-								typestring = typestring .. " - " .. GetFullName(parttype[index])
-
-								index = index - 1
-							end
-
-							-- Allow nil
-							if parttype.AllowNil then
-								typestring = typestring .. " + nil"
-							end
-
-							if typestring:sub(1, 2) == " +" then
-								typestring = typestring:sub(3, -1)
-							end
-
-							result = result .. "\n\n  Element :\n    Type =" .. typestring
+						if info.ArrayElement then
+							result = result .. "\n\n  Element :\n    Type = " .. tostring(info.ArrayElement)
 						end
 					end
 					return result
@@ -5164,7 +5155,7 @@ do
 								if usage then
 									result = result .. "[__AttributeUsage__{ "
 
-									result = result .. "AttributeTarget = " .. Serialize(AttributeTargets, usage.AttributeTarget) .. ", "
+									result = result .. "AttributeTarget = " .. Serialize(usage.AttributeTarget, AttributeTargets) .. ", "
 
 									result = result .. "Inherited = " .. tostring(usage.Inherited and true or false) .. ", "
 
@@ -5215,7 +5206,7 @@ do
 								desc = HasDocument(ns, "event", evt) and GetDocument(ns, "event", evt, "desc")
 								desc = desc and desc()
 								if desc then
-									desc = "　-　" .. desc
+									desc = " - " .. desc
 								else
 									desc = ""
 								end
@@ -5232,7 +5223,7 @@ do
 								desc = HasDocument(ns, "property", prop) and GetDocument(ns, "property", prop, "desc")
 								desc = desc and desc()
 								if desc then
-									desc = "　-　" .. desc
+									desc = " - " .. desc
 								else
 									desc = ""
 								end
@@ -5249,7 +5240,7 @@ do
 								desc = HasDocument(ns, "method", method) and GetDocument(ns, "method", method, "desc")
 								desc = desc and desc()
 								if desc then
-									desc = "　-　" .. desc
+									desc = " - " .. desc
 								else
 									desc = ""
 								end
@@ -5430,31 +5421,7 @@ do
 							local types = GetPropertyType(ns, name)
 
 							if types then
-								local parttype = types
-								local typestring = ""
-
-								for _, tns in ipairs(parttype) do
-									typestring = typestring .. " + " .. GetFullName(tns)
-								end
-
-								-- NameSpace
-								local index = -1
-								while parttype[index] do
-									typestring = typestring .. " - " .. GetFullName(parttype[index])
-
-									index = index - 1
-								end
-
-								-- Allow nil
-								if parttype.AllowNil then
-									typestring = typestring .. " + nil"
-								end
-
-								if typestring:sub(1, 2) == " +" then
-									typestring = typestring:sub(3, -1)
-								end
-
-								result = result .. "\n\n  Type :\n    " .. typestring
+								result = result .. "\n\n  Type :\n    " .. tostring(types)
 							end
 
 							-- Readonly
@@ -5588,109 +5555,154 @@ do
 			@type method
 			@method interface
 			@desc Serialize the data
-			@param type the data't type
+			@format data[, type]
 			@param data the data
+			@param type the data's type
 			@return string
 		]======]
-		function Serialize(ns, data)
-			if type(ns) == "string" then ns = ForName(ns) end
+		local function SerializeData(data)
+			if type(data) == "string" then
+				return strformat("%q", data)
+			elseif type(data) == "number" or type(data) == "boolean" then
+				return tostring(data)
+			elseif type(data) == "table" then
+				local cache = CACHE_TABLE()
 
-			if ObjectIsClass(ns, Type) then
-				ns = ns:GetObjectType(data)
+				tinsert(cache, "{")
 
-				if ns == false then
-					return nil
-				elseif ns == nil then
-					return "nil"
+				for k, v in pairs(data) do
+					if ( type(k) == "number" or type(k) == "string" ) and
+						( type(v) == "string" or type(v) == "number" or type(v) == "boolean" or type(v) == "table" ) then
+
+						if type(k) == "number" then
+							tinsert(cache, ("[%s] = %s,"):format(tostring(k), SerializeData(v)))
+						else
+							tinsert(cache, ("%s = %s,"):format(k, SerializeData(v)))
+						end
+					end
+				end
+
+				tinsert(cache, "}")
+
+				local ret = tblconcat(cache, " ")
+
+				CACHE_TABLE(cache)
+
+				return ret
+			else
+				-- Don't support any point values
+				return nil
+			end
+		end
+
+		function Serialize(data, ns)
+			if ns then
+				if ObjectIsClass(ns, Type) then
+					ns = ns:GetObjectType(data)
+
+					if ns == false then
+						return nil
+					elseif ns == nil then
+						return "nil"
+					end
+				elseif type(ns) == "string" then
+					ns = ForName(ns)
 				end
 			end
 
-			if not rawget(_NSInfo, ns) then return end
+			if ns and rawget(_NSInfo, ns) then
+				if Reflector.IsEnum(ns) then
+					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(data) == "number" then
+						local ret = {Reflector.ParseEnum(ns, data)}
 
-			if Reflector.IsEnum(ns) then
-				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(data) == "number" then
-					local ret = {Reflector.ParseEnum(ns, data)}
+						local result = ""
 
-					local result = ""
-
-					for i, str in ipairs(ret) do
-						if i > 1 then
-							result = result .. " + "
+						for i, str in ipairs(ret) do
+							if i > 1 then
+								result = result .. " + "
+							end
+							result = result .. (tostring(ns) .. "." .. str)
 						end
-						result = result .. (tostring(ns) .. "." .. str)
+
+						return result
+					else
+						local str = Reflector.ParseEnum(ns, data)
+
+						return str and (tostring(ns) .. "." .. str)
 					end
+				elseif Reflector.IsClass(ns) then
+					-- Class handle the serialize itself with __tostring
+					return tostring(data)
+				elseif Reflector.IsStruct(ns) then
+					if Reflector.GetStructType(ns) == "MEMBER" and type(data) == "table" then
+						local parts = Reflector.GetStructParts(ns)
 
-					return result
-				else
-					local str = Reflector.ParseEnum(ns, data)
+						if not parts or not next(parts) then
+							-- Well, what a no member struct can be used for?
+							return tostring(ns) .. "( )"
+						else
+							local ret = tostring(ns) .. "( "
 
-					return str and (tostring(ns) .. "." .. str)
-				end
-			elseif Reflector.IsClass(ns) then
-				-- Class handle the serialize itself with __tostring
-				return tostring(data)
-			elseif Reflector.IsStruct(ns) then
-				if Reflector.GetStructType(ns) == "MEMBER" then
-					local parts = Reflector.GetStructParts(ns)
+							for i, part in ipairs(parts) do
+								local sty = Reflector.GetStructPart(ns, part)
+								local value = data[part]
 
-					if not parts or not next(parts) then
-						-- Mean it's a base element struct
-						if type(data) == "string" then
-							return strformat("%q", data)
-						elseif type(data) == "number" or type(data) == "boolean" then
-							return tostring(data)
-						end
-					elseif type(data) == "table" then
-						local ret = tostring(ns) .. "( "
+								if sty and #sty == 1 then
+									value = Serialize(value, sty[1])
+								else
+									value = SerializeData(value)
+								end
 
-						for i, part in ipairs(parts) do
-							local sty = Reflector.GetStructPart(ns, part)
-							local value = data[part]
-
-							if sty and #sty == 1 then
-								value = Serialize(sty[1], value)
+								if i == 1 then
+									ret = ret .. tostring(value)
+								else
+									ret = ret .. ", " .. tostring(value)
+								end
 							end
 
-							if i == 1 then
-								ret = ret .. tostring(value)
-							else
-								ret = ret .. ", " .. tostring(value)
+							ret = ret .. " )"
+
+							return ret
+						end
+					elseif Reflector.GetStructType(ns) == "ARRAY" and type(data) == "table" then
+						local ret = tostring(ns) .. "( "
+
+						sty = Reflector.GetStructArrayElement(ns)
+
+						if sty and #sty == 1 then
+							for i, v in ipairs(data) do
+								v = Serialize(v, sty[1])
+
+								if i == 1 then
+									ret = ret .. tostring(v)
+								else
+									ret = ret .. ", " .. tostring(v)
+								end
+							end
+						else
+							for i, v in ipairs(data) do
+								v = SerializeData(v)
+
+								if i == 1 then
+									ret = ret .. tostring(v)
+								else
+									ret = ret .. ", " .. tostring(v)
+								end
 							end
 						end
 
 						ret = ret .. " )"
 
 						return ret
-					end
-				elseif Reflector.GetStructType(ns) == "ARRAY" and type(data) == "table" then
-					local ret = tostring(ns) .. "( "
-
-					sty = Reflector.GetStructArrayElement(ns)
-
-					if sty and #sty == 1 then
-						for i, v in ipairs(data) do
-							v = Serialize(sty[1], v)
-
-							if i == 1 then
-								ret = ret .. tostring(v)
-							else
-								ret = ret .. ", " .. tostring(v)
-							end
-						end
+					elseif type(data) == "table" and type(data.__tostring) == "function" then
+						return data:__tostring()
 					else
-						for i, v in ipairs(data) do
-							if i == 1 then
-								ret = ret .. tostring(v)
-							else
-								ret = ret .. ", " .. tostring(v)
-							end
-						end
+						return SerializeData(data)
 					end
-
-					ret = ret .. " )"
-
-					return ret
 				end
+			else
+				-- Serialize normal datas
+				return SerializeData(data)
 			end
 		end
 	endinterface "Reflector"
@@ -7092,6 +7104,8 @@ do
 		------------------------------------------------------
 		-- For structs
 		------------------------------------------------------
+		_KeyWord4StrtEnv.structtype = nil
+
 		objFinal:ApplyAttribute(Boolean, AttributeTargets.Struct)
 		objFinal:ApplyAttribute(String, AttributeTargets.Struct)
 		objFinal:ApplyAttribute(Number, AttributeTargets.Struct)
@@ -7281,9 +7295,8 @@ do
 		------------------------------------------------------
 		-- Meta-Method
 		------------------------------------------------------
-		local superCall = Super.__call
 		function __call(self)
-			superCall(self)
+			Super.__call(self)
 
 			-- Clear
 			self.__Storage = nil
@@ -7528,7 +7541,7 @@ do
 
 						if arg.Default ~= nil then
 							if arg.Type then
-								serialize = Reflector.Serialize(arg.Type, arg.Default)
+								serialize = Reflector.Serialize(arg.Default, arg.Type)
 							else
 								serialize = tostring(arg.Default)
 							end
@@ -7587,7 +7600,7 @@ do
 
 						if arg.Default ~= nil then
 							if arg.Type then
-								serialize = Reflector.Serialize(arg.Type, arg.Default)
+								serialize = Reflector.Serialize(arg.Default, arg.Type)
 							else
 								serialize = tostring(arg.Default)
 							end
@@ -7690,16 +7703,16 @@ do
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class}
 	__Final__()
 	__Unique__()
-	class "__Expandable__"
+	class "__NonExpandable__"
 		inherit "__Attribute__"
 		doc [======[
-			@name __Expandable__
+			@name __NonExpandable__
 			@type class
-			@desc Mark the class|interface can receive functions as new methods like :
+			@desc Mark the class|interface can't receive functions as new methods like :
 				System.Object.Print = function(self) print(self) end, give all object of System.Object a new method.
 				The cost should be expensive, use it carefully.
 		]======]
-	endclass "__Expandable__"
+	endclass "__NonExpandable__"
 
 	------------------------------------------------------
 	-- System.Object
