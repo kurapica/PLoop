@@ -93,6 +93,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/09/17 The basic structs can validate values like custom structs now
 --               2013/09/24 No single class/interface environment limit
 --               2013/10/02 __Expandable__ attribute removed, __NonExpandable__ attribute added, now expandable is default attribute to all classes/interfaces
+--               2013/10/11 Attribute can apply to the struct's field now.
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -213,7 +214,7 @@ end
 -- Constant Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 79
+	LUA_OOP_VERSION = 80
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -982,6 +983,10 @@ do
 
 			if type(key) == "string" and type(value) == "function" then
 				if __Attribute__ then
+					if not key:match("^_") and __Attribute__._IsDefined(info.Owner, AttributeTargets.Interface, __Cache__) then
+						__Cache__()
+					end
+
 					value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, GetSuperMethod(info.Owner, key), info.Owner, key) or value
 				end
 
@@ -2872,7 +2877,7 @@ do
 					info.Cache4Method = info.Cache4Method or {}
 
 					-- keep function in env, just register the method
-					if __Attribute__ and info.Owner ~= __Attribute__ then
+					if __Attribute__ then
 						value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, nil, info.Owner, key) or value
 					end
 
@@ -2889,6 +2894,11 @@ do
 							tinsert(info.Members, key)
 						elseif info.SubType == _STRUCT_TYPE_ARRAY then
 							info.ArrayElement = ret
+						end
+
+						-- Apply attribtue for fields, use the type object as the key
+						if __Attribute__ then
+							__Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key)
 						end
 
 						return
@@ -4562,14 +4572,30 @@ do
 
 			local info = ns and rawget(_NSInfo, ns)
 
-			if info and info.Type == TYPE_STRUCT and info.Members and #info.Members > 0 then
-				local tmp = {}
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+					local tmp = {}
 
-				for _, part in ipairs(info.Members) do
-					tinsert(tmp, part)
+					for _, part in ipairs(info.Members) do
+						tinsert(tmp, part)
+					end
+
+					return tmp
+				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+					return { "element" }
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					local tmp = {}
+
+					for key, value in pairs(info.StructEnv) do
+						if type(key) == "string" and IsType(value) then
+							tinsert(tmp, key)
+						end
+					end
+
+					sort(tmp)
+
+					return tmp
 				end
-
-				return tmp
 			end
 		end
 
@@ -4588,10 +4614,18 @@ do
 
 			local info = ns and rawget(_NSInfo, ns)
 
-			if info and info.Type == TYPE_STRUCT and info.Members and #info.Members > 0  then
-				for _, p in ipairs(info.Members) do
-					if p == part and IsType(info.StructEnv[p]) then
-						return info.StructEnv[p]:Copy()
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
+					for _, p in ipairs(info.Members) do
+						if p == part and IsType(info.StructEnv[part]) then
+							return info.StructEnv[part]:Copy()
+						end
+					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+					return info.ArrayElement:Copy()
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					if IsType(info.StructEnv[part]) then
+						return info.StructEnv[part]:Copy()
 					end
 				end
 			end
@@ -6041,6 +6075,7 @@ do
 		Method = 32,
 		Property = 64,
 		Struct = 128,
+		Field = 256,
 	}
 
 	class "__Attribute__"
@@ -6063,16 +6098,18 @@ do
 		_Attribute4Method = _Attribute4Method or setmetatable({}, WEAK_KEY)
 		_Attribute4Property = _Attribute4Property or setmetatable({}, WEAK_KEY)
 		_Attribute4Struct = _Attribute4Struct or setmetatable({}, WEAK_KEY)
+		_Attribute4Field = _Attribute4Field or setmetatable({}, WEAK_KEY)
 
 		_AttributeCache = {
-			[1] = _Attribute4Class,
-			[2] = _Attribute4Constructor,
-			[4] = _Attribute4Enum,
-			[8] = _Attribute4Event,
-			[16] = _Attribute4Interface,
-			[32] = _Attribute4Method,
-			[64] = _Attribute4Property,
-			[128] = _Attribute4Struct,
+			[AttributeTargets.Class] = _Attribute4Class,
+			[AttributeTargets.Constructor] = _Attribute4Constructor,
+			[AttributeTargets.Enum] = _Attribute4Enum,
+			[AttributeTargets.Event] = _Attribute4Event,
+			[AttributeTargets.Interface] = _Attribute4Interface,
+			[AttributeTargets.Method] = _Attribute4Method,
+			[AttributeTargets.Property] = _Attribute4Property,
+			[AttributeTargets.Struct] = _Attribute4Struct,
+			[AttributeTargets.Field] = _Attribute4Field,
 		}
 
 		TYPE_CLASS = TYPE_CLASS
@@ -6157,6 +6194,8 @@ do
 				end
 			elseif targetType == AttributeTargets.Struct then
 				return "[Struct]" .. tostring(target)
+			elseif targetType == AttributeTargets.Field then
+				return "[Struct]" .. tostring(owner) .. " [Field]" .. tostring(name)
 			end
 		end
 
@@ -6178,21 +6217,23 @@ do
 				return type(target) == "table" and type(target.Name) == "string"
 			elseif targetType == AttributeTargets.Struct then
 				return Reflector.IsStruct(target)
+			elseif targetType == AttributeTargets.Field then
+				return Reflector.ObjectIsClass(target, Type)
 			end
 		end
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
+		--[======[
 			@name _ApplyAttributes
 			@type method
 			@desc Apply the attributes for the target
 			@format target, targetType[, superTarget, owner, name]
-			@param target class | event | method | property | struct | interface | enum
+			@param target class | event | method | property | struct | interface | enum | field
 			@param targetType System.AttributeTargets
 			@param superTarget the super target the contains several attributes to be inherited
-			@param owner the class|interface object, the owner of the target
+			@param owner the class|interface|struct object, the owner of the target
 			@param name the target's name
 			@return target
 		]======]
@@ -6216,6 +6257,10 @@ do
 					arg4 = name
 				elseif targetType == AttributeTargets.Property then
 					arg1 = target.Name
+					arg2 = targetType
+					arg3 = owner
+				elseif targetType == AttributeTargets.Field then
+					arg1 = name
 					arg2 = targetType
 					arg3 = owner
 				else
@@ -6248,7 +6293,7 @@ do
 					end
 				else
 					for i = #config, 1, -1 do
-						ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3)
+						ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3, arg4)
 
 						if not ok then
 							errorhandler(ret)
@@ -6273,6 +6318,8 @@ do
 
 					if #config == 0 then
 						_AttributeCache[targetType][target] = nil
+					elseif #config == 1 then
+						_AttributeCache[targetType][target] = config[1]
 					end
 				end
 			end
@@ -6661,6 +6708,35 @@ do
 		end
 
 		doc [======[
+			@name _IsFieldAttributeDefined
+			@type method
+			@desc Check whether the target contains such type attribute
+			@param target struct
+			@param field the field's name
+			@param type the attribute class type
+			@return boolean true if the target contains attribute with the type
+		]======]
+		function _IsFieldAttributeDefined(target, field, type)
+			local info = rawget(_NSInfo, target)
+
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+					for _, part in ipairs(info.Members) do
+						if part == field then
+							return _IsDefined(info.StructEnv[field], AttributeTargets.Field, type)
+						end
+					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+					return _IsDefined(info.ArrayElement, AttributeTargets.Field, type)
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					return _IsDefined(info.StructEnv[field], AttributeTargets.Field, type)
+				end
+			end
+
+			return false
+		end
+
+		doc [======[
 			@name _GetCustomAttribute
 			@type method
 			@desc Return the attributes of the given type for the target
@@ -6824,6 +6900,33 @@ do
 		function _GetStructAttribute(target, type)
 			if Reflector.IsStruct(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Struct, type)
+			end
+		end
+
+		doc [======[
+			@name _GetFieldAttribute
+			@type method
+			@desc Return the attributes of the given type for the struct's field
+			@param target struct
+			@param field the field's name
+			@param type the attribute class type
+			@return ... the attribute objects
+		]======]
+		function _GetFieldAttribute(target, field, type)
+			local info = rawget(_NSInfo, target)
+
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+					for _, part in ipairs(info.Members) do
+						if part == field then
+							return _GetCustomAttribute(info.StructEnv[field], AttributeTargets.Field, type)
+						end
+					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+					return _GetCustomAttribute(info.ArrayElement, AttributeTargets.Field, type)
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					return _GetCustomAttribute(info.StructEnv[field], AttributeTargets.Field, type)
+				end
 			end
 		end
 
@@ -7036,7 +7139,7 @@ do
 		doc [======[
 			@name __Final__
 			@type class
-			@desc Mark the class|interface to be final, and can't be re-defined again
+			@desc Mark the class|interface|struct|enum to be final, and can't be re-defined again
 		]======]
 
 		function ApplyAttribute(self, target, targetType)
@@ -7306,7 +7409,7 @@ do
 		end
 	endclass "__Auto__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Method}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Method}
 	__Final__()
 	__Unique__()
 	class "__Cache__"
@@ -7314,7 +7417,7 @@ do
 		doc [======[
 			@name __Cache__
 			@type class
-			@desc Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created
+			@desc Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .
 		]======]
 	endclass "__Cache__"
 

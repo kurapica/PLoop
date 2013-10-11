@@ -2075,6 +2075,7 @@ The whole attribute system is built on the **System.__Attribute__** class. Here 
 			_GetMethodAttribute　-　Return the attributes of the given type for the class|interface's method
 			_GetPropertyAttribute　-　Return the attributes of the given type for the class|interface's property
 			_GetStructAttribute　-　Return the attributes of the given type for the struct
+			_GetFieldAttribute　-　Return the attributes of the given type for the struct's field
 
 			_IsClassAttributeDefined　-　Check whether the target contains such type attribute
 			_IsConstructorAttributeDefined　-　Check whether the target contains such type attribute
@@ -2084,6 +2085,7 @@ The whole attribute system is built on the **System.__Attribute__** class. Here 
 			_IsMethodAttributeDefined　-　Check whether the target contains such type attribute
 			_IsPropertyAttributeDefined　-　Check whether the target contains such type attribute
 			_IsStructAttributeDefined　-　Check whether the target contains such type attribute
+			_IsFieldAttributeDefined　-　Check whether the target contains such type attribute
 
 
 System.__Final__
@@ -2145,6 +2147,7 @@ For the attribute system, attributes can be applied to several types (Defined in
 	    METHOD = 32
 	    PROPERTY = 64
 	    STRUCT = 128
+	    FIELD = 256
 
 * All - for all below features :
 * Class - for the class
@@ -2155,6 +2158,7 @@ For the attribute system, attributes can be applied to several types (Defined in
 * Method - for the method of the class, struct and interface
 * Property - for the property of the class and interface
 * Struct - for the struct
+* Field - for the struct's field
 
 So, take the `__Final__` class as an example to show how the `__AttributeUsage__` is used :
 
@@ -2164,7 +2168,7 @@ So, take the `__Final__` class as an example to show how the `__AttributeUsage__
 	[Class] System.__Final__ :
 
 	Description :
-		Mark the class|interface to be final, and can't be re-defined again
+		Mark the class|interface|struct|enum to be final, and can't be re-defined again
 
 
 	Super Class :
@@ -2292,9 +2296,9 @@ So, take a method as the example first :
 	-- Error : Usage : A:Add(Count, ...) - ... must be a string, got number.
 	obj:Add(3, "hi", 2, 3)
 
-So, you can see, the system would do the arguments validation for the method, since the lua is dynamic type language, this is not recommend.
+So, you can see, the system would do the arguments validation for the method, this is not recommend.
 
-The `__Arguments__` is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the `__Arguments__`, some special variables in the init table should be take to the constructor:
+The `__Arguments__` is very powerful for the constructor part, when talking about *Init the object with a table*, no values should be passed to the constructor, but with the `__Arguments__`, some special variables in the init table should be passed to the constructor:
 
 	Module "E" ""
 
@@ -2322,7 +2326,7 @@ The `__Arguments__` is very powerful for the constructor part, when talking abou
 	-- Error : Usage : A(Name = "Anonymous") - Name must be a string, got number.
 	obj = A { Name = 123 }
 
-So, the constructor would take what it need to do the init, and the variables also removed from the init table. So using the **__Arguments__** attribute is a good way to combine the **constructor** and the **init with table** abilities. It's recommended.
+So, the constructor would take what it need to do the init, and the variables also removed from the init table. So using the **__Arguments__** attribute is a good way to combine the **constructor** and the **init with table**. It's recommended.
 
 
 System.__StructType__
@@ -2334,7 +2338,7 @@ Introduced in the struct part.
 System.__Cache__
 ----
 
-In the class system, all methods(include inherited) are stored in a class cache for objects to use. Normally, it's enough for the require. But in some background, we need a quick acces for those methods, sure you do it like :
+In the class system, all methods(include inherited) are stored in a class cache for objects to use. Normally, it's enough for the require. But in some scenarios, we need acces those methods very frequently, sure you can do it like :
 
 	class "A"
 		function Greet(self) end
@@ -2347,17 +2351,17 @@ But write the code everytime is just a pain. So, here comes the **System.__Cache
 
 	[__Final__]
 	[__Unique__]
-	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS + System.AttributeTargets.METHOD, Inherited = true, AllowMultiple = false, RunOnce = false }]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS + AttributeTargets.INTERFACE + System.AttributeTargets.METHOD, Inherited = true, AllowMultiple = false, RunOnce = false }]
 	[Class] System.__Cache__ :
 
 		Description :
-			Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created
+			Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with **__Cache__** attribute .
 
 
 		Super Class :
 			System.__Attribute__
 
-It can be used on the class or methods, when used on the class, all its objects will cache a method when they access the method for the first time. When used on a method, the method should be saved to the object when the object is created :
+It can be used on the class, interface or method, when used on the class, all its objects will cache a method when they access the method for the first time. When used on a method, the method should be saved to the object when the object is created :
 
 	Module "F" ""
 
@@ -2365,7 +2369,10 @@ It can be used on the class or methods, when used on the class, all its objects 
 
 	__Cache__()
 	class "A"
-		function Greet(self) end
+
+		function Greet(self)
+		end
+
 	endclass "A"
 
 	obj = A()
@@ -2381,8 +2388,11 @@ It can be used on the class or methods, when used on the class, all its objects 
 	---------------------------
 
 	class "B"
+
 		__Cache__()
-		function Greet(self) end
+		function Greet(self)
+		end
+
 	endclass "B"
 
 	obj = B()
@@ -2390,7 +2400,7 @@ It can be used on the class or methods, when used on the class, all its objects 
 	-- Output : function: function: 0x7feb084884d0
 	print(rawget(obj, "Greet"))
 
-It's would be very useful to mark some most used methods with the attribute.
+It would be very useful to mark some most used methods with the attribute.
 
 
 System.__NonExpandable__
@@ -2459,25 +2469,16 @@ Now, I need a function to manipulate the datatable, but I don't know the detail 
 
 So, the best way is the data can tell us what datatable it is and also the field informations.
 
-We could define a class used to represent one row of the datatable like :
+We could define a struct used to represent one row of the datatable like :
 
 	Module "DataTable" ""
 
 	import "System"
 
-	class "Person"
-		property "ID" {
-			Storage = "__ID",
-			Type = Number,
-		}
-		property "Name" {
-			Storage = "__Name",
-			Type = String,
-		}
-		property "Age" {
-			Storage = "__Age",
-			Type = Number,
-		}
+	struct "Person"
+		ID = Number
+		Name = String
+		Age = Number
 	endclass "Person"
 
 But since the function won't know how to use the **Person** table ( we don't want a function to handle only one data type ), we need use some attributes to describe them.
@@ -2486,7 +2487,7 @@ First, two attribute classes are defined here :
 
 	Module "DataTable" ""
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct}
 	class "__Table__"
 		inherit "__Attribute__"
 
@@ -2496,7 +2497,7 @@ First, two attribute classes are defined here :
 		}
 	endclass "__Table__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Field}
 	class "__Field__"
 		inherit "__Attribute__"
 
@@ -2516,67 +2517,60 @@ First, two attribute classes are defined here :
 		}
 	endclass "__Field__"
 
-The `__Table__` attribute is used on the class, used to mark the class with the datatable's name, so we can bind it to the real table in the database.
+The `__Table__` attribute is used on the struct, used to mark the struct with the datatable's name, so we can bind it to the real table in the database.
 
-The `__Field__` attribute is used on the property, used to mark the property to a field of a datatable, the **Name** to the field's name, **Index** to the field's display index, and the **Type** to the field's type (not the type of the Loop).
+The `__Field__` attribute is used on the field, used to mark the field to a field of a datatable, the **Name** to the field's name, **Index** to the field's display index, and the **Type** to the field's type (not the type of the Loop).
 
-So, here re-define the **Person** class :
+So, here re-define the **Person** struct :
 
 	Module "DataTable" ""
 
 	__Table__{ Name = "Persons" }
-	class "Person"
+	struct "Person"
 		__Field__{ Name = "No.", Index = 1, Type = "NUMBER(10, 0)" }
-		property "ID" {
-			Storage = "__ID",
-			Type = Number,
-		}
+		ID = Number
 
 		__Field__{ Name = "Name", Index = 2, Type = "VARCHAR2(30)" }
-		property "Name" {
-			Storage = "__Name",
-			Type = String,
-		}
+		Name = String
 
 		__Field__{ Name = "Age", Index = 3, Type = "NUMBER(3, 0)" }
-		property "Age" {
-			Storage = "__Age",
-			Type = Number,
-		}
-	endclass "Person"
+		Age = Number
+	endstruct "Person"
 
-Now, we can use them to store the datatable and make a common function to display the datas :
+Now, we can use them to store the datatable and make a common function to display the datas (BTW, use **init table** on a struct won't create a new table, only do the validation and return the **init table** as the result) :
 
 	Module "DataTable" ""
 
 	data = {
 		Person { ID = 1, Name = "Ann", Age = 22 },
 		Person { ID = 2, Name = "King", Age = 33 },
-		Person { ID = 3, Name = "Sam", Age = 18, },
+		Person { ID = 3, Name = "Sam", Age = 18 },
 	}
 
-	function PrintData(objs)
-		local cls = getmetatable(objs[1])
-
-		local tbl = __Attribute__._GetClassAttribute(cls, __Table__)
+	-- Define the function used to print the data of a struct has attributes as descriptions
+	function PrintData(strt, objs)
+		-- Handle the struct's attribute
+		local tbl = __Attribute__._GetStructAttribute(strt, __Table__)
 
 		if tbl then
 			print("Table : " .. tbl.Name)
 			print("-----------------------")
 		end
 
+		-- Handle the field's attribute
 		local cols = {}
 		local colnames = {}
 
-		for _, prop in ipairs(Reflector.GetProperties(cls)) do
-			local field = __Attribute__._GetPropertyAttribute(cls, prop, __Field__)
+		for _, part in ipairs(Reflector.GetStructParts(strt)) do
+			local field = __Attribute__._GetFieldAttribute(strt, part, __Field__)
 
 			if field then
-				cols[field.Index] = prop
+				cols[field.Index] = part
 				colnames[field.Index] = field.Name
 			end
 		end
 
+		-- Print the data
 		local str = ""
 
 		for i, name in ipairs(colnames) do
@@ -2588,15 +2582,16 @@ Now, we can use them to store the datatable and make a common function to displa
 		for i, data in ipairs(objs) do
 			str = ""
 
-			for _, prop in ipairs(cols) do
-				str = str == "" and (str .. data[prop]) or (str .. "\t\t" .. data[prop])
+			for _, part in ipairs(cols) do
+				str = str == "" and (str .. data[part]) or (str .. "\t\t" .. data[part])
 			end
 
 			print(str)
 		end
 	end
 
-	PrintData(data)
+	-- Print the data
+	PrintData(Person, data)
 
 The final result is :
 
@@ -2609,10 +2604,9 @@ The final result is :
 
 Some points about the function :
 
-* `getmetatable(objs[1])`, using getmetatable on an object, would get the object's class, it's a quick way to get the class.
-* `__Attribute__._GetClassAttribute(cls, __Table__)` will try to get class attribute of the `__Table__` for the cls, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
-* `Reflector.GetProperties` used to get a sorted name list of the class/interface's all properties, if pass **true** as the second argument, only properties defined in the class/interface will be get, since there is no super class of the **Person**, so get all properties is simple enough. You can use **Help** to see the detail of it.
-* `__Attribute__._GetPropertyAttribute(cls, prop, __Field__)` like **_GetClassAttribute**, only need a more argument : the property's name.
+* `__Attribute__._GetStructAttribute(strt, __Table__)` will try to get struct attribute of the `__Table__` for the struct, the return value is an object of the `__Table__` if existed. So, then we could get the datatable's name.
+* `Reflector.GetStructParts` used to get a list of the struct's all fields. You can use **Help** to see the detail of it.
+* `__Attribute__._GetFieldAttribute(strt, part, __Field__)` like **_GetStructAttribute**, only need a more argument : the field's name.
 
 
 
