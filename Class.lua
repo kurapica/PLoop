@@ -171,6 +171,9 @@ do
 	}))
 
 	-- Common features
+	getfenv = getfenv
+	setfenv = setfenv
+
 	strlen = string.len
 	strformat = string.format
 	strfind = string.find
@@ -225,7 +228,7 @@ end
 -- GLOBAL Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 80
+	LUA_OOP_VERSION = 81
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
