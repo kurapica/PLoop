@@ -143,8 +143,19 @@ OTHER DEALINGS IN THE SOFTWARE.
 -- Object oriented program syntax system environment
 ------------------------------------------------------
 do
+	local _ENV
+
+	-- Check if there an table pass in used as the environment of the system
+	for i = 1, select('#', ...) do
+		_ENV = select(i, ...)
+		if type(_ENV) == "table" and getmetatable(_ENV) == nil then
+			break
+		end
+		_ENV = nil
+	end
+
 	-- Local Environment
-	setfenv(1, setmetatable({}, {
+	setfenv(1, setmetatable(_ENV or {}, {
 		__index = function(self,  key)
 			if type(key) == "string" and key ~= "_G" and key:find("^_") then
 				return
@@ -211,7 +222,7 @@ do
 end
 
 ------------------------------------------------------
--- Constant Definition
+-- GLOBAL Definition
 ------------------------------------------------------
 do
 	LUA_OOP_VERSION = 80
@@ -244,6 +255,75 @@ do
 			end
 		end,
 	})
+
+	-- Thread Pool
+	THREAD_POOL_SIZE = 100
+	THREAD_POINT = 0
+
+	local function retValueAndRecycle(...)
+		-- Here means the function call is finished successful
+		-- so, we need send the running thread back to the pool
+		THREAD_POOL( running() )
+
+		return ...
+	end
+
+	local function callFunc(func, ...)
+		return retValueAndRecycle( func(...) )
+	end
+
+	local function newRycThread(pool, func)
+		while pool == THREAD_POOL and type(func) == "function" do
+			pool, func = yield( callFunc ( func, yield() ) )
+		end
+	end
+
+	THREAD_POOL = setmetatable({}, {
+		__call = function(self, value)
+			if value then
+				if THREAD_POINT < THREAD_POOL_SIZE then
+					THREAD_POINT = THREAD_POINT + 1
+					tinsert(self, value)
+				else
+					resume(value)
+				end
+			else
+				if THREAD_POINT > 0 then
+					THREAD_POINT = THREAD_POINT - 1
+					return tremove(self, THREAD_POINT + 1)
+				else
+					return create(newRycThread)
+				end
+			end
+		end,
+	})
+
+	local function chkValue(flag, ...)
+		if flag then
+			return ...
+		else
+			error(..., 3)
+		end
+	end
+
+	function CallThread(func, ...)
+		if running() then
+			return func( ... )
+		end
+
+		local th = THREAD_POOL()
+
+		-- Keep safe from unexpected resume
+		while status(th) == "dead" do
+			th = THREAD_POOL()
+		end
+
+		-- Register the function
+		resume(th, THREAD_POOL, func)
+
+		-- Call and return the result
+		return chkValue( resume(th, ...) )
+	end
 end
 
 ------------------------------------------------------
@@ -5739,6 +5819,18 @@ do
 				return SerializeData(data)
 			end
 		end
+
+		doc [======[
+			@name CallAsThread
+			@type method
+			@desc Call the function in a thread from the thread pool of the system
+			@param func the function
+			@param ... the parameters
+			@return any
+		]======]
+		function CallAsThread(func, ...)
+			return CallThread(func, ...)
+		end
 	endinterface "Reflector"
 
 	------------------------------------------------------
@@ -5987,7 +6079,7 @@ do
 			if self.__Blocked then return end
 
 			local owner = self.__Owner
-			local asParam, useThread, chk, ret
+			local asParam, useThread, ret
 
 			asParam = (obj ~= owner)
 
@@ -5997,29 +6089,17 @@ do
 			for _, handler in ipairs(self) do
 				-- Call the handler
 				if useThread then
-					local thread = create(handler)
-
 					if asParam then
-						chk, ret = resume(thread, owner, obj, ...)
+						ret = CallThread(handler, owner, obj, ...)
 					else
-						chk, ret = resume(thread, obj, ...)
-					end
-
-					if status(thread) ~= "dead" then
-						-- not stop when the thread not dead
-						ret = nil
+						ret = CallThread(handler, obj, ...)
 					end
 				else
 					if asParam then
-						chk, ret = pcall(handler, owner, obj, ...)
+						ret = handler(owner, obj, ...)
 					else
-						chk, ret = pcall(handler, obj, ...)
+						ret = handler(obj, ...)
 					end
-				end
-
-				-- Stop with any error
-				if not chk then
-					return errorhandler(ret)
 				end
 
 				if rawget(owner, "Disposed") then
@@ -6036,23 +6116,17 @@ do
 				local handler = self[0]
 
 				if useThread then
-					local thread = create(handler)
-
 					if asParam then
-						chk, ret = resume(thread, owner, obj, ...)
+						CallThread(handler, owner, obj, ...)
 					else
-						chk, ret = resume(thread, obj, ...)
+						CallThread(handler, obj, ...)
 					end
 				else
 					if asParam then
-						chk, ret = pcall(handler, owner, obj, ...)
+						handler(owner, obj, ...)
 					else
-						chk, ret = pcall(handler, obj, ...)
+						handler(obj, ...)
 					end
-				end
-
-				if not chk then
-					return errorhandler(ret)
 				end
 			end
 		end
@@ -7294,11 +7368,6 @@ do
 			@desc Whether the event is thread activated by defalut, or wrap the method as coroutine
 		]======]
 
-		local function validateReturn(ok, ...)
-			if ok then return ... end
-			errorhandler(...)
-		end
-
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
@@ -7306,11 +7375,7 @@ do
 			if type(target) == "function" and (Reflector.IsClass(owner) or Reflector.IsInterface(owner) or Reflector.IsStruct(owner)) then
 				-- Wrap the target method
 				return function (self, ...)
-					if not running() then
-						return validateReturn(resume(create(target), self, ...))
-					else
-						return target(self, ...)
-					end
+					return CallThread(target, self, ...)
 				end
 			end
 		end
@@ -7993,11 +8058,7 @@ do
 			end
 
 			if type(method) == "function" then
-				if not running() then
-					return resume(create(method), self, ...)
-				else
-					return method(self, ...)
-				end
+				return CallThread(method, self, ...)
 			end
 		end
 

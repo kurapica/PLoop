@@ -2029,7 +2029,7 @@ So, the anonymous modules can't be reused, it's better to use anonymous modules 
 
 
 
-System.__Attribute__
+`System.__Attribute__`
 ====
 
 In the previous examples, `__Flags__` is used for enum, `__StructType__` is used for struct, and you can find many attribute classes in the **System**.
@@ -2045,7 +2045,7 @@ The attribute class's behavior is quite different from normal classes, Since in 
 
 in .Net. The Loop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
 
-The whole attribute system is built on the **System.__Attribute__** class. Here is a list of it :
+The whole attribute system is built on the `System.__Attribute__` class. Here is a list of it :
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
@@ -2088,10 +2088,10 @@ The whole attribute system is built on the **System.__Attribute__** class. Here 
 			_IsFieldAttributeDefined　-　Check whether the target contains such type attribute
 
 
-System.__Final__
+`System.__Final__`
 ----
 
-The first line show the class is a final class, **System.__Final__** is a class inherited from the **System.__Attribute__** and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using **Module** as the environment :
+The first line show the class is a final class, `System.__Final__` is a class inherited from the `System.__Attribute__` and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using **Module** as the environment :
 
 	Module "A" ""
 
@@ -2110,14 +2110,14 @@ So, creating an object of the `__Final__` class before the definition, then the 
 Like how to use the `__Final__`, using any attribtue class is just create an object with init values before its target.
 
 
-System.__AttributeUsage__
+`System.__AttributeUsage__`
 ----
 
 The second line :
 
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.ALL, Inherited = true, AllowMultiple = false, RunOnce = false }]
 
-The **System.__AttributeUsage__** is also an attribute class inherited from the **System.__Attribute__**, it can be used on an attribute class, and used to describe how the attribute class can be used.
+The `System.__AttributeUsage__` is also an attribute class inherited from the `System.__Attribute__`, it can be used on an attribute class, and used to describe how the attribute class can be used.
 
 	[__Final__]
 	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.CLASS, Inherited = false, AllowMultiple = false, RunOnce = false }]
@@ -2180,16 +2180,16 @@ So, take the `__Final__` class as an example to show how the `__AttributeUsage__
 Since the **AttributeTargets** is a flag enum, the **AttributeTarget** property can be assigned a value combined from several enum values.
 
 
-System.__Flags__
+`System.__Flags__`
 ----
 
-As the previous example in the enum part, that's the using of the **System.__Flags__**.
+As the previous example in the enum part, that's the using of the `System.__Flags__`.
 
 
-System.__Unique__
+`System.__Unique__`
 ----
 
-In the list of the `__Final__`, a new attribute is set, the **System.__Unique__** attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
+In the list of the `__Final__`, a new attribute is set, the `System.__Unique__` attribute is used to mark the class can only have one object, anytime using the class create object will return an unique object, the object can't be disposed.
 
 Like :
 
@@ -2216,10 +2216,10 @@ It's useful to pass init table to modify the unique object.
 The `__Unique__` attribute normally used on attribute classes, avoid creating too many same functionality objects.
 
 
-System.__NonInheritable__
+`System.__NonInheritable__`
 ----
 
-The **System.__NonInheritable__** attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
+The `System.__NonInheritable__` attribute is used to mark the classs/interface can't be inherited/extended. So no child-class/interface could be created for them.
 
 	Module "C" ""
 
@@ -2237,7 +2237,7 @@ The **System.__NonInheritable__** attribute is used to mark the classs/interface
 BTW. if using the `__Unique__` attribute, the class is also non-inheritable, since it can only have one unique object.
 
 
-System.__Arguments__
+`System.__Arguments__`
 ----
 
 	[__Final__]
@@ -2254,7 +2254,7 @@ System.__Arguments__
 		Method :
 			ApplyAttribute　-　Apply the attribute to the target, overridable
 
-The **System.__Arguments__** attribute is used on constructor or method, it's used to mark the arguments's name and types, it use **System.Argument** class as a partner :
+The `System.__Arguments__` attribute is used on constructor or method, it's used to mark the arguments's name and types, it use **System.Argument** class as a partner :
 
 	[__Final__]
 	[Class] System.Argument :
@@ -2326,16 +2326,16 @@ The `__Arguments__` is very powerful for the constructor part, when talking abou
 	-- Error : Usage : A(Name = "Anonymous") - Name must be a string, got number.
 	obj = A { Name = 123 }
 
-So, the constructor would take what it need to do the init, and the variables also removed from the init table. So using the **__Arguments__** attribute is a good way to combine the **constructor** and the **init with table**. It's recommended.
+So, the constructor would take what it need to do the init, and the variables also removed from the init table. So using the `__Arguments__` attribute is a good way to combine the **constructor** and the **init with table**. It's recommended.
 
 
-System.__StructType__
+`System.__StructType__`
 ----
 
 Introduced in the struct part.
 
 
-System.__Cache__
+`System.__Cache__`
 ----
 
 In the class system, all methods(include inherited) are stored in a class cache for objects to use. Normally, it's enough for the require. But in some scenarios, we need acces those methods very frequently, sure you can do it like :
@@ -2347,7 +2347,7 @@ In the class system, all methods(include inherited) are stored in a class cache 
 	obj = A()
 	obj.Greet = obj.Greet  -- so next time access the 'Greet' is just a table field
 
-But write the code everytime is just a pain. So, here comes the **System.__Cache__** attribute :
+But write the code everytime is just a pain. So, here comes the `System.__Cache__` attribute :
 
 	[__Final__]
 	[__Unique__]
@@ -2403,7 +2403,7 @@ It can be used on the class, interface or method, when used on the class, all it
 It would be very useful to mark some most used methods with the attribute.
 
 
-System.__NonExpandable__
+`System.__NonExpandable__`
 ----
 
 Sometimes we may want to expand the existed class/interface with a simple way, like set a function to the class/interface directly. To do this, we can set a function value to the class/interface as a field, if there is no other method with the field name, the function will be added as a method :
@@ -2422,7 +2422,7 @@ Sometimes we may want to expand the existed class/interface with a simple way, l
 	-- Output : Hello World
 	obj:Greet()
 
-If want forbidden those features, the **__NonExpandable__** attribute is used :
+If want forbidden those features, the `__NonExpandable__` attribute is used :
 
 	Module "G2" ""
 
