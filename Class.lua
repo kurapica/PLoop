@@ -143,19 +143,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 -- Object oriented program syntax system environment
 ------------------------------------------------------
 do
-	local _ENV
-
-	-- Check if there an table pass in used as the environment of the system
-	for i = 1, select('#', ...) do
-		_ENV = select(i, ...)
-		if type(_ENV) == "table" and getmetatable(_ENV) == nil then
-			break
-		end
-		_ENV = nil
-	end
-
 	-- Local Environment
-	setfenv(1, setmetatable(_ENV or {}, {
+	setfenv(1, setmetatable({}, {
 		__index = function(self,  key)
 			if type(key) == "string" and key ~= "_G" and key:find("^_") then
 				return
