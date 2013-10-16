@@ -294,7 +294,15 @@ do
 		if flag then
 			return ...
 		else
-			error(..., 3)
+			local value = ...
+
+			if value then
+				value = value:match(":%d+:%s*(.-)$") or value
+
+				error(value, 4)
+			else
+				error(..., 4)
+			end
 		end
 	end
 
@@ -394,7 +402,7 @@ do
 		_MetaNS.__newindex = function(self, key, value)
 			local info = _NSInfo[self]
 
-			if info.Type == TYPE_CLASS and not __Attribute__._IsDefined(self, AttributeTargets.Class, __NonExpandable__) and type(key) == "string" and type(value) == "function" then
+			if info.Type == TYPE_CLASS and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
 					info.Method[key] = value
 
@@ -402,7 +410,7 @@ do
 				else
 					error("Can't override the existed method.", 2)
 				end
-			elseif info.Type == TYPE_INTERFACE and not __Attribute__._IsDefined(self, AttributeTargets.Interface, __NonExpandable__) and type(key) == "string" and type(value) == "function" then
+			elseif info.Type == TYPE_INTERFACE and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
 					info.Method[key] = value
 
@@ -420,13 +428,13 @@ do
 
 			ok, _type1 = pcall(BuildType, v1)
 			if not ok then
-				_type1 = strtrim(_type1:match(":%d+:(.*)$") or _type1)
+				_type1 = strtrim(_type1:match(":%d+:%s*(.-)$") or _type1)
 				error(_type1, 2)
 			end
 
 			ok, _type2 = pcall(BuildType, v2)
 			if not ok then
-				_type2 = strtrim(_type2:match(":%d+:(.*)$") or _type2)
+				_type2 = strtrim(_type2:match(":%d+:%s*(.-)$") or _type2)
 				error(_type2, 2)
 			end
 
@@ -438,13 +446,13 @@ do
 
 			ok, _type1 = pcall(BuildType, v1)
 			if not ok then
-				_type1 = strtrim(_type1:match(":%d+:(.*)$") or _type1)
+				_type1 = strtrim(_type1:match(":%d+:%s*(.-)$") or _type1)
 				error(_type1, 2)
 			end
 
 			ok, _type2 = pcall(BuildType, v2, nil, true)
 			if not ok then
-				_type2 = strtrim(_type2:match(":%d+:(.*)$") or _type2)
+				_type2 = strtrim(_type2:match(":%d+:%s*(.-)$") or _type2)
 				error(_type2, 2)
 			end
 
@@ -456,7 +464,7 @@ do
 
 			ok, _type1 = pcall(BuildType, v1, nil, true)
 			if not ok then
-				_type1 = strtrim(_type1:match(":%d+:(.*)$") or _type1)
+				_type1 = strtrim(_type1:match(":%d+:%s*(.-)$") or _type1)
 				error(_type1, 2)
 			end
 
@@ -662,7 +670,11 @@ do
 			end
 			return _type
 		else
-			error("The type must be nil, struct, enum or class.")
+			if name then
+				error(("The value of %s must be combination of nil, struct, enum, interface or class."):format(name))
+			else
+				error("The type must be combination of nil, struct, enum, interface or class.")
+			end
 		end
 	end
 end
@@ -1399,7 +1411,7 @@ do
 				end,
 				GetMethod = "GetXXX",
 				SetMethod = "SetXXX",
-				Storage = "__XXX",
+				Field = "__XXX",
 				Type = Type1 [+ Type2 [+ nil]],	-- set the property's type
 			}]=], 2)
 		end
@@ -1435,16 +1447,16 @@ do
 					if type(v) == "string" then
 						prop.SetMethod = v
 					end
-				elseif k == "storage" then
+				elseif k == "field" then
 					if type(v) == "string" then
-						prop.Storage = v
+						prop.Field = v
 					end
 				elseif k == "type" then
 					local ok, ret = pcall(BuildType, v, name)
 					if ok then
 						prop.Type = ret
 					else
-						ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+						ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 
 						errorhandler(ret)
 					end
@@ -1885,7 +1897,7 @@ do
 							if not ok then
 								CACHE_TABLE(cache)
 
-								value = strtrim(value:match(":%d+:(.*)$") or value)
+								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 								if value:find("%%s") then
 									value = value:gsub("%%s[_%w]*", arg.Name)
@@ -1925,7 +1937,7 @@ do
 							if not ok then
 								CACHE_TABLE(cache)
 
-								value = strtrim(value:match(":%d+:(.*)$") or value)
+								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 								if value:find("%%s") then
 									value = value:gsub("%%s[_%w]*", arg.Name)
@@ -1946,7 +1958,7 @@ do
 								if not ok then
 									CACHE_TABLE(cache)
 
-									value = strtrim(value:match(":%d+:(.*)$") or value)
+									value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 									if value:find("%%s") then
 										value = value:gsub("%%s[_%w]*", "...")
@@ -1989,7 +2001,7 @@ do
 						ok, msg = pcall(TrySetProperty, obj, name, value)
 
 						if not ok then
-							msg = strtrim(msg:match(":%d+:(.*)$") or msg)
+							msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
 
 							errorhandler(msg)
 						end
@@ -2035,7 +2047,7 @@ do
 				ok, msg = pcall(TrySetProperty, obj, name, value)
 
 				if not ok then
-					msg = strtrim(msg:match(":%d+:(.*)$") or msg)
+					msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
 
 					errorhandler(msg)
 				end
@@ -2255,8 +2267,8 @@ do
 						else
 							return Cache4Method[oper](self)
 						end
-					elseif oper.Storage then
-						return rawget(self, oper.Storage)
+					elseif oper.Field then
+						return rawget(self, oper.Field)
 					else
 						error(("%s is write-only."):format(tostring(key)),2)
 					end
@@ -2321,8 +2333,8 @@ do
 						else
 							return Cache4Method[oper](self, value)
 						end
-					elseif oper.Storage then
-						return rawset(self, oper.Storage, value)
+					elseif oper.Field then
+						return rawset(self, oper.Field, value)
 					else
 						error(("%s is read-only."):format(tostring(key)),2)
 					end
@@ -2975,7 +2987,7 @@ do
 
 						return
 					else
-						ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+						ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 						error(ret, 2)
 					end
 				end
@@ -3008,7 +3020,7 @@ do
 				if flag then
 					value[i] = ret
 				else
-					ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+					ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 
 					if ret:find("%%s([_%w]+)") then
 						ret = ret:gsub("%%s([_%w]+)", "%%s["..i.."]")
@@ -3057,7 +3069,7 @@ do
 				return value
 			elseif not continue then
 				if info.SubType == _STRUCT_TYPE_MEMBER then
-					value = strtrim(value:match(":%d+:(.*)$") or value)
+					value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 					value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
 					local args = ""
@@ -3076,7 +3088,7 @@ do
 					end
 					error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
 				else
-					value = strtrim(value:match(":%d+:(.*)$") or value)
+					value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 					value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
 					error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
@@ -3094,7 +3106,7 @@ do
 				end
 				return ret
 			else
-				ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+				ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 
 				error(ret, 3)
 			end
@@ -3120,7 +3132,7 @@ do
 
 				return value
 			else
-				value = strtrim(value:match(":%d+:(.*)$") or value)
+				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
 				local args = ""
@@ -3158,7 +3170,7 @@ do
 				end
 				return value
 			else
-				value = strtrim(value:match(":%d+:(.*)$") or value)
+				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
 				error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
@@ -3170,7 +3182,7 @@ do
 			local ok, ret = pcall(info.UserValidate, ...)
 
 			if not ok then
-				ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+				ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 
 				ret = ret:gsub("%%s", "[".. info.Name .."]")
 
@@ -3190,7 +3202,7 @@ do
 			local ok, ret = pcall(ValidateStruct, strt, value)
 
 			if not ok then
-				ret = strtrim(ret:match(":%d+:(.*)$") or ret)
+				ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
 
 				ret = ret:gsub("%%s", "[".. info.Name .."]")
 
@@ -3605,7 +3617,7 @@ do
 						return new
 					end
 
-					new = strtrim(new:match(":%d+:(.*)$") or new)
+					new = strtrim(new:match(":%d+:%s*(.-)$") or new)
 				elseif info.Type == TYPE_CLASS then
 					-- Check if the value is an instance of this class
 					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then
@@ -3837,13 +3849,13 @@ do
 
 			ok, _type1 = pcall(BuildType, v1)
 			if not ok then
-				_type1 = strtrim(_type1:match(":%d+:(.*)$") or _type1)
+				_type1 = strtrim(_type1:match(":%d+:%s*(.-)$") or _type1)
 				error(_type1, 2)
 			end
 
 			ok, _type2 = pcall(BuildType, v2)
 			if not ok then
-				_type2 = strtrim(_type2:match(":%d+:(.*)$") or _type2)
+				_type2 = strtrim(_type2:match(":%d+:%s*(.-)$") or _type2)
 				error(_type2, 2)
 			end
 
@@ -3900,7 +3912,7 @@ do
 
 				ok, _type2 = pcall(BuildType, v2, nil, true)
 				if not ok then
-					_type2 = strtrim(_type2:match(":%d+:(.*)$") or _type2)
+					_type2 = strtrim(_type2:match(":%d+:%s*(.-)$") or _type2)
 					error(_type2, 2)
 				end
 
@@ -4196,12 +4208,27 @@ do
 			@desc Check if the class|interface is non-inheritable
 			@param object
 			@return boolean true if the class|interface is non-inheritable
-			@usage System.Reflector.IsFinal(System.Object)
+			@usage System.Reflector.IsNonInheritable(System.Object)
 		]======]
 		function IsNonInheritable(ns)
 			if type(ns) == "string" then ns = ForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonInheritable or false
+		end
+
+		doc [======[
+			@name IsNonExpandable
+			@type method
+			@method interface
+			@desc Check if the class|interface is non-expandable
+			@param object
+			@return boolean true if the class|interface is non-expandable
+			@usage System.Reflector.IsNonExpandable(System.Object)
+		]======]
+		function IsNonExpandable(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonExpandable or false
 		end
 
 		doc [======[
@@ -4466,7 +4493,7 @@ do
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
 				local prop = info.Cache4Property[propName]
-				return (prop.Get or prop.GetMethod or prop.Storage) and true or false
+				return (prop.Get or prop.GetMethod or prop.Field) and true or false
 			end
 		end
 
@@ -4487,7 +4514,7 @@ do
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
 				local prop = info.Cache4Property[propName]
-				return (prop.Set or prop.SetMethod or prop.Storage) and true or false
+				return (prop.Set or prop.SetMethod or prop.Field) and true or false
 			end
 		end
 
@@ -4986,7 +5013,7 @@ do
 					_Validate_Type(types)
 
 					if not ok then
-						value = strtrim(value:match(":%d+:(.*)$") or value)
+						value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 						if value:find("%%s") then
 							value = value:gsub("%%s[_%w]*", name)
@@ -5173,14 +5200,18 @@ do
 
 				if info.Type == TYPE_ENUM then
 					-- Enum
-					local result
+					local result = ""
 					local value
 
-					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
-						result = "[Enum][__Flags__] " .. GetFullName(ns) .. " :"
-					else
-						result = "[Enum] " .. GetFullName(ns) .. " :"
+					if info.IsFinal then
+						result = result .. "[__Final__]\n"
 					end
+
+					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
+						result = result .. "[__Flags__]\n"
+					end
+
+					result = result .. "[Enum] " .. GetFullName(ns) .. " :"
 
 					for _, enums in ipairs(GetEnums(ns)) do
 						value = ns[enums]
@@ -5196,29 +5227,39 @@ do
 					return result
 				elseif info.Type == TYPE_STRUCT then
 					-- Struct
-					local result = "[Struct] " .. GetFullName(ns) .. " :"
+					local result = ""
+
+					if info.IsFinal then
+						result = result .. "[__Final__]\n"
+					end
+
+					if info.SubType == _STRUCT_TYPE_ARRAY then
+						result = result .. "[__StructType__(StructType.Array)]\n"
+					elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+						result = result .. "[__StructType__(StructType.Custom)]\n"
+					end
+
+					result = result .. "[Struct] " .. GetFullName(ns) .. " :"
 
 					-- SubNameSpace
 					result = result .. buildSubNamespace(ns)
 
-					if info.SubType == _STRUCT_TYPE_MEMBER then
-						-- Part
+					if info.SubType == _STRUCT_TYPE_MEMBER or info.SubType == _STRUCT_TYPE_CUSTOM then
 						local parts = GetStructParts(ns)
 
 						if parts and next(parts) then
-							result = result .. "\n\n  Member:"
+							result = result .. "\n\n  Field:"
 
 							for _, name in ipairs(parts) do
-								result = result .. "\n    " .. name .. " = " .. tostring(GetStructPart(ns, name))
+								result = result .. "\n    " .. name .. " = " .. tostring(info.StructEnv[name])
 							end
-						else
-							result = result .. "\n\n  Basic Element"
 						end
 					elseif info.SubType == _STRUCT_TYPE_ARRAY then
 						if info.ArrayElement then
-							result = result .. "\n\n  Element :\n    Type = " .. tostring(info.ArrayElement)
+							result = result .. "\n\n  Element :\n    " .. tostring(info.ArrayElement)
 						end
 					end
+
 					return result
 				elseif info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
 					-- Interface & Class
@@ -5226,13 +5267,21 @@ do
 						local result = ""
 						local desc
 
-						if info.Type == TYPE_INTERFACE then
-							if info.IsFinal then
-								result = result .. "[__Final__]\n"
-							end
+						if info.IsFinal then
+							result = result .. "[__Final__]\n"
+						end
 
-							if info.IsNonInheritable then
-								result = result .. "[__NonInheritable__]\n"
+						if info.IsNonInheritable then
+							result = result .. "[__NonInheritable__]\n"
+						end
+
+						if info.NonExpandable then
+							result = result .. "[__NonExpandable__]\n"
+						end
+
+						if info.Type == TYPE_INTERFACE then
+							if __Attribute__._IsDefined(ns, AttributeTargets.Interface, __Cache__) then
+								result = result .. "[__Cache__]\n"
 							end
 
 							result = result .. "[Interface] " .. GetFullName(ns) .. " :"
@@ -5243,12 +5292,8 @@ do
 								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
 							end
 						else
-							if info.IsFinal then
-								result = result .. "[__Final__]\n"
-							end
-
-							if info.IsNonInheritable then
-								result = result .. "[__NonInheritable__]\n"
+							if __Attribute__._IsDefined(ns, AttributeTargets.Class, __Cache__) then
+								result = result .. "[__Cache__]\n"
 							end
 
 							if __Attribute__._IsDefined(ns, AttributeTargets.Class, __Unique__) then
@@ -5375,8 +5420,29 @@ do
 						local isFormat = false
 
 						if info.Type == TYPE_CLASS then
+							-- __Arguments__
+							local args = __Attribute__._GetConstructorAttribute(ns, __Arguments__)
+
+							if args and #args > 0 then
+								result = result .. "\n\n  Init table field :"
+
+								for i = 1, #args do
+									result = result .. "\n    " .. args[i].Name
+
+									if args[i].Type then
+										result = result .. " = " .. tostring(args[i].Type)
+									end
+
+									if args[i].Default then
+										result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
+									end
+								end
+							end
+
 							while ns do
 								isFormat = true
+
+								desc = nil
 
 								if HasDocumentPart(ns, "class", GetName(ns)) then
 									desc = GetDocumentPart(ns, "class", GetName(ns), "format")
@@ -5483,6 +5549,11 @@ do
 						end
 
 						if querytype == "event" then
+							-- __Thread__
+							if __Attribute__._IsEventAttributeDefined(ns, name, __Thread__) then
+								result = result .. "\n\n  [__Thread__]"
+							end
+
 							-- Format
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
 							if desc then
@@ -5547,6 +5618,11 @@ do
 								end
 							end
 
+							-- __Thread__
+							if __Attribute__._IsMethodAttributeDefined(ns, name, __Thread__) then
+								result = result .. "\n\n  [__Thread__]"
+							end
+
 							-- Format
 							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
 							result = result .. "\n\n  Format :"
@@ -5592,6 +5668,25 @@ do
 										result = result .. "\n    " .. param .. " - " .. info
 									else
 										result = result .. "\n    " .. param
+									end
+								end
+							else
+								-- __Arguments__
+								local args = __Attribute__._GetMethodAttribute(ns, name, __Arguments__)
+
+								if args and #args > 0 then
+									result = result .. "\n\n  Parameter :"
+
+									for i = 1, #args do
+										result = result .. "\n    " .. args[i].Name
+
+										if args[i].Type then
+											result = result .. " = " .. tostring(args[i].Type)
+										end
+
+										if args[i].Default then
+											result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
+										end
 									end
 								end
 							end
@@ -5841,7 +5936,7 @@ do
 			@desc The event's name
 		]======]
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = String,
 		}
 
@@ -5967,7 +6062,7 @@ do
 			@desc Whether the event handler is blocked
 		]======]
 		property "Blocked" {
-			Storage = "__Blocked",
+			Field = "__Blocked",
 			Type = Boolean,
 		}
 
@@ -5977,7 +6072,7 @@ do
 			@desc Whether the event handler is thread activated
 		]======]
 		property "ThreadActivated" {
-			Storage = "__ThreadActivated",
+			Field = "__ThreadActivated",
 			Type = Boolean,
 		}
 
@@ -7154,7 +7249,7 @@ do
 			@desc The attribute target type, default AttributeTargets.All
 		]======]
 		property "AttributeTarget" {
-			Storage = "__AttributeTarget",
+			Field = "__AttributeTarget",
 			Type = AttributeTargets,
 		}
 
@@ -7164,7 +7259,7 @@ do
 			@desc Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true
 		]======]
 		property "Inherited" {
-			Storage = "__Inherited",
+			Field = "__Inherited",
 			Type = Boolean,
 		}
 
@@ -7174,7 +7269,7 @@ do
 			@desc whether multiple instances of your attribute can exist on an element. default false
 		]======]
 		property "AllowMultiple" {
-			Storage = "__AllowMultiple",
+			Field = "__AllowMultiple",
 			Type = Boolean,
 		}
 
@@ -7184,7 +7279,7 @@ do
 			@desc Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation
 		]======]
 		property "RunOnce" {
-			Storage = "__RunOnce",
+			Field = "__RunOnce",
 			Type = Boolean,
 		}
 
@@ -7395,10 +7490,10 @@ do
 			if prop then
 				prop.Type = prop.Type or self.Type
 
-				if type(self.__Storage) == "string" then
-					prop.Storage = prop.Storage or self.__Storage
-				elseif self.__Storage then
-					prop.Storage = prop.Storage or ("__" .. info.Name:match("^_*(.-)$") .. "_" .. name)
+				if type(self.__Field) == "string" then
+					prop.Field = prop.Field or self.__Field
+				elseif self.__Field then
+					prop.Field = prop.Field or ("__" .. info.Name:match("^_*(.-)$") .. "_" .. name)
 				end
 
 				if self.__Method then
@@ -7412,12 +7507,12 @@ do
 		-- Property
 		------------------------------------------------------
 		doc [======[
-			@name Storage
+			@name Field
 			@type property
 			@desc The target field
 		]======]
-		property "Storage" {
-			Storage = "__Storage",
+		property "Field" {
+			Field = "__Field",
 			Type = String + Boolean,
 		}
 
@@ -7427,7 +7522,7 @@ do
 			@desc The default value of the property
 		]======]
 		property "Default" {
-			Storage = "__Default",
+			Field = "__Default",
 		}
 
 		doc [======[
@@ -7436,7 +7531,7 @@ do
 			@desc Whether use the object's method as the accessors
 		]======]
 		property "Method" {
-			Storage = "__Method",
+			Field = "__Method",
 			Type = Boolean,
 		}
 
@@ -7446,7 +7541,7 @@ do
 			@desc The type of the property
 		]======]
 		property "Type" {
-			Storage = "__Type",
+			Field = "__Type",
 			Set = function(self, value)
 				self.__Type = BuildType(value)
 			end,
@@ -7459,7 +7554,7 @@ do
 			Super.__call(self)
 
 			-- Clear
-			self.__Storage = nil
+			self.__Field = nil
 			self.__Default = nil
 			self.__Method = nil
 			self.__Type = nil
@@ -7479,57 +7574,18 @@ do
 	endclass "__Cache__"
 
 	__Final__()
-	class "Argument"
-		doc [======[
-			@name Argument
-			@type class
-			@desc The argument description object
-		]======]
+	struct "Argument"
+		Name = String
+		Type = Any
+		Default = Any
+		IsList = Boolean + nil
 
-		------------------------------------------------------
-		-- Property
-		------------------------------------------------------
-		doc [======[
-			@name Name
-			@type property
-			@desc The name of the argument
-		]======]
-		property "Name" {
-			Storage = "__Name",
-			Type = String,
-		}
+		function Validate(value)
+			value.Type = BuildType(value.Type, "Type")
 
-		doc [======[
-			@name Type
-			@type property
-			@desc The type of the argument
-		]======]
-		property "Type" {
-			Storage = "__Type",
-			Set = function(self, value)
-				self.__Type = BuildType(value)
-			end,
-		}
-
-		doc [======[
-			@name Default
-			@type property
-			@desc The defalut value of the argument
-		]======]
-		property "Default" {
-			Storage = "__Default",
-		}
-
-		doc [======[
-			@name IsList
-			@type property
-			@desc Whether the rest are a list of the same type argument, only used for the last argument
-		]======]
-		property "IsList" {
-			Storage = "__IsList",
-			Type = Boolean,
-		}
-	endclass "Argument"
+			return value
+		end
+	endstruct "Argument"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor}
 	__Final__()
@@ -7553,12 +7609,15 @@ do
 				index = index + 1
 				objArg = self[index]
 				if objArg then
-					arg@ = arg@ or objArg.Default
+					if arg@ == nil and objArg.Default ~= nil then
+						arg@ = objArg.Default
+					end
+
 					if objArg.Type then
 						ok, value = pcall(objArg.Type.Validate, objArg.Type, arg@)
 
 						if not ok then
-							value = value:match(":%d+:(.*)$") or value
+							value = value:match(":%d+:%s*(.-)$") or value
 
 							if value:find("%%s") then
 								value = value:gsub("%%s[_%w]*", objArg.Name)
@@ -7628,7 +7687,7 @@ do
 						ok, value = pcall(arg.Type.Validate, arg.Type, ret[i])
 
 						if not ok then
-							value = strtrim(value:match(":%d+:(.*)$") or value)
+							value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 							if value:find("%%s") then
 								value = value:gsub("%%s[_%w]*", arg.Name)
@@ -7645,7 +7704,7 @@ do
 							ok, value = pcall(arg.Type.Validate, arg.Type, ret[j])
 
 							if not ok then
-								value = strtrim(value:match(":%d+:(.*)$") or value)
+								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 
 								if value:find("%%s") then
 									value = value:gsub("%%s[_%w]*", "...")
@@ -7672,9 +7731,7 @@ do
 			local max = #self
 
 			for i = max, 1, -1 do
-				if not Reflector.ObjectIsClass(self[i], Argument) then
-					tremove(self, i)
-				elseif not self[i].Name and (i < max or not self[i].IsList) then
+				if type(self[i]) ~= "table" or not self[i].Name or (i < #self and self[i].IsList) then
 					tremove(self, i)
 				end
 			end
@@ -7682,8 +7739,13 @@ do
 			if type(target) == "function" and (Reflector.IsClass(owner) or Reflector.IsInterface(owner) or Reflector.IsStruct(owner)) then
 				local useList = false
 				local count = 0
+				local isObjectMethod = not name:match("^_")
 
-				self.Usage = "Usage : " .. _NSInfo[owner].Name .. ":" .. name .. "("
+				if isObjectMethod then
+					self.Usage = "Usage : " .. _NSInfo[owner].Name .. ":" .. name .. "("
+				else
+					self.Usage = "Usage : " .. _NSInfo[owner].Name .. "." .. name .. "("
+				end
 
 				for i = 1, #self do
 					local arg = self[i]
@@ -7700,11 +7762,7 @@ do
 						local serialize
 
 						if arg.Default ~= nil then
-							if arg.Type then
-								serialize = Reflector.Serialize(arg.Default, arg.Type)
-							else
-								serialize = tostring(arg.Default)
-							end
+							serialize = Reflector.Serialize(arg.Default, arg.Type)
 						end
 
 						if serialize then
@@ -7731,8 +7789,14 @@ do
 				end
 
 				if self.ValidateArguments then
-					return function(obj, ...)
-						return target(obj, self:ValidateArguments(...))
+					if isObjectMethod then
+						return function(obj, ...)
+							return target(obj, self:ValidateArguments(...))
+						end
+					else
+						return function(...)
+							return target(self:ValidateArguments(...))
+						end
 					end
 				else
 					return target
@@ -7759,11 +7823,7 @@ do
 						local serialize
 
 						if arg.Default ~= nil then
-							if arg.Type then
-								serialize = Reflector.Serialize(arg.Default, arg.Type)
-							else
-								serialize = tostring(arg.Default)
-							end
+							serialize = Reflector.Serialize(arg.Default, arg.Type)
 						end
 
 						if serialize then
@@ -7847,7 +7907,7 @@ do
 			@desc The struct's type
 		]======]
 		property "Type" {
-			Storage = "__Type",
+			Field = "__Type",
 			Type = StructType,
 		}
 
@@ -7860,7 +7920,7 @@ do
 		end
 	endclass "__StructType__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class, RunOnce = true}
 	__Final__()
 	__Unique__()
 	class "__NonExpandable__"
@@ -7872,6 +7932,12 @@ do
 				System.Object.Print = function(self) print(self) end, give all object of System.Object a new method.
 				The cost should be expensive, use it carefully.
 		]======]
+
+		function ApplyAttribute(self, target, targetType)
+			if rawget(_NSInfo, target) then
+				_NSInfo[target].NonExpandable = true
+			end
+		end
 	endclass "__NonExpandable__"
 
 	------------------------------------------------------

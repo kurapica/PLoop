@@ -18,7 +18,7 @@ Use loadfile or require to load the class.lua file in the folder. Then you can t
 			end
 
 			property "Name" {
-				Storage = "_Name",     -- The real field that used to store the value, explain later
+				Field = "_Name",     -- The real field that used to store the value, explain later
 				Type = System.String,  -- the property's type used to validate the value,
 									   -- System.Sting means the value should be a string, also explain later.
 			}
@@ -575,13 +575,13 @@ Properties are used to access the object's state, like **name**, **age** for a p
 So, here is the full definition format for a property :
 
 	property "name" {
-		Storage = "field",
+		Field = "field",
 		Get = "GetMethod" or function(self) end,
 		Set = "SetMethod" or function(self, value) end,
 		Type = types,
 	}
 
-* Storage - optional, the lowest priority, the real field in the object that store the data, can be used to read or write the property.
+* Field - optional, the lowest priority, the real field in the object that store the data, can be used to read or write the property.
 
 * Get - optional, the highest priority, if the value is string, the object method with the name same to the value will be used, if the value is a function, the function will be used as the read accessor, can be used to read the property.
 
@@ -594,7 +594,7 @@ So, re-define the **Person** class with the property :
 	class "Person"
 
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = System.String,
 		}
 
@@ -609,7 +609,7 @@ With the property system, we can create objects with a new format, called *Init 
 
 If only a normal table passed to the class to create the object, the object will be created with no parameters, and then any key-value paris in the table will be tried to write to the object (just like obj[key] = value). If you want some parameters be passed into the class's constructor, the features will be added in the **Attribute** system.
 
-With the **Storage**, the reading and writing are the quickest, but normally, we need to do more things when the object's properties are accessed, like return a default value when data not existed. So, here is a full example to show **Get** and **Set** :
+With the **Field**, the reading and writing are the quickest, but normally, we need to do more things when the object's properties are accessed, like return a default value when data not existed. So, here is a full example to show **Get** and **Set** :
 
 	class "Person"
 
@@ -814,7 +814,7 @@ Since the objects are lua tables with special metatable set by the Loop system, 
 
 		-- Property
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = System.String + nil,
 		}
 
@@ -923,7 +923,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 * With the inheritance system, go back to the property definition :
 
 		property "name" {
-			Storage = "field",
+			Field = "field",
 			Get = "GetMethod" or function(self) end,
 			Set = "SetMethod" or function(self, value) end,
 			Type = types,
@@ -993,7 +993,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 			event "OnNameChanged"
 
 			property "Name" {
-				Storage = "__Name",
+				Field = "__Name",
 				Set = function(self, name)
 					local oldName = self.__Name
 
@@ -1005,7 +1005,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 			}
 
 			property "GUID" {
-				Storage = "__ID",
+				Field = "__ID",
 				Type = System.String,
 			}
 
@@ -1216,7 +1216,7 @@ The definition of an interface is started with **interface** and end with **endi
 	-- Define an interface with one property
 	interface "IFName"
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = System.String,
 		}
 	endinterface "IFName"
@@ -1782,6 +1782,7 @@ The last part, let's get a view of the **System** namespace.
 
 		Sub Struct :
 			Any
+			Argument
 			Boolean
 			Function
 			Number
@@ -1794,7 +1795,6 @@ The last part, let's get a view of the **System** namespace.
 			Reflector
 
 		Sub Class :
-			Argument
 			Event
 			EventHandler
 			Module
@@ -1818,7 +1818,7 @@ The last part, let's get a view of the **System** namespace.
 * The **StructType** is used by `__StructType__` attribtue, in the struct part, an example already existed.
 * The structs are basic structs, so no need to care about the non-table value structs.
 * The **Reflector** is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
-* The **Argument** class is used with `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
+* The **Argument** struct is used by `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
 * The **Event** and **EventHandler** classes are used to create the whole event system. No need to use it yourself.
 * The **Module** class is used to build private environment for common using, explained later.
 * The **Object** class may be the root class of others, several useful methods.
@@ -2254,20 +2254,16 @@ BTW. if using the `__Unique__` attribute, the class is also non-inheritable, sin
 		Method :
 			ApplyAttribute　-　Apply the attribute to the target, overridable
 
-The `System.__Arguments__` attribute is used on constructor or method, it's used to mark the arguments's name and types, it use **System.Argument** class as a partner :
+The `System.__Arguments__` attribute is used on constructor or method, it's used to mark the arguments's name and types, it use **System.Argument** struct as a partner :
 
 	[__Final__]
-	[Class] System.Argument :
+	[Struct] System.Argument :
 
-		Description :
-			The argument description object
-
-
-		Property :
-			Default　-　The defalut value of the argument
-			IsList　-　Whether the rest are a list of the same type argument, only used for the last argument
-			Name　-　The name of the argument
-			Type　-　The type of the argument
+		Field:
+			Name = System.String　			-　The name of the argument
+			Type = System.Any　				-　The type of the argument
+			Default = System.Any　			-　The defalut value of the argument
+			IsList = System.Boolean + nil 	-　Whether the rest are a list of the same type argument, only used for the last argument
 
 So, take a method as the example first :
 
@@ -2492,7 +2488,7 @@ First, two attribute classes are defined here :
 		inherit "__Attribute__"
 
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = String,
 		}
 	endclass "__Table__"
@@ -2502,17 +2498,17 @@ First, two attribute classes are defined here :
 		inherit "__Attribute__"
 
 		property "Name" {
-			Storage = "__Name",
+			Field = "__Name",
 			Type = String,
 		}
 
 		property "Index" {
-			Storage = "__Index",
+			Field = "__Index",
 			Type = Number,
 		}
 
 		property "Type" {
-			Storage = "__Type",
+			Field = "__Type",
 			Type = String,
 		}
 	endclass "__Field__"

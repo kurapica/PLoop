@@ -46,7 +46,7 @@ class "Error"
 		@type property
 		@desc The error message
 	]======]
-	__Auto__{ Storage = "__Message", Type = System.String + nil }
+	__Auto__{ Field = "__Message", Type = System.String + nil }
 	property "Message" {}
 
 	--------------------------------------
