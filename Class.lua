@@ -4533,15 +4533,36 @@ do
 			local info = ns and _NSInfo[ns]
 
 			if info and info.Type == TYPE_ENUM then
-				local tmp = {}
+				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
+					local tmp = {}
+					local zero = nil
 
-				for i in pairs(info.Enum) do
-					tinsert(tmp, i)
+					for i, v in pairs(info.Enum) do
+						if type(v) == "number" then
+							if v > 0 then
+								tmp[floor(log(v)/log(2)) + 1] = i
+							else
+								zero = i
+							end
+						end
+					end
+
+					if zero then
+						tinsert(tmp, 1, zero)
+					end
+
+					return tmp
+				else
+					local tmp = {}
+
+					for i in pairs(info.Enum) do
+						tinsert(tmp, i)
+					end
+
+					sort(tmp)
+
+					return tmp
 				end
-
-				sort(tmp)
-
-				return tmp
 			end
 		end
 
