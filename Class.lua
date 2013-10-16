@@ -1460,7 +1460,15 @@ do
 
 						errorhandler(ret)
 					end
+				elseif k == "default" then
+					prop.Default = v
 				end
+			end
+		end
+
+		if prop.Type and prop.Default ~= nil then
+			if prop.Type:GetObjectType(prop.Default) == false then
+				prop.Default = nil
 			end
 		end
 
@@ -2257,20 +2265,28 @@ do
 				-- Property Get
 				oper = Cache4Property[key]
 				if oper then
+					local value
+
 					if oper.Get then
-						return oper.Get(self)
+						value = oper.Get(self)
 					elseif oper.GetMethod then
 						oper = oper.GetMethod
 						local func = rawget(self, oper)
 						if type(func) == "function" then
-							return func(self)
+							value = func(self)
 						else
-							return Cache4Method[oper](self)
+							value = Cache4Method[oper](self)
 						end
 					elseif oper.Field then
-						return rawget(self, oper.Field)
+						value = rawget(self, oper.Field)
+					elseif oper.Default == nil then
+						error(("%s can't be read."):format(tostring(key)),2)
+					end
+
+					if value == nil and oper.Default ~= nil then
+						return oper.Default
 					else
-						error(("%s is write-only."):format(tostring(key)),2)
+						return value
 					end
 				end
 
@@ -2336,7 +2352,7 @@ do
 					elseif oper.Field then
 						return rawset(self, oper.Field, value)
 					else
-						error(("%s is read-only."):format(tostring(key)),2)
+						error(("%s can't be written."):format(tostring(key)),2)
 					end
 				end
 
@@ -7518,8 +7534,17 @@ do
 				end
 
 				if self.__Method then
-					prop.SetMethod = prop.SetMethod or "Set" .. name
-					prop.GetMethod = prop.GetMethod or "Get" .. name
+					if not prop.Set then
+						prop.SetMethod = prop.SetMethod or "Set" .. name
+					end
+
+					if not prop.Get then
+						prop.GetMethod = prop.GetMethod or "Get" .. name
+					end
+				end
+
+				if self.__Default ~= nil and prop.Default == nil and (not prop.Type or prop.Type:GetObjectType(self.__Default) ~= false) then
+					prop.Default = self.__Default
 				end
 			end
 		end
@@ -7530,7 +7555,7 @@ do
 		doc [======[
 			@name Field
 			@type property
-			@desc The target field
+			@desc The target field, auto-generated if set to true
 		]======]
 		property "Field" {
 			Field = "__Field",
@@ -7549,7 +7574,7 @@ do
 		doc [======[
 			@name Method
 			@type property
-			@desc Whether use the object's method as the accessors
+			@desc True to use object methods with the name like ('Set/Get' + property's name) as the accessors
 		]======]
 		property "Method" {
 			Field = "__Method",

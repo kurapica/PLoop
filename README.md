@@ -579,6 +579,7 @@ So, here is the full definition format for a property :
 		Get = "GetMethod" or function(self) end,
 		Set = "SetMethod" or function(self, value) end,
 		Type = types,
+		Default = value,
 	}
 
 * Field - optional, the lowest priority, the real field in the object that store the data, can be used to read or write the property.
@@ -588,6 +589,8 @@ So, here is the full definition format for a property :
 * Set - optional, the highest priority, if the value is string, the object method with the name same to the value will be used, if the value is a function, the function will be used as the write accessor, can be used to write the property.
 
 * Type - optional, just like define member types in the struct, if set, when write the property, the value would be validated by the type settings.
+
+* Default - optional, used as the default value if no value existed.
 
 So, re-define the **Person** class with the property :
 
@@ -2434,6 +2437,145 @@ If want forbidden those features, the `__NonExpandable__` attribute is used :
 	A.Greet = function(self) end
 
 BTW, mark a class/interface with `__Final__` attribute, the class/interface still can be expanded.
+
+
+`__Auto__`
+----
+
+The attribute is only applied to the properties, here is the detail of it :
+
+	[__Final__]
+	[__Unique__]
+	[__AttributeUsage__{ AttributeTarget = System.AttributeTargets.PROPERTY, Inherited = false, AllowMultiple = false, RunOnce = true }]
+	[Class] System.__Auto__ :
+
+		Description :
+			Auto-generated property body
+
+
+		Super Class :
+			System.__Attribute__
+
+		Property :
+			Default - The default value of the property
+			Field - The target field, auto-generated if set to true
+			Method - True to use object methods with the name like ('Set/Get' + property's name) as the accessors
+			Type - The type of the property
+
+		Method :
+			ApplyAttribute - Apply the attribute to the target, overridable
+
+Since lua is a dynamic language, in some non-restricted scene, we may like to the minimum informations for the properties, Like :
+
+	property "Name" {
+		Field = "__Name",
+	}
+
+Only a field to the property, if you don't want see the real field, a simple way is use the `__Auto__` attribtue :
+
+	class "A"
+
+		__Auto__{ Field = true }
+		property "Name" {}
+
+	endclass "A"
+
+So, the attribute would generate a field for the property, in this example, the field is :
+
+	__A_Name
+
+Using the class's name to reduce conflict between super class and its child-classes.
+
+Also, for a class :
+
+	class "A"
+
+		function SetName(self, name)
+			self.__Name = name
+		end
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		property "Name" {
+			Get = "GetName",
+			Set = "SetName",
+		}
+	end
+
+(Btw. `Get = "GetName"` Also can be `Get = GetName,` but since the child-class can override the GetName, it's better to keep using the child-class's newest method.)
+
+We can use the `__Auto__` attribute to re-write like :
+
+	class "A"
+
+		function SetName(self, name)
+			self.__Name = name
+		end
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		__Auto__{ Method = true, Type = System.String }
+		property "Name" {}
+	end
+
+The `__Auto__` won't override the existed settings, so you can combine it with normal definitions :
+
+	class "A"
+
+		function SetName(self, name)
+			self.__Name = name
+		end
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		__Auto__{ Method = true }
+		property "Name" {
+			Type = System.String,
+			Default = "Anonymous",
+		}
+	end
+
+But it's better to keep it in one format like :
+
+	class "A"
+
+		function SetName(self, name)
+			self.__Name = name
+		end
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		__Auto__{ Method = true, Type = System.String, Default = "Anonymous",}
+		property "Name" {}
+	end
+
+Or
+
+	class "A"
+
+		function SetName(self, name)
+			self.__Name = name
+		end
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		property "Name" {
+			Get = "GetName",
+			Set = "SetName",
+			Type = System.String,
+			Default = "Anonymous",
+		}
+	end
 
 
 Custom Attributes
