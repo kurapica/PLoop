@@ -2502,7 +2502,7 @@ Also, for a class :
 			Get = "GetName",
 			Set = "SetName",
 		}
-	end
+	endclass "A"
 
 (Btw. `Get = "GetName"` Also can be `Get = GetName,` but since the child-class can override the GetName, it's better to keep using the child-class's newest method.)
 
@@ -2520,7 +2520,7 @@ We can use the `__Auto__` attribute to re-write like :
 
 		__Auto__{ Method = true, Type = System.String }
 		property "Name" {}
-	end
+	endclass "A"
 
 The `__Auto__` won't override the existed settings, so you can combine it with normal definitions :
 
@@ -2539,7 +2539,7 @@ The `__Auto__` won't override the existed settings, so you can combine it with n
 			Type = System.String,
 			Default = "Anonymous",
 		}
-	end
+	endclass "A"
 
 But it's better to keep it in one format like :
 
@@ -2555,7 +2555,7 @@ But it's better to keep it in one format like :
 
 		__Auto__{ Method = true, Type = System.String, Default = "Anonymous",}
 		property "Name" {}
-	end
+	endclass "A"
 
 Or
 
@@ -2575,7 +2575,7 @@ Or
 			Type = System.String,
 			Default = "Anonymous",
 		}
-	end
+	endclass "A"
 
 
 Custom Attributes
