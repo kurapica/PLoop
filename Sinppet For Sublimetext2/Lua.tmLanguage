@@ -9,7 +9,7 @@
 		<string>lua</string>
 	</array>
 	<key>foldingStartMarker</key>
-	<string>^\s*\b(function|local\s+function|if|for|partclass|class|struct|interface|partinterface)\b|{[ \t]*$|\[\[</string>
+	<string>^\s*\b(function|local\s+function|if|for|class|struct|interface)\b|{[ \t]*$|\[\[</string>
 	<key>foldingStopMarker</key>
 	<string>\b(end|endclass|endstruct|endinterface)\b|^\s*}|\]\]</string>
 	<key>keyEquivalent</key>
@@ -185,7 +185,7 @@
 		</dict>
 		<dict>
 			<key>match</key>
-			<string>\b(break|do|else|for|if|elseif|return|then|repeat|while|until|end|function|local|in|class|partclass|event|property|import|extend|inherit|namespace|endclass|struct|endstruct|enum|interface|partinterface|endinterface|doc)\b</string>
+			<string>\b(break|do|else|for|if|elseif|return|then|repeat|while|until|end|function|local|in|class|event|property|import|extend|inherit|namespace|endclass|struct|endstruct|enum|interface|endinterface|doc)\b</string>
 			<key>name</key>
 			<string>keyword.control.lua</string>
 		</dict>

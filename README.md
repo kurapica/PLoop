@@ -53,9 +53,9 @@ There are some keywords that released into the _G :
 * enum
 * struct
 * class
-* partclass
+* part-class
 * interface
-* partinterface
+* part-interface
 * Module
 
 The **namespace** & **import** are used to control the namespace system used to store classes, interfaces, structs and enums.
@@ -64,9 +64,9 @@ The **enum** is used to define an enum type.
 
 The **struct** is used to start the definition of a struct type. A data of a struct type, is a normal table in lua, without metatable settings or basic lua type data like string, number, thread, function, userdata, boolean. The struct types are used to validate or create the values that follow the explicitly structure that defined in the struct types.
 
-The **class** & **partclass** are used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to tell it do some jobs, also would have properties to store the data used to mark the object's state. A class is an abstract of objects, and can be used to create objects with the same properties and methods settings.
+The **class** & **part-class** are used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to tell it do some jobs, also would have properties to store the data used to mark the object's state. A class is an abstract of objects, and can be used to create objects with the same properties and methods settings.
 
-The **interface** & **partinterface** are used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like we may need every objects have a **Name** property to used to show all objects's name. So, the interface is bring in to provide such features. Define an interface is the same like define a class, but no objects can be created from an interface.
+The **interface** & **part-interface** are used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like we may need every objects have a **Name** property to used to show all objects's name. So, the interface is bring in to provide such features. Define an interface is the same like define a class, but no objects can be created from an interface.
 
 The **Module** is used to start a standalone environment with version check, and make the development with the lua-oop system more easily, like we don't need to write down full path of namespaces. This topic will be discussed at last.
 
@@ -1087,7 +1087,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 
 
 
-partclass & re-define
+part-class & re-define
 ----
 
 * The class can be re-defined, and the object that created from the old version class, will use the new version's features.
@@ -1159,7 +1159,7 @@ partclass & re-define
 		table: 0x7fe080c4a410
 		table: 0x7fe080c4a410
 
-* partclass is used to start the class definition without clearance :
+* part-class is used to start the class definition without clearance :
 
 		class "A"
 			function Hi(self)
@@ -1169,7 +1169,7 @@ partclass & re-define
 
 		obj = A()
 
-		partclass "A"
+		part-class "A"
 		endclass "A"
 
 		-- Output : Hello
@@ -1251,7 +1251,7 @@ Define an interface is just like define a class with little different :
 
 * Re-define interface is like re-define a class, any features would be passed to classes that extend from it.
 
-* like the **partclass**, **partinterface** is used to re-define the interface without clearance.
+* like the **part-class**, **part-interface** is used to re-define the interface without clearance.
 
 
 Init & Dispose

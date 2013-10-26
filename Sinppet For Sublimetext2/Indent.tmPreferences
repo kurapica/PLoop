@@ -11,7 +11,7 @@
 		<key>decreaseIndentPattern</key>
 		<string>^\s*(elseif|else|end(class|interface|struct)?|\})\s*$</string>
 		<key>increaseIndentPattern</key>
-		<string>^\s*(else|elseif|for|(local\s+)?function|if|repeat|until|while|class|partclass|struct|interface|partinterface)\b((?!end).)*$|\{\s*$</string>
+		<string>^\s*(else|elseif|for|(local\s+)?function|if|repeat|until|while|class|struct|interface)\b((?!end).)*$|\{\s*$</string>
 	</dict>
 	<key>uuid</key>
 	<string>411468A8-E0AC-415A-9E71-E2BD091EB571</string>
