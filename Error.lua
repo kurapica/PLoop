@@ -52,7 +52,7 @@ class "Error"
 	--- Constructor
 	--------------------------------------
 	function Error(self, message)
-		self.__Message = type(message) == "string" and message or nil
+		self.Message = type(message) == "string" and message or nil
 	end
 
 	--------------------------------------

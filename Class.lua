@@ -95,6 +95,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 --               2013/10/02 __Expandable__ attribute removed, __NonExpandable__ attribute added, now expandable is default attribute to all classes/interfaces
 --               2013/10/11 Attribute can apply to the struct's field now.
 --               2013/10/25 Redesign the definition environment, partclass & partinterface removed
+--               2013/10/30 The property auto-fill system finished
+--               2013/11/13 The overload system for method, constructor & meta-method finished
 
 ------------------------------------------------------------------------
 -- Class system is used to provide a object-oriented system in lua.
@@ -241,7 +243,7 @@ end
 -- GLOBAL Definition
 ------------------------------------------------------
 do
-	LUA_OOP_VERSION = 82
+	LUA_OOP_VERSION = 83
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -249,6 +251,7 @@ do
 	TYPE_INTERFACE = "Interface"
 
 	TYPE_NAMESPACE = "NameSpace"
+	TYPE_SUPERALIAS = "SuperAlias"
 	TYPE_TYPE = "TYPE"
 
 	-- Disposing method name
@@ -262,25 +265,15 @@ do
 
 	-- Base env field
 	BASE_ENV_FIELD = "__LOOP_BASE_ENV"
+end
 
+------------------------------------------------------
+-- Thread Pool & Cache & SaveFixedMethod
+------------------------------------------------------
+do
 	WEAK_KEY = {__mode = "k"}
 
-	CACHE_TABLE = setmetatable({}, {
-		__call = function(self, key)
-			if key then
-				wipe(key)
-				tinsert(self, key)
-			elseif next(self) then
-				return tremove(self)
-			else
-				return {}
-			end
-		end,
-	})
-
-	-- Thread Pool
 	THREAD_POOL_SIZE = 100
-	THREAD_POINT = 0
 
 	local function retValueAndRecycle(...)
 		-- Here means the function call is finished successful
@@ -303,19 +296,18 @@ do
 	THREAD_POOL = setmetatable({}, {
 		__call = function(self, value)
 			if value then
-				if THREAD_POINT < THREAD_POOL_SIZE then
-					THREAD_POINT = THREAD_POINT + 1
+				if #self < THREAD_POOL_SIZE then
 					tinsert(self, value)
 				else
+					-- Kill it
 					resume(value)
 				end
 			else
-				if THREAD_POINT > 0 then
-					THREAD_POINT = THREAD_POINT - 1
-					return tremove(self, THREAD_POINT + 1)
-				else
-					return create(newRycThread)
+				-- Keep safe from unexpected resume
+				while not value or status(value) == "dead" do
+					value = tremove(self) or create(newRycThread)
 				end
+				return value
 			end
 		end,
 	})
@@ -343,24 +335,117 @@ do
 
 		local th = THREAD_POOL()
 
-		-- Keep safe from unexpected resume
-		while status(th) == "dead" do
-			th = THREAD_POOL()
-		end
-
 		-- Register the function
 		resume(th, THREAD_POOL, func)
 
 		-- Call and return the result
 		return chkValue( resume(th, ...) )
 	end
+
+	CACHE_TABLE = setmetatable({}, {
+		__call = function(self, key)
+			if key then
+				wipe(key)
+				tinsert(self, key)
+			elseif next(self) then
+				return tremove(self)
+			else
+				return {}
+			end
+		end,
+	})
+
+	function SaveFixedMethod(storage, key, value, owner, targetType)
+		if __Attribute__ and (owner ~= __Attribute__ or __Attribute__._ConsumePreparedAttributes) then
+			value = __Attribute__._ConsumePreparedAttributes(value, targetType or AttributeTargets.Method, targetType ~= AttributeTargets.Constructor and GetSuperMethod(owner, key) or nil, owner, key) or value
+		end
+
+		if __Attribute__ and targetType ~= AttributeTargets.Constructor then
+			-- Hide the real fixed method for method and meta-method, started with '0', strange but useful
+			local rKey = "0" .. key
+
+			if storage[rKey] then
+				if type(value) == "function" and (not getmetatable(storage[rKey]) or storage[rKey].Owner ~= owner) then
+					-- roll back to normal meta-methods
+					storage[key] = value
+					storage[rKey] = nil
+					return
+				end
+
+				key = rKey
+			elseif getmetatable(value) then
+				storage[rKey] = storage[key]
+
+				-- table can't be meta-methods & hide the details
+				storage[key] = function(...)
+					return storage[rKey](...)
+				end
+
+				key = rKey
+			end
+		end
+
+		if getmetatable(storage[key]) then
+			local prev
+			local fixedMethod = storage[key]
+
+			while getmetatable(fixedMethod) and fixedMethod.Owner == owner do
+				if getmetatable(value) and #fixedMethod == #value then
+					local isEqual = true
+
+					if fixedMethod == value then return end
+
+					for i = 1, #fixedMethod do
+						if not Reflector.IsEqual(fixedMethod[i], value[i]) then
+							isEqual = false
+							break
+						end
+					end
+
+					if isEqual then
+						if prev then
+							value.Next = fixedMethod.Next
+							prev.Next = value
+							value = nil
+						else
+							value.Next = fixedMethod.Next
+							storage[key] = value
+							value = nil
+						end
+
+						break
+					end
+				end
+
+				prev = fixedMethod
+				fixedMethod = fixedMethod.Next
+			end
+
+			if getmetatable(value) then
+				value.Next = storage[key]
+				storage[key] = value
+			elseif value then
+				if prev then
+					prev.Next = value
+				else
+					storage[key] = value
+				end
+			end
+		elseif storage[key] and getmetatable(value) then
+			value.Next = storage[key]
+			storage[key] = value
+		else
+			storage[key] = value
+		end
+	end
 end
 
 ------------------------------------------------------
--- NameSpace
+-- NameSpace & Super Alias
 ------------------------------------------------------
 do
 	_NameSpace = _NameSpace or newproxy(true)
+	_SuperAlias = _SuperAlias or newproxy(true)
 
 	_NSInfo = _NSInfo or setmetatable({}, {
 		__index = function(self, key)
@@ -375,7 +460,9 @@ do
 		__mode = "k",
 	})
 
-	-- metatable for class
+	_SuperMap = _SuperMap or setmetatable({}, {__mode = "kv"})
+
+	-- metatable for namespaces
 	_MetaNS = _MetaNS or getmetatable(_NameSpace)
 	do
 		_MetaNS.__call = function(self, ...)
@@ -404,6 +491,8 @@ do
 						BuildStructValidate(self)
 					end
 					return info.Validate
+				elseif info.Method[key] then
+					return info.Method[key]
 				else
 					return info.SubNS and info.SubNS[key]
 				end
@@ -437,7 +526,7 @@ do
 
 			if info.Type == TYPE_CLASS and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
-					info.Method[key] = value
+					SaveFixedMethod(info.Method, key, value, info.Owner)
 
 					return RefreshCache(self)
 				else
@@ -445,7 +534,7 @@ do
 				end
 			elseif info.Type == TYPE_INTERFACE and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
 				if not info.Cache4Method[key] then
-					info.Method[key] = value
+					SaveFixedMethod(info.Method, key, value, info.Owner)
 
 					return RefreshCache(self)
 				else
@@ -509,6 +598,42 @@ do
 		end
 
 		_MetaNS.__metatable = TYPE_NAMESPACE
+	end
+
+	-- metatable for super alias
+	_MetaSA = _MetaSA or getmetatable(_SuperAlias)
+	do
+		_MetaSA.__call = function(self, ...)
+			local cls = _SuperMap[self].Owner
+			local obj = select(1, ...)
+
+			if getmetatable(obj) and Reflector.ObjectIsClass(obj, cls) then
+				-- Init the class object
+				return Class1Obj(cls, obj, select(2, ...))
+			end
+		end
+
+		_MetaSA.__index = function(self, key)
+			local info = _SuperMap[self]
+
+			if info.SubNS and info.SubNS[key] then
+				return info.SubNS[key]
+			elseif _KeyMeta[key] ~= nil then
+				if _KeyMeta[key] then
+					return info.MetaTable[key]
+				else
+					return info.MetaTable["_"..key]
+				end
+			else
+				return info.Method[key] or info.Cache4Method[key]
+			end
+		end
+
+		_MetaSA.__tostring = function(self)
+			return GetFullName4NS(_SuperMap[self].Owner)
+		end
+
+		_MetaSA.__metatable = TYPE_SUPERALIAS
 	end
 
 	-- IsNameSpace
@@ -835,6 +960,38 @@ do
 	_KeyWord4IFEnv = _KeyWord4IFEnv or {}
 
 	do
+		local Verb2Adj = {
+			"(.+)(ed)$",
+			"(.+)(able)$",
+			"(.+)(ing)$",
+			"(.+)(ive)$",
+			"(.+)(ary)$",
+			"(.+)(al)$",
+			"(.+)(ous)$",
+			"(.+)(ior)$",
+			"(.+)(ful)$",
+		}
+
+		local function ParseAdj(str, useIs)
+			local noun, adj = str:match("^(.-)(%u%l+)$")
+
+			if noun and adj and #noun > 0 and #adj > 0 then
+				for _, pattern in ipairs(Verb2Adj) do
+					local head, tail = adj:match(pattern)
+
+					if head and tail and #head > 0 and #tail > 0 then
+						local c = head:sub(1, 1)
+
+						if useIs then
+							return "^[Ii]s[" .. c:upper() .. c:lower().."]" .. head:sub(2) .. "%w*" .. noun .. "$"
+						else
+							return "^[" .. c:upper() .. c:lower().."]" .. head:sub(2) .. "%w*" .. noun .. "$"
+						end
+					end
+				end
+			end
+		end
+
 		function CloneWithoutOverride(dest, src)
 			for key, value in pairs(src) do
 				if dest[key] == nil then
@@ -894,6 +1051,39 @@ do
 
 			-- Cache4Method
 			wipe(info.Cache4Method)
+			-- Validate fixedMethods, remove link to parent
+			for name, method in pairs(info.Method) do
+				if getmetatable(method) then
+					while method.Next do
+						if getmetatable(method.Next) then
+							if method.Next.Owner ~= info.Owner then
+								method.Next = nil
+								break
+							else
+								method = method.Next
+							end
+						else
+							-- Remove header 0
+							name = name:match("^%d*(.-)$")
+
+							--- superclass method
+							if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] == method.Next then
+								method.Next = nil
+							elseif info.ExtendInterface then
+								--- extend method
+								for _, IF in ipairs(info.ExtendInterface) do
+									if _NSInfo[IF].Cache4Method[name] == method.Next then
+										method.Next = nil
+										break
+									end
+								end
+							end
+
+							break
+						end
+					end
+				end
+			end
 			--- self method
 			CloneWithoutOverride4Method(info.Cache4Method, info.Method)
 			--- superclass method
@@ -909,6 +1099,10 @@ do
 			wipe(info.Cache4Property)
 			-- Validate the properties
 			for name, prop in pairs(info.Property) do
+				name = name:gsub("^%a", strupper)
+
+				local useMethod = false
+
 				if prop.GetMethod and not info.Cache4Method[prop.GetMethod] then
 					prop.GetMethod = nil
 				end
@@ -917,11 +1111,8 @@ do
 					prop.SetMethod = nil
 				end
 
-				if not prop.Set and not prop.Get and not prop.GetMethod and not prop.SetMethod and not prop.Field then
-					-- Auto generate property
-					local name = prop.Name:gsub("^%a", strupper)
-					local useMethod = false
-
+				-- Auto generate GetMethod
+				if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and not prop.Field then
 					-- GetMethod
 					if info.Cache4Method["get" .. name] then
 						useMethod = true
@@ -929,8 +1120,35 @@ do
 					elseif info.Cache4Method["Get" .. name] then
 						useMethod = true
 						prop.GetMethod = "Get" .. name
-					end
+					elseif prop.Type and prop.Type:Is(Boolean) then
+						-- FlagEnabled -> IsFlagEnabled
+						if info.Cache4Method["is" .. name] then
+							useMethod = true
+							prop.GetMethod = "is" .. name
+						elseif info.Cache4Method["Is" .. name] then
+							useMethod = true
+							prop.GetMethod = "Is" .. name
+						else
+							-- FlagEnable -> IsEnableFlag
+							local pattern = ParseAdj(name, true)
 
+							if pattern then
+								for mname in pairs(info.Cache4Method) do
+									if mname:match(pattern) then
+										useMethod = true
+										prop.GetMethod = mname
+										break
+									end
+								end
+							end
+						end
+					end
+				else
+					useMethod = true
+				end
+
+				-- Auto generate SetMethod
+				if ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and not prop.Field then
 					-- SetMethod
 					if info.Cache4Method["set" .. name] then
 						useMethod = true
@@ -938,21 +1156,37 @@ do
 					elseif info.Cache4Method["Set" .. name] then
 						useMethod = true
 						prop.SetMethod = "Set" .. name
-					end
+					elseif prop.Type and prop.Type:Is(Boolean) then
+						-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
+						local pattern = ParseAdj(name)
 
-					-- Field
-					if not useMethod then
-						prop.Field = "_" .. info.Name:match("^_*(.-)$") .. "_" .. prop.Name
-					end
-
-					if prop.Type and not prop.Type:Is(nil) and prop.Default == nil then
-						if prop.Type:Is(Boolean) then
-							prop.Default = false
-						elseif prop.Type:Is(Number) then
-							prop.Default = 0
-						elseif prop.Type:Is(String) then
-							prop.Default = ""
+						if pattern then
+							for mname in pairs(info.Cache4Method) do
+								if mname:match(pattern) then
+									useMethod = true
+									prop.SetMethod = mname
+									break
+								end
+							end
 						end
+					end
+				else
+					useMethod = true
+				end
+
+				-- Auto generate Field
+				if not useMethod and not prop.Field then
+					prop.Field = "_" .. info.Name:match("^_*(.-)$") .. "_" .. prop.Name
+				end
+
+				-- Auto generate Default
+				if prop.Type and not prop.Type:Is(nil) and prop.Default == nil and #(prop.Type) == 1 then
+					if prop.Type:Is(Boolean) then
+						prop.Default = false
+					elseif prop.Type:Is(Number) then
+						prop.Default = 0
+					elseif prop.Type:Is(String) then
+						prop.Default = ""
 					end
 				end
 			end
@@ -967,25 +1201,7 @@ do
 				CloneWithoutOverride(info.Cache4Property, _NSInfo[IF].Cache4Property)
 			end
 
-			-- Cache for objects
-			if __Attribute__ and __Cache__ and info.Type == TYPE_CLASS then
-				local cache = info.Cache4Object
-				if cache then wipe(cache) end
-
-				for key, func in pairs(info.Cache4Method) do
-					if __Attribute__._IsDefined(func, AttributeTargets.Method, __Cache__) then
-						cache = cache or {}
-						tinsert(cache, key)
-					end
-				end
-				if cache and next(cache) then
-					info.Cache4Object = cache
-				else
-					info.Cache4Object = nil
-				end
-			end
-
-			-- Clear branch
+			-- Refresh branch
 			if info.ChildClass then
 				for subcls in pairs(info.ChildClass) do
 					RefreshCache(subcls)
@@ -1004,9 +1220,11 @@ do
 				return _NSInfo[info.SuperClass].Cache4Property[name]
 			end
 
-			for _, IF in ipairs(info.ExtendInterface) do
-				if _NSInfo[IF].Cache4Property[name] then
-					return _NSInfo[IF].Cache4Property[name]
+			if info.ExtendInterface then
+				for _, IF in ipairs(info.ExtendInterface) do
+					if _NSInfo[IF].Cache4Property[name] then
+						return _NSInfo[IF].Cache4Property[name]
+					end
 				end
 			end
 		end
@@ -1018,9 +1236,11 @@ do
 				return _NSInfo[info.SuperClass].Cache4Method[name]
 			end
 
-			for _, IF in ipairs(info.ExtendInterface) do
-				if _NSInfo[IF].Cache4Method[name] then
-					return _NSInfo[IF].Cache4Method[name]
+			if info.ExtendInterface then
+				for _, IF in ipairs(info.ExtendInterface) do
+					if _NSInfo[IF].Cache4Method[name] then
+						return _NSInfo[IF].Cache4Method[name]
+					end
 				end
 			end
 		end
@@ -1078,6 +1298,15 @@ do
 				return value
 			end
 
+			-- Check method, so definition environment can use existed method
+			-- created by another definition environment for the same interface
+			value = info.Method[key]
+
+			if value then
+				rawset(self, key, value)
+				return value
+			end
+
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 
@@ -1096,6 +1325,7 @@ do
 
 			if key == info.Name then
 				if type(value) == "function" then
+					-- No attribute for the initializer
 					info.Initializer = value
 					return
 				else
@@ -1113,15 +1343,8 @@ do
 			end
 
 			if type(key) == "string" and type(value) == "function" then
-				if __Attribute__ then
-					if not key:match("^_") and __Attribute__._IsDefined(info.Owner, AttributeTargets.Interface, __Cache__) then
-						__Cache__()
-					end
-
-					value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, GetSuperMethod(info.Owner, key), info.Owner, key) or value
-				end
-
-				info.Method[key] = value
+				-- Don't save to environment until need it
+				return SaveFixedMethod(info.Method, key, value, info.Owner)
 			end
 
 			rawset(self, key, value)
@@ -1384,13 +1607,13 @@ do
 				k = k:lower()
 
 				if k == "get" then
-					if type(v) == "function" then
+					if type(v) == "function" or type(v) == "boolean" then
 						prop.Get = v
 					elseif type(v) == "string" then
 						prop.GetMethod = v
 					end
 				elseif k == "set" then
-					if type(v) == "function" then
+					if type(v) == "function" or type(v) == "boolean" then
 						prop.Set = v
 					elseif type(v) == "string" then
 						prop.SetMethod = v
@@ -1404,7 +1627,7 @@ do
 						prop.SetMethod = v
 					end
 				elseif k == "field" then
-					if type(v) == "string" then
+					if type(v) == "string" and v ~= name then
 						prop.Field = v
 					end
 				elseif k == "type" then
@@ -1429,8 +1652,8 @@ do
 		end
 
 		-- Clear
-		if prop.Get then prop.GetMethod = nil end
-		if prop.Set then prop.SetMethod = nil end
+		if prop.Get ~= nil then prop.GetMethod = nil end
+		if prop.Set ~= nil then prop.SetMethod = nil end
 
 		if __Attribute__ then
 			__Attribute__._ConsumePreparedAttributes(prop, AttributeTargets.Property, GetSuperProperty(info.Owner, name), info.Owner, name)
@@ -1592,14 +1815,14 @@ do
 			local objCls = getmetatable(self)
 			local IF, info, disfunc
 
-			if __Attribute__._IsDefined(objCls, AttributeTargets.Class, __Unique__) then
-				-- No dispose to a unique object
-				return
-			end
-
 			info = objCls and rawget(_NSInfo, objCls)
 
 			if not info then return end
+
+			if info.UniqueObject then
+				-- No dispose to a unique object
+				return
+			end
 
 			for i = #(info.Cache4Interface), 1, -1 do
 				IF = info.Cache4Interface[i]
@@ -1641,8 +1864,8 @@ do
 			end
 
 			if key == _SuperIndex then
-				value = info.SuperClass
-				if value then
+				if info.SuperClass then
+					value = _NSInfo[info.SuperClass].SuperAlias
 					rawset(self, _SuperIndex, value)
 					return value
 				else
@@ -1690,6 +1913,15 @@ do
 				return value
 			end
 
+			-- Check method, so definition environment can use existed method
+			-- created by another definition environment for the same class
+			value = info.Method[key]
+
+			if value then
+				rawset(self, key, value)
+				return value
+			end
+
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 
@@ -1708,13 +1940,7 @@ do
 
 			if key == info.Name then
 				if type(value) == "function" then
-					info.Constructor = value
-
-					if __Attribute__ and info.Owner ~= __Attribute__ then
-						__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Constructor, info.SuperClass)
-					end
-
-					return
+					return SaveFixedMethod(info, "Constructor", value, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 				else
 					error(("'%s' must be a function as constructor."):format(key), 2)
 				end
@@ -1732,21 +1958,19 @@ do
 			if _KeyMeta[key] ~= nil then
 				if type(value) == "function" then
 					local rMeta = _KeyMeta[key] and key or "_"..key
-					SetMetaFunc(rMeta, info.ChildClass, info.MetaTable[rMeta], value)
-					info.MetaTable[rMeta] = value
-					return
+					local oldValue = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
+
+					SaveFixedMethod(info.MetaTable, rMeta, value, info.Owner)
+
+					return UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta])
 				else
 					error(("'%s' must be a function."):format(key), 2)
 				end
 			end
 
 			if type(key) == "string" and type(value) == "function" then
-				-- keep function in env, just register the method
-				if __Attribute__ and info.Owner ~= __Attribute__ then
-					value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, GetSuperMethod(info.Owner, key), info.Owner, key) or value
-				end
-
-				info.Method[key] = value
+				-- Don't save to environment until need it
+				return SaveFixedMethod(info.Method, key, value, info.Owner)
 			end
 
 			rawset(self, key, value)
@@ -1775,16 +1999,50 @@ do
 		return false
 	end
 
-	function SetMetaFunc(meta, sub, pre, now)
+	function UpdateMeta4Child(meta, cls, pre, now)
+		if pre == now then return end
+
+		local info = _NSInfo[cls]
+		local rMeta = "0" .. meta
+
+		if not info.MetaTable[meta] then
+			-- simple clone
+			SaveFixedMethod(info.MetaTable, meta, now, cls)
+
+			UpdateMeta4Children(meta, info.ChildClass, pre, now)
+		elseif not info.MetaTable[rMeta] then
+			-- mean not fixed method, can't make link on it
+			if info.MetaTable[meta] == pre then
+				info.MetaTable[meta] = nil
+
+				SaveFixedMethod(info.MetaTable, meta, now, cls)
+
+				UpdateMeta4Children(meta, info.ChildClass, pre, now)
+			end
+		else
+			-- Update the fixed method link
+			local fixedMethod = info.MetaTable[rMeta]
+
+			if fixedMethod == pre then
+				info.MetaTable[rMeta] = now
+
+				UpdateMeta4Children(meta, info.ChildClass, pre, now)
+			else
+				while getmetatable(fixedMethod) and fixedMethod.Owner == cls and fixedMethod.Next ~= pre do
+					fixedMethod = fixedMethod.Next
+				end
+
+				if getmetatable(fixedMethod) and fixedMethod.Next == pre then
+					fixedMethod.Next = now
+				end
+			end
+		end
+	end
+
+	function UpdateMeta4Children(meta, sub, pre, now)
 		if sub and pre ~= now then
 			for cls in pairs(sub) do
-				local info = _NSInfo[cls]
-
-				if info.MetaTable[meta] == pre then
-					info.MetaTable[meta] = now
-
-					SetMetaFunc(meta, info.ChildClass, pre, now)
-				end
+				UpdateMeta4Child(meta, cls, pre, now)
 			end
 		end
 	end
@@ -1808,7 +2066,7 @@ do
 		local error = error
 		local tostring = tostring
 
-		local isCached = __Attribute__ and __Cache__ and __Attribute__._IsDefined(info.Owner, AttributeTargets.Class, __Cache__) or false
+		local isCached = info.AutoCache or false
 
 		MetaTable.__metatable = cls
 
@@ -1828,12 +2086,11 @@ do
 				if oper.Get then
 					value = oper.Get(self)
 				elseif oper.GetMethod then
-					oper = oper.GetMethod
-					local func = rawget(self, oper)
+					local func = rawget(self, oper.GetMethod)
 					if type(func) == "function" then
 						value = func(self)
 					else
-						value = Cache4Method[oper](self)
+						value = Cache4Method[oper.GetMethod](self)
 					end
 				elseif oper.Field then
 					value = rawget(self, oper.Field)
@@ -1879,10 +2136,10 @@ do
 			-- Custom index metametods
 			oper = MetaTable["___index"]
 			if oper then
-				if type(oper) == "table" then
-					return oper[key]
-				elseif type(oper) == "function" then
+				if type(oper) == "function" or getmetatable(oper) == FixedMethod then
 					return oper(self, key)
+				elseif type(oper) == "table" then
+					return oper[key]
 				end
 			end
 		end
@@ -1942,7 +2199,7 @@ do
 
 			-- Custom newindex metametods
 			oper = MetaTable["___newindex"]
-			if oper and type(oper) == "function" then
+			if oper and (type(oper) == "function" or getmetatable(oper) == FixedMethod) then
 				return oper(self, key, value)
 			end
 
@@ -1950,199 +2207,62 @@ do
 		end
 	end
 
-	-- The cache for constructor parameters
-	function Class2Obj(cls, ...)
+	-- Init the object with class's constructor
+	function Class1Obj(cls, obj, ...)
 		local info = _NSInfo[cls]
-		local obj, isUnique
-		local ok, msg, args
-		local cache = CACHE_TABLE()
-		local max = select('#', ...)
-		local init = select(1, ...)
+		local count = select('#', ...)
+		local initTable = select(1, ...)
 
-		if __Attribute__ and __Arguments__ then
-			args = __Attribute__._GetCustomAttribute(cls, AttributeTargets.Constructor, __Arguments__)
+		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then
+			initTable = nil
 		end
 
-		if max == 1 and type(init) == "table" and getmetatable(init) == nil then
-			-- Check if the init table should be the argument
-			if args and #args == 1 then
-				local arg = args[1]
+		while info do
+			if not info.Constructor then
+				info = info.SuperClass and _NSInfo[info.SuperClass]
+			elseif type(info.Constructor) == "function" then
+				return info.Constructor(obj, ...)
+			elseif getmetatable(info.Constructor) == FixedMethod then
+				local fixedMethod = info.Constructor
+				local noArgMethod = nil
 
-				if arg.Type and arg.Type:GetObjectType(init) then
-					init = nil
-				end
-			end
-		else
-			init = nil
-		end
+				while getmetatable(fixedMethod) do
+					fixedMethod.Thread = nil
 
-		if init then
-			-- With the init table
-			if args then
-				max = #args
-
-				for i = 1, max do
-					local arg = args[i]
-
-					if i < max or not arg.IsList then
-						local value = init[arg.Name]
-						if value == nil then value = arg.Default end
-						init[arg.Name] = nil
-
-						if arg.Type then
-							ok, value = pcall(arg.Type.Validate, arg.Type, value)
-
-							if not ok then
-								CACHE_TABLE(cache)
-
-								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-								if value:find("%%s") then
-									value = value:gsub("%%s[_%w]*", arg.Name)
-								end
-
-								error(args.Usage .. value, 3)
-							end
+					if #fixedMethod == 0 and initTable then
+						noArgMethod = fixedMethod
+					elseif fixedMethod:MatchArgs(obj, ...) then
+						if fixedMethod.Thread then
+							return fixedMethod.Method(select(2, resume(fixedMethod.Thread, false)))
+						else
+							return fixedMethod.Method(obj, ...)
 						end
-
-						cache[i] = value
+					elseif fixedMethod.Thread then
+						-- Remove argument container
+						resume(fixedMethod.Thread, false)
+						fixedMethod.Thread = nil
 					end
-				end
-			end
-		else
-			-- Without the init table
-			for i = 1, max do
-				cache[i] = select(i, ...)
-			end
 
-			if args then
-				local maxArgs = #args
-
-				if maxArgs > max then
-					max = maxArgs
+					fixedMethod = fixedMethod.Next
 				end
 
-				for i = 1, maxArgs do
-					local arg = args[i]
-
-					if i < maxArgs or not arg.IsList then
-						local value = cache[i]
-						if value == nil then value = arg.Default end
-
-						if arg.Type then
-							ok, value = pcall(arg.Type.Validate, arg.Type, value)
-
-							if not ok then
-								CACHE_TABLE(cache)
-
-								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-								if value:find("%%s") then
-									value = value:gsub("%%s[_%w]*", arg.Name)
-								end
-
-								error(args.Usage .. value, 3)
-							end
-						end
-
-						cache[i] = value
-					else
-						for j = maxArgs, max do
-							local value = cache[j]
-
-							if arg.Type then
-								ok, value = pcall(arg.Type.Validate, arg.Type, value)
-
-								if not ok then
-									CACHE_TABLE(cache)
-
-									value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-									if value:find("%%s") then
-										value = value:gsub("%%s[_%w]*", "...")
-									end
-
-									error(args.Usage .. value, 3)
-								end
-							end
-
-							cache[j] = value
-						end
-					end
-				end
-			end
-		end
-
-		-- No tail nil
-		for i = max, 1, -1 do
-			if cache[i] ~= nil then
-				max = i
-				break
-			elseif i == 1 then
-				max = 0
-			end
-		end
-
-		-- Check if the class is unique and already created one object to be return
-		if __Attribute__ and __Unique__ then
-			isUnique = __Attribute__._IsDefined(cls, AttributeTargets.Class, __Unique__)
-
-			if isUnique and info.UniqueObject then
-				obj = info.UniqueObject
-
-				pcall(obj, unpack(cache, 1, max))
-				CACHE_TABLE(cache)
-
-				-- Try set properties
-				if type(init) == "table" then
-					for name, value in pairs(init) do
-						ok, msg = pcall(TrySetProperty, obj, name, value)
-
-						if not ok then
-							msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
-
-							errorhandler(msg)
-						end
-					end
+				if noArgMethod then
+					noArgMethod.Method(obj)
+					break
 				end
 
-				return obj
-			end
-		else
-			isUnique = false
-		end
-
-		-- Check if this class has __exist so no need to create again.
-		if type(info.MetaTable.__exist) == "function" then
-			ok, obj = pcall(info.MetaTable.__exist, unpack(cache, 1, max))
-
-			if type(obj) == "table" then
-				CACHE_TABLE(cache)
-				if getmetatable(obj) == cls then
-					return obj
+				if type(fixedMethod) == "function" then
+					return fixedMethod(obj, ...)
 				else
-					error(("There is an existed object as type '%s'."):format(Reflector.GetName(Reflector.GetObjectClass(obj)) or ""), 2)
+					error(("%s has no constructor support such arguments"):format(tostring(cls)), 2)
 				end
 			end
 		end
 
-		-- Create new object
-		obj = setmetatable({}, info.MetaTable)
-
-		if InitObjectWithClass(cls, obj, unpack(cache, 1, max)) then
-			InitObjectWithInterface(cls, obj)
-		else
-			obj = nil
-		end
-
-		CACHE_TABLE(cache)
-
-		if not obj then return nil end
-
-		-- Try set properties
-		if type(init) == "table" then
-			for name, value in pairs(init) do
-				ok, msg = pcall(TrySetProperty, obj, name, value)
+		-- No constructor or constructor with no arguments, so try init table
+		if initTable then
+			for name, value in pairs(initTable) do
+				local ok, msg = pcall(TrySetProperty, obj, name, value)
 
 				if not ok then
 					msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
@@ -2151,17 +2271,36 @@ do
 				end
 			end
 		end
+	end
 
-		-- Auto cache methods in object
-		if info.Cache4Object then
-			for _, key in ipairs(info.Cache4Object) do
-				if not rawget(obj, key) then
-					rawset(obj,  key, info.Cache4Method[key])
-				end
+	-- The cache for constructor parameters
+	function Class2Obj(cls, ...)
+		local info = _NSInfo[cls]
+
+		-- Check if the class is unique and already created one object to be return
+		if getmetatable(info.UniqueObject) then
+			-- Init the obj with new arguments
+			Class1Obj(cls, info.UniqueObject, ...)
+
+			return info.UniqueObject
+		end
+
+		-- Check if this class has __exist so no need to create again.
+		if info.MetaTable.__exist then
+			local ok, obj = pcall(info.MetaTable.__exist, ...)
+
+			if ok and getmetatable(obj) == cls then
+				return obj
 			end
 		end
 
-		if obj and isUnique then
+		-- Create new object
+		local obj = setmetatable({}, info.MetaTable)
+
+		Class1Obj(cls, obj, ...)
+		InitObjectWithInterface(cls, obj)
+
+		if info.UniqueObject then
 			info.UniqueObject = obj
 		end
 
@@ -2244,15 +2383,13 @@ do
 		info.MetaTable = info.MetaTable or {}
 
 		if __Attribute__ and cls ~= __Attribute__ then
-			local isCached = __Cache__ and __Attribute__._IsDefined(info.Owner, AttributeTargets.Class, __Cache__) or false
+			local isCached = info.AutoCache or false
 
 			__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Class, info.SuperClass)
 
-			if not isCached and __Cache__ then
-				if __Attribute__._IsDefined(info.Owner, AttributeTargets.Class, __Cache__) then
-					-- So, the __index need re-build
-					info.MetaTable.__index = nil
-				end
+			if not isCached and info.AutoCache then
+				-- So, the __index need re-build
+				info.MetaTable.__index = nil
 			end
 		end
 
@@ -2321,25 +2458,40 @@ do
 
 		superInfo.ChildClass = superInfo.ChildClass or {}
 		superInfo.ChildClass[info.Owner] = true
+
+		-- Generate super alias
+		if not superInfo.SuperAlias then
+			superInfo.SuperAlias = newproxy(_SuperAlias)
+			_SuperMap[superInfo.SuperAlias] = superInfo
+		end
+
 		info.SuperClass = superCls
 
 		-- Keep to the environmenet
 		-- rawset(env, _SuperIndex, superCls)
 
 		-- Copy Metatable
-		local rMeta
-		for meta, flag in pairs(_KeyMeta) do
-			rMeta = flag and meta or "_"..meta
+		if __Attribute__ then __Attribute__._ClearPreparedAttributes() end
 
-			if info.MetaTable[rMeta] == nil and superInfo.MetaTable[rMeta] then
-				SetMetaFunc(rMeta, info.ChildClass, nil, superInfo.MetaTable[rMeta])
-				info.MetaTable[rMeta] = superInfo.MetaTable[rMeta]
+		for meta, flag in pairs(_KeyMeta) do
+			local rMeta = flag and meta or "_" .. meta
+
+			if superInfo.MetaTable[rMeta] then
+				UpdateMeta4Child(rMeta, info.Owner, nil, superInfo.MetaTable["0" .. rMeta] or superInfo.MetaTable[rMeta])
 			end
 		end
 
 		-- Clone Attributes
 		if __Attribute__ then
+			local isCached = info.AutoCache or false
+
 			__Attribute__._CloneAttributes(superCls, info.Owner, AttributeTargets.Class)
+
+			if not isCached and info.AutoCache then
+				-- So, the __index need re-build
+				info.MetaTable.__index = nil
+				UpdateMetaTable4Cls(info.Owner)
+			end
 		end
 	end
 
@@ -2517,12 +2669,6 @@ do
 		if info.Name == name then
 			setfenv(2, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
-
-			if not info.Constructor then
-				if __Attribute__ and info.Owner ~= __Attribute__ then
-					__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Constructor, info.SuperClass)
-				end
-			end
 		else
 			error(("%s is not closed."):format(info.Name), 2)
 		end
@@ -2720,6 +2866,13 @@ do
 				return value
 			end
 
+			-- Check Method
+			value = info.Method and info.Method[key]
+			if value then
+				rawset(self, key, value)
+				return value
+			end
+
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 
@@ -2757,14 +2910,12 @@ do
 			if type(key) == "string"  then
 				if type(value) == "function" then
 					-- Cache the method for the struct data
-					info.Cache4Method = info.Cache4Method or {}
+					info.Method = info.Method or {}
 
-					-- keep function in env, just register the method
-					if __Attribute__ then
-						value = __Attribute__._ConsumePreparedAttributes(value, AttributeTargets.Method, nil, info.Owner, key) or value
-					end
+					SaveFixedMethod(info.Method, key, value, info.Owner)
 
-					info.Cache4Method[key] = value
+					-- Don't save to environment until need it
+					value = nil
 
 				elseif (value == nil or IsType(value) or IsNameSpace(value)) then
 					local ok, ret = pcall(BuildType, value, key)
@@ -2859,8 +3010,8 @@ do
 			local ok, value = pcall(ValidateStruct, strt, init)
 
 			if ok then
-				if info.Cache4Method and type(value) == "table" then
-					for k, v in pairs(info.Cache4Method) do
+				if info.Method and type(value) == "table" then
+					for k, v in pairs(info.Method) do
 						value[k] = v
 					end
 				end
@@ -2898,8 +3049,8 @@ do
 		if type(info.Constructor) == "function" then
 			local ok, ret = pcall(info.Constructor, ...)
 			if ok then
-				if info.Cache4Method and type(ret) == "table" then
-					for k, v in pairs(info.Cache4Method) do
+				if info.Method and type(ret) == "table" then
+					for k, v in pairs(info.Method) do
 						ret[k] = v
 					end
 				end
@@ -2923,8 +3074,8 @@ do
 			local ok, value = pcall(ValidateStruct, strt, ret)
 
 			if ok then
-				if info.Cache4Method then
-					for k, v in pairs(info.Cache4Method) do
+				if info.Method then
+					for k, v in pairs(info.Method) do
 						value[k] = v
 					end
 				end
@@ -2962,8 +3113,8 @@ do
 			local ok, value = pcall(ValidateStruct, strt, ret)
 
 			if ok then
-				if info.Cache4Method then
-					for k, v in pairs(info.Cache4Method) do
+				if info.Method then
+					for k, v in pairs(info.Method) do
 						value[k] = v
 					end
 				end
@@ -3070,7 +3221,7 @@ do
 		info.ArrayElement = nil
 		info.UserValidate = nil
 		info.Validate = nil
-		info.Cache4Method = nil
+		info.Method = nil
 		info.Constructor = nil
 		info.Import4Env = nil
 
@@ -3199,14 +3350,11 @@ do
 end
 
 ------------------------------------------------------
--- System Namespace
+-- System Namespace (Base structs & Reflector)
 ------------------------------------------------------
 do
 	namespace "System"
 
-	------------------------------------------------------
-	-- Base structs
-	------------------------------------------------------
 	struct "Boolean"
 		structtype "CUSTOM"
 
@@ -3259,6 +3407,19 @@ do
 		end
 	endstruct "Table"
 
+	struct "RawTable"
+		structtype "CUSTOM"
+
+		function Validate(value)
+			if type(value) ~= "table" then
+				error(("%s must be a table, got %s."):format("%s", type(value)))
+			elseif getmetatable(value) ~= nil then
+				error("%s must be a table without metatable.")
+			end
+			return value
+		end
+	endstruct "RawTable"
+
 	struct "Userdata"
 		structtype "CUSTOM"
 
@@ -3290,8 +3451,2039 @@ do
 	endstruct "Any"
 
 	------------------------------------------------------
-	-- System.Type
+	-- System.Reflector
 	------------------------------------------------------
+	interface "Reflector"
+
+		doc [======[
+			@name Reflector
+			@type interface
+			@desc This interface contains much methodes to get the running object-oriented system's informations.
+		]======]
+
+		doc [======[
+			@name GetCurrentNameSpace
+			@type method
+			@desc Get the namespace used by the environment
+			@param env table
+			@param rawOnly boolean, rawget data from the env if true
+			@return namespace
+		]======]
+		function GetCurrentNameSpace(env, rawOnly)
+			env = type(env) == "table" and env or getfenv(2)
+
+			return GetNameSpace4Env(env, rawOnly)
+		end
+
+		doc [======[
+			@name SetCurrentNameSpace
+			@type method
+			@desc set the namespace used by the environment
+			@param ns the namespace that set for the environment
+			@param env table
+			@return nil
+		]======]
+		function SetCurrentNameSpace(ns, env)
+			env = type(env) == "table" and env or getfenv(2)
+
+			return SetNameSpace4Env(env, ns)
+		end
+
+		doc [======[
+			@name ForName
+			@type method
+			@desc Get the namespace for the name
+			@param name the namespace's name, split by "."
+			@return namespace the namespace
+			@usage System.Reflector.ForName("System")
+		]======]
+		function ForName(name)
+			return GetNameSpace(GetDefaultNameSpace(), name)
+		end
+
+		doc [======[
+			@name GetType
+			@type method
+			@desc Get the class|enum|struct|interface for the namespace
+			@param name the namespace
+			@return type
+			@usage System.Reflector.GetType("System.Object")
+		]======]
+		function GetType(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type
+		end
+
+		doc [======[
+			@name GetName
+			@type method
+			@desc Get the name for the namespace
+			@param namespace the namespace to query
+			@return name
+			@usage System.Reflector.GetName(System.Object)
+		]======]
+		function GetName(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Name
+		end
+
+		doc [======[
+			@name GetFullName
+			@type method
+			@desc Get the full name for the namespace
+			@param namespace the namespace to query
+			@return fullname
+			@usage System.Reflector.GetFullName(System.Object)
+		]======]
+		function GetFullName(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return GetFullName4NS(ns)
+		end
+
+		doc [======[
+			@name GetSuperClass
+			@type method
+			@desc Get the superclass for the class
+			@param class the class object to query
+			@return superclass
+			@usage System.Reflector.GetSuperClass(System.Object)
+		]======]
+		function GetSuperClass(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].SuperClass
+		end
+
+		doc [======[
+			@name IsNameSpace
+			@type method
+			@desc Check if the object is a NameSpace
+			@param object the object to query
+			@return boolean true if the object is a NameSpace
+			@usage System.Reflector.IsNameSpace(System.Object)
+		]======]
+		function IsNameSpace(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and true or false
+		end
+
+		doc [======[
+			@name IsClass
+			@type method
+			@desc Check if the namespace is a class
+			@param object
+			@return boolean true if the object is a class
+			@usage System.Reflector.IsClass(System.Object)
+		]======]
+		function IsClass(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_CLASS or false
+		end
+
+		doc [======[
+			@name IsStruct
+			@type method
+			@desc Check if the namespace is a struct
+			@param object
+			@return boolean true if the object is a struct
+			@usage System.Reflector.IsStruct(System.Object)
+		]======]
+		function IsStruct(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_STRUCT or false
+		end
+
+		doc [======[
+			@name IsEnum
+			@type method
+			@desc Check if the namespace is an enum
+			@param object
+			@return boolean true if the object is a enum
+			@usage System.Reflector.IsEnum(System.Object)
+		]======]
+		function IsEnum(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_ENUM or false
+		end
+
+		doc [======[
+			@name IsInterface
+			@type method
+			@desc Check if the namespace is an interface
+			@param object
+			@return boolean true if the object is an Interface
+			@usage System.Reflector.IsInterface(System.IFSocket)
+		]======]
+		function IsInterface(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_INTERFACE or false
+		end
+
+		doc [======[
+			@name IsFinal
+			@type method
+			@desc Check if the class|interface is final, can't be re-defined
+			@param object
+			@return boolean true if the class|interface is final
+			@usage System.Reflector.IsFinal(System.Object)
+		]======]
+		function IsFinal(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].IsFinal or false
+		end
+
+		doc [======[
+			@name IsNonInheritable
+			@type method
+			@desc Check if the class|interface is non-inheritable
+			@param object
+			@return boolean true if the class|interface is non-inheritable
+			@usage System.Reflector.IsNonInheritable(System.Object)
+		]======]
+		function IsNonInheritable(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonInheritable or false
+		end
+
+		doc [======[
+			@name IsUniqueClass
+			@type method
+			@desc Check if the class is unique, can only have one object
+			@param object
+			@return boolean true if the class is unique
+			@usage System.Reflector.IsUniqueClass(System.Object)
+		]======]
+		function IsUniqueClass(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].UniqueObject and true or false
+		end
+
+		doc [======[
+			@name IsAutoCacheClass
+			@type method
+			@desc Whether the class is auto-cache, the objects of the class will keep methods in itself when called
+			@param object
+			@return boolean true if the class is auto-cache
+			@usage System.Reflector.IsAutoCacheClass(System.Object)
+		]======]
+		function IsAutoCacheClass(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].AutoCache or false
+		end
+
+		doc [======[
+			@name IsNonExpandable
+			@type method
+			@desc Check if the class|interface is non-expandable
+			@param object
+			@return boolean true if the class|interface is non-expandable
+			@usage System.Reflector.IsNonExpandable(System.Object)
+		]======]
+		function IsNonExpandable(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonExpandable or false
+		end
+
+		doc [======[
+			@name GetSubNamespace
+			@type method
+			@desc Get the sub namespace of the namespace
+			@param namespace
+			@return table the sub-namespace list
+			@usage System.Reflector.GetSubNamespace(System)
+		]======]
+		function GetSubNamespace(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and info.SubNS then
+				local ret = {}
+
+				for key in pairs(info.SubNS) do
+					tinsert(ret, key)
+				end
+
+				sort(ret)
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetExtendInterfaces
+			@type method
+			@desc Get the extend interfaces of the class
+			@param class
+			@return table the extend interface list
+			@usage System.Reflector.GetExtendInterfaces(System.Object)
+		]======]
+		function GetExtendInterfaces(cls)
+			if type(cls) == "string" then cls = ForName(cls) end
+
+			local info = cls and _NSInfo[cls]
+
+			if info.ExtendInterface then
+				local ret = {}
+
+				for _, IF in ipairs(info.ExtendInterface) do
+					tinsert(ret, IF)
+				end
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetAllExtendInterfaces
+			@type method
+			@desc Get all the extend interfaces of the class
+			@param class
+			@return table the full extend interface list in the inheritance tree
+			@usage System.Reflector.GetAllExtendInterfaces(System.Object)
+		]======]
+		function GetAllExtendInterfaces(cls)
+			if type(cls) == "string" then cls = ForName(cls) end
+
+			local info = cls and _NSInfo[cls]
+
+			if info.Cache4Interface then
+				local ret = {}
+
+				for _, IF in ipairs(info.Cache4Interface) do
+					tinsert(ret, IF)
+				end
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetChildClasses
+			@type method
+			@desc Get the child classes of the class
+			@param class
+			@return table the child class list
+			@usage System.Reflector.GetChildClasses(System.Object)
+		]======]
+		function GetChildClasses(cls)
+			if type(cls) == "string" then cls = ForName(cls) end
+
+			local info = cls and _NSInfo[cls]
+
+			if info.Type == TYPE_CLASS and info.ChildClass then
+				local ret = {}
+
+				for subCls in pairs(info.ChildClass) do
+					tinsert(ret, subCls)
+				end
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetEvents
+			@type method
+			@desc Get the events of the class
+			@format class|interface[, noSuper]
+			@param class|interface the class or interface to query
+			@param noSuper no super event handlers
+			@return table the event handler list
+			@usage System.Reflector.GetEvents(System.Object)
+		]======]
+		function GetEvents(ns, noSuper)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local ret = {}
+
+				for i, v in pairs(noSuper and info.Event or info.Cache4Event) do
+					if v then
+						tinsert(ret, i)
+					end
+				end
+
+				sort(ret)
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetProperties
+			@type method
+			@desc Get the properties of the class
+			@format class|interface[, noSuper]
+			@param class|interface the class or interface to query
+			@param noSuper no super properties
+			@return table the property list
+			@usage System.Reflector.GetProperties(System.Object)
+		]======]
+		function GetProperties(ns, noSuper)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local ret = {}
+
+				for i, v in pairs(noSuper and info.Property or info.Cache4Property) do
+					if v then
+						tinsert(ret, i)
+					end
+				end
+
+				sort(ret)
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetMethods
+			@type method
+			@desc Get the methods of the class
+			@format class|interface[, noSuper]
+			@param class|interface the class or interface to query
+			@param noSuper no super methodes
+			@return table the method list
+			@usage System.Reflector.GetMethods(System.Object)
+		]======]
+		function GetMethods(ns, noSuper)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local ret = {}
+
+				for k, v in pairs(noSuper and info.Method or info.Cache4Method) do
+					tinsert(ret, k)
+				end
+
+				if not noSuper then
+					for k, v in pairs(info.Method) do
+						if k:match("^_") then
+							tinsert(ret, k)
+						end
+					end
+				end
+
+				sort(ret)
+
+				return ret
+			end
+		end
+
+		doc [======[
+			@name GetPropertyType
+			@type method
+			@desc Get the property type of the class
+			@param class|interface
+			@param propName the property name
+			@return type the property type
+			@usage System.Reflector.GetPropertyType(System.Object, "Name")
+		]======]
+		function GetPropertyType(ns, propName)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
+				local ty = info.Cache4Property[propName].Type
+
+				return ty and ty:Copy()
+			end
+		end
+
+		doc [======[
+			@name HasProperty
+			@type method
+			@desc whether the property is existed
+			@param class|interface
+			@param propName
+			@return boolean true if the class|interface has the property
+			@usage System.Reflector.HasProperty(System.Object, "Name")
+		]======]
+		function HasProperty(ns, propName)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
+				return true
+			end
+
+			return false
+		end
+
+		doc [======[
+			@name IsPropertyReadable
+			@type method
+			@desc whether the property is readable
+			@param class|interface
+			@param propName
+			@return boolean true if the property is readable
+			@usage System.Reflector.IsPropertyReadable(System.Object, "Name")
+		]======]
+		function IsPropertyReadable(ns, propName)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
+				local prop = info.Cache4Property[propName]
+				if prop.Get or prop.GetMethod or prop.Field then
+					return true
+				else
+					return false
+				end
+			end
+		end
+
+		doc [======[
+			@name IsPropertyWritable
+			@type method
+			@desc whether the property is writable
+			@param class|interface
+			@param propName
+			@return boolean true if the property is writable
+			@usage System.Reflector.IsPropertyWritable(System.Object, "Name")
+		]======]
+		function IsPropertyWritable(ns, propName)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
+				local prop = info.Cache4Property[propName]
+				if prop.Set or prop.SetMethod or prop.Field then
+					return true
+				else
+					return false
+				end
+			end
+		end
+
+		doc [======[
+			@name IsFlagsEnum
+			@type method
+			@desc Whether the enum is flags or not
+			@param object
+			@return boolean
+			@usage System.Reflector.IsFlagsEnum(System.Object)
+		]======]
+		function IsFlagsEnum(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].IsFlags or false
+		end
+
+		doc [======[
+			@name GetEnums
+			@type method
+			@desc Get the enums of the enum
+			@param enum
+			@return table the enum index list
+			@usage System.Reflector.GetEnums(System.SampleEnum)
+		]======]
+		function GetEnums(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and info.Type == TYPE_ENUM then
+				if info.IsFlags then
+					local tmp = {}
+					local zero = nil
+
+					for i, v in pairs(info.Enum) do
+						if type(v) == "number" then
+							if v > 0 then
+								tmp[floor(log(v)/log(2)) + 1] = i
+							else
+								zero = i
+							end
+						end
+					end
+
+					if zero then
+						tinsert(tmp, 1, zero)
+					end
+
+					return tmp
+				else
+					local tmp = {}
+
+					for i in pairs(info.Enum) do
+						tinsert(tmp, i)
+					end
+
+					sort(tmp)
+
+					return tmp
+				end
+			end
+		end
+
+		doc [======[
+			@name ParseEnum
+			@type method
+			@desc Get the enum index of the enum value
+			@param enum
+			@param value
+			@return index
+			@usage System.Reflector.ParseEnum(System.SampleEnum, 1)
+		]======]
+		function ParseEnum(ns, value)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			if ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_ENUM and _NSInfo[ns].Enum then
+				if _NSInfo[ns].IsFlags and type(value) == "number" then
+					local ret = {}
+
+					if value == 0 then
+						for n, v in pairs(_NSInfo[ns].Enum) do
+							if v == value then
+								return n
+							end
+						end
+					else
+						for n, v in pairs(_NSInfo[ns].Enum) do
+							if ValidateFlags(v, value) then
+								tinsert(ret, n)
+							end
+						end
+					end
+
+					return unpack(ret)
+				else
+					for n, v in pairs(_NSInfo[ns].Enum) do
+						if v == value then
+							return n
+						end
+					end
+				end
+			end
+		end
+
+		doc [======[
+			@name ValidateFlags
+			@type method
+			@desc  hether the value is contains on the target value
+			@param checkValue like 1, 2, 4, 8, ...
+			@param targetValue like 3 : (1 + 2)
+			@return boolean true if the targetValue contains the checkValue
+		]======]
+		function ValidateFlags(checkValue, targetValue)
+			targetValue = targetValue % (2 * checkValue)
+			return (targetValue - targetValue % checkValue) == checkValue
+		end
+
+		doc [======[
+			@name HasEvent
+			@type method
+			@desc Check if the class|interface has that event
+			@param class|interface
+			@param event the event handler name
+			@return true if the class|interface has the event
+			@usage System.Reflector.HasEvent(Addon, "OnEvent")
+		]======]
+		function HasEvent(cls, sc)
+			if type(cls) == "string" then cls = ForName(cls) end
+
+			local info = _NSInfo[cls]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				return info.Cache4Event[sc] or false
+			end
+		end
+
+		doc [======[
+			@name GetStructType
+			@type method
+			@desc Get the type of the struct
+			@param struct
+			@return string
+		]======]
+		function GetStructType(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and rawget(_NSInfo, ns)
+
+			if info and info.Type == TYPE_STRUCT then
+				return info.SubType
+			end
+		end
+
+		doc [======[
+			@name GetStructArrayElement
+			@type method
+			@desc Get the array element type of the struct
+			@param ns
+			@return type the array element's type
+		]======]
+		function GetStructArrayElement(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and rawget(_NSInfo, ns)
+
+			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY then
+				return info.ArrayElement
+			end
+		end
+
+		doc [======[
+			@name GetStructParts
+			@type method
+			@desc Get the parts of the struct
+			@param struct
+			@return table struct part name list
+			@usage System.Reflector.GetStructParts(Position)
+		]======]
+		function GetStructParts(ns)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and rawget(_NSInfo, ns)
+
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+					local tmp = {}
+
+					for _, part in ipairs(info.Members) do
+						tinsert(tmp, part)
+					end
+
+					return tmp
+				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+					return { "element" }
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					local tmp = {}
+
+					for key, value in pairs(info.StructEnv) do
+						if type(key) == "string" and IsType(value) then
+							tinsert(tmp, key)
+						end
+					end
+
+					sort(tmp)
+
+					return tmp
+				end
+			end
+		end
+
+		doc [======[
+			@name GetStructPart
+			@type method
+			@desc Get the part's type of the struct
+			@param struct
+			@param part the part's name
+			@return type the part's type
+			@usage System.Reflector.GetStructPart(Position, "x")
+		]======]
+		function GetStructPart(ns, part)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			local info = ns and rawget(_NSInfo, ns)
+
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
+					for _, p in ipairs(info.Members) do
+						if p == part and IsType(info.StructEnv[part]) then
+							return info.StructEnv[part]:Copy()
+						end
+					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+					return info.ArrayElement:Copy()
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+					if IsType(info.StructEnv[part]) then
+						return info.StructEnv[part]:Copy()
+					end
+				end
+			end
+		end
+
+		doc [======[
+			@name IsSuperClass
+			@type method
+			@desc Check if this first arg is a child class of the next arg
+			@param childclass
+			@param superclass
+			@return boolean true if the supeclass is the childclass's super class
+			@usage System.Reflector.IsSuperClass(UIObject, Object)
+		]======]
+		function IsSuperClass(child, super)
+			if type(child) == "string" then child = ForName(child) end
+			if type(super) == "string" then super = ForName(super) end
+
+			return IsClass(child) and IsClass(super) and IsChildClass(super, child)
+		end
+
+		doc [======[
+			@name IsExtendedInterface
+			@type method
+			@desc Check if the class is extended from the interface
+			@param class|interface
+			@param interface
+			@return boolean true if the first arg is extend from the second
+			@usage System.Reflector.IsExtendedInterface(UIObject, IFSocket)
+		]======]
+		function IsExtendedInterface(cls, IF)
+			if type(cls) == "string" then cls = ForName(cls) end
+			if type(IF) == "string" then IF = ForName(IF) end
+
+			return IsExtend(IF, cls)
+		end
+
+		doc [======[
+			@name GetObjectClass
+			@type method
+			@desc Get the class type of this object
+			@param object
+			@return class the object's class
+			@usage System.Reflector.GetObjectClass(obj)
+		]======]
+		function GetObjectClass(obj)
+			return type(obj) == "table" and getmetatable(obj)
+		end
+
+		doc [======[
+			@name ObjectIsClass
+			@type method
+			@desc Check if this object is an instance of the class
+			@param object
+			@param class
+			@return true if the object is an instance of the class or it's child class
+			@usage System.Reflector.ObjectIsClass(obj, Object)
+		]======]
+		function ObjectIsClass(obj, cls)
+			if type(cls) == "string" then cls = ForName(cls) end
+			return (obj and cls and IsChildClass(cls, GetObjectClass(obj))) or false
+		end
+
+		doc [======[
+			@name ObjectIsInterface
+			@type method
+			@desc Check if this object is an instance of the interface
+			@param object
+			@param interface
+			@return true if the object's class is extended from the interface
+			@usage System.Reflector.ObjectIsInterface(obj, IFSocket)
+		]======]
+		function ObjectIsInterface(obj, IF)
+			if type(IF) == "string" then IF = ForName(IF) end
+			return (obj and IF and IsExtend(IF, GetObjectClass(obj))) or false
+		end
+
+		doc [======[
+			@name FireObjectEvent
+			@type method
+			@desc Fire an object's event, to trigger the object's event handlers
+			@param object the object
+			@param event the event name
+			@param ... the event's arguments
+			@return nil
+		]======]
+		function FireObjectEvent(obj, sc, ...)
+			-- No more check , just fire the event as quick as we can
+			local handler = rawget(obj, "__Events")
+			handler = handler and handler[sc]
+			if handler then return handler(obj, ...) end
+		end
+
+		doc [======[
+			@name ActiveThread
+			@type method
+			@desc Active thread mode for special events.
+			@param object
+			@param ... event handler name list
+			@return nil
+			@usage System.Reflector.ActiveThread(obj, "OnClick", "OnEnter")
+		]======]
+		function ActiveThread(obj, ...)
+			local cls = GetObjectClass(obj)
+			local name
+
+			if cls then
+				for i = 1, select('#', ...) do
+					name = select(i, ...)
+
+					if HasEvent(cls, name) then
+						local handler = rawget(obj, "__Events")
+						handler = handler and handler[name]
+
+						if handler or not IsThreadActivated(cls, name) then
+							obj[name].ThreadActivated = true
+						end
+					end
+				end
+			end
+		end
+
+		doc [======[
+			@name IsThreadActivated
+			@type method
+			@desc Whether the thread mode is activated for special events.
+			@param obect
+			@param event
+			@return boolean true if the object has active thread mode for the given event.
+			@usage System.Reflector.IsThreadActivated(obj, "OnClick")
+		]======]
+		function IsThreadActivated(obj, sc)
+			if IsClass(obj) then
+				local evt = _NSInfo[obj].Cache4Event[sc]
+
+				return evt and evt.ThreadActivated or false
+			else
+				local cls = GetObjectClass(obj)
+
+				if cls and HasEvent(cls, sc) then
+					return obj[sc].ThreadActivated or false
+				end
+			end
+
+			return false
+		end
+
+		doc [======[
+			@name InactiveThread
+			@type method
+			@desc Inactive thread mode for special events.
+			@param object
+			@param ... event name list
+			@return nil
+			@usage System.Reflector.InactiveThread(obj, "OnClick", "OnEnter")
+		]======]
+		function InactiveThread(obj, ...)
+			local cls = GetObjectClass(obj)
+			local name
+
+			if cls then
+				for i = 1, select('#', ...) do
+					name = select(i, ...)
+
+					if HasEvent(cls, name) then
+						local handler = rawget(obj, "__Events")
+						handler = handler and handler[name]
+
+						if handler or IsThreadActivated(cls, name) then
+							obj[name].ThreadActivated = false
+						end
+					end
+				end
+			end
+		end
+
+		doc [======[
+			@name BlockEvent
+			@type method
+			@desc Block event for object
+			@param object
+			@param ... the event handler name list
+			@return nil
+			@usage System.Reflector.BlockEvent(obj, "OnClick", "OnEnter")
+		]======]
+		function BlockEvent(obj, ...)
+			local cls = GetObjectClass(obj)
+			local name
+
+			if cls then
+				for i = 1, select('#', ...) do
+					name = select(i, ...)
+
+					if HasEvent(cls, name) then
+						obj[name]._Blocked = true
+					end
+				end
+			end
+		end
+
+		doc [======[
+			@name IsEventBlocked
+			@type method
+			@desc Whether the event is blocked for object
+			@param object
+			@param event
+			@return boolean true if the event is blocked
+			@usage System.Reflector.IsEventBlocked(obj, "OnClick")
+		]======]
+		function IsEventBlocked(obj, sc)
+			local cls = GetObjectClass(obj)
+			local name
+
+			if cls and HasEvent(cls, sc) then
+				return obj[sc]._Blocked or false
+			end
+
+			return false
+		end
+
+		doc [======[
+			@name UnBlockEvent
+			@type method
+			@desc Un-Block event for object
+			@param object
+			@param ... event handler name list
+			@return nil
+			@usage System.Reflector.UnBlockEvent(obj, "OnClick", "OnEnter")
+		]======]
+		function UnBlockEvent(obj, ...)
+			local cls = GetObjectClass(obj)
+			local name
+
+			if cls then
+				for i = 1, select('#', ...) do
+					name = select(i, ...)
+
+					if HasEvent(cls, name) then
+						obj[name]._Blocked = nil
+					end
+				end
+			end
+		end
+
+		-- Recycle the test type object
+		_Validate_Type = setmetatable({}, {
+			__call = function(self, key)
+				if key then
+					key.AllowNil = nil
+					key[1] = nil
+					key.Name = nil
+
+					tinsert(self, key)
+				else
+					if next(self) then
+						return tremove(self)
+					else
+						return BuildType(nil)
+					end
+				end
+			end,
+		})
+
+		doc [======[
+			@name Validate
+			@type method
+			@desc Validating the value to the given type.
+			@format type, value, name[, prefix[, stacklevel]]
+			@param type such like Object+String+nil
+			@param value the test value
+			@param name the parameter's name
+			@param prefix the prefix string
+			@param stacklevel set if not in the main function call, only work when prefix is setted
+			@return nil
+			@usage System.Reflector.Validate(System.String+nil, "Test")
+		]======]
+		function Validate(types, value, name, prefix, stacklevel)
+			stacklevel = type(stacklevel) == "number" and stacklevel > 0 and stacklevel or 0
+
+			stacklevel = math.floor(stacklevel)
+
+			if type(name) ~= "string" then name = "value" end
+
+			if types == nil then
+				return value
+			end
+
+			if IsNameSpace(types) then
+				local vtype = _Validate_Type()
+
+				vtype.AllowNil = nil
+				vtype[1] = types
+				vtype.Name = name
+
+				types = vtype
+			end
+
+			local ok, _type = pcall(BuildType, types, name)
+
+			if ok then
+				if _type then
+					ok, value = pcall(_type.Validate, _type, value)
+
+					-- Recycle
+					_Validate_Type(types)
+
+					if not ok then
+						value = strtrim(value:match(":%d+:%s*(.-)$") or value)
+
+						if value:find("%%s") then
+							value = value:gsub("%%s[_%w]*", name)
+						end
+
+						if type(prefix) == "string" then
+							error(prefix .. value, 3 + stacklevel)
+						else
+							error(value, 2)
+						end
+					end
+				else
+					-- Recycle
+					_Validate_Type(types)
+				end
+
+				return value
+			else
+				-- Recycle
+				_Validate_Type(types)
+
+				error("Usage : System.Reflector.Validate(type, value[, name[, prefix]]) : type - must be nil, enum, struct or class.", 2)
+			end
+
+			return value
+		end
+
+		doc [======[
+			@name EnableDocumentSystem
+			@type method
+			@desc Enable or disbale the document system, only effect later created document
+			@param enabled true to enable the document system
+			@return nil
+			@usage System.Reflector.EnableDocumentSystem(true)
+		]======]
+		function EnableDocumentSystem(enabled)
+			EnableDocument(enabled)
+		end
+
+		doc [======[
+			@name IsDocumentSystemEnabled
+			@type method
+			@desc Whether the document system is enabled
+			@return boolean
+		]======]
+		function IsDocumentSystemEnabled()
+			return IsDocumentEnabled()
+		end
+
+		doc [======[
+			@name GetDocument
+			@type method
+			@desc Get the document settings
+			@format namespace, docType, name[, part]
+			@param namespace
+			@param doctype such as "property"
+			@param name the query name
+			@param part the part name
+			@return Iterator the iterator to get detail
+			@usage
+				for part, value in System.Reflector.GetDocument(System.Object, "method", "GetClass")
+			<br>	do print(part, value)
+			<br>end
+		]======]
+		function GetDocument(ns, doctype, name, part)
+			return GetDocumentPart(ns, doctype, name, part)
+		end
+
+		doc [======[
+			@name HasDocument
+			@type method
+			@desc Check if has the document
+			@param namespace
+			@param doctype
+			@param name
+			@return true if the document is present
+		]======]
+		function HasDocument(ns, doctype, name)
+			return HasDocumentPart(ns, doctype, name)
+		end
+
+		doc [======[
+			@name Help
+			@type method
+			@desc Get the document detail
+			@format class|interface[, event|property|method, name]
+			@format class|interface, name
+			@format enum|struct
+			@param class|interface|enum|struct
+			@param event|property|method
+			@param name the name to query
+			@return string the detail information
+		]======]
+
+		-- The cache for constructor parameters
+		local function buildSubNamespace(ns)
+			local result = ""
+
+			local _Enums = CACHE_TABLE()
+			local _Structs = CACHE_TABLE()
+			local _Classes = CACHE_TABLE()
+			local _Interfaces = CACHE_TABLE()
+			local _Namespaces = CACHE_TABLE()
+
+			local subNS = GetSubNamespace(ns)
+
+			if subNS and next(subNS) then
+				for _, sns in ipairs(subNS) do
+					sns = ns[sns]
+
+					if IsEnum(sns) then
+						tinsert(_Enums, sns)
+					elseif IsStruct(sns) then
+						tinsert(_Structs, sns)
+					elseif IsInterface(sns) then
+						tinsert(_Interfaces, sns)
+					elseif IsClass(sns) then
+						tinsert(_Classes, sns)
+					else
+						tinsert(_Namespaces, sns)
+					end
+				end
+
+				if next(_Enums) then
+					result = result .. "\n\n Sub Enum :"
+
+					for _, sns in ipairs(_Enums) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Structs) then
+					result = result .. "\n\n Sub Struct :"
+
+					for _, sns in ipairs(_Structs) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Interfaces) then
+					result = result .. "\n\n Sub Interface :"
+
+					for _, sns in ipairs(_Interfaces) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Classes) then
+					result = result .. "\n\n Sub Class :"
+
+					for _, sns in ipairs(_Classes) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+
+				if next(_Namespaces) then
+					result = result .. "\n\n Sub NameSpace :"
+
+					for _, sns in ipairs(_Namespaces) do
+						result = result .. "\n    " .. GetName(sns)
+					end
+				end
+			end
+
+			CACHE_TABLE(_Enums)
+			CACHE_TABLE(_Structs)
+			CACHE_TABLE(_Classes)
+			CACHE_TABLE(_Interfaces)
+			CACHE_TABLE(_Namespaces)
+
+			return result
+		end
+
+		function Help(ns, doctype, name)
+			if type(ns) == "string" then ns = ForName(ns) end
+
+			if ns and rawget(_NSInfo, ns) then
+				local info = _NSInfo[ns]
+
+				if info.Type == TYPE_ENUM then
+					-- Enum
+					local result = ""
+					local value
+
+					if info.IsFinal then
+						result = result .. "[__Final__]\n"
+					end
+
+					if info.IsFlags then
+						result = result .. "[__Flags__]\n"
+					end
+
+					result = result .. "[Enum] " .. GetFullName(ns) .. " :"
+
+					for _, enums in ipairs(GetEnums(ns)) do
+						value = ns[enums]
+
+						if type(value) == "string" then
+							value = ("%q"):format(value)
+						else
+							value = tostring(value)
+						end
+
+						result = result .. "\n    " .. enums .. " = " .. value
+					end
+					return result
+				elseif info.Type == TYPE_STRUCT then
+					-- Struct
+					local result = ""
+
+					if info.IsFinal then
+						result = result .. "[__Final__]\n"
+					end
+
+					if info.SubType == _STRUCT_TYPE_ARRAY then
+						result = result .. "[__StructType__(StructType.Array)]\n"
+					elseif info.SubType == _STRUCT_TYPE_CUSTOM then
+						result = result .. "[__StructType__(StructType.Custom)]\n"
+					end
+
+					result = result .. "[Struct] " .. GetFullName(ns) .. " :"
+
+					-- SubNameSpace
+					result = result .. buildSubNamespace(ns)
+
+					if info.SubType == _STRUCT_TYPE_MEMBER or info.SubType == _STRUCT_TYPE_CUSTOM then
+						local parts = GetStructParts(ns)
+
+						if parts and next(parts) then
+							result = result .. "\n\n  Field:"
+
+							for _, name in ipairs(parts) do
+								result = result .. "\n    " .. name .. " = " .. tostring(info.StructEnv[name])
+							end
+						end
+					elseif info.SubType == _STRUCT_TYPE_ARRAY then
+						if info.ArrayElement then
+							result = result .. "\n\n  Element :\n    " .. tostring(info.ArrayElement)
+						end
+					end
+
+					return result
+				elseif info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
+					-- Interface & Class
+					if type(doctype) ~= "string" then
+						local result = ""
+						local desc
+
+						if info.IsFinal then
+							result = result .. "[__Final__]\n"
+						end
+
+						if info.NonInheritable then
+							result = result .. "[__NonInheritable__]\n"
+						end
+
+						if info.NonExpandable then
+							result = result .. "[__NonExpandable__]\n"
+						end
+
+						if info.Type == TYPE_INTERFACE then
+							result = result .. "[Interface] " .. GetFullName(ns) .. " :"
+
+							if HasDocumentPart(ns, "interface", GetName(ns)) then
+								desc = GetDocumentPart(ns, "interface", GetName(ns), "desc")
+							elseif HasDocumentPart(ns, "default", GetName(ns)) then
+								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+							end
+						else
+							if info.AutoCache then
+								result = result .. "[__Cache__]\n"
+							end
+
+							if info.UniqueObject then
+								result = result .. "[__Unique__]\n"
+							end
+
+							if IsChildClass(__Attribute__, ns) then
+								local usage = __Attribute__._GetClassAttribute(ns, __AttributeUsage__)
+
+								if usage then
+									result = result .. "[__AttributeUsage__{ "
+
+									result = result .. "AttributeTarget = " .. Serialize(usage.AttributeTarget, AttributeTargets) .. ", "
+
+									result = result .. "Inherited = " .. tostring(usage.Inherited and true or false) .. ", "
+
+									result = result .. "AllowMultiple = " .. tostring(usage.AllowMultiple and true or false) .. ", "
+
+									result = result .. "RunOnce = " .. tostring(usage.RunOnce and true or false)
+
+									result = result .. " }]\n"
+								end
+							end
+
+							result = result .. "[Class] " .. GetFullName(ns) .. " :"
+
+							if HasDocumentPart(ns, "class", GetName(ns)) then
+								desc = GetDocumentPart(ns, "class", GetName(ns), "desc")
+							elseif HasDocumentPart(ns, "default", GetName(ns)) then
+								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+							end
+						end
+
+						-- Desc
+						desc = desc and desc()
+						if desc then
+							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n        "):gsub("  %s+", "\n        "):gsub("\t+", "\n        ")
+						end
+
+						-- Inherit
+						if info.SuperClass then
+							result = result .. "\n\n  Super Class :\n    " .. GetFullName(info.SuperClass)
+						end
+
+						-- Extend
+						if info.ExtendInterface and next(info.ExtendInterface) then
+							result = result .. "\n\n  Extend Interface :"
+							for _, IF in ipairs(info.ExtendInterface) do
+								result = result .. "\n    " .. GetFullName(IF)
+							end
+						end
+
+						-- SubNameSpace
+						result = result .. buildSubNamespace(ns)
+
+						-- Event
+						if next(info.Event) then
+							result = result .. "\n\n  Event :"
+							for _, evt in ipairs(GetEvents(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "event", evt) and GetDocument(ns, "event", evt, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = " - " .. desc
+								else
+									desc = ""
+								end
+
+								result = result .. "\n    " .. evt .. desc
+							end
+						end
+
+						-- Property
+						if next(info.Property) then
+							result = result .. "\n\n  Property :"
+							for _, prop in ipairs(GetProperties(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "property", prop) and GetDocument(ns, "property", prop, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = " - " .. desc
+								else
+									desc = ""
+								end
+
+								result = result .. "\n    " .. prop .. desc
+							end
+						end
+
+						-- Method
+						if next(info.Method) then
+							result = result .. "\n\n  Method :"
+							for _, method in ipairs(GetMethods(ns, true)) do
+								-- Desc
+								desc = HasDocument(ns, "method", method) and GetDocument(ns, "method", method, "desc")
+								desc = desc and desc()
+								if desc then
+									desc = " - " .. desc
+								else
+									desc = ""
+								end
+								result = result .. "\n    " .. method .. desc
+							end
+						end
+
+						-- Need
+						if info.Type == TYPE_INTERFACE then
+							desc = GetDocumentPart(ns, "interface", GetName(ns), "overridable")
+
+							if desc then
+								result = result .. "\n\n  Overridable :"
+
+								for need, info in desc do
+									if info and info:len() > 0 then
+										result = result .. "\n    " .. need .. " - " .. info
+									else
+										result = result .. "\n    " .. need
+									end
+								end
+							end
+						end
+
+						-- Constructor
+						local isFormat = false
+
+						if info.Type == TYPE_CLASS then
+							-- __Arguments__
+							local args = __Attribute__._GetConstructorAttribute(ns, __Arguments__)
+
+							if args and #args > 0 then
+								result = result .. "\n\n  Init table field :"
+
+								for i = 1, #args do
+									result = result .. "\n    " .. args[i].Name
+
+									if args[i].Type then
+										result = result .. " = " .. tostring(args[i].Type)
+									end
+
+									if args[i].Default then
+										result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
+									end
+								end
+							end
+
+							while ns do
+								isFormat = true
+
+								desc = nil
+
+								if HasDocumentPart(ns, "class", GetName(ns)) then
+									desc = GetDocumentPart(ns, "class", GetName(ns), "format")
+									if not desc then
+										desc = GetDocumentPart(ns, "class", GetName(ns), "param")
+										isFormat = false
+									end
+								elseif HasDocumentPart(ns, "default", GetName(ns)) then
+									desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+									if not desc then
+										desc = GetDocumentPart(ns, "default", GetName(ns), "param")
+										isFormat = false
+									end
+								end
+
+								if desc then
+									-- Constructor
+									result = result .. "\n\n  Constructor :"
+									if isFormat then
+										for fmt in desc do
+											result = result .. "\n    " .. GetName(ns) .. "(" .. fmt .. ")"
+										end
+									else
+										result = result .. "\n    " .. GetName(ns) .. "("
+
+										local isFirst = true
+
+										for param in desc do
+											if isFirst then
+												isFirst = false
+												result = result .. param
+											else
+												result = result .. ", " .. param
+											end
+										end
+
+										result = result .. ")"
+									end
+
+									-- Params
+									desc = GetDocumentPart(ns, "class", GetName(ns), "param") or GetDocumentPart(ns, "default", GetName(ns), "param")
+									if desc then
+										result = result .. "\n\n  Parameter :"
+										for param, info in desc do
+											if info and info:len() > 0 then
+												result = result .. "\n    " .. param .. " - " .. info
+											else
+												result = result .. "\n    " .. param
+											end
+										end
+									end
+
+									break
+								end
+
+								ns = GetSuperClass(ns)
+							end
+						end
+
+						return result
+					else
+						local result
+						local querytype
+
+						if info.Type == TYPE_INTERFACE then
+							result = "[Interface] " .. GetFullName(ns) .. " - "
+						else
+							result = "[Class] " .. GetFullName(ns) .. " - "
+						end
+
+						if type(name) ~= "string" then
+							doctype, name = nil, doctype
+						end
+
+						querytype = doctype
+
+						if not querytype then
+							if HasEvent(ns, name) then
+								querytype = "event"
+							elseif HasProperty(ns, name) then
+								querytype = "property"
+							elseif type(ns[name]) == "function" then
+								querytype = "method"
+							else
+								return
+							end
+						end
+
+						doctype = querytype or "default"
+
+						if doctype:match("^%a") then
+							result = result .. "[" .. doctype:match("^%a"):upper() .. doctype:sub(2, -1) .. "] " .. name .. " :"
+						else
+							result = result .. "[" .. doctype .. "] " .. name .. " :"
+						end
+
+						local hasDocument = HasDocumentPart(ns, doctype, name)
+
+						-- Desc
+						local desc = hasDocument and GetDocumentPart(ns, doctype, name, "desc")
+						desc = desc and desc()
+						if desc then
+							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
+						end
+
+						if querytype == "event" then
+							-- __Thread__
+							if IsThreadActivated(ns, name) then
+								result = result .. "\n\n  [__Thread__]"
+							end
+
+							-- Format
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
+							if desc then
+								result = result .. "\n\n  Format :"
+								for fmt in desc do
+									result = result .. "\n    " .. "function object:" .. name .. "(" .. fmt .. ")\n        -- Handle the event\n    end"
+								end
+							else
+								result = result .. "\n\n  Format :\n    function object:" .. name .. "("
+
+								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+
+								if desc then
+									local isFirst = true
+
+									for param in desc do
+										if isFirst then
+											isFirst = false
+											result = result .. param
+										else
+											result = result .. ", " .. param
+										end
+									end
+								end
+
+								result = result .. ")\n        -- Handle the event\n    end"
+							end
+
+							-- Params
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+							if desc then
+								result = result .. "\n\n  Parameter :"
+								for param, info in desc do
+									if info and info:len() > 0 then
+										result = result .. "\n    " .. param .. " - " .. info
+									else
+										result = result .. "\n    " .. param
+									end
+								end
+							end
+						elseif querytype == "property" then
+							local types = GetPropertyType(ns, name)
+
+							if types then
+								result = result .. "\n\n  Type :\n    " .. tostring(types)
+							end
+
+							-- Readonly
+							result = result .. "\n\n  Readable :\n    " .. tostring(IsPropertyReadable(ns, name))
+
+							-- Writable
+							result = result .. "\n\n  Writable :\n    " .. tostring(IsPropertyWritable(ns, name))
+						elseif querytype == "method" then
+							local isGlobal = false
+
+							if name:match("^_") then
+								isGlobal = true
+							else
+								if info.Type == TYPE_INTERFACE and info.NonInheritable then
+									isGlobal = true
+								end
+							end
+
+							-- Format
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
+							result = result .. "\n\n  Format :"
+							if desc then
+								for fmt in desc do
+									if isGlobal then
+										result = result .. "\n    " .. GetName(ns) .. "." .. name .. "(" .. fmt .. ")"
+									else
+										result = result .. "\n    object:" .. name .. "(" .. fmt .. ")"
+									end
+								end
+							else
+								if isGlobal then
+									result = result .. "\n    " .. GetName(ns) .. "." .. name .. "("
+								else
+									result = result .. "\n    object:" .. name .. "("
+								end
+
+								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+
+								if desc then
+									local isFirst = true
+
+									for param in desc do
+										if isFirst then
+											isFirst = false
+											result = result .. param
+										else
+											result = result .. ", " .. param
+										end
+									end
+								end
+
+								result = result .. ")"
+							end
+
+							-- Params
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+							if desc then
+								result = result .. "\n\n  Parameter :"
+								for param, info in desc do
+									if info and info:len() > 0 then
+										result = result .. "\n    " .. param .. " - " .. info
+									else
+										result = result .. "\n    " .. param
+									end
+								end
+							else
+								-- __Arguments__
+								local args = __Attribute__._GetMethodAttribute(ns, name, __Arguments__)
+
+								if args and #args > 0 then
+									result = result .. "\n\n  Parameter :"
+
+									for i = 1, #args do
+										result = result .. "\n    " .. args[i].Name
+
+										if args[i].Type then
+											result = result .. " = " .. tostring(args[i].Type)
+										end
+
+										if args[i].Default then
+											result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
+										end
+									end
+								end
+							end
+
+							-- ReturnFormat
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "returnformat")
+							if desc then
+								result = result .. "\n\n  Return Format :"
+								for fmt in desc do
+									result = result .. "\n    " .. fmt
+								end
+							end
+
+							-- Returns
+							desc = hasDocument and GetDocumentPart(ns, doctype, name, "return")
+							if desc then
+								result = result .. "\n\n  Return :"
+								for ret, info in desc do
+									if info and info:len() > 0 then
+										result = result .. "\n    " .. ret .. " - " .. info
+									else
+										result = result .. "\n    " .. ret
+									end
+								end
+							end
+						else
+							-- skip
+						end
+
+						-- Usage
+						desc = hasDocument and GetDocumentPart(ns, doctype, name, "usage")
+						if desc then
+							result = result .. "\n\n  Usage :"
+							for usage in desc do
+								result = result .. "\n    " .. usage:gsub("<br>", "\n    ")
+							end
+						end
+
+						return result
+					end
+				else
+					local result = "[NameSpace] " .. GetFullName(ns) .. " :"
+					local desc
+
+					if HasDocumentPart(ns, "namespace", GetName(ns)) then
+						desc = GetDocumentPart(ns, "namespace", GetName(ns), "desc")
+					elseif HasDocumentPart(ns, "default", GetName(ns)) then
+						desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+					end
+
+					-- Desc
+					desc = desc and desc()
+					if desc then
+						result = result .. "\n\n  Description :\n    " .. desc
+					end
+
+					-- SubNameSpace
+					result = result .. buildSubNamespace(ns)
+
+					return result
+				end
+			end
+		end
+
+		doc [======[
+			@name Serialize
+			@type method
+			@desc Serialize the data
+			@format data[, type]
+			@param data the data
+			@param type the data's type
+			@return string
+		]======]
+		local function SerializeData(data)
+			if type(data) == "string" then
+				return strformat("%q", data)
+			elseif type(data) == "number" or type(data) == "boolean" then
+				return tostring(data)
+			elseif type(data) == "table" then
+				local cache = CACHE_TABLE()
+
+				tinsert(cache, "{")
+
+				for k, v in pairs(data) do
+					if ( type(k) == "number" or type(k) == "string" ) and
+						( type(v) == "string" or type(v) == "number" or type(v) == "boolean" or type(v) == "table" ) then
+
+						if type(k) == "number" then
+							tinsert(cache, ("[%s] = %s,"):format(tostring(k), SerializeData(v)))
+						else
+							tinsert(cache, ("%s = %s,"):format(k, SerializeData(v)))
+						end
+					end
+				end
+
+				tinsert(cache, "}")
+
+				local ret = tblconcat(cache, " ")
+
+				CACHE_TABLE(cache)
+
+				return ret
+			else
+				-- Don't support any point values
+				return nil
+			end
+		end
+
+		function Serialize(data, ns)
+			if ns then
+				if ObjectIsClass(ns, Type) then
+					ns = ns:GetObjectType(data)
+
+					if ns == false then
+						return nil
+					elseif ns == nil then
+						return "nil"
+					end
+				elseif type(ns) == "string" then
+					ns = ForName(ns)
+				end
+			end
+
+			if ns and rawget(_NSInfo, ns) then
+				if Reflector.IsEnum(ns) then
+					if _NSInfo[ns].IsFlags and type(data) == "number" then
+						local ret = {Reflector.ParseEnum(ns, data)}
+
+						local result = ""
+
+						for i, str in ipairs(ret) do
+							if i > 1 then
+								result = result .. " + "
+							end
+							result = result .. (tostring(ns) .. "." .. str)
+						end
+
+						return result
+					else
+						local str = Reflector.ParseEnum(ns, data)
+
+						return str and (tostring(ns) .. "." .. str)
+					end
+				elseif Reflector.IsClass(ns) then
+					-- Class handle the serialize itself with __tostring
+					return tostring(data)
+				elseif Reflector.IsStruct(ns) then
+					if Reflector.GetStructType(ns) == "MEMBER" and type(data) == "table" then
+						local parts = Reflector.GetStructParts(ns)
+
+						if not parts or not next(parts) then
+							-- Well, what a no member struct can be used for?
+							return tostring(ns) .. "( )"
+						else
+							local ret = tostring(ns) .. "( "
+
+							for i, part in ipairs(parts) do
+								local sty = Reflector.GetStructPart(ns, part)
+								local value = data[part]
+
+								if sty and #sty == 1 then
+									value = Serialize(value, sty[1])
+								else
+									value = SerializeData(value)
+								end
+
+								if i == 1 then
+									ret = ret .. tostring(value)
+								else
+									ret = ret .. ", " .. tostring(value)
+								end
+							end
+
+							ret = ret .. " )"
+
+							return ret
+						end
+					elseif Reflector.GetStructType(ns) == "ARRAY" and type(data) == "table" then
+						local ret = tostring(ns) .. "( "
+
+						sty = Reflector.GetStructArrayElement(ns)
+
+						if sty and #sty == 1 then
+							for i, v in ipairs(data) do
+								v = Serialize(v, sty[1])
+
+								if i == 1 then
+									ret = ret .. tostring(v)
+								else
+									ret = ret .. ", " .. tostring(v)
+								end
+							end
+						else
+							for i, v in ipairs(data) do
+								v = SerializeData(v)
+
+								if i == 1 then
+									ret = ret .. tostring(v)
+								else
+									ret = ret .. ", " .. tostring(v)
+								end
+							end
+						end
+
+						ret = ret .. " )"
+
+						return ret
+					elseif type(data) == "table" and type(data.__tostring) == "function" then
+						return data:__tostring()
+					else
+						return SerializeData(data)
+					end
+				end
+			else
+				-- Serialize normal datas
+				return SerializeData(data)
+			end
+		end
+
+		doc [======[
+			@name ThreadCall
+			@type method
+			@desc Call the function in a thread from the thread pool of the system
+			@param func the function
+			@param ... the parameters
+			@return any
+		]======]
+		function ThreadCall(func, ...)
+			return CallThread(func, ...)
+		end
+
+		doc [======[
+			@name IsEqual
+			@type method
+			@desc Whether the two objects are objects with same settings
+			@param obj1 object, the object used to compare
+			@param obj2 object, the object used to compare to
+			@return boolean
+		]======]
+		local function checkEqual(obj1, obj2, cache)
+			if obj1 == obj2 then return true end
+			if type(obj1) ~= "table" then return false end
+			if type(obj2) ~= "table" then return false end
+
+			if cache[obj1] and cache[obj2] then
+				return true
+			elseif cache[obj1] or cache[obj2] then
+				return false
+			else
+				cache[obj1] = true
+				cache[obj2] = true
+			end
+
+			local cls = getmetatable(obj1)
+			local info = cls and rawget(_NSInfo, cls)
+
+			if info then
+				if cls ~= getmetatable(obj2) then return false end
+
+				-- Check properties
+				for name, prop in pairs(info.Cache4Property) do
+					if prop.Get or prop.GetMethod or prop.Field then
+						if not checkEqual(obj1[name], obj2[name], cache) then
+							return false
+						end
+					end
+				end
+			end
+
+			-- Check fields
+			for k, v in pairs(obj1) do
+				if not checkEqual(v, rawget(obj2, k), cache) then
+					return false
+				end
+			end
+
+			for k, v in pairs(obj2) do
+				if rawget(obj1, k) == nil then
+					return false
+				end
+			end
+
+			return true
+		end
+
+		function IsEqual(obj1, obj2)
+			local cache = CACHE_TABLE()
+
+			local result = checkEqual(obj1, obj2, cache)
+
+			CACHE_TABLE(cache)
+
+			return result
+		end
+	endinterface "Reflector"
+end
+
+------------------------------------------------------
+-- Local Namespace (Inner classes)
+------------------------------------------------------
+do
+	namespace( nil )
+
 	class "Type"
 		doc [======[
 			@name Type
@@ -3734,1973 +5926,6 @@ do
 		end
 	endclass "Type"
 
-	------------------------------------------------------
-	-- System.Reflector
-	------------------------------------------------------
-	interface "Reflector"
-
-		doc [======[
-			@name Reflector
-			@type interface
-			@desc This interface contains much methodes to get the running object-oriented system's informations.
-		]======]
-
-		doc [======[
-			@name FireObjectEvent
-			@type method
-			@desc Fire an object's event, to trigger the object's event handlers
-			@param object the object
-			@param event the event name
-			@param ... the event's arguments
-			@return nil
-		]======]
-		function FireObjectEvent(self, sc, ...)
-			-- No more check , just fire the event as quick as we can
-			local handler = rawget(self, "__Events")
-			handler = handler and handler[sc]
-			return handler and handler(self, ...)
-
-			--[[if not GetObjectClass(self) then
-				error("Usage : Reflector.FireObjectEvent(object, event[, ...]) : 'object' - object expected.")
-			end
-
-			if type(sc) ~= "string" then
-				error(("Usage : Reflector.FireObjectEvent(object, event [, args, ...]) : 'event' - string expected, got %s."):format(type(sc)), 2)
-			end
-
-			if rawget(self, "__Events") and rawget(self.__Events, sc) then
-				return rawget(self.__Events, sc)(self, ...)
-			end--]]
-		end
-
-		doc [======[
-			@name GetCurrentNameSpace
-			@type method
-			@desc Get the namespace used by the environment
-			@param env table
-			@param rawOnly boolean, rawget data from the env if true
-			@return namespace
-		]======]
-		function GetCurrentNameSpace(env, rawOnly)
-			env = type(env) == "table" and env or getfenv(2)
-
-			return GetNameSpace4Env(env, rawOnly)
-		end
-
-		doc [======[
-			@name SetCurrentNameSpace
-			@type method
-			@desc set the namespace used by the environment
-			@param ns the namespace that set for the environment
-			@param env table
-			@return nil
-		]======]
-		function SetCurrentNameSpace(ns, env)
-			env = type(env) == "table" and env or getfenv(2)
-
-			return SetNameSpace4Env(env, ns)
-		end
-
-		doc [======[
-			@name ForName
-			@type method
-			@desc Get the namespace for the name
-			@param name the namespace's name, split by "."
-			@return namespace the namespace
-			@usage System.Reflector.ForName("System")
-		]======]
-		function ForName(name)
-			return GetNameSpace(GetDefaultNameSpace(), name)
-		end
-
-		doc [======[
-			@name GetType
-			@type method
-			@desc Get the class|enum|struct|interface for the namespace
-			@param name the namespace
-			@return type
-			@usage System.Reflector.GetType("System.Object")
-		]======]
-		function GetType(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type
-		end
-
-		doc [======[
-			@name GetName
-			@type method
-			@desc Get the name for the namespace
-			@param namespace the namespace to query
-			@return name
-			@usage System.Reflector.GetName(System.Object)
-		]======]
-		function GetName(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Name
-		end
-
-		doc [======[
-			@name GetFullName
-			@type method
-			@desc Get the full name for the namespace
-			@param namespace the namespace to query
-			@return fullname
-			@usage System.Reflector.GetFullName(System.Object)
-		]======]
-		function GetFullName(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return GetFullName4NS(ns)
-		end
-
-		doc [======[
-			@name GetSuperClass
-			@type method
-			@desc Get the superclass for the class
-			@param class the class object to query
-			@return superclass
-			@usage System.Reflector.GetSuperClass(System.Object)
-		]======]
-		function GetSuperClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].SuperClass
-		end
-
-		doc [======[
-			@name IsNameSpace
-			@type method
-			@desc Check if the object is a NameSpace
-			@param object the object to query
-			@return boolean true if the object is a NameSpace
-			@usage System.Reflector.IsNameSpace(System.Object)
-		]======]
-		function IsNameSpace(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and true or false
-		end
-
-		doc [======[
-			@name IsClass
-			@type method
-			@desc Check if the namespace is a class
-			@param object
-			@return boolean true if the object is a class
-			@usage System.Reflector.IsClass(System.Object)
-		]======]
-		function IsClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_CLASS or false
-		end
-
-		doc [======[
-			@name IsStruct
-			@type method
-			@desc Check if the namespace is a struct
-			@param object
-			@return boolean true if the object is a struct
-			@usage System.Reflector.IsStruct(System.Object)
-		]======]
-		function IsStruct(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_STRUCT or false
-		end
-
-		doc [======[
-			@name IsEnum
-			@type method
-			@desc Check if the namespace is an enum
-			@param object
-			@return boolean true if the object is a enum
-			@usage System.Reflector.IsEnum(System.Object)
-		]======]
-		function IsEnum(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_ENUM or false
-		end
-
-		doc [======[
-			@name IsInterface
-			@type method
-			@desc Check if the namespace is an interface
-			@param object
-			@return boolean true if the object is an Interface
-			@usage System.Reflector.IsInterface(System.IFSocket)
-		]======]
-		function IsInterface(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_INTERFACE or false
-		end
-
-		doc [======[
-			@name IsFinal
-			@type method
-			@desc Check if the class|interface is final, can't be re-defined
-			@param object
-			@return boolean true if the class|interface is final
-			@usage System.Reflector.IsFinal(System.Object)
-		]======]
-		function IsFinal(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].IsFinal or false
-		end
-
-		doc [======[
-			@name IsNonInheritable
-			@type method
-			@desc Check if the class|interface is non-inheritable
-			@param object
-			@return boolean true if the class|interface is non-inheritable
-			@usage System.Reflector.IsNonInheritable(System.Object)
-		]======]
-		function IsNonInheritable(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonInheritable or false
-		end
-
-		doc [======[
-			@name IsNonExpandable
-			@type method
-			@desc Check if the class|interface is non-expandable
-			@param object
-			@return boolean true if the class|interface is non-expandable
-			@usage System.Reflector.IsNonExpandable(System.Object)
-		]======]
-		function IsNonExpandable(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonExpandable or false
-		end
-
-		doc [======[
-			@name GetSubNamespace
-			@type method
-			@desc Get the sub namespace of the namespace
-			@param namespace
-			@return table the sub-namespace list
-			@usage System.Reflector.GetSubNamespace(System)
-		]======]
-		function GetSubNamespace(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and info.SubNS then
-				local ret = {}
-
-				for key in pairs(info.SubNS) do
-					tinsert(ret, key)
-				end
-
-				sort(ret)
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetExtendInterfaces
-			@type method
-			@desc Get the extend interfaces of the class
-			@param class
-			@return table the extend interface list
-			@usage System.Reflector.GetExtendInterfaces(System.Object)
-		]======]
-		function GetExtendInterfaces(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
-
-			local info = cls and _NSInfo[cls]
-
-			if info.ExtendInterface then
-				local ret = {}
-
-				for _, IF in ipairs(info.ExtendInterface) do
-					tinsert(ret, IF)
-				end
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetAllExtendInterfaces
-			@type method
-			@desc Get all the extend interfaces of the class
-			@param class
-			@return table the full extend interface list in the inheritance tree
-			@usage System.Reflector.GetAllExtendInterfaces(System.Object)
-		]======]
-		function GetAllExtendInterfaces(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
-
-			local info = cls and _NSInfo[cls]
-
-			if info.Cache4Interface then
-				local ret = {}
-
-				for _, IF in ipairs(info.Cache4Interface) do
-					tinsert(ret, IF)
-				end
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetChildClasses
-			@type method
-			@desc Get the child classes of the class
-			@param class
-			@return table the child class list
-			@usage System.Reflector.GetChildClasses(System.Object)
-		]======]
-		function GetChildClasses(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
-
-			local info = cls and _NSInfo[cls]
-
-			if info.Type == TYPE_CLASS and info.ChildClass then
-				local ret = {}
-
-				for subCls in pairs(info.ChildClass) do
-					tinsert(ret, subCls)
-				end
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetEvents
-			@type method
-			@desc Get the events of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super event handlers
-			@return table the event handler list
-			@usage System.Reflector.GetEvents(System.Object)
-		]======]
-		function GetEvents(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local ret = {}
-
-				for i, v in pairs(noSuper and info.Event or info.Cache4Event) do
-					if v then
-						tinsert(ret, i)
-					end
-				end
-
-				sort(ret)
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetProperties
-			@type method
-			@desc Get the properties of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super properties
-			@return table the property list
-			@usage System.Reflector.GetProperties(System.Object)
-		]======]
-		function GetProperties(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local ret = {}
-
-				for i, v in pairs(noSuper and info.Property or info.Cache4Property) do
-					if v then
-						tinsert(ret, i)
-					end
-				end
-
-				sort(ret)
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetMethods
-			@type method
-			@desc Get the methods of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super methodes
-			@return table the method list
-			@usage System.Reflector.GetMethods(System.Object)
-		]======]
-		function GetMethods(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local ret = {}
-
-				for k, v in pairs(noSuper and info.Method or info.Cache4Method) do
-					tinsert(ret, k)
-				end
-
-				if not noSuper then
-					for k, v in pairs(info.Method) do
-						if k:match("^_") then
-							tinsert(ret, k)
-						end
-					end
-				end
-
-				sort(ret)
-
-				return ret
-			end
-		end
-
-		doc [======[
-			@name GetPropertyType
-			@type method
-			@desc Get the property type of the class
-			@param class|interface
-			@param propName the property name
-			@return type the property type
-			@usage System.Reflector.GetPropertyType(System.Object, "Name")
-		]======]
-		function GetPropertyType(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local ty = info.Cache4Property[propName].Type
-
-				return ty and ty:Copy()
-			end
-		end
-
-		doc [======[
-			@name HasProperty
-			@type method
-			@desc whether the property is existed
-			@param class|interface
-			@param propName
-			@return boolean true if the class|interface has the property
-			@usage System.Reflector.HasProperty(System.Object, "Name")
-		]======]
-		function HasProperty(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				return true
-			end
-
-			return false
-		end
-
-		doc [======[
-			@name IsPropertyReadable
-			@type method
-			@desc whether the property is readable
-			@param class|interface
-			@param propName
-			@return boolean true if the property is readable
-			@usage System.Reflector.IsPropertyReadable(System.Object, "Name")
-		]======]
-		function IsPropertyReadable(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local prop = info.Cache4Property[propName]
-				return (prop.Get or prop.GetMethod or prop.Field) and true or false
-			end
-		end
-
-		doc [======[
-			@name IsPropertyWritable
-			@type method
-			@desc whether the property is writable
-			@param class|interface
-			@param propName
-			@return boolean true if the property is writable
-			@usage System.Reflector.IsPropertyWritable(System.Object, "Name")
-		]======]
-		function IsPropertyWritable(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local prop = info.Cache4Property[propName]
-				return (prop.Set or prop.SetMethod or prop.Field) and true or false
-			end
-		end
-
-		doc [======[
-			@name GetEnums
-			@type method
-			@desc Get the enums of the enum
-			@param enum
-			@return table the enum index list
-			@usage System.Reflector.GetEnums(System.SampleEnum)
-		]======]
-		function GetEnums(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and _NSInfo[ns]
-
-			if info and info.Type == TYPE_ENUM then
-				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
-					local tmp = {}
-					local zero = nil
-
-					for i, v in pairs(info.Enum) do
-						if type(v) == "number" then
-							if v > 0 then
-								tmp[floor(log(v)/log(2)) + 1] = i
-							else
-								zero = i
-							end
-						end
-					end
-
-					if zero then
-						tinsert(tmp, 1, zero)
-					end
-
-					return tmp
-				else
-					local tmp = {}
-
-					for i in pairs(info.Enum) do
-						tinsert(tmp, i)
-					end
-
-					sort(tmp)
-
-					return tmp
-				end
-			end
-		end
-
-		doc [======[
-			@name ParseEnum
-			@type method
-			@desc Get the enum index of the enum value
-			@param enum
-			@param value
-			@return index
-			@usage System.Reflector.ParseEnum(System.SampleEnum, 1)
-		]======]
-		function ParseEnum(ns, value)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			if ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_ENUM and _NSInfo[ns].Enum then
-				if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(value) == "number" then
-					local ret = {}
-
-					if value == 0 then
-						for n, v in pairs(_NSInfo[ns].Enum) do
-							if v == value then
-								return n
-							end
-						end
-					else
-						for n, v in pairs(_NSInfo[ns].Enum) do
-							if ValidateFlags(v, value) then
-								tinsert(ret, n)
-							end
-						end
-					end
-
-					return unpack(ret)
-				else
-					for n, v in pairs(_NSInfo[ns].Enum) do
-						if v == value then
-							return n
-						end
-					end
-				end
-			end
-		end
-
-		doc [======[
-			@name ValidateFlags
-			@type method
-			@desc  hether the value is contains on the target value
-			@param checkValue like 1, 2, 4, 8, ...
-			@param targetValue like 3 : (1 + 2)
-			@return boolean true if the targetValue contains the checkValue
-		]======]
-		function ValidateFlags(checkValue, targetValue)
-			targetValue = targetValue % (2 * checkValue)
-			return (targetValue - targetValue % checkValue) == checkValue
-		end
-
-		doc [======[
-			@name HasEvent
-			@type method
-			@desc Check if the class|interface has that event
-			@param class|interface
-			@param event the event handler name
-			@return true if the class|interface has the event
-			@usage System.Reflector.HasEvent(Addon, "OnEvent")
-		]======]
-		function HasEvent(cls, sc)
-			if type(cls) == "string" then cls = ForName(cls) end
-
-			local info = _NSInfo[cls]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				return info.Cache4Event[sc] or false
-			end
-		end
-
-		doc [======[
-			@name GetStructType
-			@type method
-			@desc Get the type of the struct
-			@param struct
-			@return string
-		]======]
-		function GetStructType(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and rawget(_NSInfo, ns)
-
-			if info and info.Type == TYPE_STRUCT then
-				return info.SubType
-			end
-		end
-
-		doc [======[
-			@name GetStructArrayElement
-			@type method
-			@desc Get the array element type of the struct
-			@param ns
-			@return type the array element's type
-		]======]
-		function GetStructArrayElement(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and rawget(_NSInfo, ns)
-
-			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY then
-				return info.ArrayElement
-			end
-		end
-
-		doc [======[
-			@name GetStructParts
-			@type method
-			@desc Get the parts of the struct
-			@param struct
-			@return table struct part name list
-			@usage System.Reflector.GetStructParts(Position)
-		]======]
-		function GetStructParts(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and rawget(_NSInfo, ns)
-
-			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
-					local tmp = {}
-
-					for _, part in ipairs(info.Members) do
-						tinsert(tmp, part)
-					end
-
-					return tmp
-				elseif info.SubType == _STRUCT_TYPE_ARRAY then
-					return { "element" }
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					local tmp = {}
-
-					for key, value in pairs(info.StructEnv) do
-						if type(key) == "string" and IsType(value) then
-							tinsert(tmp, key)
-						end
-					end
-
-					sort(tmp)
-
-					return tmp
-				end
-			end
-		end
-
-		doc [======[
-			@name GetStructPart
-			@type method
-			@desc Get the part's type of the struct
-			@param struct
-			@param part the part's name
-			@return type the part's type
-			@usage System.Reflector.GetStructPart(Position, "x")
-		]======]
-		function GetStructPart(ns, part)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			local info = ns and rawget(_NSInfo, ns)
-
-			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
-					for _, p in ipairs(info.Members) do
-						if p == part and IsType(info.StructEnv[part]) then
-							return info.StructEnv[part]:Copy()
-						end
-					end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-					return info.ArrayElement:Copy()
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					if IsType(info.StructEnv[part]) then
-						return info.StructEnv[part]:Copy()
-					end
-				end
-			end
-		end
-
-		doc [======[
-			@name IsSuperClass
-			@type method
-			@desc Check if this first arg is a child class of the next arg
-			@param childclass
-			@param superclass
-			@return boolean true if the supeclass is the childclass's super class
-			@usage System.Reflector.IsSuperClass(UIObject, Object)
-		]======]
-		function IsSuperClass(child, super)
-			if type(child) == "string" then child = ForName(child) end
-			if type(super) == "string" then super = ForName(super) end
-
-			return IsClass(child) and IsClass(super) and IsChildClass(super, child)
-		end
-
-		doc [======[
-			@name IsExtendedInterface
-			@type method
-			@desc Check if the class is extended from the interface
-			@param class|interface
-			@param interface
-			@return boolean true if the first arg is extend from the second
-			@usage System.Reflector.IsExtendedInterface(UIObject, IFSocket)
-		]======]
-		function IsExtendedInterface(cls, IF)
-			if type(cls) == "string" then cls = ForName(cls) end
-			if type(IF) == "string" then IF = ForName(IF) end
-
-			return IsExtend(IF, cls)
-		end
-
-		doc [======[
-			@name GetObjectClass
-			@type method
-			@desc Get the class type of this object
-			@param object
-			@return class the object's class
-			@usage System.Reflector.GetObjectClass(obj)
-		]======]
-		function GetObjectClass(obj)
-			return type(obj) == "table" and getmetatable(obj)
-		end
-
-		doc [======[
-			@name ObjectIsClass
-			@type method
-			@desc Check if this object is an instance of the class
-			@param object
-			@param class
-			@return true if the object is an instance of the class or it's child class
-			@usage System.Reflector.ObjectIsClass(obj, Object)
-		]======]
-		function ObjectIsClass(obj, cls)
-			if type(cls) == "string" then cls = ForName(cls) end
-			return (obj and cls and IsChildClass(cls, GetObjectClass(obj))) or false
-		end
-
-		doc [======[
-			@name ObjectIsInterface
-			@type method
-			@desc Check if this object is an instance of the interface
-			@param object
-			@param interface
-			@return true if the object's class is extended from the interface
-			@usage System.Reflector.ObjectIsInterface(obj, IFSocket)
-		]======]
-		function ObjectIsInterface(obj, IF)
-			if type(IF) == "string" then IF = ForName(IF) end
-			return (obj and IF and IsExtend(IF, GetObjectClass(obj))) or false
-		end
-
-		doc [======[
-			@name ActiveThread
-			@type method
-			@desc Active thread mode for special events.
-			@param object
-			@param ... event handler name list
-			@return nil
-			@usage System.Reflector.ActiveThread(obj, "OnClick", "OnEnter")
-		]======]
-		function ActiveThread(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then
-						obj[name].__ThreadActivated = true
-					end
-				end
-			end
-		end
-
-		doc [======[
-			@name IsThreadActivated
-			@type method
-			@desc Whether the thread mode is activated for special events.
-			@param obect
-			@param event
-			@return boolean true if the object has active thread mode for the given event.
-			@usage System.Reflector.IsThreadActivated(obj, "OnClick")
-		]======]
-		function IsThreadActivated(obj, sc)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls and HasEvent(cls, sc) then
-				return obj[sc].__ThreadActivated or false
-			end
-
-			return false
-		end
-
-		doc [======[
-			@name InactiveThread
-			@type method
-			@desc Inactive thread mode for special events.
-			@param object
-			@param ... event name list
-			@return nil
-			@usage System.Reflector.InactiveThread(obj, "OnClick", "OnEnter")
-		]======]
-		function InactiveThread(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then
-						obj[name].__ThreadActivated = nil
-					end
-				end
-			end
-		end
-
-		doc [======[
-			@name BlockEvent
-			@type method
-			@desc Block event for object
-			@param object
-			@param ... the event handler name list
-			@return nil
-			@usage System.Reflector.BlockEvent(obj, "OnClick", "OnEnter")
-		]======]
-		function BlockEvent(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then
-						obj[name]._Blocked = true
-					end
-				end
-			end
-		end
-
-		doc [======[
-			@name IsEventBlocked
-			@type method
-			@desc Whether the event is blocked for object
-			@param object
-			@param event
-			@return boolean true if the event is blocked
-			@usage System.Reflector.IsEventBlocked(obj, "OnClick")
-		]======]
-		function IsEventBlocked(obj, sc)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls and HasEvent(cls, sc) then
-				return obj[sc]._Blocked or false
-			end
-
-			return false
-		end
-
-		doc [======[
-			@name UnBlockEvent
-			@type method
-			@desc Un-Block event for object
-			@param object
-			@param ... event handler name list
-			@return nil
-			@usage System.Reflector.UnBlockEvent(obj, "OnClick", "OnEnter")
-		]======]
-		function UnBlockEvent(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then
-						obj[name]._Blocked = nil
-					end
-				end
-			end
-		end
-
-		-- Recycle the test type object
-		_Validate_Type = setmetatable({}, {
-			__call = function(self, key)
-				if key then
-					key.AllowNil = nil
-					key[1] = nil
-					key.Name = nil
-
-					tinsert(self, key)
-				else
-					if next(self) then
-						return tremove(self)
-					else
-						return BuildType(nil)
-					end
-				end
-			end,
-		})
-
-		doc [======[
-			@name Validate
-			@type method
-			@desc Validating the value to the given type.
-			@format type, value, name[, prefix[, stacklevel]]
-			@param type such like Object+String+nil
-			@param value the test value
-			@param name the parameter's name
-			@param prefix the prefix string
-			@param stacklevel set if not in the main function call, only work when prefix is setted
-			@return nil
-			@usage System.Reflector.Validate(System.String+nil, "Test")
-		]======]
-		function Validate(types, value, name, prefix, stacklevel)
-			stacklevel = type(stacklevel) == "number" and stacklevel > 0 and stacklevel or 0
-
-			stacklevel = math.floor(stacklevel)
-
-			if type(name) ~= "string" then name = "value" end
-
-			if types == nil then
-				return value
-			end
-
-			if IsNameSpace(types) then
-				local vtype = _Validate_Type()
-
-				vtype.AllowNil = nil
-				vtype[1] = types
-				vtype.Name = name
-
-				types = vtype
-			end
-
-			local ok, _type = pcall(BuildType, types, name)
-
-			if ok then
-				if _type then
-					ok, value = pcall(_type.Validate, _type, value)
-
-					-- Recycle
-					_Validate_Type(types)
-
-					if not ok then
-						value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-						if value:find("%%s") then
-							value = value:gsub("%%s[_%w]*", name)
-						end
-
-						if type(prefix) == "string" then
-							error(prefix .. value, 3 + stacklevel)
-						else
-							error(value, 2)
-						end
-					end
-				else
-					-- Recycle
-					_Validate_Type(types)
-				end
-
-				return value
-			else
-				-- Recycle
-				_Validate_Type(types)
-
-				error("Usage : System.Reflector.Validate(type, value[, name[, prefix]]) : type - must be nil, enum, struct or class.", 2)
-			end
-
-			return value
-		end
-
-		doc [======[
-			@name EnableDocumentSystem
-			@type method
-			@desc Enable or disbale the document system, only effect later created document
-			@param enabled true to enable the document system
-			@return nil
-			@usage System.Reflector.EnableDocumentSystem(true)
-		]======]
-		function EnableDocumentSystem(enabled)
-			EnableDocument(enabled)
-		end
-
-		doc [======[
-			@name IsDocumentSystemEnabled
-			@type method
-			@desc Whether the document system is enabled
-			@return boolean
-		]======]
-		function IsDocumentSystemEnabled()
-			return IsDocumentEnabled()
-		end
-
-		doc [======[
-			@name GetDocument
-			@type method
-			@desc Get the document settings
-			@format namespace, docType, name[, part]
-			@param namespace
-			@param doctype such as "property"
-			@param name the query name
-			@param part the part name
-			@return Iterator the iterator to get detail
-			@usage
-				for part, value in System.Reflector.GetDocument(System.Object, "method", "GetClass")
-			<br>	do print(part, value)
-			<br>end
-		]======]
-		function GetDocument(ns, doctype, name, part)
-			return GetDocumentPart(ns, doctype, name, part)
-		end
-
-		doc [======[
-			@name HasDocument
-			@type method
-			@desc Check if has the document
-			@param namespace
-			@param doctype
-			@param name
-			@return true if the document is present
-		]======]
-		function HasDocument(ns, doctype, name)
-			return HasDocumentPart(ns, doctype, name)
-		end
-
-		doc [======[
-			@name Help
-			@type method
-			@desc Get the document detail
-			@format class|interface[, event|property|method, name]
-			@format class|interface, name
-			@format enum|struct
-			@param class|interface|enum|struct
-			@param event|property|method
-			@param name the name to query
-			@return string the detail information
-		]======]
-
-		-- The cache for constructor parameters
-		local function buildSubNamespace(ns)
-			local result = ""
-
-			local _Enums = CACHE_TABLE()
-			local _Structs = CACHE_TABLE()
-			local _Classes = CACHE_TABLE()
-			local _Interfaces = CACHE_TABLE()
-			local _Namespaces = CACHE_TABLE()
-
-			local subNS = GetSubNamespace(ns)
-
-			if subNS and next(subNS) then
-				for _, sns in ipairs(subNS) do
-					sns = ns[sns]
-
-					if IsEnum(sns) then
-						tinsert(_Enums, sns)
-					elseif IsStruct(sns) then
-						tinsert(_Structs, sns)
-					elseif IsInterface(sns) then
-						tinsert(_Interfaces, sns)
-					elseif IsClass(sns) then
-						tinsert(_Classes, sns)
-					else
-						tinsert(_Namespaces, sns)
-					end
-				end
-
-				if next(_Enums) then
-					result = result .. "\n\n Sub Enum :"
-
-					for _, sns in ipairs(_Enums) do
-						result = result .. "\n    " .. GetName(sns)
-					end
-				end
-
-				if next(_Structs) then
-					result = result .. "\n\n Sub Struct :"
-
-					for _, sns in ipairs(_Structs) do
-						result = result .. "\n    " .. GetName(sns)
-					end
-				end
-
-				if next(_Interfaces) then
-					result = result .. "\n\n Sub Interface :"
-
-					for _, sns in ipairs(_Interfaces) do
-						result = result .. "\n    " .. GetName(sns)
-					end
-				end
-
-				if next(_Classes) then
-					result = result .. "\n\n Sub Class :"
-
-					for _, sns in ipairs(_Classes) do
-						result = result .. "\n    " .. GetName(sns)
-					end
-				end
-
-				if next(_Namespaces) then
-					result = result .. "\n\n Sub NameSpace :"
-
-					for _, sns in ipairs(_Namespaces) do
-						result = result .. "\n    " .. GetName(sns)
-					end
-				end
-			end
-
-			CACHE_TABLE(_Enums)
-			CACHE_TABLE(_Structs)
-			CACHE_TABLE(_Classes)
-			CACHE_TABLE(_Interfaces)
-			CACHE_TABLE(_Namespaces)
-
-			return result
-		end
-
-		function Help(ns, doctype, name)
-			if type(ns) == "string" then ns = ForName(ns) end
-
-			if ns and rawget(_NSInfo, ns) then
-				local info = _NSInfo[ns]
-
-				if info.Type == TYPE_ENUM then
-					-- Enum
-					local result = ""
-					local value
-
-					if info.IsFinal then
-						result = result .. "[__Final__]\n"
-					end
-
-					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) then
-						result = result .. "[__Flags__]\n"
-					end
-
-					result = result .. "[Enum] " .. GetFullName(ns) .. " :"
-
-					for _, enums in ipairs(GetEnums(ns)) do
-						value = ns[enums]
-
-						if type(value) == "string" then
-							value = ("%q"):format(value)
-						else
-							value = tostring(value)
-						end
-
-						result = result .. "\n    " .. enums .. " = " .. value
-					end
-					return result
-				elseif info.Type == TYPE_STRUCT then
-					-- Struct
-					local result = ""
-
-					if info.IsFinal then
-						result = result .. "[__Final__]\n"
-					end
-
-					if info.SubType == _STRUCT_TYPE_ARRAY then
-						result = result .. "[__StructType__(StructType.Array)]\n"
-					elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-						result = result .. "[__StructType__(StructType.Custom)]\n"
-					end
-
-					result = result .. "[Struct] " .. GetFullName(ns) .. " :"
-
-					-- SubNameSpace
-					result = result .. buildSubNamespace(ns)
-
-					if info.SubType == _STRUCT_TYPE_MEMBER or info.SubType == _STRUCT_TYPE_CUSTOM then
-						local parts = GetStructParts(ns)
-
-						if parts and next(parts) then
-							result = result .. "\n\n  Field:"
-
-							for _, name in ipairs(parts) do
-								result = result .. "\n    " .. name .. " = " .. tostring(info.StructEnv[name])
-							end
-						end
-					elseif info.SubType == _STRUCT_TYPE_ARRAY then
-						if info.ArrayElement then
-							result = result .. "\n\n  Element :\n    " .. tostring(info.ArrayElement)
-						end
-					end
-
-					return result
-				elseif info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
-					-- Interface & Class
-					if type(doctype) ~= "string" then
-						local result = ""
-						local desc
-
-						if info.IsFinal then
-							result = result .. "[__Final__]\n"
-						end
-
-						if info.NonInheritable then
-							result = result .. "[__NonInheritable__]\n"
-						end
-
-						if info.NonExpandable then
-							result = result .. "[__NonExpandable__]\n"
-						end
-
-						if info.Type == TYPE_INTERFACE then
-							if __Attribute__._IsDefined(ns, AttributeTargets.Interface, __Cache__) then
-								result = result .. "[__Cache__]\n"
-							end
-
-							result = result .. "[Interface] " .. GetFullName(ns) .. " :"
-
-							if HasDocumentPart(ns, "interface", GetName(ns)) then
-								desc = GetDocumentPart(ns, "interface", GetName(ns), "desc")
-							elseif HasDocumentPart(ns, "default", GetName(ns)) then
-								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
-							end
-						else
-							if __Attribute__._IsDefined(ns, AttributeTargets.Class, __Cache__) then
-								result = result .. "[__Cache__]\n"
-							end
-
-							if __Attribute__._IsDefined(ns, AttributeTargets.Class, __Unique__) then
-								result = result .. "[__Unique__]\n"
-							end
-
-							if IsChildClass(__Attribute__, ns) then
-								local usage = __Attribute__._GetClassAttribute(ns, __AttributeUsage__)
-
-								if usage then
-									result = result .. "[__AttributeUsage__{ "
-
-									result = result .. "AttributeTarget = " .. Serialize(usage.AttributeTarget, AttributeTargets) .. ", "
-
-									result = result .. "Inherited = " .. tostring(usage.Inherited and true or false) .. ", "
-
-									result = result .. "AllowMultiple = " .. tostring(usage.AllowMultiple and true or false) .. ", "
-
-									result = result .. "RunOnce = " .. tostring(usage.RunOnce and true or false)
-
-									result = result .. " }]\n"
-								end
-							end
-
-							result = result .. "[Class] " .. GetFullName(ns) .. " :"
-
-							if HasDocumentPart(ns, "class", GetName(ns)) then
-								desc = GetDocumentPart(ns, "class", GetName(ns), "desc")
-							elseif HasDocumentPart(ns, "default", GetName(ns)) then
-								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
-							end
-						end
-
-						-- Desc
-						desc = desc and desc()
-						if desc then
-							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n        "):gsub("  %s+", "\n        "):gsub("\t+", "\n        ")
-						end
-
-						-- Inherit
-						if info.SuperClass then
-							result = result .. "\n\n  Super Class :\n    " .. GetFullName(info.SuperClass)
-						end
-
-						-- Extend
-						if info.ExtendInterface and next(info.ExtendInterface) then
-							result = result .. "\n\n  Extend Interface :"
-							for _, IF in ipairs(info.ExtendInterface) do
-								result = result .. "\n    " .. GetFullName(IF)
-							end
-						end
-
-						-- SubNameSpace
-						result = result .. buildSubNamespace(ns)
-
-						-- Event
-						if next(info.Event) then
-							result = result .. "\n\n  Event :"
-							for _, evt in ipairs(GetEvents(ns, true)) do
-								-- Desc
-								desc = HasDocument(ns, "event", evt) and GetDocument(ns, "event", evt, "desc")
-								desc = desc and desc()
-								if desc then
-									desc = " - " .. desc
-								else
-									desc = ""
-								end
-
-								result = result .. "\n    " .. evt .. desc
-							end
-						end
-
-						-- Property
-						if next(info.Property) then
-							result = result .. "\n\n  Property :"
-							for _, prop in ipairs(GetProperties(ns, true)) do
-								-- Desc
-								desc = HasDocument(ns, "property", prop) and GetDocument(ns, "property", prop, "desc")
-								desc = desc and desc()
-								if desc then
-									desc = " - " .. desc
-								else
-									desc = ""
-								end
-
-								result = result .. "\n    " .. prop .. desc
-							end
-						end
-
-						-- Method
-						if next(info.Method) then
-							result = result .. "\n\n  Method :"
-							for _, method in ipairs(GetMethods(ns, true)) do
-								-- Desc
-								desc = HasDocument(ns, "method", method) and GetDocument(ns, "method", method, "desc")
-								desc = desc and desc()
-								if desc then
-									desc = " - " .. desc
-								else
-									desc = ""
-								end
-								result = result .. "\n    " .. method .. desc
-							end
-						end
-
-						-- Need
-						if info.Type == TYPE_INTERFACE then
-							desc = GetDocumentPart(ns, "interface", GetName(ns), "overridable")
-
-							if desc then
-								result = result .. "\n\n  Overridable :"
-
-								for need, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. need .. " - " .. info
-									else
-										result = result .. "\n    " .. need
-									end
-								end
-							end
-						end
-
-						-- Constructor
-						local isFormat = false
-
-						if info.Type == TYPE_CLASS then
-							-- __Arguments__
-							local args = __Attribute__._GetConstructorAttribute(ns, __Arguments__)
-
-							if args and #args > 0 then
-								result = result .. "\n\n  Init table field :"
-
-								for i = 1, #args do
-									result = result .. "\n    " .. args[i].Name
-
-									if args[i].Type then
-										result = result .. " = " .. tostring(args[i].Type)
-									end
-
-									if args[i].Default then
-										result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
-									end
-								end
-							end
-
-							while ns do
-								isFormat = true
-
-								desc = nil
-
-								if HasDocumentPart(ns, "class", GetName(ns)) then
-									desc = GetDocumentPart(ns, "class", GetName(ns), "format")
-									if not desc then
-										desc = GetDocumentPart(ns, "class", GetName(ns), "param")
-										isFormat = false
-									end
-								elseif HasDocumentPart(ns, "default", GetName(ns)) then
-									desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
-									if not desc then
-										desc = GetDocumentPart(ns, "default", GetName(ns), "param")
-										isFormat = false
-									end
-								end
-
-								if desc then
-									-- Constructor
-									result = result .. "\n\n  Constructor :"
-									if isFormat then
-										for fmt in desc do
-											result = result .. "\n    " .. GetName(ns) .. "(" .. fmt .. ")"
-										end
-									else
-										result = result .. "\n    " .. GetName(ns) .. "("
-
-										local isFirst = true
-
-										for param in desc do
-											if isFirst then
-												isFirst = false
-												result = result .. param
-											else
-												result = result .. ", " .. param
-											end
-										end
-
-										result = result .. ")"
-									end
-
-									-- Params
-									desc = GetDocumentPart(ns, "class", GetName(ns), "param") or GetDocumentPart(ns, "default", GetName(ns), "param")
-									if desc then
-										result = result .. "\n\n  Parameter :"
-										for param, info in desc do
-											if info and info:len() > 0 then
-												result = result .. "\n    " .. param .. " - " .. info
-											else
-												result = result .. "\n    " .. param
-											end
-										end
-									end
-
-									break
-								end
-
-								ns = GetSuperClass(ns)
-							end
-						end
-
-						return result
-					else
-						local result
-						local querytype
-
-						if info.Type == TYPE_INTERFACE then
-							result = "[Interface] " .. GetFullName(ns) .. " - "
-						else
-							result = "[Class] " .. GetFullName(ns) .. " - "
-						end
-
-						if type(name) ~= "string" then
-							doctype, name = nil, doctype
-						end
-
-						querytype = doctype
-
-						if not querytype then
-							if HasEvent(ns, name) then
-								querytype = "event"
-							elseif HasProperty(ns, name) then
-								querytype = "property"
-							elseif type(ns[name]) == "function" then
-								querytype = "method"
-							else
-								return
-							end
-						end
-
-						doctype = querytype or "default"
-
-						if doctype:match("^%a") then
-							result = result .. "[" .. doctype:match("^%a"):upper() .. doctype:sub(2, -1) .. "] " .. name .. " :"
-						else
-							result = result .. "[" .. doctype .. "] " .. name .. " :"
-						end
-
-						local hasDocument = HasDocumentPart(ns, doctype, name)
-
-						-- Desc
-						local desc = hasDocument and GetDocumentPart(ns, doctype, name, "desc")
-						desc = desc and desc()
-						if desc then
-							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
-						end
-
-						if querytype == "event" then
-							-- __Thread__
-							if __Attribute__._IsEventAttributeDefined(ns, name, __Thread__) then
-								result = result .. "\n\n  [__Thread__]"
-							end
-
-							-- Format
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
-							if desc then
-								result = result .. "\n\n  Format :"
-								for fmt in desc do
-									result = result .. "\n    " .. "function object:" .. name .. "(" .. fmt .. ")\n        -- Handle the event\n    end"
-								end
-							else
-								result = result .. "\n\n  Format :\n    function object:" .. name .. "("
-
-								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
-
-								if desc then
-									local isFirst = true
-
-									for param in desc do
-										if isFirst then
-											isFirst = false
-											result = result .. param
-										else
-											result = result .. ", " .. param
-										end
-									end
-								end
-
-								result = result .. ")\n        -- Handle the event\n    end"
-							end
-
-							-- Params
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
-							if desc then
-								result = result .. "\n\n  Parameter :"
-								for param, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. param .. " - " .. info
-									else
-										result = result .. "\n    " .. param
-									end
-								end
-							end
-						elseif querytype == "property" then
-							local types = GetPropertyType(ns, name)
-
-							if types then
-								result = result .. "\n\n  Type :\n    " .. tostring(types)
-							end
-
-							-- Readonly
-							result = result .. "\n\n  Readable :\n    " .. tostring(IsPropertyReadable(ns, name))
-
-							-- Writable
-							result = result .. "\n\n  Writable :\n    " .. tostring(IsPropertyWritable(ns, name))
-						elseif querytype == "method" then
-							local isGlobal = false
-
-							if name:match("^_") then
-								isGlobal = true
-							else
-								if info.Type == TYPE_INTERFACE and info.NonInheritable then
-									isGlobal = true
-								end
-							end
-
-							-- __Thread__
-							if __Attribute__._IsMethodAttributeDefined(ns, name, __Thread__) then
-								result = result .. "\n\n  [__Thread__]"
-							end
-
-							-- Format
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
-							result = result .. "\n\n  Format :"
-							if desc then
-								for fmt in desc do
-									if isGlobal then
-										result = result .. "\n    " .. GetName(ns) .. "." .. name .. "(" .. fmt .. ")"
-									else
-										result = result .. "\n    object:" .. name .. "(" .. fmt .. ")"
-									end
-								end
-							else
-								if isGlobal then
-									result = result .. "\n    " .. GetName(ns) .. "." .. name .. "("
-								else
-									result = result .. "\n    object:" .. name .. "("
-								end
-
-								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
-
-								if desc then
-									local isFirst = true
-
-									for param in desc do
-										if isFirst then
-											isFirst = false
-											result = result .. param
-										else
-											result = result .. ", " .. param
-										end
-									end
-								end
-
-								result = result .. ")"
-							end
-
-							-- Params
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
-							if desc then
-								result = result .. "\n\n  Parameter :"
-								for param, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. param .. " - " .. info
-									else
-										result = result .. "\n    " .. param
-									end
-								end
-							else
-								-- __Arguments__
-								local args = __Attribute__._GetMethodAttribute(ns, name, __Arguments__)
-
-								if args and #args > 0 then
-									result = result .. "\n\n  Parameter :"
-
-									for i = 1, #args do
-										result = result .. "\n    " .. args[i].Name
-
-										if args[i].Type then
-											result = result .. " = " .. tostring(args[i].Type)
-										end
-
-										if args[i].Default then
-											result = result .. " (Default : " .. Serialize(args[i].Default, args[i].Type) .. " )"
-										end
-									end
-								end
-							end
-
-							-- ReturnFormat
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "returnformat")
-							if desc then
-								result = result .. "\n\n  Return Format :"
-								for fmt in desc do
-									result = result .. "\n    " .. fmt
-								end
-							end
-
-							-- Returns
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "return")
-							if desc then
-								result = result .. "\n\n  Return :"
-								for ret, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. ret .. " - " .. info
-									else
-										result = result .. "\n    " .. ret
-									end
-								end
-							end
-						else
-							-- skip
-						end
-
-						-- Usage
-						desc = hasDocument and GetDocumentPart(ns, doctype, name, "usage")
-						if desc then
-							result = result .. "\n\n  Usage :"
-							for usage in desc do
-								result = result .. "\n    " .. usage:gsub("<br>", "\n    ")
-							end
-						end
-
-						return result
-					end
-				else
-					local result = "[NameSpace] " .. GetFullName(ns) .. " :"
-					local desc
-
-					if HasDocumentPart(ns, "namespace", GetName(ns)) then
-						desc = GetDocumentPart(ns, "namespace", GetName(ns), "desc")
-					elseif HasDocumentPart(ns, "default", GetName(ns)) then
-						desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
-					end
-
-					-- Desc
-					desc = desc and desc()
-					if desc then
-						result = result .. "\n\n  Description :\n    " .. desc
-					end
-
-					-- SubNameSpace
-					result = result .. buildSubNamespace(ns)
-
-					return result
-				end
-			end
-		end
-
-		doc [======[
-			@name Serialize
-			@type method
-			@desc Serialize the data
-			@format data[, type]
-			@param data the data
-			@param type the data's type
-			@return string
-		]======]
-		local function SerializeData(data)
-			if type(data) == "string" then
-				return strformat("%q", data)
-			elseif type(data) == "number" or type(data) == "boolean" then
-				return tostring(data)
-			elseif type(data) == "table" then
-				local cache = CACHE_TABLE()
-
-				tinsert(cache, "{")
-
-				for k, v in pairs(data) do
-					if ( type(k) == "number" or type(k) == "string" ) and
-						( type(v) == "string" or type(v) == "number" or type(v) == "boolean" or type(v) == "table" ) then
-
-						if type(k) == "number" then
-							tinsert(cache, ("[%s] = %s,"):format(tostring(k), SerializeData(v)))
-						else
-							tinsert(cache, ("%s = %s,"):format(k, SerializeData(v)))
-						end
-					end
-				end
-
-				tinsert(cache, "}")
-
-				local ret = tblconcat(cache, " ")
-
-				CACHE_TABLE(cache)
-
-				return ret
-			else
-				-- Don't support any point values
-				return nil
-			end
-		end
-
-		function Serialize(data, ns)
-			if ns then
-				if ObjectIsClass(ns, Type) then
-					ns = ns:GetObjectType(data)
-
-					if ns == false then
-						return nil
-					elseif ns == nil then
-						return "nil"
-					end
-				elseif type(ns) == "string" then
-					ns = ForName(ns)
-				end
-			end
-
-			if ns and rawget(_NSInfo, ns) then
-				if Reflector.IsEnum(ns) then
-					if __Attribute__._IsDefined(ns, AttributeTargets.Enum, __Flags__) and type(data) == "number" then
-						local ret = {Reflector.ParseEnum(ns, data)}
-
-						local result = ""
-
-						for i, str in ipairs(ret) do
-							if i > 1 then
-								result = result .. " + "
-							end
-							result = result .. (tostring(ns) .. "." .. str)
-						end
-
-						return result
-					else
-						local str = Reflector.ParseEnum(ns, data)
-
-						return str and (tostring(ns) .. "." .. str)
-					end
-				elseif Reflector.IsClass(ns) then
-					-- Class handle the serialize itself with __tostring
-					return tostring(data)
-				elseif Reflector.IsStruct(ns) then
-					if Reflector.GetStructType(ns) == "MEMBER" and type(data) == "table" then
-						local parts = Reflector.GetStructParts(ns)
-
-						if not parts or not next(parts) then
-							-- Well, what a no member struct can be used for?
-							return tostring(ns) .. "( )"
-						else
-							local ret = tostring(ns) .. "( "
-
-							for i, part in ipairs(parts) do
-								local sty = Reflector.GetStructPart(ns, part)
-								local value = data[part]
-
-								if sty and #sty == 1 then
-									value = Serialize(value, sty[1])
-								else
-									value = SerializeData(value)
-								end
-
-								if i == 1 then
-									ret = ret .. tostring(value)
-								else
-									ret = ret .. ", " .. tostring(value)
-								end
-							end
-
-							ret = ret .. " )"
-
-							return ret
-						end
-					elseif Reflector.GetStructType(ns) == "ARRAY" and type(data) == "table" then
-						local ret = tostring(ns) .. "( "
-
-						sty = Reflector.GetStructArrayElement(ns)
-
-						if sty and #sty == 1 then
-							for i, v in ipairs(data) do
-								v = Serialize(v, sty[1])
-
-								if i == 1 then
-									ret = ret .. tostring(v)
-								else
-									ret = ret .. ", " .. tostring(v)
-								end
-							end
-						else
-							for i, v in ipairs(data) do
-								v = SerializeData(v)
-
-								if i == 1 then
-									ret = ret .. tostring(v)
-								else
-									ret = ret .. ", " .. tostring(v)
-								end
-							end
-						end
-
-						ret = ret .. " )"
-
-						return ret
-					elseif type(data) == "table" and type(data.__tostring) == "function" then
-						return data:__tostring()
-					else
-						return SerializeData(data)
-					end
-				end
-			else
-				-- Serialize normal datas
-				return SerializeData(data)
-			end
-		end
-
-		doc [======[
-			@name ThreadCall
-			@type method
-			@desc Call the function in a thread from the thread pool of the system
-			@param func the function
-			@param ... the parameters
-			@return any
-		]======]
-		function ThreadCall(func, ...)
-			return CallThread(func, ...)
-		end
-
-		doc [======[
-			@name IsEqual
-			@type method
-			@desc Whether the two objects are objects with same settings
-			@param obj1 object, the object used to compare
-			@param obj2 object, the object used to compare to
-			@return boolean
-		]======]
-		function IsEqual(obj1, obj2)
-			if obj1 == obj2 then return true end
-			if type(obj1) ~= "table" then return false end
-			if type(obj2) ~= "table" then return false end
-
-			local cls = getmetatable(obj1)
-			local info = cls and rawget(_NSInfo, cls)
-
-			if info then
-				if cls ~= getmetatable(obj2) then return false end
-
-				-- Check properties
-				for name, prop in pairs(info.Cache4Property) do
-					if prop.Get or prop.GetMethod or prop.Field then
-						if not IsEqual(obj1[name], obj2[name]) then
-							return false
-						end
-					end
-				end
-			end
-
-			-- Check fields
-			for k, v in pairs(obj1) do
-				if not IsEqual(v, rawget(obj2, k)) then
-					return false
-				end
-			end
-
-			for k, v in pairs(obj2) do
-				if rawget(obj1, k) == nil then
-					return false
-				end
-			end
-
-			return true
-		end
-	endinterface "Reflector"
-
-	------------------------------------------------------
-	-- System.Event & EventHandler
-	------------------------------------------------------
 	class "Event"
 		doc [======[
 			@name Event
@@ -5713,25 +5938,25 @@ do
 			@type property
 			@desc The event's name
 		]======]
-		property "Name" {
-			Field = "__Name",
-			Type = String,
-		}
+		property "Name" { Type = String }
+
+		doc [======[
+			@name ThreadActivated
+			@type property
+			@desc Whether the event is thread activated
+		]======]
+		property "ThreadActivated" { Type = Boolean }
 
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
 		function Event(self, name)
-			self.__Name = type(name) == "string" and name or "anonymous"
+			self.Name = type(name) == "string" and name or "anonymous"
 		end
 
 		------------------------------------------------------
 		-- Meta-Method
 		------------------------------------------------------
-		function __call(self)
-			-- Pass
-		end
-
 		function __tostring(self)
 			return ("%s( %q )"):format(tostring(Event), self.__Name)
 		end
@@ -5745,9 +5970,7 @@ do
 		]======]
 
 		local function FireOnEventHandlerChanged(self)
-			if self.__Owner and self.__Event then
-				Reflector.FireObjectEvent(self.__Owner, "OnEventHandlerChanged", self.__Event.Name)
-			end
+			return Reflector.FireObjectEvent(self.Owner, "OnEventHandlerChanged", self.Event.Name)
 		end
 
 		------------------------------------------------------
@@ -5778,7 +6001,7 @@ do
 			end
 
 			if flag then
-				FireOnEventHandlerChanged(self)
+				return FireOnEventHandlerChanged(self)
 			end
 		end
 
@@ -5792,7 +6015,7 @@ do
 		function Copy(self, src)
 			local flag = false
 
-			if Reflector.ObjectIsClass(src, EventHandler) and self ~= src then
+			if Reflector.ObjectIsClass(src, EventHandler) and self.Event == src.Event and self ~= src then
 				for i = #self, 0, -1 do
 					flag = true
 					self[i] = nil
@@ -5805,7 +6028,7 @@ do
 			end
 
 			if flag then
-				FireOnEventHandlerChanged(self)
+				return FireOnEventHandlerChanged(self)
 			end
 		end
 
@@ -5817,42 +6040,28 @@ do
 			@type property
 			@desc The owner of the event handler
 		]======]
-		property "Owner" {
-			Get = function(self)
-				return self.__Owner
-			end,
-		}
+		property "Owner" { Type = Table }
 
 		doc [======[
 			@name Event
 			@type property
 			@desc The event type of the handler
 		]======]
-		property "Event" {
-			Get = function(self)
-				return self.__Event
-			end,
-		}
+		property "Event" { Type = Event }
 
 		doc [======[
 			@name Blocked
 			@type property
 			@desc Whether the event handler is blocked
 		]======]
-		property "Blocked" {
-			Field = "__Blocked",
-			Type = Boolean,
-		}
+		property "Blocked" { Type = Boolean }
 
 		doc [======[
 			@name ThreadActivated
 			@type property
 			@desc Whether the event handler is thread activated
 		]======]
-		property "ThreadActivated" {
-			Field = "__ThreadActivated",
-			Type = Boolean,
-		}
+		property "ThreadActivated" { Type = Boolean }
 
 		doc [======[
 			@name Handler
@@ -5866,7 +6075,7 @@ do
 			Set = function(self, value)
 				if self[0] ~= value then
 					self[0] = value
-					FireOnEventHandlerChanged(self)
+					return FireOnEventHandlerChanged(self)
 				end
 			end,
 			Type = Function + nil,
@@ -5884,12 +6093,12 @@ do
 	    		error("Usage : EventHandler(event, owner) - 'owner' must be an object.")
 	    	end
 
-	    	self.__Event = evt
-	    	self.__Owner = owner
+	    	self.Event = evt
+	    	self.Owner = owner
 
 	    	-- Active the thread status based on the attribute setting
-	    	if __Attribute__._IsDefined(evt, AttributeTargets.Event, __Thread__) then
-	    		self.__ThreadActivated = true
+	    	if evt.ThreadActivated then
+	    		self.ThreadActivated = true
 	    	end
 	    end
 
@@ -5937,18 +6146,18 @@ do
 		local pcall = pcall
 		local ipairs = ipairs
 		local errorhandler = errorhandler
+		local CallThread = CallThread
 
 		function __call(self, obj, ...)
 			-- The event call is so frequent
 			-- keep local for optimization
-			if self.__Blocked then return end
+			if self.Blocked then return end
 
-			local owner = self.__Owner
+			local owner = self.Owner
 			local asParam, useThread, ret
 
 			asParam = (obj ~= owner)
-
-			useThread = self.__ThreadActivated
+			useThread = self.ThreadActivated
 
 			-- Call the stacked handlers
 			for _, handler in ipairs(self) do
@@ -5997,9 +6206,335 @@ do
 		end
 
 		function __tostring(self)
-			return tostring(EventHandler) .. "( " .. tostring(self.__Event) .. " )"
+			return tostring(EventHandler) .. "( " .. tostring(self.Event) .. " )"
 		end
 	endclass "EventHandler"
+
+	class "FixedMethod"
+		doc [======[
+			@name FixedMethod
+			@type class
+			@desc Used to control method with fixed arguments
+		]======]
+
+		-- Reduce cache table cost
+		local function keepArgs(...)
+			local flag = yield( running() )
+
+			while flag do
+				flag = yield( ... )
+			end
+
+			return ...
+		end
+
+		-- Find the real fixed method in class | interface
+		local function getFixedMethod(ns, name)
+			local info = _NSInfo[ns]
+
+			if info.Method[name] then
+				return info.Method["0" .. name] or info.Method[name]
+			end
+
+			if info.SuperClass then
+				local handler = getFixedMethod(info.SuperClass, name)
+
+				if handler then return handler end
+			end
+
+			if info.ExtendInterface then
+				for _, IF in ipairs(info.ExtendInterface) do
+					local handler = getFixedMethod(IF, name)
+
+					if handler then return handler end
+				end
+			end
+		end
+
+		------------------------------------------------------
+		-- Event
+		------------------------------------------------------
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		doc [======[
+			@name MatchArgs
+			@type method
+			@desc Whether the fixed method can handler the arguments
+			@param ...
+			@return boolean
+		]======]
+		function MatchArgs(self, ...)
+			local base = self.HasSelf and 1 or 0
+			local count = select('#', ...) - base
+			local argsCount = #self
+
+			-- Empty methods won't accept any arguments
+			if argsCount == 0 then return count == 0 end
+
+			-- Check argument settings
+			if count >= self.MinArgs and count <= self.MaxArgs then
+				local cache = CACHE_TABLE()
+
+				-- Cache first
+				for i = 1, count do
+					cache[i] = select(i + base, ...)
+				end
+
+				-- required
+				for i = 1, self.MinArgs do
+					local arg = self[i]
+					local value = cache[i]
+					local ok
+
+					if value == nil then
+						-- No check
+						if arg.Default ~= nil then
+							value = arg.Default
+						else
+							CACHE_TABLE(cache)
+
+							return false
+						end
+					else
+						-- Validate the value
+						ok, value = pcall(arg.Type.Validate, arg.Type, value)
+
+						if not ok then
+							CACHE_TABLE(cache)
+
+							return false
+						end
+					end
+
+					cache[i] = value
+				end
+
+				-- optional
+				for i = self.MinArgs + 1, count do
+					local arg = self[i] or self[argsCount]
+					local value = cache[i]
+					local ok
+
+					if value == nil then
+						-- No check
+						if arg.Default ~= nil then
+							value = arg.Default
+						end
+					elseif arg.Type then
+						-- Validate the value
+						ok, value = pcall(arg.Type.Validate, arg.Type, value)
+
+						if not ok then
+							CACHE_TABLE(cache)
+
+							return false
+						end
+					end
+
+					cache[i] = value
+				end
+
+				if base == 1 then
+					tinsert(cache, 1, (select(1, ...)))
+				end
+
+				-- Keep arguments in thread, so cache can be recycled
+				self.Thread = CallThread(keepArgs, unpack(cache, 1, base + count))
+
+				CACHE_TABLE(cache)
+
+				return true
+			end
+
+			return false
+		end
+
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc [======[
+			@name Next
+			@type property
+			@desc The next fixed method
+		]======]
+		property "Next" {
+			Field = "__Next",
+			Get = function (self)
+				if not self.__Next and self.HasSelf then
+					if self.TargetType == AttributeTargets.Method  then
+						-- Check super for object method
+						local info = _NSInfo[self.Owner]
+						local name = self.Name
+						local handler
+
+						if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
+							handler = getFixedMethod(info.SuperClass, name)
+						end
+
+						if not handler and info.ExtendInterface then
+							for _, IF in ipairs(info.ExtendInterface) do
+								if _NSInfo[IF].Cache4Method[name] then
+									handler = getFixedMethod(IF, name)
+								end
+
+								if handler then break end
+							end
+						end
+
+						if handler then
+							-- Keep link for a quick inheritance
+							self.__Next = handler
+						end
+					elseif self.TargetType == AttributeTargets.Constructor then
+						local info = _NSInfo[self.Owner]
+
+						while info and info.SuperClass do
+							info = _NSInfo[info.SuperClass]
+
+							if info.Constructor then
+								-- No link for constructor
+								return info.Constructor
+							end
+						end
+					end
+				end
+
+				return self.__Next
+			end,
+			Type = FixedMethod + Function + nil,
+		}
+
+		doc [======[
+			@name Usage
+			@type property
+			@desc The usage of the fixed method
+		]======]
+		property "Usage" {
+			Get = function (self)
+				if self.__Usage then return self.__Usage end
+
+				-- Generate usage message
+				local usage = CACHE_TABLE()
+				local targetType = self.TargetType
+				local name = self.Name
+				local owner = self.Owner
+
+				if targetType == AttributeTargets.Method then
+					if (name:match("^_") and not (Reflector.IsClass(owner) and (_KeyMeta[name] or _KeyMeta[name:sub(2)] == false))) or
+						( Reflector.IsInterface(owner) and Reflector.IsNonInheritable(owner) ) then
+						tinsert(usage, "Usage : " .. tostring(owner) .. "." .. name .. "( ")
+					else
+						tinsert(usage, "Usage : " .. tostring(owner) .. ":" .. name .. "( ")
+					end
+				else
+					tinsert(usage, "Usage : " .. tostring(owner) .. "( ")
+				end
+
+				for i = 1, #self do
+					local arg = self[i]
+					local str = ""
+
+					if i > 1 then
+						tinsert(usage, ", ")
+					end
+
+					-- [name As type = default]
+					if arg.Name then
+						str = str .. arg.Name
+
+						if arg.Type then
+							str = str .. " As "
+						end
+					end
+
+					if arg.Type then
+						str = str .. tostring(arg.Type)
+					end
+
+					if arg.Default ~= nil then
+						local serialize = Reflector.Serialize(arg.Default, arg.Type)
+
+						if serialize then
+							str = str .. " = " .. serialize
+						end
+					end
+
+					if not arg.Type or arg.Type:Is(nil) then
+						str = "[" .. str .. "]"
+					end
+
+					tinsert(usage, str)
+				end
+
+				tinsert(usage, " )")
+
+				self.__Usage = tblconcat(usage, "")
+
+				CACHE_TABLE(usage)
+
+				return self.__Usage
+			end
+		}
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+
+		------------------------------------------------------
+		-- Meta-methods
+		------------------------------------------------------
+		function __call(self, ...)
+			-- Clear the thread
+			self.Thread = nil
+
+			-- Validation self once, maybe no need to waste time
+			if false and self.HasSelf then
+				local value = select(1, ...)
+				local owner = self.Owner
+
+				if not value or
+					( Reflector.IsInterface(owner) and not Reflector.ObjectIsInterface(value, owner) ) or
+					( Reflector.IsClass(owner) and not Reflector.ObjectIsClass(value, owner)) or
+					( Reflector.IsStruct(owner) and not pcall(owner.Validate, value)) then
+
+					error(self.Usage, 2)
+				end
+			end
+
+			if MatchArgs(self, ...) then
+				if self.Thread then
+					return self.Method( select(2, resume(self.Thread, false)) )
+				else
+					return self.Method( ... )
+				end
+			end
+
+			-- Remove argument container
+			if self.Thread then
+				resume(self.Thread, false)
+				self.Thread = nil
+			end
+
+			if self.Next then
+				return self.Next( ... )
+			end
+
+			return error(self.Usage, 2)
+		end
+
+		function __tostring(self)
+			return self.Usage
+		end
+	endclass "FixedMethod"
+end
+
+------------------------------------------------------
+-- System Namespace (Attribute System)
+------------------------------------------------------
+do
+	namespace "System"
 
 	------------------------------------------------------
 	-- System.__Attribute__
@@ -6142,7 +6677,7 @@ do
 			if targetType == AttributeTargets.Class then
 				return Reflector.IsClass(target)
 			elseif targetType == AttributeTargets.Constructor then
-				return Reflector.IsClass(target)
+				return type(target) == "function"
 			elseif targetType == AttributeTargets.Enum then
 				return Reflector.IsEnum(target)
 			elseif targetType == AttributeTargets.Event then
@@ -6150,7 +6685,7 @@ do
 			elseif targetType == AttributeTargets.Interface then
 				return Reflector.IsInterface(target)
 			elseif targetType == AttributeTargets.Method then
-				return type(target) == "function"
+				return type(target) == "function" or getmetatable(target) == FixedMethod
 			elseif targetType == AttributeTargets.Property then
 				-- Normally, this only be called by the system
 				return type(target) == "table" and type(target.Name) == "string"
@@ -6203,7 +6738,6 @@ do
 		local function _ApplyAttributes(target, targetType, owner, name, start)
 			-- Apply the attributes
 			local config = _AttributeCache[targetType][target]
-			local usage
 
 			if config then
 				local ok, ret, arg1, arg2, arg3, arg4
@@ -6214,7 +6748,7 @@ do
 					arg2 = targetType
 					arg3 = owner
 				elseif targetType == AttributeTargets.Method then
-					arg1 = target
+					arg1 = getmetatable(target) and target.Method or target
 					arg2 = targetType
 					arg3 = owner
 					arg4 = name
@@ -6226,6 +6760,11 @@ do
 					arg1 = name
 					arg2 = targetType
 					arg3 = owner
+				elseif targetType == AttributeTargets.Constructor then
+					arg1 = target
+					arg2 = targetType
+					arg3 = owner
+					arg4 = name
 				else
 					arg1 = target
 					arg2 = targetType
@@ -6239,7 +6778,7 @@ do
 
 						_AttributeCache[targetType][target] = nil
 					else
-						usage = _GetCustomAttribute(getmetatable(config), AttributeTargets.Class, __AttributeUsage__)
+						local usage = _GetCustomAttribute(getmetatable(config), AttributeTargets.Class, __AttributeUsage__)
 
 						if usage and not usage.Inherited and usage.RunOnce then
 							_AttributeCache[targetType][target] = nil
@@ -6247,14 +6786,16 @@ do
 							config:Dispose()
 						end
 
-						if targetType == AttributeTargets.Method then
+						if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
 							-- The method may be wrapped in the apply operation
-							if type(ret) == "function" then
+							if type(ret) == "function" or getmetatable(ret) == FixedMethod then
 								target = ret
 							end
 						end
 					end
 				else
+					local oldTarget = target
+
 					start = start or 1
 
 					for i = #config, start, -1 do
@@ -6265,26 +6806,33 @@ do
 
 							tremove(config, i)
 						else
-							usage = _GetCustomAttribute(getmetatable(config[i]), AttributeTargets.Class, __AttributeUsage__)
+							local usage = _GetCustomAttribute(getmetatable(config[i]), AttributeTargets.Class, __AttributeUsage__)
 
 							if usage and not usage.Inherited and usage.RunOnce then
 								config[i]:Dispose()
 								tremove(config, i)
 							end
 
-							if targetType == AttributeTargets.Method then
+							if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
 								if type(ret) == "function" then
-									target = ret
+									if type(target) == "function" then
+										target = ret
+									else
+										target.Method = ret
+									end
 									arg1 = ret
+								elseif getmetatable(ret) == FixedMethod then
+									target = ret
+									arg1 = target.Method
 								end
 							end
 						end
 					end
 
 					if #config == 0 then
-						_AttributeCache[targetType][target] = nil
+						_AttributeCache[targetType][oldTarget] = nil
 					elseif #config == 1 then
-						_AttributeCache[targetType][target] = config[1]
+						_AttributeCache[targetType][oldTarget] = config[1]
 					end
 				end
 			end
@@ -6706,12 +7254,18 @@ do
 			@return boolean true if the target contains attribute with the type
 		]======]
 		function _IsMethodAttributeDefined(target, method, type)
-			local info = rawget(_NSInfo, target)
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Method[method] then
-				return _IsDefined(info.Cache4Method[method], AttributeTargets.Method, type)
-			elseif type(target) == "function" then
+			if type(target) == "function" then
 				return _IsDefined(target, AttributeTargets.Method, method)
+			elseif getmetatable(target) == FixedMethod then
+				while target do
+					if _IsDefined(target, AttributeTargets.Method, method) then
+						return true
+					end
+
+					target = getmetatable(target) and target.Next
+				end
+			elseif (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return _IsMethodAttributeDefined(target[method], type)
 			end
 		end
 
@@ -6902,12 +7456,21 @@ do
 			@return ... the attribute objects
 		]======]
 		function _GetMethodAttribute(target, method, type)
-			local info = rawget(_NSInfo, target)
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Method[method] then
-				return _GetCustomAttribute(info.Cache4Method[method], AttributeTargets.Method, type)
-			elseif type(target) == "function" then
+			if type(target) == "function" then
 				return _GetCustomAttribute(target, AttributeTargets.Method, method)
+			elseif getmetatable(target) == FixedMethod then
+				local result
+
+				while target do
+					result = _GetCustomAttribute(target, AttributeTargets.Method, method)
+					if result then
+						return result
+					end
+
+					target = getmetatable(target) and target.Next
+				end
+			elseif (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return _GetMethodAttribute(target[method], type)
 			end
 		end
 
@@ -6987,16 +7550,10 @@ do
 		function __Attribute__(self)
 			SendToPrepared(self)
 		end
-
-		function __call(self)
-			SendToPrepared(self)
-		end
 	endclass "__Attribute__"
 
 	class "__Unique__"
 		inherit "__Attribute__"
-
-		local _UniqueObj
 
 		doc [======[
 			@name __Unique__
@@ -7007,29 +7564,13 @@ do
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsClass(target) then
 				_NSInfo[target].NonInheritable = true
+				_NSInfo[target].UniqueObject = true
 			end
-		end
-
-		------------------------------------------------------
-		-- Constructor
-		------------------------------------------------------
-		function __Unique__(self)
-			_UniqueObj = self
-		end
-
-		function __exist()
-			if _UniqueObj then
-				_UniqueObj()
-			end
-
-			return _UniqueObj
 		end
 	endclass "__Unique__"
 
 	class "__Flags__"
 		inherit "__Attribute__"
-
-		local _UniqueObj
 
 		doc [======[
 			@name __Flags__
@@ -7039,6 +7580,8 @@ do
 
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsEnum(target) then
+				_NSInfo[target].IsFlags = true
+
 				local enums = _NSInfo[target].Enum
 
 				local cache = {}
@@ -7093,20 +7636,6 @@ do
 				end
 			end
 		end
-
-		------------------------------------------------------
-		-- Constructor
-		------------------------------------------------------
-		function __Flags__(self)
-			_UniqueObj = self
-		end
-
-		function __exist()
-			if _UniqueObj then
-				_UniqueObj()
-			end
-			return _UniqueObj
-		end
 	endclass "__Flags__"
 
 	class "__AttributeUsage__"
@@ -7126,48 +7655,32 @@ do
 			@type property
 			@desc The attribute target type, default AttributeTargets.All
 		]======]
-		property "AttributeTarget" {
-			Default = AttributeTargets.All,
-			Field = "__AttributeTarget",
-			Type = AttributeTargets,
-		}
+		property "AttributeTarget" { Default = AttributeTargets.All, Type = AttributeTargets }
 
 		doc [======[
 			@name Inherited
 			@type property
 			@desc Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true
 		]======]
-		property "Inherited" {
-			Default = true,
-			Field = "__Inherited",
-			Type = Boolean,
-		}
+		property "Inherited" { Default = true, Type = Boolean }
 
 		doc [======[
 			@name AllowMultiple
 			@type property
 			@desc whether multiple instances of your attribute can exist on an element. default false
 		]======]
-		property "AllowMultiple" {
-			Field = "__AllowMultiple",
-			Type = Boolean,
-		}
+		property "AllowMultiple" { Type = Boolean }
 
 		doc [======[
 			@name RunOnce
 			@type property
 			@desc Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation
 		]======]
-		property "RunOnce" {
-			Field = "__RunOnce",
-			Type = Boolean,
-		}
+		property "RunOnce" { Type = Boolean }
 	endclass "__AttributeUsage__"
 
 	class "__Final__"
 		inherit "__Attribute__"
-
-		local _UniqueObj
 
 		doc [======[
 			@name __Final__
@@ -7180,26 +7693,10 @@ do
 				_NSInfo[target].IsFinal = true
 			end
 		end
-
-		------------------------------------------------------
-		-- Constructor
-		------------------------------------------------------
-		function __Final__(self)
-			_UniqueObj = self
-		end
-
-		function __exist()
-			if _UniqueObj then
-				_UniqueObj()
-			end
-			return _UniqueObj
-		end
 	endclass "__Final__"
 
 	class "__NonInheritable__"
 		inherit "__Attribute__"
-
-		local _UniqueObj
 
 		doc [======[
 			@name __NonInheritable__
@@ -7212,111 +7709,255 @@ do
 				_NSInfo[target].NonInheritable = true
 			end
 		end
+	endclass "__NonInheritable__"
+
+	struct "Argument"
+		Name = String + nil
+		Type = Any + nil
+		Default = Any + nil
+		IsList = Boolean + nil
+
+		function Validate(value)
+			value.Type = value.Type and BuildType(value.Type, "Type") or nil
+
+			if value.Type and value.Default ~= nil then
+				if value.Type:GetObjectType(value.Default) == false then
+					value.Default = nil
+				end
+			end
+
+			return value
+		end
+	endstruct "Argument"
+
+	class "__Arguments__"
+		inherit "__Attribute__"
+
+		doc [======[
+			@name __Arguments__
+			@type class
+			@desc The argument definitions of the target method or class's constructor
+		]======]
+
+		_Error_Header = [[Usage : __Arguments__{ arg1[, arg2[, ...] ] } : ]]
+		_Error_NotArgument = [[arg%d must be System.Argument]]
+		_Error_NotOptional = [[arg%d must also be optional]]
+		_Error_NotList = [[arg%d can't be a list]]
+
+		local function ValidateArgument(self, i)
+			local isLast = i == #self
+
+			local flag, arg = pcall( Argument.Validate, self[i] )
+
+			if flag then
+				-- Check optional args
+				if not arg.Type or arg.Type:Is(nil) then
+					if not self.MinArgs then
+						self.MinArgs = i - 1
+					end
+				elseif self.MinArgs then
+					-- Only optional args can be defined after optional args
+					error(_Error_Header .. _Error_NotOptional:format(i))
+				end
+
+				-- Check ... args
+				if arg.IsList then
+					if isLast then
+						if self.MinArgs then
+							error(_Error_Header .. _Error_NotList:format(i))
+						else
+							if not arg.Type or arg.Type:Is(nil) then
+								self.MinArgs = i - 1
+							else
+								-- Must have one parameter at least
+								self.MinArgs = i
+							end
+
+							-- Just big enough
+							self.MaxArgs = 9999
+
+							arg.Name = "..."
+						end
+					else
+						error(_Error_Header .. _Error_NotList:format(i))
+					end
+				end
+
+				return
+			end
+
+			-- Convert to type
+			if Reflector.IsNameSpace(self[i]) then
+				self[i] = BuildType(self[i])
+			end
+
+			-- Convert type to Argument
+			if IsType(self[i]) then
+				self[i] = { Type = self[i] }
+
+				-- Check optional args
+				if self[i].Type:Is(nil) then
+					if not self.MinArgs then
+						self.MinArgs = i - 1
+					end
+				elseif self.MinArgs then
+					-- Only optional args can be defined after optional args
+					error(_Error_Header .. _Error_NotOptional:format(i))
+				end
+
+				return
+			end
+
+			error(_Error_Header .. _Error_NotArgument:format(i))
+		end
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self, target, targetType, owner, name)
+			-- Self validation once
+			for i = 1, #self do
+				ValidateArgument(self, i)
+			end
+
+			self.Owner = owner
+			self.TargetType = targetType
+			self.Name = name
+
+			if targetType == AttributeTargets.Method then
+				if (name:match("^_") and not (Reflector.IsClass(owner) and name ~= "__exist" and (_KeyMeta[name] or _KeyMeta[name:sub(2)] == false))) or
+					( Reflector.IsInterface(owner) and Reflector.IsNonInheritable(owner) ) then
+					self.HasSelf = false
+				else
+					self.HasSelf = true
+				end
+			else
+				self.HasSelf = true
+			end
+
+			-- Quick match
+			if not self.MinArgs then self.MinArgs = #self end
+			if not self.MaxArgs then self.MaxArgs = #self end
+
+			-- Save self to fixedmethod object
+			local fixedObj = FixedMethod()
+
+			for k, v in pairs(self) do
+				fixedObj[k] = v
+			end
+
+			fixedObj.Method = target
+
+			wipe(self)
+
+			return fixedObj
+		end
 
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
-		function __NonInheritable__(self)
-			_UniqueObj = self
-		end
+		function __Arguments__(self)
+			wipe(self)
 
-		function __exist()
-			if _UniqueObj then
-				_UniqueObj()
-			end
-			return _UniqueObj
+			return Super(self)
 		end
-	endclass "__NonInheritable__"
+	endclass "__Arguments__"
 
 	-- Apply Attribute to the previous definitions, since I can't use them before definition
 	do
-		------------------------------------------------------
-		-- For Attribute system
-		------------------------------------------------------
-		local objFinal = __Final__()
-		local objNonInheritable = __NonInheritable__()
-		__Attribute__._ClearPreparedAttributes()
-
 		------------------------------------------------------
 		-- For structs
 		------------------------------------------------------
 		_KeyWord4StrtEnv.structtype = nil
 
-		objFinal:ApplyAttribute(Boolean, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(String, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Number, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Function, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Table, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Userdata, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Thread, AttributeTargets.Struct)
-		objFinal:ApplyAttribute(Any, AttributeTargets.Struct)
+		__Final__:ApplyAttribute(Boolean)
+		__Final__:ApplyAttribute(String)
+		__Final__:ApplyAttribute(Number)
+		__Final__:ApplyAttribute(Function)
+		__Final__:ApplyAttribute(Table)
+		__Final__:ApplyAttribute(Userdata)
+		__Final__:ApplyAttribute(Thread)
+		__Final__:ApplyAttribute(Any)
+		__Final__:ApplyAttribute(Argument)
 
+		------------------------------------------------------
+		-- For Attribute system
+		------------------------------------------------------
 		-- System.AttributeTargets
-		__Flags__()
-		__Attribute__._ConsumePreparedAttributes(AttributeTargets, AttributeTargets.Enum)
-		objFinal:ApplyAttribute(AttributeTargets, AttributeTargets.Enum)
+		__Flags__:ApplyAttribute(AttributeTargets)
+		__Final__:ApplyAttribute(AttributeTargets)
+
+		-- System.__Arguments__
+		__Unique__:ApplyAttribute(__Arguments__)
+		__Final__:ApplyAttribute(__Arguments__)
 
 		-- System.__Attribute__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.All}
-		__Attribute__._ConsumePreparedAttributes(__Attribute__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__Attribute__, AttributeTargets.Class)
+		__Final__:ApplyAttribute(__Attribute__)
+		__Arguments__()
+		SaveFixedMethod(_NSInfo[__Attribute__], "Constructor", _NSInfo[__Attribute__].Constructor, __Attribute__, AttributeTargets.Constructor)
 
 		-- System.__Unique__
-		__Unique__()
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__Unique__, AttributeTargets.Class)
+		__Unique__:ApplyAttribute(__Unique__)
+		__Final__:ApplyAttribute(__Unique__)
 
 		-- System.__Flags__
-		__Unique__()
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__Flags__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__Flags__, AttributeTargets.Class)
+		__Unique__:ApplyAttribute(__Flags__)
+		__Final__:ApplyAttribute(__Flags__)
 
 		-- System.__AttributeUsage__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
 		__Attribute__._ConsumePreparedAttributes(__AttributeUsage__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__AttributeUsage__, AttributeTargets.Class)
-		objNonInheritable:ApplyAttribute(__AttributeUsage__, AttributeTargets.Class)
+		__Final__:ApplyAttribute(__AttributeUsage__)
+		__NonInheritable__:ApplyAttribute(__AttributeUsage__)
 
 		-- System.__Final__
-		__Unique__()
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__Final__, AttributeTargets.Class)
+		__Unique__:ApplyAttribute(__Final__)
+		__Final__:ApplyAttribute(__Final__)
 
 		-- System.__NonInheritable__
-		__Unique__()
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
 		__Attribute__._ConsumePreparedAttributes(__NonInheritable__, AttributeTargets.Class)
-		objFinal:ApplyAttribute(__NonInheritable__, AttributeTargets.Class)
+		__Unique__:ApplyAttribute(__NonInheritable__)
+		__Final__:ApplyAttribute(__NonInheritable__)
+
+		-- System.__Arguments__
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor, Inherited = false, RunOnce = true }
+		__Attribute__._ConsumePreparedAttributes(__Arguments__, AttributeTargets.Class)
+		__Arguments__()
+		SaveFixedMethod(_NSInfo[__Arguments__], "Constructor", _NSInfo[__Arguments__].Constructor, __Arguments__, AttributeTargets.Constructor)
 
 		------------------------------------------------------
 		-- For other classes
 		------------------------------------------------------
-		-- System.Type
-		__Final__()
-		__NonInheritable__()
-		__Attribute__._ConsumePreparedAttributes(Type, AttributeTargets.Class)
-
 		-- System.Reflector
-		__Final__()
-		__NonInheritable__()
-		__Attribute__._ConsumePreparedAttributes(Reflector, AttributeTargets.Interface)
+		__Final__:ApplyAttribute(Reflector)
+		__NonInheritable__:ApplyAttribute(Reflector)
 
-		-- System.Event
-		__Final__()
-		__NonInheritable__()
-		__Attribute__._ConsumePreparedAttributes(Event, AttributeTargets.Class)
+		-- Type
+		__Final__:ApplyAttribute(Type)
+		__NonInheritable__:ApplyAttribute(Type)
 
-		-- System.EventHandler
-		__Final__()
-		__NonInheritable__()
-		__Attribute__._ConsumePreparedAttributes(EventHandler, AttributeTargets.Class)
+		-- Event
+		__Final__:ApplyAttribute(Event)
+		__NonInheritable__:ApplyAttribute(Event)
+
+		-- EventHandler
+		__Final__:ApplyAttribute(EventHandler)
+		__NonInheritable__:ApplyAttribute(EventHandler)
+
+		-- FixedMethod
+		__Final__:ApplyAttribute(FixedMethod)
+		__NonInheritable__:ApplyAttribute(FixedMethod)
 	end
 
 	-- More usable attributes
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method, Inherited = false, RunOnce = true}
 	__Final__()
 	__Unique__()
 	class "__Thread__"
@@ -7331,16 +7972,22 @@ do
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
-			if type(target) == "function" and (Reflector.IsClass(owner) or Reflector.IsInterface(owner) or Reflector.IsStruct(owner)) then
-				-- Wrap the target method
-				return function (self, ...)
-					return CallThread(target, self, ...)
+			local CallThread = CallThread
+
+			if targetType == AttributeTargets.Method then
+				if type(target) == "function" then
+					-- Wrap the target method
+					return function (...)
+						return CallThread(target, ...)
+					end
 				end
+			elseif targetType == AttributeTargets.Event then
+				_NSInfo[owner].Event[target].ThreadActivated = true
 			end
 		end
 	endclass "__Thread__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Method}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Final__()
 	__Unique__()
 	class "__Cache__"
@@ -7350,286 +7997,13 @@ do
 			@type class
 			@desc Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .
 		]======]
+
+		function ApplyAttribute(self, target, targetType)
+			if Reflector.IsClass(target) then
+				_NSInfo[target].AutoCache = true
+			end
+		end
 	endclass "__Cache__"
-
-	__Final__()
-	struct "Argument"
-		Name = String
-		Type = Any
-		Default = Any
-		IsList = Boolean + nil
-
-		function Validate(value)
-			value.Type = BuildType(value.Type, "Type")
-
-			return value
-		end
-	endstruct "Argument"
-
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor}
-	__Final__()
-	class "__Arguments__"
-		inherit "__Attribute__"
-
-		doc [======[
-			@name __Arguments__
-			@type class
-			@desc The argument definitions of the target method or class's constructor
-		]======]
-
-		_Validate_Header = [[
-			return function (self, %s, ...)
-				local ok, value, objArg
-				local index = 0
-
-		]]
-
-		_Validate_Body = [[
-				index = index + 1
-				objArg = self[index]
-				if objArg then
-					if arg@ == nil and objArg.Default ~= nil then
-						arg@ = objArg.Default
-					end
-
-					if objArg.Type then
-						ok, value = pcall(objArg.Type.Validate, objArg.Type, arg@)
-
-						if not ok then
-							value = value:match(":%d+:%s*(.-)$") or value
-
-							if value:find("%%s") then
-								value = value:gsub("%%s[_%w]*", objArg.Name)
-							end
-
-							error(self.Usage .. value, 3)
-						else
-							arg@ = value
-						end
-					end
-				end
-
-		]]
-
-		_Validate_Tail = [[
-				return %s, ...
-			end
-		]]
-
-		local function buildValidate(count)
-			local args = ""
-
-			for i = 1, count do
-				if i > 1 then
-					args = args .. ", arg" .. i
-				else
-					args = "arg1"
-				end
-			end
-
-			local func = _Validate_Header:format(args)
-
-			for i = 1, count do
-				func = func .. _Validate_Body:gsub("@", tostring(i))
-			end
-
-			func = func .. _Validate_Tail:format(args)
-
-			func = func:gsub("\n%s+", "\n"):gsub("^%s+", "")
-
-			return func
-		end
-
-		_ValidateArgumentsCache = setmetatable({}, {__index = function(self, key)
-			if type(key) == "number" and key >= 1 then
-				key = floor(key)
-
-				rawset(self, key, loadstring(buildValidate(key))())
-				return rawget(self, key)
-			end
-		end})
-
-		_ValidateArgumentsCache[0] = function (self, ...)
-			local ret = {...}
-			local max = #self
-			local ok, value
-
-			for i = 1, max do
-				local arg = self[i]
-
-				if i < max or not arg.IsList then
-					if ret[i] == nil and arg.Default ~= nil then
-						ret[i] = arg.Default
-					end
-
-					if arg.Type then
-						ok, value = pcall(arg.Type.Validate, arg.Type, ret[i])
-
-						if not ok then
-							value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-							if value:find("%%s") then
-								value = value:gsub("%%s[_%w]*", arg.Name)
-							end
-
-							error(self.Usage .. value, 3)
-						elseif ret[i] ~= nil then
-							ret[i] = value
-						end
-					end
-				else
-					if arg.Type then
-						for j = i, #ret do
-							ok, value = pcall(arg.Type.Validate, arg.Type, ret[j])
-
-							if not ok then
-								value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-
-								if value:find("%%s") then
-									value = value:gsub("%%s[_%w]*", "...")
-								end
-
-								error(self.Usage .. value, 3)
-							elseif ret[j] ~= nil then
-								ret[j] = value
-							end
-						end
-					end
-				end
-			end
-
-			return unpack(ret)
-		end
-
-		------------------------------------------------------
-		-- Method
-		------------------------------------------------------
-
-		function ApplyAttribute(self, target, targetType, owner, name)
-			-- Self validation once
-			local max = #self
-
-			for i = max, 1, -1 do
-				if type(self[i]) ~= "table" or not self[i].Name or (i < #self and self[i].IsList) then
-					tremove(self, i)
-				end
-			end
-
-			if type(target) == "function" and (Reflector.IsClass(owner) or Reflector.IsInterface(owner) or Reflector.IsStruct(owner)) then
-				local useList = false
-				local count = 0
-				local isObjectMethod = not name:match("^_")
-
-				if isObjectMethod then
-					self.Usage = "Usage : " .. _NSInfo[owner].Name .. ":" .. name .. "("
-				else
-					self.Usage = "Usage : " .. _NSInfo[owner].Name .. "." .. name .. "("
-				end
-
-				for i = 1, #self do
-					local arg = self[i]
-					local str = ""
-
-					if i > 1 then
-						self.Usage = self.Usage .. ", "
-					end
-
-					if i == #self and arg.IsList then
-						self.Usage = self.Usage .. "..."
-						useList = true
-					else
-						local serialize
-
-						if arg.Default ~= nil then
-							serialize = Reflector.Serialize(arg.Default, arg.Type)
-						end
-
-						if serialize then
-							serialize = arg.Name .. " = " .. serialize
-						else
-							serialize = arg.Name
-						end
-
-						if arg.Type and arg.Type:Is(nil) then
-							serialize = "[" .. serialize .. "]"
-						end
-
-						self.Usage = self.Usage .. serialize
-						count = count + 1
-					end
-				end
-
-				self.Usage = self.Usage .. ") - "
-
-				if useList then
-					self.ValidateArguments = _ValidateArgumentsCache[0]
-				elseif count > 0 then
-					self.ValidateArguments = _ValidateArgumentsCache[count]
-				end
-
-				if self.ValidateArguments then
-					if isObjectMethod then
-						return function(obj, ...)
-							return target(obj, self:ValidateArguments(...))
-						end
-					else
-						return function(...)
-							return target(self:ValidateArguments(...))
-						end
-					end
-				else
-					return target
-				end
-			elseif Reflector.IsClass(target) and targetType == AttributeTargets.Constructor then
-				local useList = false
-				local count = 0
-
-				if self.Usage and self.ValidateArguments then return end
-
-				self.Usage = "Usage : " .. _NSInfo[target].Name .. "("
-
-				for i = 1, #self do
-					local arg = self[i]
-
-					if i > 1 then
-						self.Usage = self.Usage .. ", "
-					end
-
-					if i == #self and arg.IsList then
-						self.Usage = self.Usage .. "..."
-						useList = true
-					else
-						local serialize
-
-						if arg.Default ~= nil then
-							serialize = Reflector.Serialize(arg.Default, arg.Type)
-						end
-
-						if serialize then
-							serialize = arg.Name .. " = " .. serialize
-						else
-							serialize = arg.Name
-						end
-
-						if arg.Type and arg.Type:Is(nil) then
-							serialize = "[" .. serialize .. "]"
-						end
-
-						self.Usage = self.Usage .. serialize
-						count = count + 1
-					end
-				end
-
-				self.Usage = self.Usage .. ") - "
-
-				if useList then
-					self.ValidateArguments = _ValidateArgumentsCache[0]
-				elseif count > 0 then
-					self.ValidateArguments = _ValidateArgumentsCache[count]
-				end
-			end
-		end
-	endclass "__Arguments__"
 
 	enum "StructType" {
 		"Member",
@@ -7639,7 +8013,7 @@ do
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true}
 	__Final__()
-	__NonInheritable__()
+	__Unique__()
 	class "__StructType__"
 		inherit "__Attribute__"
 
@@ -7648,10 +8022,6 @@ do
 			@type class
 			@desc Mark the struct's type, default 'Member'
 		]======]
-
-		_STRUCT_TYPE_MEMBER = _STRUCT_TYPE_MEMBER
-		_STRUCT_TYPE_ARRAY = _STRUCT_TYPE_ARRAY
-		_STRUCT_TYPE_CUSTOM = _STRUCT_TYPE_CUSTOM
 
 		------------------------------------------------------
 		-- Method
@@ -7685,21 +8055,27 @@ do
 			@type property
 			@desc The struct's type
 		]======]
-		property "Type" {
-			Field = "__Type",
-			Type = StructType,
-		}
+		property "Type" { Type = StructType }
 
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
-		__Arguments__{ Argument{ Name = "Type", Type = StructType, Default = StructType.Member } }
+		__Arguments__{ StructType }
 		function __StructType__(self, type)
-			self.__Type = type
+			Super(self)
+
+			self.Type = type
+		end
+
+		__Arguments__{ }
+		function __StructType__(self)
+			Super(self)
+
+			self.Type = StructType.Member
 		end
 	endclass "__StructType__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Final__()
 	__Unique__()
 	class "__NonExpandable__"
@@ -7719,9 +8095,45 @@ do
 		end
 	endclass "__NonExpandable__"
 
-	------------------------------------------------------
-	-- System.Object
-	------------------------------------------------------
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
+	__Final__()
+	__Unique__()
+	class "__InitTable__"
+		inherit "__Attribute__"
+
+		doc [======[
+			@name __InitTable__
+			@type class
+			@desc Used to mark the class can use init table like: obj = cls(name) { Age = 123 }
+		]======]
+
+		__Arguments__{ RawTable }
+		function InitWithTable(self, initTable)
+			for name, value in pairs(initTable) do
+				local ok, msg = pcall(TrySetProperty, self, name, value)
+
+				if not ok then
+					msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
+
+					errorhandler(msg)
+				end
+			end
+
+			return self
+		end
+
+		function ApplyAttribute(self, target, targetType)
+			if rawget(_NSInfo, target) and _NSInfo[target].Type == TYPE_CLASS then
+				SaveFixedMethod(_NSInfo[target].MetaTable, "__call", __InitTable__["0InitWithTable"], target)
+			end
+		end
+	endclass "__InitTable__"
+end
+
+------------------------------------------------------
+-- System Namespace (Object & Module)
+------------------------------------------------------
+do
 	__Final__()
 	class "Object"
 
@@ -7907,9 +8319,6 @@ do
 		end--]]
 	endclass "Object"
 
-	------------------------------------------------------
-	-- System.Module
-	------------------------------------------------------
 	__Final__()
 	class "Module"
 		inherit "Object"
