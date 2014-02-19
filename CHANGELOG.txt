@@ -1,0 +1,222 @@
+2013/12/31
+    'This' is added for class definition, used in the class's constructor to call other constructors.
+
+2013/12/30
+    __Synthesize__ attribtue added, used to auto-generate methods bodys for property accessors.
+
+2013/12/27
+    Loop renamed to PLoop, avoid with the existed lua oop lib.
+
+2013/12/25
+    __Require__ and __Optional__ attributes are added to System used to describe the requirement of the features defined in the interfaces.
+
+2013/12/25
+    No cache when define types, only cache when using those types, ignore some painful problems.
+
+2013/11/29
+    The 'require' keyword added for interface system, so the class that extend from the interface must be the sub-class of the target class|interface.
+
+2013/11/22
+    Property definition will be stored as predefined table in properties, and can be changed by attribute system, will be convert to the real contents when finished the definition of the class or interface.
+
+2013/11/19
+    Event can be defined in property definition, so value changes can be fired when only using field to set
+
+2013/11/13
+    The overload system for method, constructor & meta-method finished
+
+2013/10/30
+    The property auto-fill system finished
+
+2013/10/25
+    Redesign the definition environment, partclass & partinterface removed
+
+2013/10/11
+    Attribute can apply to the struct's field now.
+
+2013/10/02
+    __Expandable__ attribute removed, __NonExpandable__ attribute added, now expandable is default attribute to all classes/interfaces
+
+2013/09/24
+    No single class/interface environment limit
+
+2013/09/17
+    The basic structs can validate values like custom structs now
+
+2013/09/11
+    Fix Reflector.Help & ParseEnum
+
+2013/09/09
+    Improve the cache system to improve performance
+
+2013/09/08
+    New property system
+
+2013/09/08
+    Improve the property system
+
+2013/09/08
+    Reduce the cpu cost for methods, properties, events system
+
+2013/09/07
+    Init-table system added for class and struct
+
+2013/09/01
+    Attribute system added
+
+2013/08/28
+    partinterface is removed(canceled)
+
+2013/08/28
+    Now init table can be used to init the objects, like : o = System.Object{Name = "Obj", Type = "Object"}
+
+2013/08/27
+    System.Object's method ThreadCall will use the running thread instead of create new one
+
+2013/08/12
+    System.Module is added to create an environment for oop system
+
+2013/08/05
+    Remove version check, seal the definition environment
+
+2013/06/26
+    keyword script -> event
+
+2013/06/24
+    IGAS:Install([env]) added, used to add keywords into current environment
+
+2013/04/07
+    Lower the memory usage
+
+2013/01/25
+    object.Disposed is set to true after calling object:Dispose() as a mark
+
+2012/12/25
+    Doc system added.Interface system improved.
+
+2012/12/24
+    Dispose system modified.
+
+2012/12/23
+    Class Constructor system modified.
+
+2012/12/08
+    Re-order inherit & extend tree.
+
+2012/11/16
+    Extend interface order system added.
+
+2012/11/14
+    Fix interface constructor systfem.
+
+2012/11/11
+    Disposing objects when Object created failded.
+
+2012/11/07
+    Interface constructor invoking mechanism improved.
+
+2012/10/13
+    partclass keyword added to support part class definition.
+
+2012/10/08
+    Object Method, Property, Event can't start with '_'.
+
+2012/09/20
+    class without constructor now will use Super class's constructor. System.Reflector change to Interface.
+
+2012/09/07
+    Fix can't extend interface that defined in the class
+
+2012/08/30
+    IFDispoe removed, Class system will use Dispose as a system method, Interface's Dispose will be called first when object call like obj:Dispose(), then the class's own Dispose will be called, Class.Dispose will access the class' own Dispose method, not system one.
+
+2012/08/19
+    Don't block error when create object.
+
+2012/08/14
+    Reduce Struct Validate method cost.
+
+2012/08/14
+    Class & Struct env now can access base namespace directly.
+
+2012/08/14
+    Struct namespace object now has Validate method.
+
+2012/07/31
+    Improve struct system
+
+2012/07/26
+    Fix a stack overflow problem
+
+2012/07/09
+    Using cache to keep interface list for class object creation
+
+2012/07/08
+    IFDispose added to support interface disposing
+
+2012/07/01
+    Interface can extend from multi-interface
+
+2012/06/30
+    BlockEvent, IsEventBlocked, UnBlockEvent added to Reflector
+
+2012/06/29
+    System.Reflector Update for Interface
+
+2012/06/28
+    Interface can access it's methodes
+
+2012/06/27
+    Interface system added
+
+2012/05/21
+    Keyword 'Super' is added to the class environment
+
+2012/05/14
+    Type add sub & unm metamethodes
+
+2012/05/07
+    System.Reflector.BuildType removed
+
+2012/05/06
+    System.Reflector.Validate(type, value, name, prefix) mod
+
+2012/05/01
+    System.Reflector.Validate(type, value) added
+
+2012/04/10
+    System.Reflector.IsNameSpace(obj) added
+
+2011/10/31
+    System.Reflector.InactiveThread added
+
+2011/10/30
+    System.Reflector.ConvertClass(obj, cls) added
+
+2011/10/26
+    Error report update for __index & __newindex
+
+2011/07/27
+    Enum's validation method changed.
+
+2011/07/12
+    System.Reflector.ParseEnum(enm, value) added
+
+2011/07/08
+    System.Reflector.IsAbstractClass(cls) added
+
+2011/07/04
+    Struct no longer need Constructor and Validate function
+
+2011/06/24
+    Property definition ignore case
+
+2011/05/30
+    System.Reflector.GetParts added.
+
+2011/05/11
+    Event handlers can run as thread.
+
+2011/04/14
+    System.Reflector added.
+

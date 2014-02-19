@@ -1,27 +1,35 @@
-Loop
+Pure lua object-oriented program system
 ====
 
-Lua object-oriented program system, also with a special syntax keyword system. Now, it only works for Lua 5.1. Since the **getfenv**, **setfenv**, **newproxy** api is removed from Lua 5.2, the system won't works on it now.
+PLoop provide a oop system with a special sugar syntax system. Several features contains in it:
+
+* Namespace system used to contains custom types.
+* Enum system used to define enumeration value types.
+* Struct system used to define structure value types.
+* Class system used to define object types with methods and properties settings, also with object events and meta-methods.
+* Interface system used to define interfaces for class objects.
+
+* Attribute system used to give descriptions for every parts of the system: enum, struct, class, interface, method, property, event. Those are useful for frameworks and adding system features in a good manner.
+* Overload system used to apply several definitions for class's constructor, method or meta-method with the same name, will make the config features easily to be defined.
+
+
+Now, it only works for Lua 5.1. Since the **getfenv**, **setfenv**, **newproxy** api is removed from Lua 5.2, the system won't works on it now, or you can provide them in another way.
 
 
 
 How to use
 ====
 
-Use loadfile or require to load the class.lua file in the folder. Then you can try the below code:
+Use loadfile or require to load the **PLoop.lua** file in the folder. Then you can try the below code:
 
 	do
 		-- Define a class
 		class "MyClass"
+			property "Name" { Type = System.String }
+
 			function Greet(self, name)
 				print("Hello " .. name .. ", My name is " .. self.Name)
 			end
-
-			property "Name" {
-				Field = "_Name",     -- The real field that used to store the value, explain later
-				Type = System.String,  -- the property's type used to validate the value,
-									   -- System.Sting means the value should be a string, also explain later.
-			}
 		endclass "MyClass"
 	end
 
@@ -35,59 +43,57 @@ Now we create a class with a **Greet** method and a **Name** property. Then we c
 		-- Call the object's method, Output : Hello Ann, My name is Kurapica
 		ob:Greet("Ann")
 
-		-- Property settings, 123 is not a string, Error : stdin:10: Name must be a string, got number.
+		-- Property settings, 123 is not a string, so Error : Name must be a string, got number.
 		ob.Name = 123
 	end
 
-Here I use **do ... end** because you may try those code in an interactive programming environment, many definitions like class, struct, interface's definitions should be kept in one piece. After here, I'll not use **do ... end** again, but just remember to add it yourself.
+Here I use **do ... end** because you may try those code in an interactive programming environment, many definitions like class, struct, interface's definitions should be kept in one piece. After here, I won't use **do ... end** again, but just remember to add it yourself.
 
 
 
 Features
 ====
 
-There are some keywords that released into the _G :
+There are some keywords that the system will released into the _G :
 
 * namespace
 * import
 * enum
 * struct
 * class
-* part-class
 * interface
-* part-interface
 * Module
 
 The **namespace** & **import** are used to control the namespace system used to store classes, interfaces, structs and enums.
 
-The **enum** is used to define an enum type.
+The **enum** is used to define enum types.
 
-The **struct** is used to start the definition of a struct type. A data of a struct type, is a normal table in lua, without metatable settings or basic lua type data like string, number, thread, function, userdata, boolean. The struct types are used to validate or create the values that follow the explicitly structure that defined in the struct types.
+The **struct** is used to start the definition of a struct type. A data of a struct type, is a normal table in lua, without metatable settings, the basic lua value types like string, number, thread, function, userdata, boolean are also defined in the **PLoop** system as struct types. The struct types are used to validate or create the values that follow the explicitly structure that defined in the struct types, like position on a cartesian coordinates, we only need values like { x = 13.4, y = 33 }.
 
-The **class** & **part-class** are used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to tell it do some jobs, also would have properties to store the data used to mark the object's state. A class is an abstract of objects, and can be used to create objects with the same properties and methods settings.
+The **class** is used to start the definition of a class. In an object-oriented system, the core part is the objects. One object should have methods that used to show what jobs the object can do, also should have properties to store the data used to mark the object's state. A class is an abstract from objects of the same type, it can contains the definition of the methods and properties so the object won't do these itself.
 
-The **interface** & **part-interface** are used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like we may need every objects have a **Name** property to used to show all objects's name. So, the interface is bring in to provide such features. Define an interface is the same like define a class, but no objects can be created from an interface.
+The **interface** is used to start the definition of an interface. Sometimes we may not know the true objects that our program will manipulate, or we want to manipulate objects from different classes, we only want to make sure the objects will have some features that our program needs, like objects have a **Name** property. So, the interface is bring in to provide such features. No objects can be created from an interface, the interface can be extended by classes.
 
-The **Module** is used to start a standalone environment with version check, and make the development with the lua-oop system more easily, like we don't need to write down full path of namespaces. This topic will be discussed at last.
+The **Module** is used to start a standalone environment with version check, and make the development with the **PLoop** system more easily, like we don't need to write down full path of namespaces. This topic will be discussed at last.
 
 
 
 namespace & import
 ====
 
-In an oop project, there would be hundred or thousand classes or other data types to work together, it's important to manage them in groups. The namespace system is bring in to store the classes and other features.
+In an oop project, there may be hundred or thousand classes or other data types to work together, it's important to manage them in groups. The namespace system is bring in to store the classes and other features.
 
 In the namespace system, we can access those features like classes, interfaces, structs with a path string.
 
 A full path looks like **System.Forms.EditBox**, a combination of words separated by '.', in the example, **System**, **System.Forms** and **System.Forms.EditBox** are all namespaces, the namespace can be a pure namespace used only to contains other namespaces, but also can be classes, interfaces, structs or enums, only eums can't contains other namespaces.
 
 
-The **import** function is used to save the target namespace into current environment, the 1st paramter is a string that contains the full path of the target namespace, so we can share the classes and other features in many lua environments, the 2nd paramter is a boolean, if true, then all the sub-namespace of the target will be saved to the current environment too.
+The **import** function is used to save the target namespace into current environment, the 1st paramter is a string that contains the full path of the target namespace, so we can share the classes and other features in many lua files(environments), the 2nd paramter is a boolean value, if true, then all the sub-namespace of the target namespace will be saved to the current environment too.
 
     import (name[, all])
 
 
-If you already load the class.lua, you can try some example :
+If you already load the PLoop.lua, you can try some example :
 
 	import "System"  -- Short for import( "System" ), just want make it looks like a keyword
 
@@ -99,7 +105,7 @@ If you already load the class.lua, you can try some example :
 
 	print( Object )          -- Output : System.Object
 
-The System is a root namespace defined in the class.lua file, some basic features are defined in the namespace, such like **System.Object**, used as the super class of other classes.
+The System is a root namespace defined in the PLoop.lua file, some basic features are defined in the namespace, such like **System.Object**, could be used as the super class of other classes(Unlike other oop system, there is no default super class, for lua, simple is good).
 
 Also you can see, **Object** is a sub-namespace in **System**, we can access it just like a field in the **System**.
 
@@ -118,42 +124,41 @@ Here a simple example :
 
 	print( NewClass )            -- Output : MySpace.Example.NewClass
 
-The namespace system is used to share features like class, if you don't declare a namespace for the environment, those features that defined later will be private.
+The namespace system is used to share features like classes, if you don't declare a namespace for the environment, those features that defined later will be private.
 
 
 
 enum
 ====
 
-enum is used to defined new value types with enumerated values.
+enum is used to define new value types with enumerated values.
 
-First, an example used to show how to create a new enum type :
+First, an example is used to show how to create a new enum type :
 
 	import "System"
 
 	-- Define a enum data type
 	enum "Week" {
-		SUNDAY = 0,
-		MONDAY = 1,
-		TUESDAY = 2,
-		WEDNESDAY = 3,
-	    THURSDAY = 4,
-	    FRIDAY = 5,
-	    SATURDAY = 6,
-	    "None",
+		"Sunday",
+		Monday = "Monday",
+		"Tuesday",
+		Wednesday = 3,
+	    thur = "Thursday",
+	    "Friday",
+	    "Saturday",
 	}
 
-	-- All output : 0
-	-- Acees the values as table field, just case ignored
-	print( Week.sunday )
-	print( Week.Sunday )
-	print( Week.sunDay )
+	-- Access the values like table field, case ignored
+	print( Week.SuNday )	-- Sunday
+	print( Week.Sunday )	-- Sunday
+	print( Week.THUR )		-- Thursday
 
-	-- Output : 'None'
-	print( Week.none )
+	print( Week.wedNesday )	-- 3
 
+	-- Call the enum as a function, parse the value to the text
 	-- Output : 'WEDNESDAY'
-	print( System.Reflector.ParseEnum( Week, 3 ) )
+	print( Week( 3 ) )
+
 
 The true format of the 'enum' function is
 
@@ -161,13 +166,15 @@ The true format of the 'enum' function is
 
 The **name** is a common string word, **enum(name)** should return a function to receive a table as the definition of the enum data type.
 
-In the **table**, for each key-value pairs, if the key is **string**, the key would be used as the value's name, if the key is a number and the value is a string, the value should be used as the value's name, so the 'None' is the value's name in the enum **Week**.
+In the **table**, for each key-value pairs, if the key is **string**, the key would be used as the value's name, if the key is a number and the value is a string, the value should be used as the value's name, so the 'Sunday' is the value's name in the enum **Week**.
 
-In the last line of the example, **System.Reflecotr** is an interface used to provide some internal informations of the system. Here, **ParseEnum** is used to get the key of a enum's value.
+So, you can get the value of an enumeration like a case ignored field, and get the enumeration from the value like a function call, it's a simple value type.
+
 
 ---
 
-Sometimes, we may need use the enum values as a combination, like Week.SUNDAY + Week.SATURDAY as the weekend days. We could use the System.__Flags__ attribute to mark the enum data type as bit flags data type (Attributes are special classes, only one for enums, the detail of the Attribute system will be explained later).
+
+Sometimes, we may need use the enum values as a combination, like Week.SUNDAY + Week.SATURDAY as the weekend days. We could use the `System.__Flags__` attribute to mark the enum data type as bit flags data type (The Attribute system will be explained later, using `System.__Flags__` is so simple so just remember it).
 
 Here is the full example :
 
@@ -181,30 +188,22 @@ Here is the full example :
 		WEDNESDAY = 8,
 	    THURSDAY = 16,
 	    FRIDAY = 32,
-	    SATURDAY = 64,
-	    "None",
+	    "SATURDAY",
 	}
+
+	-- Output : 64
+	print( Week.SATURDAY )
 
 	-- Output : 65
 	print( Week.SUNDAY + Week.SATURDAY )
 
 	-- Output : SATURDAY	SUNDAY
-	print( System.Reflector.ParseEnum( Week, 65 ) )
-
-	-- Output : true
-	print( System.Reflector.ValidateFlags( Week.SATURDAY, 65 ) )
-
-	-- Output : false
-	print( System.Reflector.ValidateFlags( Week.TUESDAY, 65 ) )
-
-	-- Ouput : 128
-	print( Week.None )
+	print( Week( 65 ) )
 
 
-First, the enum values should be 2^n, and the system would provide auto values if no value is set, so the Week.None is 128.
+The enumeration values should be 2^n, and the system would provide auto values if no value is set or not correct, so the Week.SATURDAY is 64.
 
-The **ParseEnum** function can return multi-values of the combination, and **ValidateFlags** can be used to validate the values.
-
+So use the enum type as function to parse the value, will return multi-values of the combination.
 
 
 struct
@@ -212,7 +211,7 @@ struct
 
 The main purpose of the struct system is used to validate values, for lua, the values can be boolean, number, string, function, userdata, thread and table.
 
-And in the **System** namespace, all basic data type have a struct :
+And in the **System** namespace, each basic data type have a **custom** struct type defined for it :
 
 * System.Boolean - The value should be mapped to true or false, no validation
 * System.String  - means the value should match : type(value) == "string"
@@ -221,8 +220,10 @@ And in the **System** namespace, all basic data type have a struct :
 * System.Userdata  - means the value should match : type(value) == "userdata"
 * System.Thread  - means the value should match : type(value) == "thread"
 * System.Table  - means the value should match : type(value) == "table"
+* System.RawTable  - means the value should match : type(value) == "table" and getmetatable(value) == nil
+* System.Any - Any value
 
-Those are the **basic** struct types, take the **System.Number** as an example to show the basic using :
+Those are the **basic** struct types, take the **System.Number** as an example to show how to use :
 
 	import "System"
 
@@ -232,31 +233,31 @@ Those are the **basic** struct types, take the **System.Number** as an example t
 	-- Error : [Number] must be a number, got string.
 	print( System.Number( '123' ))
 
-All structs can used to validate values. ( Normally, you won't need to write the 'validation' code yourselves.)
+All structs can be used to validate values. ( Normally, you only need to declare where and what type is needed, the validation will be done by the system.)
 
-When the value is a table, and we may expect the table contains fields with the expected type values, and the **System.Table** can only be used to check whether the value is a table.
+When the value is a table, and we may expect the table contains fields with expected type values, and the **System.Table** can only be used to check whether the value is a table.
 
 Take a position table as the example, we may expect the table has two fields : **x** - the horizontal position, **y** - the vertical position, and the fields' values should all be numbers. So, we can declare a **member** struct type like :
-
-	import "System"
 
 	struct "Position"
 		x = System.Number
 		y = System.Number
 	endstruct "Position"
 
-Here, **struct** keyword is used to begin the declaration, and **endstruct** keyword is used to end the declaration. Anything defined between them will be definition of the struct.
+Here, **struct** keyword is used to begin the declaration, and **endstruct** keyword is used to end the declaration. Anything defined between them will be the definition of the struct.
 
-The expression *x = System.Number*, the left part **x** is the member name, the right part **System.Number** is the member's type, the type can be any classes, interfaces, enums or structs :
+The expression *x = System.Number*, the left part **x** is the member name, the right part **System.Number** is the member's type.
+
+the type can be any classes, interfaces, enums or structs :
 
 * For a given class, the value should be objects that created from the class.
 * For a given interface, the value should be objects whose class extend from the interface.
 * For a given enum, the value should be the enum value or the value's name.
-* For a given struct, the value that can pass the validation of the struct.
+* For a given struct, the value should pass the validation of the struct.
 
 So, we can test the custom struct now :
 
-	-- Short for Position( {x = 123, y = 456} )
+	-- Use the struct type as a validator
 	pos = Position {x = 123, y = 456}
 
 	-- Output : 123	-	456
@@ -265,15 +266,85 @@ So, we can test the custom struct now :
 	-- Error : Usage : Position(x, y) - y must be a number, got nil.
 	pos = Position {x = 111}
 
-	-- Use the struct type as a table constructor
+	-- Use the struct type as a constructor,
+	-- the 'x' member is first defined, it will receive the 1st argument, so the 'y' member take the 2nd.
 	pos = Position(110, 200)
 
 	-- Output : 110	-	200
 	print(pos.x, '-', pos.y)
 
+
 ---
 
-In the previous example, the **x** and **y** field can't be nil, we can re-define it to make the field accpet nil value :
+In the struct's definition, there is no need to use `import "System"` to import the **System** namespace, the root namespace like **System** can be accessed directly, if you want use **Number** directly, also, can use `import "System"` like :
+
+	struct "Position"
+		import "System"
+
+		x = System.Number
+		y = System.Number
+	endstruct "Position"
+
+The struct is the first type that defined with those special syntax, so here is an explanation :
+
+* PLoop is designed based on controlling lua environment, so all type definitions can be tracke by the PLoop system and won't effect the common lua coding.
+
+* The struct keyword start the declaration, and also changed the current lua environment to a private table for the struct type's definition
+
+* The private environment can access any global features in the outside environment (mostly _G) , also has a cache system to increase performance, so normally you don't need to care how the track system working.
+
+* The private environment can access any root namespaces such like **System** directly, also can access any sub-namespaces of the namespaces that imported, so **Number** can be accessed just by import the **System**, those features can't be done in the _G.
+
+* There is no need to use **namespace** to give a namespace for the private environment, the private environment's namespace is the struct type itself.
+
+* The code of the definition will be running in the private environment, so the PLoop system can track all the special defintions like `x = System.Number`, this is a simple assignment, but the value is a type, so the PLoop system know the **x** is a field of the struct.
+
+* Except the special defintions, other definitions will be passed to do the default job, like :
+
+		struct "Position"
+			import "System"
+
+			-- Simple lua code
+			a = 123
+			print(a)
+
+			-- Special definition
+			x = System.Number
+			y = System.Number
+		endstruct "Position"
+
+		-- nil, a is defined in the private environment, no where get it
+		print(a)
+
+* endstruct is used to finished the defintion of the struct, and change back the lua environment, so the **struct ... enstruct** works just like define a function to keep all code in one piece.
+
+* The struct can be redefined any times(we'll see how to disable it in later), each time a new private environment will be used to make sure the previous defintion won't affect the new one :
+
+
+		struct "Position"
+			import "System"
+
+			-- Simple lua code
+			x = 123
+
+			-- Special definition
+			y = System.Number
+		endstruct "Position"
+
+		struct "Position"
+			import "System"
+
+			-- Special definition
+			x = System.Number
+			y = System.Number
+		endstruct "Position"
+
+	If the redefine code using the same private environment, and **x** has a value 123, then `x = System.Number` won't be tracked by the system, so **x** won't be treated as a struct's field. Each time using a new private environment will keep the problem out the way.
+
+
+---
+
+In the previous example, the **x** and **y** field can't be nil, we can redefine it to make the field accpet nil value :
 
 	struct "Position"
 		x = System.Number + nil
@@ -287,7 +358,7 @@ Normally, the type part can be a combination of lots types seperated by '+', **n
 
 ---
 
-If we want default values for the fields, we can add a **Validate** method in the definition, this is a special method used to do custom validations, so we can do some changes in the method, and just remeber to return the value in the **Validate** method.
+If you want default values for the fields, we can add a **Validate** method in the definition, this is a special method used to do custom validations, so we can do some changes in the method.
 
 	struct "Position"
 		x = System.Number + nil
@@ -296,8 +367,6 @@ If we want default values for the fields, we can add a **Validate** method in th
 		function Validate(value)
 			value.x = value.x or 0
 			value.y = value.y or 0
-
-			return value
 		end
 	endstruct "Position"
 
@@ -316,11 +385,13 @@ Or you can use a method with the name of the struct, the method should be treate
 
 		-- The constructor should create table itself
 		function Position(x, y)
-			return { x = x or 0, y = y or 0 }
+			-- Don't forget use the struct type to validate the return value
+			-- It may be looks strange, but remember, the Position here is the struct type not the function
+			return Position { x = x or 0, y = y or 0 }
 		end
 	endstruct "Position"
 
-	-- Validate won't go through the constructor
+	-- Use struct type as validator won't go through the constructor
 	pos = Position {x = 111}
 
 	-- Output : 111	-	nil
@@ -331,13 +402,14 @@ Or you can use a method with the name of the struct, the method should be treate
 	-- Output : 111	-	0
 	print(pos.x, '-', pos.y)
 
-	-- The constructor should do the validate itself
+	-- Error : Usage : Position([x, y]) - x must be a number, got string.(Optional)
 	pos = Position ('X', 'Y')
 
 	-- Output : X	-	Y
 	print(pos.x, '-', pos.y)
 
-There are many disadvantages in using the constructor, so, just leave the table creation to the struct system.
+
+There are not many things can be done in the constructor, the struct know how to create tables based on the field settings, and the **Validate** function works better than the constructor, so just forget the constructor.
 
 ---
 
@@ -349,15 +421,13 @@ In sometimes, we need validate the values and fire new errors, those operations 
 
 		function Validate(value)
 			assert(value.min <= value.max, "%s.min can't be greater than %s.max.")
-
-			return value
 		end
 	endstruct "MinMax"
 
 	-- Error : Usage : MinMax(min, max) - min can't be greater than max.
 	minmax = MinMax(200, 100)
 
-In the error message, there are two "%s" used to represent the value, and will be replaced by the validation system considered by where it's using. Here an example to show :
+In the error message, there are two "%s." used to represent the value, and will be replaced by the validation system considered by where it's using. Here an example to show :
 
 	struct "Value"
 		value = System.Number
@@ -369,6 +439,8 @@ In the error message, there are two "%s" used to represent the value, and will b
 
 So, you can quickly find where the error happened.
 
+Remember, when a value is passed to the **Validate** method, it has already passed the type checking, so no need to check it again in your custom validation.
+
 ---
 
 We also may want to validate numeric index table of a same type values, like a table contains only string values :
@@ -379,42 +451,155 @@ We can declare a **array** struct for those types (A special attribtue for the s
 
 	import "System"
 
-	System.__StructType__( System.StructType.Array )
+	System.__StructType__( "array" )
 	struct "StringTable"
-		element = System.String
+		element = String
 	endstruct "StringTable"
 
 	-- Error : Usage : StringTable(...) - [3] must be a string, got number.
 	a = StringTable{"Hello", "World", 3}
 
-It's looks like the **member** struct, but the member name **element** has no means, it's just used to decalre the element's type, you can use **element**, **ele** or anything else.
+It's looks like the **member** struct, but the field name **element** has no means, it's just used to declare the element's type, you can use **element**, **ele** or anything else.
+
+The **"array"** is an enumeration value of System.StructType, there are three type structs, **"custom"**, **"member"** and **"array"**, **"custom"** is used for special values that not table, all has be defined in the **System** namespace like **System.Number**, if no struct type is specified by `__StructType__`, **"member"** is the default type, so we only need use the attribute when defining an array struct type.
+
 
 ---
 
-The last part about the struct is the struct methods. Any functions that defined in the struct definition, if the name is not the **Validate** and the struct's name, will be treated as the struct methods, and those methods will be copyed to the values when created.
+Now, let's defined a special struct type :
 
-	struct "Position"
-		x = System.Number
-		y = System.Number
+	struct "Person"
+		import "System"
 
-		function Print(self)
-			print(self.x .. " - " .. self.y)
+		__StructType__( "array" )
+		struct "Children"
+			ele = Person
+		endstruct "Children"
+
+		enum "Gender" {
+			"male",
+			"female",
+		}
+
+		name = String
+		gender = Gender
+		father = Person + nil
+		mother = Person + nil
+		children = Children + nil
+
+		-- generate the relationship
+		function Validate(value)
+			if value.children then
+				for _, child in ipairs(value.children) do
+					if value.gender == Gender.Male then
+						child.father = value
+					else
+						child.mother = value
+					end
+				end
+			end
 		end
-	endstruct "Position"
 
-	pos = Position { x = 123, y = 456 }
+	endstruct "Person"
 
-	-- Output : 123 - 456
-	pos:Print()
+The **Person** struct is a **member** struct type, it contains an enum type named **Gender**, like I said, the private environment using the struct type as the namespace, so the enum can be accessed like **Person.Gender**.
 
-	pos = Position (1, 2)
+Also an **array** struct type is defined in it with name **Children**, specially, it using **Person** as its element's type, when using `struct "Person"`, the **Person** struct type is created and can be used, no matter its definition is finished or not.
 
-	-- Output : 1 - 2
-	pos:Print()
+The **Person** struct need a **name** field to store its name, **gender** to store its gender, and three optional field to store the relationship between the person objects.
 
-Only using the struct to validate a value or create a value, will fill the methods into the value.
+Also a custom validation is added to generate the relationship for person objects, here is the test :
 
-Normally, creating a class is better than using the struct methods, unless you want do some optimizations.
+	king = Person {
+		name = "King",
+		gender = "male",
+		children = {
+			Person {
+				name = "Ann",
+				gender = "female",
+				children = {
+					Person ("Kite", "female"),
+				},
+			},
+		}
+	}
+
+	kite = king.children[1].children[1]
+
+	-- king
+	print(kite.mother.father.name)
+
+---
+
+The last part about the struct is the struct methods. Any functions that defined in the struct definition, if the name is not the **Validate** and the struct's name, will be treated as the struct methods, and those methods will be copyed to the data when created or validated.
+
+Now we give the **Person** struct type a new method to add child :
+
+	struct "Person"
+		import "System"
+
+		__StructType__( "array" )
+		struct "Children"
+			ele = Person
+		endstruct "Children"
+
+		enum "Gender" {
+			"male",
+			"female",
+		}
+
+		name = String
+		gender = Gender
+		father = Person + nil
+		mother = Person + nil
+		children = Children + nil
+
+		-- generate the relationship
+		function Validate(value)
+			if value.children then
+				for _, child in ipairs(value.children) do
+					if value.gender == Gender.Male then
+						child.father = value
+					else
+						child.mother = value
+					end
+				end
+			end
+		end
+
+		-- Add Child
+		function AddChild(self, child)
+			-- don't forget validate the child
+			child = Person( child )
+
+			self.children = self.children or {}
+
+			table.insert(self.children, child)
+
+			if self.gender == Gender.Male then
+				child.father = self
+			else
+				child.mother = self
+			end
+		end
+
+	endstruct "Person"
+
+	king = Person("King", "male")
+	kite = Person("Kite", "female")
+
+	king:AddChild(kite)
+
+	-- King
+	print(kite.father.name)
+
+	-- function: 00865FE0
+	print( rawget(kite, "AddChild") )
+
+
+So, the methods are just copied to the datas.It's useful when you don't need some inheritance features.
+
+Those datas are just normal lua tables without metatable settings, so, the struct types are just some constructor or validator.
 
 
 
@@ -434,19 +619,21 @@ Let's use an example to show how to create a new class :
 	class "Person"
 	endclass "Person"
 
-Like defining a struct, **class** keyword is used to start the definition of the class, it receive a string word as the class's name, and the **endclass** keyword is used to end the definition of the class, also it need the same name as the parameter, **class**, **endclass** and all keywords in the loop are fake keywords, they are only functions with some lua environment tricks, so we can't use the **end** to do the job for the best.
+Like defining a struct, **class** keyword is used to start the definition of the class, it receive a string word as the class's name, and the **endclass** keyword is used to end the definition of the class, also it need the same name as the parameter, **class**, **endclass** and all keywords in the **PLoop system** are fake keywords, they are only functions with some lua environment tricks, so we can't use the **end** to do the job for the best.
+
+Also the class definition codes are running in a private environment just like defining struct types.
 
 Now, we can create an object of the class :
 
 	obj = Person()
 
-Since the **Person** class is a empty class, the **obj** just works like a normal table.
+Since the **Person** class is an empty class, the **obj** just works as a normal table.
 
 
 Method
 ----
 
-Calling an object's method is like sending a message to the object, so the object can do some operations. Take the **Person** class as an example, re-define it :
+Calling an object's method is like sending a message to the object, so the object can do some operations. Take the **Person** class as an example, redefine it :
 
 	class "Person"
 
@@ -478,7 +665,7 @@ Here two methods are defined for the **Person**'s objects. **GetName** used to g
 
 	endclass "Person"
 
-So, we can used it like :
+Now, we can used it like :
 
 	obj = Person()
 
@@ -496,7 +683,7 @@ So, we can used it like :
 Constructor
 ----
 
-Well, it's better to give the name to a person object when objects are created. When define a global function with the class name, the function will be treated as the constructor function, like the object methods, it use **self** as the first paramter to receive the objecet, and all other paramters passed in.
+Well, it's better to give the name to a person object when objects are created. When define a global function with the class name, the function will be treated as the constructor function, like the object methods, it use **self** as the first paramter to receive the object, and all other paramters will be passed in.
 
 	class "Person"
 
@@ -523,6 +710,8 @@ So, here we can use it like :
 	-- Output : Hi Kurapica
 	print( "Hi " .. obj:GetName() )
 
+One class can have many constructors with different paramter settings, so the object methods, those features will be introduced in the attribute system.
+
 
 Class Method
 ----
@@ -531,7 +720,7 @@ Any global functions defined in the class's definition with name start with "_" 
 
 	class "Person"
 
-		_PersonCount = _PersonCount or 0
+		_PersonCount = 0
 
 		-- Class Method
 		function _GetPersonCount()
@@ -564,89 +753,343 @@ Any global functions defined in the class's definition with name start with "_" 
 	print("Person Count : " .. Person._GetPersonCount())
 
 
-Notice a global variable **_PersonCount** is used to count the persons, it can be decalred as local, but keep global is simple, and when re-define the class, the class won't lose informations about the old version objects(run the code again, you should get 6).
+Notice a global variable **_PersonCount** is used to count the persons, it's private to the definition environment, so you won't get it in **_G**.
 
 
-Property & Init with table
+Property
 ----
 
-Properties are used to access the object's state, like **name**, **age** for a person. Normally, we can do this just using the lua table's field, but that lack the value validation and we won't know how and when the states are changed. So, the property system bring in like the other oop system.
+Properties are used to access the object's state, like **name**, **age** for a person. Normally, we can do this just using the lua table's field, but that lack the value validation and we can't track how and when the states are changed. So, the property system is bring in like the other oop system.
 
-So, here is the full definition format for a property :
+As an example, we could define a **Name** property for the **Person** class, so the object don't need to use **GetName** and **SetName** to do the job.
 
-	property "name" {
-		Field = "field",
-		Get = "GetMethod" or function(self) end,
-		Set = "SetMethod" or function(self, value) end,
-		Type = types,
-		Default = value,
-	}
+To avoid conflict, we use a new namespace for a new **Person** class, when learn the class's re-definition, you'll know why.
 
-* Field - optional, the lowest priority, the real field in the object that store the data, can be used to read or write the property.
+	namespace "TestNS"
 
-* Get - optional, the highest priority, if the value is string, the object method with the name same to the value will be used, if the value is a function, the function will be used as the read accessor, can be used to read the property.
-
-* Set - optional, the highest priority, if the value is string, the object method with the name same to the value will be used, if the value is a function, the function will be used as the write accessor, can be used to write the property.
-
-* Type - optional, just like define member types in the struct, if set, when write the property, the value would be validated by the type settings.
-
-* Default - optional, used as the default value if no value existed.
-
-So, re-define the **Person** class with the property :
+	-- Keep the previous class away
+	Person = nil
 
 	class "Person"
+		import "System"
 
-		property "Name" {
-			Field = "__Name",
-			Type = System.String,
-		}
+		property "Name" { Type = String }
+
+		property "Age" { Type = Number }
 
 	endclass "Person"
 
-With the property system, we can create objects with a new format, called *Init with a table* :
+	o = Person()
 
-	obj = Person { Name = "A", Age = 20 }
+	-- Output : string	""
+	print(type(o.Name), ('%q'):format(o.Name))
 
-	-- Output : A	A	20
-	print( obj.Name, obj.__Name, obj.Age )
+	-- Output : 0
+	print(o.Age)
 
-If only a normal table passed to the class to create the object, the object will be created with no parameters, and then any key-value paris in the table will be tried to write to the object (just like obj[key] = value). If you want some parameters be passed into the class's constructor, the features will be added in the **Attribute** system.
+	o.Name = "Kurapica"
 
-With the **Field**, the reading and writing are the quickest, but normally, we need to do more things when the object's properties are accessed, like return a default value when data not existed. So, here is a full example to show **Get** and **Set** :
+	-- Output : Kurapica
+	print(o.Name)
+
+	-- Output : _Person_Name	Kurapica
+	for k, v in pairs(o) do print(k, v) end
+
+	-- Error : Name must be a string, got number.
+	o.Name = 123
+
+To define a **property**, line started with **property** keyword, then the property's name, the end is a table contains the definitions.
+
+Normally, a property need a type to declare what value it can contains, for the **Name** property, it can only accept string values, so, in the table, we set `Type = String`, also can be `type = String`, the **Type** key is case ignored, no matter you use `type = String` or 'TYPE = String`. Then, when we run `o.Name = 123`, the value is not a string, it failed.
+
+In the code `print(type(o.Name), ('%q'):format(o.Name))` and `print(o.Age)`, we can see, the **Name** and **Age** has default values, since the **Name** property can only accept string values, the **system**'ll give it a default value - the empty string, for the **Age** property, only number can be accepted, so the default value is 0, and if it only accept boolean values, the default value is false, for any other types, the default is nil.
+
+Also you can set the default value yourself like :
 
 	class "Person"
+		import "System"
 
-		-- Object method
-		function GetName(self)
-			return self.__Name or "Anonymous"
-		end
+		property "Name" { Type = String, Default = "Anonymous" }
 
-		-- Property
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+Using **default** key to set the default value for the property, case ignored. The value must can pass the validation of the type setting, or it'll be changed to nil.
+
+And in the code `for k, v in pairs(o) do print(k, v) end`, we can find the real field that store the **Name** property's value is **_Person_Name**. Also, you change it like :
+
+	class "Person"
+		import "System"
+
+		property "Name" { Type = String, Default = "Anonymous", Field = "__Name" }
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+	o = Person()
+
+	o.Name = "Kurapica"
+
+	-- Output : __Name	Kurapica
+	for k, v in pairs(o) do print(k, v) end
+
+So, using **Field** (case ignored), you can make sure which field is used to store the values. If you don't care, just leave it to the default settings.
+
+The settings above can only make sure the value can be validated(type setting), and existed(default settings), it can't track when the property has been accessed. In the definition table, we can use **Get** / **Set** key to set functions like :
+
+	class "Person"
+		import "System"
+
 		property "Name" {
-			-- Using the object method
-			Get = "GetName",
-
-			-- Using special set function
 			Set = function(self, name)
-				local oldname = self.Name
+				-- the name is validated by the type setting
+				-- So here no need to check the name type
+				if name ~= self.Name then
+					print("Name is changed from " .. self.Name .. " to " .. name)
 
-				self.__Name = name
-
-				print("The name is changed from " .. oldname .. " to " .. self.Name)
+					-- Don't use self.Name = name, it will cause infinite recycle
+					self.__Name = name
+				end
 			end,
 
-			-- So in set method, no need to valdiate the 'name' value
-			Type = System.String + nil,
+			Type = String,
+			Default = "Anonymous",
+			Field = "__Name",
 		}
+
+		property "Age" { Type = Number, default = 99 }
 
 	endclass "Person"
 
-So, the **Get** part is using the object method **GetName**, and the **Set** part is using an anonymous function to do the job.
+	o = Person()
 
-	obj = Person()
+	-- Output : Name is changed from Anonymous to Mary
+	o.Name = "Mary"
 
-	-- Output : The name is changed from Anonymous to A
-	obj.Name = "A"
+It may be strange that define a **Set** method with the **Field** settings, so, we can give it a **Get** method too.
+
+	class "Person"
+		import "System"
+
+		property "Name" {
+			Set = function(self, name)
+				-- the name must pass the type validation, then send to here
+				-- So, I know name is a string
+				if name ~= self.Name then
+					print("Name is changed from " .. self.Name .. " to " .. name)
+
+					-- Don't use self.Name = name, it will cause infinite recycle
+					self.__Name = name
+				end
+			end,
+
+			Get = function(self)
+				return self.__Name
+			end,
+
+			Type = String,
+			Default = "Anonymous",
+		}
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+Some authors may like using **GetName** and **SetName** methods, and if you do, it's very simple to work with the property system, here is an example :
+
+	class "Person"
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		-- It's setName not SetName, both ok
+		function setName(self, name)
+			if type(name) == "string" and name ~= self.Name then
+				print("Name is changed from " .. self.Name .. " to " .. name)
+
+				self.__Name = name
+			end
+		end
+
+		property "Name" { Type = String, Default = "Anonymous" }
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+	o = Person()
+
+	-- Output : Name is changed from Anonymous to Kite
+	o.Name = "Kite"
+
+So, the **setName** is used as the **Set** method for the **Name** property, and the **GetName** is used as the **Get** method.
+
+If the property has no **Field** settings, and no **Get** method, it'll check **Get** + property's name or **get** + property's name, if the class has such method, it'll be used as the **Get** method, the same thing will be done for the **Set** part.
+
+BTW, the automatically methods scan works a little complex if the property's type is **System.Boolean**, not only **Get** + propert's name and **Set** + property's name should be scanned, **is** / **Is** + property's name also would be scanned for **Get** method. And if the property name is like **noun + adj**, and the **adj** is converted from a **verb**, the **Is + verb + noun** will be scanned for **Get**, and the **verb + noun** will be scanned for the **Set**, for an example : property's name is **FlagDisabled**, it can receive **DisableFlag** as the **Set** method and **IsFlagDisabled** or **IsDisableFlag** will be used as the **Get**, it's a little complex and just for lazy guys, you can just ignore it. An example :
+
+	class "Flag"
+		function DisableFlag(self, flag)
+			print("The object is " .. (flag and "disabled" or "enabled" ))
+
+			self.__Flag = flag
+		end
+
+		function IsFlagDisabled(self)
+			return self.__Flag
+		end
+
+		property "FlagDisabled" { Type = System.Boolean }
+	endclass "Flag"
+
+	o = Flag()
+
+	-- Output : The object is disabled
+	o.FlagDisabled = true
+
+You may think those automatically methods scan not steady, so you can set it yourself :
+
+	class "Person"
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		-- It's setName not SetName, that's ok
+		function setName(self, name)
+			if type(name) == "string" and name ~= self.Name then
+				print("Name is changed from " .. self.Name .. " to " .. name)
+
+				self.__Name = name
+			end
+		end
+
+		property "Name" { Type = String, Default = "Anonymous", Get = "GetName", Set = "SetName" }
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+You may ask why not using
+
+	class "Person"
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		-- It's setName not SetName, that's ok
+		function setName(self, name)
+			if type(name) == "string" and name ~= self.Name then
+				print("Name is changed from " .. self.Name .. " to " .. name)
+
+				self.__Name = name
+			end
+		end
+
+		property "Name" { Type = String, Default = "Anonymous", Get = GetName, Set = SetName }
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+Yes, both works, the first definition would use the object's methods as the accessor, and the second definiton use the **GetName** and **setName** function directly, when using another class that inherited from the **Person** class, and override the **GetName** method, in the second definition, the object can't use the newest **GetName** method for it's **Name** property, that would cause some problem.
+
+At last, let's see how to declare a read-only or wirte-only property.
+
+* Read-only property : No **Field**, no **Set** (include automatically methods scan) or **Set** is false
+* Write-only property : No **Field**, no **Get**  (include automatically methods scan) or **Get** is false
+
+Set **Get** or **Set** to false will block the automatically methods scan :
+
+	class "Person"
+
+		function GetName(self)
+			return self.__Name
+		end
+
+		-- It's setName not SetName, that's ok
+		function setName(self, name)
+			if type(name) == "string" and name ~= self.Name then
+				print("Name is changed from " .. self.Name .. " to " .. name)
+
+				self.__Name = name
+			end
+		end
+
+		property "Name" { Type = String, Default = "Anonymous", Set = false }
+
+		property "Age" { Type = Number, default = 99 }
+
+	endclass "Person"
+
+	o = Person()
+
+	-- Error : Name can't be written.
+	o.Name = "Mike"
+
+
+Init table
+----
+
+When create an object, and set it's properties like
+
+	o = Person()
+
+	o.Name = "Kite"
+	o.Age = 23
+
+It's weird, and sometimes, we may keep the informations in some table loaded from files, like
+
+	info = {
+		[1] = { Name = "Kite", Age = 23 },
+	}
+
+	o = Person()
+
+	o.Name = info[1].Name
+	o.Age = info[1].Age
+
+It would be better if we can build an object on the info table. Normally, you can do it by give a constructor to the **Person** class to handle it, but when you have many classes, it's weird to write some similar code many times, you can do it with the init table system.
+
+If the class has no constructor, an init table can be used when creating objects :
+
+	namespace "TestInitTableNS"
+
+	-- Keep the previous class away
+	Person = nil
+
+	class "Person"
+		property "Name" { Type = System.String }
+		property "Age" { Type = System.Number }
+	endclass "Person"
+
+	-- Create a person object with init settings
+	o = Person { Name = "Kite", Age = 23, Gender = "Female" }
+
+	-- Output : Kite	23	Female
+	print(o.Name, o.Age, o.Gender)
+
+	info = {
+		[1] = { Name = "Jane", Age = 21 },
+	}
+
+	o2 = Person( info[1] )
+
+	-- Output : Jane	21
+	print(o2.Name, o2.Age)
+
+
+Anything in the init table would be passed into the object like :
+
+	for k, v in pairs(init) do
+		pcall(function(self, name, value) self[name] = value end, obj, k, v)
+	end
+
+ Normally, you can't use init table on a class with constructors, but we'll see how to make it works with the attribtue system in a later chapter.
 
 
 Event
@@ -675,14 +1118,21 @@ The **event** keyword is used to declare an event with the event name. So, here 
 				self.__Name = name
 
 				-- Fire the event with parameters
-				self:OnNameChanged(oldName, self.Name)
+				return self:OnNameChanged(oldName, self.Name)
 			end,
 
 			Type = System.String + nil,
 		}
 	endclass "Person"
 
-It looks like we just give the object a **OnNameChanged** method, and call it when needed. The truth is the **self.OnNameChanged** is an object created from **System.EventHandler** class. It's used to control all event handlers (functions), there are two type event handlers :
+	o = Person()
+
+	o.OnNameChanged = function(self, old, new) print("The name is changed from " .. old .. " to " .. new) end
+
+	-- Output : The name is changed from Anonymous to Ann
+	o.Name = "Ann"
+
+It looks like we just give the object a **OnNameChanged** method, and call it when needed. The truth is the **self.OnNameChanged** is an object created from **System.EventHandler** class. It's used to control all event handlers (functions), there are two event handler types :
 
 * Stackable event handler
 
@@ -765,15 +1215,42 @@ So, we can get detail from the example :
 * Any handler return true will stop the calling operation, any handlers after it won't be called.
 
 
-It's not good to use the **EventHandler** directly, anytime access the object's **EventHandler**, the object will create the **EventHandler** when not existed. So, fire an event without any handlers will be a greate waste of memeory. There are two ways to do it :
+It's not good to use the **EventHandler** directly, anytime access the object's **EventHandler**, the object will create the **EventHandler** when not existed. So, fire an event without any handlers will be a greate waste of memory. There are two ways to do it :
 
-* Using **System.Reflector.FireObjectEvent**, for the previous example :
+* Using **System.Reflector.FireObjectEvent** API, for the previous example :
 
 		self:OnNameChanged(oldName, self.Name)
 
 		-- Change to
 
 		System.Reflector.FireObjectEvent(self, "OnNameChanged", oldName, self.Name)
+
+	Or just add a **Fire** method in your class like :
+
+		class "Person"
+			event "OnNameChanged"
+
+			-- Add the API as the object method
+			Fire = System.Reflector.FireObjectEvent
+
+			-- Property
+			property "Name" {
+				Get = function(self)
+					return self.__Name or "Anonymous"
+				end,
+
+				Set = function(self, name)
+					local oldName = self.Name
+
+					self.__Name = name
+
+					-- Fire the event with parameters
+					return self:Fire("OnNameChanged", oldName, self.Name)
+				end,
+
+				Type = System.String + nil,
+			}
+		endclass "Person"
 
 * Inherit from **System.Object**, then using the **Fire** method :
 
@@ -791,19 +1268,78 @@ It's not good to use the **EventHandler** directly, anytime access the object's 
 				Set = function(self, name)
 					local oldName = self.Name
 
-					self.__Name = name
+					if oldName ~= name then
+						self.__Name = name
 
-					-- Fire the event with parameters
-					self:Fire("OnNameChanged", oldName, self.Name)
+						-- Fire the event with parameters
+						return self:Fire("OnNameChanged", oldName, self.Name)
+					end
 				end,
 				Type = System.String + nil,
 			}
 
 		endclass "Person"
 
-The inheritance Systems is a powerful feature in the object-oriented program, it makes the class can using the features in its super class.
+The inheritance Systems is a powerful feature in the object-oriented program, it makes the class can using the features defined in its super class.
 
 Here, the **System.Object** class is a class that should be other classes's super class, contains many useful method, the **Fire** method is used to fire an event, it won't create the **EventHandler** object when not needed.
+
+BTW. **__Events** field in the object is used to keep the event handlers, so don't use this field for other purpose.
+
+
+Propety - Event
+----
+
+In the previous example, we give a Set method for the **Name** property, compare the old and new value, then set it and fire the event when different, it's a common operation that we may do it on many properties, and that's weird we should write them down many times.
+
+If we only want to know when the property's value is changed, we can just bind an **Event** to the property, so rewrite the previous example :
+
+	class "Person"
+		-- Declare the event
+		event "OnNameChanged"
+
+		-- Bind the event to the property
+		property "Name" { Type = System.String, Default = "Anonymous", Event = "OnNameChanged" }
+
+	endclass "Person"
+
+It's very simple, just using **Event** field point to the event's name. So, let's use it :
+
+	o = Person()
+
+	o.OnNameChanged = function (self, old, new, prop)
+		print(("[%s] %s -> %s "):format(prop, old, new))
+	end
+
+	-- Ouput : [Name] Anonymous -> Ann
+	o.Name = "Ann"
+
+From the result, you can see the parameters of the event, 1st is **old** value, 2nd is **new** value, 3rd is the property's name, so, in some case we can handle all property changes in one event :
+
+	class "Person"
+		-- Declare the event
+		event "OnPropertyChanged"
+
+		-- Bind the event to the property
+		property "Name" { Type = System.String, Default = "Anonymous", Event = "OnPropertyChanged" }
+		property "Age" { Type = System.Number, Default = 1, Event = "OnPropertyChanged" }
+
+	endclass "Person"
+
+	o = Person()
+
+	o.OnPropertyChanged = function (self, old, new, prop)
+		print(("[%s] %s -> %s "):format(prop, old, new))
+	end
+
+	-- Ouput : [Name] Anonymous -> Ann
+	o.Name = "Ann"
+
+	-- Ouput : [Age] 1 -> 22
+	o.Age = 22
+
+And just remember, if the property has a **Set** method, the event won't be fired.
+
 
 
 Meta-method
@@ -811,15 +1347,12 @@ Meta-method
 
 In lua, a table can have many metatable settings, like **__call** use the table as a function, more details can be found in [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/manual.html#2.8).
 
-Since the objects are lua tables with special metatable set by the Loop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the **__call** as an example :
+Since the objects are lua tables with special metatables set by the PLoop system, setmetatable can't be used to the objects. But it's easy to provide meta-method for the objects, take the **__call** as an example :
 
 	class "Person"
 
 		-- Property
-		property "Name" {
-			Field = "__Name",
-			Type = System.String + nil,
-		}
+		property "Name" { Type = System.String, Default = "Anonymous" }
 
 		-- Meta-method
 		function __call(self, name)
@@ -835,14 +1368,14 @@ So, just declare a global function with the meta-method's name, and it can be us
 	-- Output : Hello, Sam, it's Dean
 	obj("Sam")
 
-All metamethod can used include the **__index** and **__newindex**. Also a new metamethod used by the Loop system : **__exist**, the **__exist** method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
+All metamethod can be used include the **__index** and **__newindex**. Also a new metamethod used by the PLoop system : **__exist**, the **__exist** method receive all parameters passed to the constructor, and decide if there is an existed object, if true, return the object directly.
 
-	class "Person"
+	class "UniquePerson"
 
 		_PersonStorage = setmetatable( {}, { __mode = "v" })
 
 		-- Constructor
-		function Person(self, name)
+		function UniquePerson(self, name)
 			_PersonStorage[name] = self
 		end
 
@@ -851,11 +1384,11 @@ All metamethod can used include the **__index** and **__newindex**. Also a new m
 			return _PersonStorage[name]
 		end
 
-	endclass "Person"
+	endclass "UniquePerson"
 
 So, here is a test :
 
-	print(Person("A"))
+	print(UniquePerson("A"))
 
 Run the test anytimes, the result will be the same.
 
@@ -863,7 +1396,7 @@ Run the test anytimes, the result will be the same.
 Inheritance
 ----
 
-The inheritance system is the most important system in an oop system. In the Loop, it make the classes can gain the object methods, properties, events, metamethods settings from its superclass.
+The inheritance system is the most important system in an oop system. In the PLoop, it make the classes can gain the object methods(not class methods), properties, events, meta-methods and constructor settings from its superclass.
 
 The format is
 
@@ -873,7 +1406,7 @@ The format is
 
 	inherit "superclass path"
 
-The **inherit** keyword can only be used in the class definition. In the previous example, the **Person** class inherit from **System.Object** class, so it can use the **Fire** method defined in it. One class can only have one super class.
+The **inherit** keyword can only be used in the class definition. In the previous example, the **Person** class inherit from **System.Object** class, so it can use the **Fire** method. One class can only have one super class.
 
 * In many scene, the class should override its superclass's method, and also want to use the origin method in it. The key features is, in the class definition, a var named **Super** can be used as the superclass, so here is an example :
 
@@ -889,6 +1422,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 			inherit "A"
 
 			function Print(self)
+				-- Call the super class's method
 				Super.Print( self )
 
 				print("Here is B's Print.")
@@ -906,7 +1440,7 @@ The **inherit** keyword can only be used in the class definition. In the previou
 		Here is A's Print.
 		Here is B's Print.
 
-	It's all right if you want keep the origin method as a local var like, it's the quickest way to call functions :
+	It's all right if you want keep the origin method as a local var like(don't keep it as global, it'll be considered as a new object method) :
 
 		class "B"
 			inherit "A"
@@ -921,126 +1455,93 @@ The **inherit** keyword can only be used in the class definition. In the previou
 
 		endclass "B"
 
-	But when re-define the **A** class, the **oldPrint** would point to an old version **Print** method, it's better to avoid, unless you don't need to re-define any features.
-
-* With the inheritance system, go back to the property definition :
-
-		property "name" {
-			Field = "field",
-			Get = "GetMethod" or function(self) end,
-			Set = "SetMethod" or function(self, value) end,
-			Type = types,
-		}
-
-	Normally, if want the property accessors can be changed in the child-classes, it's better to define the get & set object methods, and using the name of the methods as the **Get** & **Set** part's value in the property definition, so the child-class only need to override the object methods to change the behavior of the property accesses. Like the **Person** class :
-
-		class "Person"
-
-			-- Object method
-			function GetName(self)
-				return self.__Name
-			end
-
-			function SetName(self, name)
-				self.__Name = name
-			end
-
-			-- Property
-			property "Name" {
-				Get = "GetName",
-				Set = "SetName",
-				Type = System.String + nil,
-			}
-
-			-- Meta-method
-			function __call(self, name)
-				print("Hello, " .. name .. ", it's " .. self.Name)
-			end
-
-		endclass "Person"
-
-	So, when a child-class of the **Person** re-define the **GetName** or **SetName**, there is no need to override the property **Name**.
-
-	If override the property definition in the child-class, the superclass's property will be removed from the child-class.
+	But when redefine the **A** class, the **oldPrint** would point to an old version **Print** method, it's better to avoid, unless you don't need to redefine any features.
 
 * Like the object methods, override the metamethods is the same, take **__call** as example, **super.__call** can be used to retrieve the superclass's **__call** metamethod.
 
-* When the class create an object, the object should passed to its super class's constructor first, and then send to the class's constructor, unlike oop system in the other languages, the child-class can't acess any variables defined in super-class's definition environment, it's simple that the child-class focus on how to manipulate the object that created from the super-class.
+* If the child class has no constructor, its super class's constructor would be used if existed.If the child has own constructor, the system won't call its super class's constructor, so the child class should call super's constructor itself, the reason will be discussed in the overload system in the later chapter.
 
 		class "A"
-			function A(self)
-				print ("[A]" .. tostring(self))
+			function A(self, ...)
+				print ("[A]" .. tostring(self), ...)
 			end
 		endclass "A"
 
 		class "B"
 			inherit "A"
 
-			function B(self)
+			function B(self, ...)
+				-- call Super to init the object with parameters
+				Super(self, ...) -- Don't use A(self), it would create a new object of class A, Super ~= A
+
 				print("[B]" .. tostring(self))
 			end
 		endclass "B"
 
-		obj = B()
+		obj = B(1, 2, 3)
 
 	Ouput :
 
-		[A]table: 0x7fe080ca4680
-		[B]table: 0x7fe080ca4680
+		[A]table: 0x7feb88628980	1	2	3
+		[B]table: 0x7feb88628980
+
 
 * Focus on the event handlers, so why need two types, take an example first :
 
 		class "Person"
-			inherit "System.Object"
-
 			event "OnNameChanged"
 
-			property "Name" {
-				Field = "__Name",
-				Set = function(self, name)
-					local oldName = self.__Name
-
-					self.__Name = name
-
-					return self:Fire("OnNameChanged", oldName, name)
-				end,
-				Type = System.String,
-			}
+			property "Name" { Type = System.String, Event = "OnNameChanged" }
 
 			property "GUID" {
-				Field = "__ID",
-				Type = System.String,
-			}
+				Field = "__GUID", Type = System.String,
 
-			function Person(self)
-				math.randomseed(os.time())
+				Get = function(self)
+					-- Create a guid if not set
+					if not self.__GUID then
+						math.randomseed(os.time())
 
-				local guid = ""
+						local guid = ""
 
-				for i = 1, 8 do
-					guid = guid .. ("%04X"):format(math.random(0xffff))
+						for i = 1, 8 do
+							guid = guid .. ("%04X"):format(math.random(0xffff))
 
-					if i > 1 and i < 6 then
-						guid = guid .. "-"
+							if i > 1 and i < 6 then
+								guid = guid .. "-"
+							end
+						end
+
+						self.__GUID = guid
 					end
-				end
 
-				self.GUID = guid
-			end
+					return self.__GUID
+				end,
+			}
 		endclass "Person"
 
-	Here is a **Person** class definition, it has two properties, one **Name** used to storage a person's name, a **GUID** used to mark the unique person, so we can diff two person with the same name. When a new person add to the system, we create the object with a new guid like :
+	Here is a **Person** class's definition, it has two properties, one **Name** used to storage a person's name, a **GUID** used to mark the unique person, so we can diff two person with the same name. When a new person add to the system, we create the object with a new guid like :
 
 		person = Person { Name = "Jane" }
+
+		data = data or {}
+
+		table.insert(data, {
+			Name = person.Name,
+			GUID = person.GUID,	-- Now new guid is generated when need
+		})
 
 	And a new guid is created for the person like 'C2022B9F-ADC2-BBA6-B911-2F670757AD12', then we can save the person's data to somewhere, and when we need we could read the data, and create the person again like :
 
 		person = Person { Name = "Jane", GUID = "C2022B9F-ADC2-BBA6-B911-2F670757AD12" }
 
-	The **Person** class is a simple class used as the root class, we can create many child-class like **Child** and **Adult**, so **Child** should have a **Guardian** property point to another person object, and so on. So, there is an event **OnNameChanged** that fired when the person's name is changed. Now we define a **Member** class inherited from the **Person**, also it will count person based on the name.
+	The **Person** class is a simple class used as the root class, we can create many child-class like **Child** and **Adult**, so **Child** should have a **Guardian** property point to another person object, and so on.
+
+	There is an event **OnNameChanged** that fired when the person's name is changed. Now we define a **Member** class inherited from the **Person**, also it will count person based on the name.
 
 		class "Member"
 			inherit "Person"
+
+			import "System"
 
 			_NameCount = {}
 
@@ -1051,7 +1552,8 @@ The **inherit** keyword can only be used in the class definition. In the previou
 
 			-- Event handler
 			local function OnNameChanged(self, old, new)
-				if old then
+				-- Don't forget the Name property has a default value
+				if old and old ~= "" then
 					_NameCount[old] = _NameCount[old] - 1
 				end
 
@@ -1061,7 +1563,13 @@ The **inherit** keyword can only be used in the class definition. In the previou
 			end
 
 			-- Constructor
+			-- The first line is an attribute object used to describe the next constructor is a 0-arguments constructor
+			-- so the the class can still use the init-table feature(as there is no constructor can receive a table as argument)
+			-- The constructor would be called before the init-table is used
+			-- More details will be discussed later
+			__Arguments__{}
 			function Member(self)
+				-- binding stackable event handler in class constructor
 				self.OnNameChanged = self.OnNameChanged + OnNameChanged
 			end
 		endclass "Member"
@@ -1087,119 +1595,36 @@ The **inherit** keyword can only be used in the class definition. In the previou
 
 
 
-part-class & re-define
-----
-
-* The class can be re-defined, and the object that created from the old version class, will use the new version's features.
-
-		class "A"
-		endclass "A"
-
-		obj = A()
-
-		-- Re-define the class A
-		class "A"
-			function Hi(self)
-				print( "Hello" )
-			end
-		endclass "A"
-
-		-- Outout : Hello
-		obj:Hi()
-
-* When re-define a class, its object methods, class methods, events, properties and meta-methods all will be cleared. So :
-
-		class "A"
-			function Hi(self)
-				print( "Hello" )
-			end
-		endclass "A"
-
-		obj = A()
-
-		class "A"
-		endclass "A"
-
-		-- Error : attempt to call method 'Hi' (a nil value)
-		obj:Hi()
-
-* Any global variables with no function values should be kept in the class definition's environment, so we can used it again :
-
-		class "A"
-			_Objs = _Objs or {}
-
-			function A(self, name)
-				_Objs[name] = self
-			end
-
-			function __exist(name)
-				return _Objs[name]
-			end
-		endclass "A"
-
-		print( A("HI") )
-
-		-- Re-define agian
-		class "A"
-			_Objs = _Objs or {}
-
-			function A(self, name)
-				_Objs[name] = self
-			end
-
-			function __exist(name)
-				return _Objs[name]
-			end
-		endclass "A"
-
-		print( A("HI") )
-
-	Output :
-
-		table: 0x7fe080c4a410
-		table: 0x7fe080c4a410
-
-* part-class is used to start the class definition without clearance :
-
-		class "A"
-			function Hi(self)
-				print( "Hello" )
-			end
-		endclass "A"
-
-		obj = A()
-
-		part-class "A"
-		endclass "A"
-
-		-- Output : Hello
-		obj:Hi()
-
-* When re-define the class, any sub-class will receive the new features that inherited from the super class, won't receive if they have their owns.
-
-		class "A"
-		endclass "A"
-
-		class "B"
-			inherit "A"
-		endclass "B"
-
-		obj = B()
-
-		class "A"
-			function Hi(self)
-				print( "Hello" )
-			end
-		endclass "A"
-
-		-- Output : Hello
-		obj:Hi()
-
 
 interface
 ====
 
-Using the interface is like the class, the format is
+In the PLoop system, the interface system is used to support multi-inheritance and other design purposes. One class can only inherited from one super class, but can extend from no-limit interfaces, also an interface can extend from other interfaces.
+
+The definition of an interface is started with **interface** and end with **endinterface** :
+
+	-- Define an interface with one property
+	-- Any class extend from this interface should contains an event and a property
+	interface "IFName"
+
+		event "OnNameChanged"
+
+		property "Name" { Type = System.String, Event = "OnNameChanged", Default = "Anonymous" }
+
+	endinterface "IFName"
+
+	-- Define an interface has one method and extend from the "IFName"
+	-- So, the interface know the object should have a Name property of string type
+	interface "IFGreet"
+		extend "IFName"
+
+		function Greet(self)
+			print("Hi, I'm " .. self.Name)
+		end
+
+	endinterface "IFGreet"
+
+Using the interface is like inherit from a class, the format is
 
 	extend ( interface ) ( interface2 ) ( interface3 ) ...
 
@@ -1207,27 +1632,12 @@ Using the interface is like the class, the format is
 
 	extend "interface path" "interface2 path" "interface3 path" ...
 
-The definition of an interface is started with **interface** and end with **endinterface** :
-
-	-- Define an interface has one method
-	interface "IFGreet"
-		function Greet(self)
-			print("Hi, I'm " .. self.Name)
-		end
-	endinterface "IFGreet"
-
-	-- Define an interface with one property
-	interface "IFName"
-		property "Name" {
-			Field = "__Name",
-			Type = System.String,
-		}
-	endinterface "IFName"
-
 	-- Define a class extend from the interfaces
 	class "Person"
 		-- so the Person class have one method and one property from the two interfaces
+		-- Since the IFGreet extend IFName, [[extend "IFGreet"]] is enough.
 		extend "IFName" "IFGreet"
+
 	endclass "Person"
 
 	obj = Person { Name = "Ann" }
@@ -1235,7 +1645,6 @@ The definition of an interface is started with **interface** and end with **endi
 	-- Output : Hi, I'm Ann
 	obj:Greet()
 
-In the Loop system, the interface system is used to support multi-inheritance. One class can only inherited from one super class, but can extend from no-limit interfaces, also an interface can extend from other interfaces.
 
 Define an interface is just like define a class with little different :
 
@@ -1245,13 +1654,59 @@ Define an interface is just like define a class with little different :
 
 * Global method start with "_" are interface methods, can only be called by the interface itself.
 
-* Global method whose name is the interface name, is initializer , will receive object that created from the classes that extend from the interface without any other paramters.
+* Global method whose name is the interface name, is initializer , will receive object that created from the classes that extend from the interface without any other paramters, the initializer will be called by the system when the object is first created and already inited by the constructors of the class, also after the init-table is applied, so the initializer can be used to manage objects with same behaviors based on the object's settings.
+
+		interface "IFProperty"
+			event "OnPropertyChanged"
+
+			local function OnPropertyChanged(self, old, new, prop)
+				print( ("[%s] %s -> %s"):format(prop, tostring(old), tostring(new)) )
+			end
+
+			function IFProperty(self)
+				self.OnPropertyChanged = self.OnPropertyChanged + OnPropertyChanged
+			end
+		endinterface "IFProperty"
+
+		class "PropertyTest"
+			extend "IFProperty"
+
+			property "Value" { Type = System.Number, Event = "OnPropertyChanged"}
+		endclass "PropertyTest"
+
+		o = PropertyTest{ Value = 123 }
+
+		-- [Value] 123 -> 456
+		o.Value = 456
 
 * No meta-methods can be defined in the interface.
 
-* Re-define interface is like re-define a class, any features would be passed to classes that extend from it.
+* Normally we only give empty definitions of the features, so the class that extended from the interface must define them, there are two attribute used to describe those rules :
 
-* like the **part-class**, **part-interface** is used to re-define the interface without clearance.
+	* `System.__Require__`, used to describe the property or method must be override by the class.
+
+			interface "IFA"
+				import "System"
+
+				__Require__() function testA() end
+				__Require__() property "testB" {}
+
+			endinterface "IFA"
+
+			class "A"
+				extend "IFA"
+			endclass "A"
+
+		You could get the error :
+
+			stdin:12: A lack declaration of :
+    		IFA - [Method]testA [Property]testB
+
+	* `System.__Optional__`, used to describe the property or method should be override by the class, but not strict, it's no harm to keep it.
+
+	* Properties and methodes without those attribute, is designed to be
+
+The PLoop system don't just bring in much keywords to increase features, using attribute is simple and more extendable, we'll see how to declare custom attributes in some later chapter.
 
 
 Init & Dispose
@@ -1276,9 +1731,13 @@ Take one class as the first example :
 		end
 
 		property "Name" {
-			Get = function(self) return _Name[self] or "Anonymous" end,
+			Get = function(self) return _Name[self] end,
+
 			Set = function(self, name) _Name[self] = name end,
-			Type = System.String + nil,
+
+			Type = System.String,
+
+			Default = "Anonymous",
 		}
 	endclass "A"
 
@@ -1288,7 +1747,7 @@ Take one class as the first example :
 	obj:Dispose()
 	obj = nil
 
-If your class or interface won't add any reference to the object, there is no need to decalre a **Dispose** method. And remember, the obj.Dispose is not A.Dispose, all objects use a same method, and the method would call the **Dispose** method that defined in the classes and interfaces.
+If your class or interface won't add any reference to the object, there is no need to declare a **Dispose** method. And remember, the obj.Dispose is not A.Dispose, all objects use a same method, and the method would call the **Dispose** method that defined in the classes and interfaces.
 
 So, that leave one problem, what's the order of the init and dispose in the inheritance system. Just an example will show :
 
@@ -1330,6 +1789,7 @@ So, that leave one problem, what's the order of the init and dispose in the inhe
 	    function Dispose(self)
 	        print("A <-", self.Name)
 	    end
+
 	    function A(self, name)
 	        self.Name = name
 	        print("A ->", name)
@@ -1345,6 +1805,9 @@ So, that leave one problem, what's the order of the init and dispose in the inhe
 	    end
 
 	    function B(self, name)
+	    	-- Don't forget call the super class's constructor
+	    	Super(self, name)
+
 	        print("B ->", name)
 	    end
 	endclass "B"
@@ -1371,16 +1834,22 @@ So, the rule is :
 
 * For the init :
 
-	* The class's constructor would be called before call the interfaces's initializer.
+	* The class's constructor would be called first, then the init-table if existed(Don't show in the example), the last is the interfaces's initializer.
 
-	* All parameter should be passed into the class and all its superclasses's constructor, and the superclass's constructor will be called first.
+	* The system would try to find the class's constructor, if existed, call it, if not, go to its super class, continue the search. The super class's constructor should be called by the child class's constructor.
 
 	* No other parameter would be passed into the interfaces' initializer, the superclass's interface's initializer would be called first, and if the class has more than one interfaces, first extended will be called first.
 
-* For the dispose : just reversed order of the init.
+* For the dispose :
+
+	* The interface's dispose methods are called first, the order is reversed.
+
+	* The class and its super class's dispose methods can called later, the class's dispose method is called first, then the super class's.
+
+	* There are no parameters for dipose methods.
 
 
-How to use
+How to use the interface
 ----
 
 The oop system is used to describe any real world object into data, using the property to represent the object's state like person's name, birthday, sex, and etc, using the methods to represent what the object can do, like walking, talking and more.
@@ -1392,10 +1861,12 @@ The interface don't represent a group of objects, it don't know what objects wil
 Take the game as an example, to display the health points of the player, we may display it in text, or something like the health orb in the Diablo, and if using text, we may display it in percent, or some short format like '101.3 k'. So, the text or texture is the objects that used to display the data, and we can use an interface to provide the data like :
 
 	interface "IFHealth"
+		import "System"
 
 		_IFHealthObjs = {}
 
 		-- Object method, need override
+		__Require__()
 		function SetValue(self, value)
 		end
 
@@ -1425,7 +1896,7 @@ Take the game as an example, to display the health points of the player, we may 
 
 	endinterface "IFHealth"
 
-In the interface, a empty method **SetValue** is defined, it will be override by the classes that extended from the **IFHealth**, so in the **_SetValue** interface method, there is no need to check whether the object has a **SetValue** method.
+In the interface, an empty method **SetValue** is defined, it will be override by the classes that extended from the **IFHealth**, so in the **_SetValue** interface method, there is no need to check whether the object has a **SetValue** method.
 
 And for a text to display the health point, if we have a **Label** class used to display strings with a **SetText** method to display, we can create a new class to do the job like :
 
@@ -1447,7 +1918,106 @@ The text of the **HealthText** object would be refreshed to the new value.
 
 
 
-Document
+Redefine features
+====
+
+For now, we introduced the namespace, enum, struct, class and interface. Let's dig deep to get some more details.
+
+The first thing is about the type's redefinition.
+
+* Only features defined in the same namespace or the same private environment can be redefined, so, if there is a class **System.Widget.Frame**, in your program, you import "System.Widget", and define a new class **Frame**, it won't redefine the **System.Widget.Frame**, but if you declare your program in **System.Widget** namespace, you can redefine it.
+
+* For Enum : redefine enums would clear all settings.
+
+		enum "EnumType" {
+			"First",
+			"Second",
+			"Third",
+		}
+
+		-- Output : Third
+		print(EnumType.Third)
+
+		enum "EnumType" {
+			"First",
+			"Second",
+		}
+
+		-- Output : Third is not an enumeration value of EnumType.
+		print(EnumType.Third)
+
+* For Struct : redefine struct would clear all settings.
+
+		struct "Position"
+			x = System.Number
+			y = System.Number
+			z = System.Number
+		endstruct "Position"
+
+		struct "Position"
+			x = System.Number
+			y = System.Number
+		endstruct "Position"
+
+		p = Position(1, 2, 3)
+
+		-- Output : 1	2	nil
+		print(p.x, p.y, p.z)
+
+* For Class : redefine class wouldn't clear previous settings. Object would receive new features. If you want add new method to it, just set the new method to the class is okay.
+
+		class "ClsA"
+			property "Name" { Type = System.String }
+		endclass "ClsA"
+
+		o = ClsA{ Name = "Oliva" }
+
+		-- Redefine the class
+		class "ClsA"
+			function Hi(self)
+				print("Hi, " .. self.Name)
+			end
+		endclass "ClsA"
+
+		-- Output : Hi, Oliva
+		o:Hi()
+
+		-- Give the class a new method
+		ClsA.Walk = function(self)
+			print(self.Name .. " is walking")
+		end
+
+		-- Output : Oliva is walking
+		o:Walk()
+
+
+＊ For Interface : redefine interface wouldn't clear previous settings. Object would receive new features. If you want add new method to it, just set the new method to the interface is okay.
+
+		-- Follow previous example
+		interface "IFAge"
+			property "Age" { Type = System.Number }
+		endinterface "IFAge"
+
+		class "ClsA"
+			extend "IFAge"
+		endclass "ClsA"
+
+		-- Error : Age must be a number, got string.
+		o.Age = "test"
+
+		-- Give a new method to the interface
+		IFAge.HowOld = function(self)
+			print(self.Name .. " is " .. self.Age .. " older.")
+		end
+
+		o.Age = 123
+
+		-- Output : Oliva is 123 older.
+		o:HowOld()
+
+
+
+Document(Pass just re-designing, a new xml base document system with attribute would be added)
 ====
 
 **System.Object** and many other features are used before, it's better if there is a way to show details of them, so, a document system is bring in to bind comments for those features.
@@ -1484,7 +2054,7 @@ And you should get :
 			UnBlockEvent　-　Un-Block some events for the object
 
 
-* The first line : [__Final__] means the class is a final class, it can't be re-defined, it's an attribute description, will be explained later.
+* The first line : [__Final__] means the class is a final class, it can't be redefined, it's an attribute description, will be explained later.
 
 * The next part is the description for the class.
 
@@ -1528,7 +2098,7 @@ Also, details of the event, property, method can be get by the **Help** method :
 			nil
 
 
-Here is a full example to show how to make documents for all features in the Loop system.
+Here is a full example to show how to make documents for all features in the PLoop system.
 
 
 	interface "IFName"
@@ -1820,7 +2390,7 @@ The last part, let's get a view of the **System** namespace.
 * The **AttributeTargets** is used by the attribute system, explained later.
 * The **StructType** is used by `__StructType__` attribtue, in the struct part, an example already existed.
 * The structs are basic structs, so no need to care about the non-table value structs.
-* The **Reflector** is an interface contains many methods used to get core informations of the Loop system, like get all method names of one class.
+* The **Reflector** is an interface contains many methods used to get core informations of the PLoop system, like get all method names of one class.
 * The **Argument** struct is used by `__Arguments__` attribtue to describe the arguments of one mehtod or the constructor, explained later.
 * The **Event** and **EventHandler** classes are used to create the whole event system. No need to use it yourself.
 * The **Module** class is used to build private environment for common using, explained later.
@@ -1836,7 +2406,7 @@ Module
 Private environment
 ----
 
-The Loop system is built by manipulate the lua's environment with getfenv / setfenv function. Like
+The PLoop system is built by manipulate the lua's environment with getfenv / setfenv function. Like
 
 	-- Output : table: 0x7fd9fb403f30	table: 0x7fd9fb403f30
 	print( getfenv( 1 ), _G)
@@ -1908,7 +2478,7 @@ When using the class/interface in the program, as the time passed, all variables
 System.Module
 ----
 
-Like the definition environment, the Loop system also provide a **Module** class to create private environment for common using. Unlike the other classes in the **System** namespace, the **Module** class will be saved to the _G at the same time the Loop system is installed.
+Like the definition environment, the PLoop system also provide a **Module** class to create private environment for common using. Unlike the other classes in the **System** namespace, the **Module** class will be saved to the _G at the same time the PLoop system is installed.
 
 So, we can use it directly with format :
 
@@ -2046,7 +2616,7 @@ The attribute class's behavior is quite different from normal classes, Since in 
 	[AttributeUsageAttribute(AttributeTargets.Enum, Inherited = false)]
 	public class FlagsAttribute : Attribute
 
-in .Net. The Loop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
+in .Net. The PLoop system using "__" at the start and end of the attribute class's name, it's not strict, just good for some editor to color it.
 
 The whole attribute system is built on the `System.__Attribute__` class. Here is a list of it :
 
@@ -2062,7 +2632,7 @@ The whole attribute system is built on the `System.__Attribute__` class. Here is
 			------------ The method could be overrided by the attribute class
 			ApplyAttribute　-　Apply the attribute to the target, overridable
 
-			------------ The class method called by the Loop system, don't use them
+			------------ The class method called by the PLoop system, don't use them
 			_ClearPreparedAttributes　-　Clear the prepared attributes
 			_CloneAttributes　-　Clone the attributes
 			_ConsumePreparedAttributes　-　Set the prepared attributes for target
@@ -2094,7 +2664,7 @@ The whole attribute system is built on the `System.__Attribute__` class. Here is
 `System.__Final__`
 ----
 
-The first line show the class is a final class, `System.__Final__` is a class inherited from the `System.__Attribute__` and used to mark the class, interface, struct and enum as final, final features can't be re-defined. Here is an example, Form now on, using **Module** as the environment :
+The first line show the class is a final class, `System.__Final__` is a class inherited from the `System.__Attribute__` and used to mark the class, interface, struct and enum as final, final features can't be redefined. Here is an example, Form now on, using **Module** as the environment :
 
 	Module "A" ""
 
@@ -2104,7 +2674,7 @@ The first line show the class is a final class, `System.__Final__` is a class in
 	class "A"
 	endclass "A"
 
-	-- Error : The class is final, can't be re-defined.
+	-- Error : The class is final, can't be redefined.
 	class "A"
 	endclass "A"
 
@@ -2171,7 +2741,7 @@ So, take the `__Final__` class as an example to show how the `__AttributeUsage__
 	[Class] System.__Final__ :
 
 	Description :
-		Mark the class|interface|struct|enum to be final, and can't be re-defined again
+		Mark the class|interface|struct|enum to be final, and can't be redefined again
 
 
 	Super Class :
@@ -2581,7 +3151,7 @@ Or
 Custom Attributes
 ----
 
-The above attributes are all used by the core system of the Loop. But also this is a powerful system for common using.
+The above attributes are all used by the core system of the PLoop. But also this is a powerful system for common using.
 
 Take a database table as example, a lua table(object) can be used to store the field data of one row of the data table. So, here are the datas :
 
@@ -2617,7 +3187,7 @@ We could define a struct used to represent one row of the datatable like :
 		ID = Number
 		Name = String
 		Age = Number
-	endclass "Person"
+	endstruct "Person"
 
 But since the function won't know how to use the **Person** table ( we don't want a function to handle only one data type ), we need use some attributes to describe them.
 
@@ -2657,9 +3227,9 @@ First, two attribute classes are defined here :
 
 The `__Table__` attribute is used on the struct, used to mark the struct with the datatable's name, so we can bind it to the real table in the database.
 
-The `__Field__` attribute is used on the field, used to mark the field to a field of a datatable, the **Name** to the field's name, **Index** to the field's display index, and the **Type** to the field's type (not the type of the Loop).
+The `__Field__` attribute is used on the field, used to mark the field to a field of a datatable, the **Name** to the field's name, **Index** to the field's display index, and the **Type** to the field's type (not the type of the PLoop).
 
-So, here re-define the **Person** struct :
+So, here redefine the **Person** struct :
 
 	Module "DataTable" ""
 
@@ -2751,7 +3321,7 @@ Some points about the function :
 Thread
 ====
 
-In the **System.Object** class, there is methods like **ActiveThread**, **ThreadCall**, also an attribute **System.__Thread__**, those features are used to bring the coroutine system into the Loop system.
+In the **System.Object** class, there is methods like **ActiveThread**, **ThreadCall**, also an attribute **System.__Thread__**, those features are used to bring the coroutine system into the PLoop system.
 
 System.Object.ThreadCall
 ----
