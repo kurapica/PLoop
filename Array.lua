@@ -9,19 +9,9 @@ Module "System.Array" "1.0.0"
 
 namespace "System"
 
+__Doc__[[Array object is used to control a group objects with same class, event handlers can be assign to all objects with one definition]]
 class "Array"
 	extend "IFIterator"
-
-	doc [======[
-		@name Array
-		@type class
-		@desc Array object is used to control a group objects with same class, event handlers can be assign to all objects with one definition.
-		@param class|struct the array's element's type
-	]======]
-
-	------------------------------------------------------
-	-- Event
-	------------------------------------------------------
 
 	------------------------------------------------------
 	-- Local functions
@@ -101,18 +91,13 @@ class "Array"
 		end
 	end
 
-
 	------------------------------------------------------
 	-- Method
 	------------------------------------------------------
-	doc [======[
-		@name Sort
-		@type method
-		@desc Sort array
-		@format [compfunc]
-		@param compfunc compare function with two args (v1, v2), true if the v1 < v2
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Sort array</desc>
+		<param name="compfunc" optional="true">compare function with two args (v1, v2), true if the v1 < v2</param>
+	]]
 	function Sort(self, comp)
 		if type(comp) ~= "function" then comp = defaultComp end
 
@@ -172,15 +157,12 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name Insert
-		@type method
-		@desc Insert object into the array
+	__Doc__[[
+		<desc>Insert object into the array</desc>
 		@format [index, ]object
-		@param index
-		@param object
-		@return nil
-	]======]
+		<param name="index" optional="true">the insert position</param>
+		<param name="object">the object need to be inserted</param>
+	]]
 	function Insert(self, ...)
 		if select('#', ...) == 2 then
 			local index, value = ...
@@ -261,13 +243,11 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name Remove
-		@type method
-		@desc Remove object from array
-		@param index|object
-		@return object
-	]======]
+	__Doc__[[
+		<desc>Remove object from array</desc>
+		<param name="object">the object position or the object itself</param>
+		<return>the removed object</return>
+	]]
 	function Remove(self, index)
 		if type(index) ~= "number" then
 			for i, ob in ipairs(self) do
@@ -305,26 +285,19 @@ class "Array"
 		return tremove(self, index)
 	end
 
-	doc [======[
-		@name HasEvent
-		@type method
-		@desc Check if the event type is supported by the array's element type
-		@param event string, the event's name
-		@return boolean true if the array's element's type has the event
-	]======]
+	__Doc__[[
+		<desc>Check if the event type is supported by the array's element type</desc>
+		<param name="event">string, the event's name</param>
+		<return type="boolean">true if the array's element's type has the event</return>
+	]]
 	function HasEvent(self, key)
 		return type(key) == "string" and _ArrayInfo[self] and _ArrayInfo[self].IsClass and Reflector.HasEvent(_ArrayInfo[self].Type, key)
 	end
 
-	doc [======[
-		@name ActiveThread
-		@type method
-		@desc Active the thread mode for special event
-		@format event[, ...]
-		@param event the event name
-		@param ... other event's name list
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Active the thread mode for special event</desc>
+		<param name="...">the event list</param>
+	]]
 	function ActiveThread(self, ...)
 		if _ArrayInfo[self] and _ArrayInfo[self].IsClass then
 			local cls = _ArrayInfo[self].Type
@@ -348,26 +321,19 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name IsThreadActivated
-		@type method
-		@desc Check if the thread mode is actived for the event
-		@param event the event's name
-		@return boolean true if the event is in thread mode
-	]======]
+	__Doc__[[
+		<desc>Check if the thread mode is actived for the event</desc>
+		<param name="event">the event's name</param>
+		<return type="boolean">true if the event is in thread mode</return>
+	]]
 	function IsThreadActivated(self, sc)
 		return type(sc) == "string" and _ArrayInfo[self] and _ArrayInfo[self].IsClass and _ArrayInfo[self]["_ArrayActive_" .. sc] or false
 	end
 
-	doc [======[
-		@name InactiveThread
-		@type method
-		@desc Turn off the thread mode for the scipts
-		@format event[, ...]
-		@param event the event's name
-		@param ... other event's name list
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Turn off the thread mode for the scipts</desc>
+		<param name="...">the event list</param>
+	]]
 	function InactiveThread(self, ...)
 		if _ArrayInfo[self] and _ArrayInfo[self].IsClass then
 			local cls = _ArrayInfo[self].Type
@@ -391,15 +357,10 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name BlockEvent
-		@type method
-		@desc Block some event for the object
-		@format event[, ...]
-		@param event the event's name
-		@param ... other event's name list
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Block some event for the object</desc>
+		<param name="...">the event list</param>
+	]]
 	function BlockEvent(self, ...)
 		if _ArrayInfo[self] and _ArrayInfo[self].IsClass then
 			local cls = _ArrayInfo[self].Type
@@ -423,26 +384,19 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name IsEventBlocked
-		@type method
-		@desc Check if the event is blocked for the object
-		@param event the event's name
-		@return boolean true if th event is blocked
-	]======]
+	__Doc__[[
+		<desc>Check if the event is blocked for the object</desc>
+		<param name="event">the event's name</param>
+		<return type="boolean">true if th event is blocked</return>
+	]]
 	function IsEventBlocked(self, sc)
 		return type(sc) == "string" and _ArrayInfo[self] and _ArrayInfo[self].IsClass and _ArrayInfo[self]["_ArrayBlock_" .. sc] or false
 	end
 
-	doc [======[
-		@name UnBlockEvent
-		@type method
-		@desc Un-Block some events for the object
-		@format event[, ...]
-		@param event the event's name
-		@param ... other event's name list
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Un-Block some events for the object</desc>
+		<param name="...">the event list</param>
+	]]
 	function UnBlockEvent(self, ...)
 		if _ArrayInfo[self] and _ArrayInfo[self].IsClass then
 			local cls = _ArrayInfo[self].Type
@@ -466,27 +420,20 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name Push
-		@type method
-		@desc add object into Array's end
-		@format object[, ...]
-		@param object
-		@param ... other objects
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>add object into Array's end</desc>
+		<param name="...">the object list</param>
+	]]
 	function Push(self, ...)
 		for i = 1, select('#', ...) do
 			self:Insert(select(i, ...))
 		end
 	end
 
-	doc [======[
-		@name Pop
-		@type method
-		@desc Remove and return the Array's last object
-		@return object
-	]======]
+	__Doc__[[
+		<desc>Remove and return the Array's last object</desc>
+		<return>the removed object</return>
+	]]
 	function Pop(self)
 		local value = self[#self]
 
@@ -497,27 +444,20 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name Unshift
-		@type method
-		@desc Add value into the Array's first position
-		@format object[, ...]
-		@param object
-		@param ... other objects
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Add value into the Array's first position</desc>
+		<param name="...">the object list</param>
+	]]
 	function Unshift(self, ...)
 		for i = select('#', ...), 1, -1 do
 			self:Insert(1, select(i, ...))
 		end
 	end
 
-	doc [======[
-		@name Shift
-		@type method
-		@desc Remove and return the Array's first element
-		@return object
-	]======]
+	__Doc__[[
+		<desc>Remove and return the Array's first element</desc>
+		<return>the removed object</return>
+	]]
 	function Shift(self)
 		local value = self[1]
 
@@ -528,26 +468,22 @@ class "Array"
 		end
 	end
 
-	doc [======[
-		@name Next
-		@type method
-		@desc Get the next element, used for IFIterator operation
-		@param key
-		@return iterator
-		@return array
-		@return nextkey
-	]======]
+	__Doc__[[
+		<desc>Get the next element, used for IFIterator operation</desc>
+		<param name="key" optional="true">the key to init the iterator</param>
+		<return type="function">the iterator</return>
+		<return>self</return>
+		<return>the start key</return>
+	]]
 	function Next(self, key)
 		return ipairs(self), self, tonumber(key) or 0
 	end
 
-	doc [======[
-		@name Contain
-		@type method
-		@desc Check if the array contains the object
-		@param object
-		@return boolean true if the array contains the object
-	]======]
+	__Doc__[[
+		<desc>Check if the array contains the object</desc>
+		<param name="object">the object</param>
+		<return type="boolean">true if the array contains the object</return>
+	]]
 	function Contain(self, item)
 		if type(item) then
 			for i, ob in ipairs(self) do
@@ -562,12 +498,14 @@ class "Array"
 	------------------------------------------------------
 	-- Property
 	------------------------------------------------------
+	__Doc__[[Get the item count]]
 	property "Count" {
 		Get = function(self)
 			return #self
 		end,
 	}
 
+	__Doc__[[Get the array element's type]]
 	property "Type" {
 		Get = function(self)
 			return _ArrayInfo[self] and _ArrayInfo[self].Type
@@ -638,8 +576,4 @@ class "Array"
 
 		return rawset(self, key, value)
 	end
-
-	------------------------------------------------------
-	-- __call for class instance
-	------------------------------------------------------
 endclass "Array"

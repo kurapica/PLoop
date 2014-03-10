@@ -32,8 +32,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica.igas@gmail.com
 -- Create Date      2011/02/01
--- Last Update Date 2013/12/31
--- Version          r91
+-- Last Update Date 2014/03/05
+-- Version          r92
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -138,6 +138,9 @@ end
 -- GLOBAL Definition
 ------------------------------------------------------
 do
+	-- Used to enable/disable document system, not started with '_', so can be disabled outsider
+	DOCUMENT_ENABLED = DOCUMENT_ENABLED == nil and true or false
+
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
 	TYPE_STRUCT = "Struct"
@@ -337,10 +340,10 @@ end
 -- NameSpace & SuperAlias
 ------------------------------------------------------
 do
-	_NameSpace = _NameSpace or newproxy(true)
-	_SuperAlias = _SuperAlias or newproxy(true)
+	_NameSpace = newproxy(true)
+	_SuperAlias = newproxy(true)
 
-	_NSInfo = _NSInfo or setmetatable({}, {
+	_NSInfo = setmetatable({}, {
 		__index = function(self, key)
 			if not IsNameSpace(key) then
 				return
@@ -353,10 +356,10 @@ do
 		__mode = "k",
 	})
 
-	_SuperMap = _SuperMap or setmetatable({}, {__mode = "kv"})
+	_SuperMap = setmetatable({}, {__mode = "kv"})
 
 	-- metatable for namespaces
-	_MetaNS = _MetaNS or getmetatable(_NameSpace)
+	_MetaNS = getmetatable(_NameSpace)
 	do
 		_MetaNS.__call = function(self, ...)
 			local info = _NSInfo[self]
@@ -494,7 +497,7 @@ do
 	end
 
 	-- metatable for super alias
-	_MetaSA = _MetaSA or getmetatable(_SuperAlias)
+	_MetaSA = getmetatable(_SuperAlias)
 	do
 		_MetaSA.__call = function(self, ...)
 			local cls = _SuperMap[self].Owner
@@ -600,23 +603,13 @@ do
 
 	-- SetNameSpace
 	function SetNameSpace4Env(env, name)
-		if type(env) ~= "table" then
-			return
-		end
+		if type(env) ~= "table" then return end
 
-		if type(name) == "string" then
-			local ns = BuildNameSpace(GetDefaultNameSpace(), name)
+		local ns = type(name) == "string" and BuildNameSpace(GetDefaultNameSpace(), name) or IsNameSpace(name) and name or nil
 
-			if ns then
-				rawset(env, NAMESPACE_FIELD, ns)
-			else
-				rawset(env, NAMESPACE_FIELD, nil)
-			end
-		elseif IsNameSpace(name) then
-			rawset(env, NAMESPACE_FIELD, name)
-		else
-			rawset(env, NAMESPACE_FIELD, nil)
-		end
+		rawset(env, NAMESPACE_FIELD, ns)
+
+		return ns
 	end
 
 	-- GetEnvNameSpace
@@ -649,15 +642,19 @@ do
 	--- Set the default namespace for the current environment, the class defined in this environment will be stored in this namespace
 	-- @name namespace
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage namespace "Widget"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>namespace "Widget"</usage>
 	------------------------------------
 	function namespace(name)
 		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then
 			error([[Usage: namespace "namespace"]], 2)
 		end
 
-		return SetNameSpace4Env(getfenv(2), name)
+		local ns = SetNameSpace4Env(getfenv(2), name)
+
+		if ns and __Attribute__ then
+			return __Attribute__._ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
+		end
 	end
 end
 
@@ -712,137 +709,120 @@ end
 -- Documentation
 ------------------------------------------------------
 do
-	_EnableDocument = _EnableDocument == nil and true or _EnableDocument
-	_MetaDoc = _MetaDoc or {}
-	do
-		_MetaDoc.__index = function(self,  key)
-			if type(key) ~= "string" or key:match("^_") then return end
+	function getSuperDoc(info, key, dkey)
+		if info.SuperClass then
+			local sinfo = _NSInfo[info.SuperClass]
 
-			local value, sinfo
+			while sinfo do
+				if sinfo.Documentation and (sinfo.Documentation[key] or sinfo.Documentation[dkey]) then
+					return sinfo.Documentation[key] or sinfo.Documentation[dkey]
+				end
 
-			-- Check SuperClass
-			local info = rawget(self, "__OwnerInfo")
-
-			if key == "class-" .. info.Name or key == "interface-" .. info.Name or key == "default-" .. info.Name then
-				return
-			end
-
-			if info.SuperClass then
-				sinfo = _NSInfo[info.SuperClass]
-
-				sinfo.Documentation = sinfo.Documentation or setmetatable({__OwnerInfo=sinfo}, _MetaDoc)
-
-				value = sinfo.Documentation[key]
-				if value then
-					rawset(self, key, value)
-					return value
+				if sinfo.SuperClass then
+					sinfo = _NSInfo[sinfo.SuperClass]
+				else
+					break
 				end
 			end
+		end
 
-			-- Check Interface
-			if info.ExtendInterface then
-				for _, IF in ipairs(info.ExtendInterface) do
-					sinfo = _NSInfo[IF]
+		-- Check Interface
+		if info.Cache4Interface then
+			for _, IF in ipairs(info.Cache4Interface) do
+				local sinfo = _NSInfo[IF]
 
-					sinfo.Documentation = sinfo.Documentation or setmetatable({__OwnerInfo=sinfo}, _MetaDoc)
-
-					value = sinfo.Documentation[key]
-					if value then
-						rawset(self, key, value)
-						return value
-					end
+				if sinfo.Documentation and (sinfo.Documentation[key] or sinfo.Documentation[dkey]) then
+					return sinfo.Documentation[key] or sinfo.Documentation[dkey]
 				end
 			end
 		end
 	end
 
-	------------------------------------
-	--- Registe documents
-	-- @name document
-	-- @class function
-	-- @param string the document
-	-- @usage document [[
-	--	@name IFModule
-	--	@type interface
-	--	@desc Common methods for class addon and interface
-	-- ]]
-	------------------------------------
-	function document(documentation)
-		if not _EnableDocument or type(documentation) ~= "string" then return end
+	function getTargetType(info, name, targetType)
+		if targetType == nil then
+			-- Find the targetType based on the name
+			if name == info.Name then
+				targetType = AttributeTargets[info.Type or TYPE_NAMESPACE]
+			elseif info.Cache4Event[name] then
+				targetType = AttributeTargets.Event
+			elseif info.Cache4Property[name] then
+				targetType = AttributeTargets.Property
+			elseif info.Cache4Method[name] then
+				targetType = AttributeTargets.Method
+			end
+		elseif type(targetType) == "string" then
+			targetType = AttributeTargets[targetType]
+		elseif type(targetType) ~= "number" then
+			targetType = nil
+		end
 
-		local info = rawget(_NSInfo, getfenv(2)[OWNER_FIELD])
+		return targetType
+	end
+
+	function SaveDocument(data, name, targetType, owner)
+		if not DOCUMENT_ENABLED or type(data) ~= "string" then return end
+
+		local info = rawget(_NSInfo, owner)
 
 		if not info then return end
 
-		documentation = documentation:gsub("\n", ""):gsub("\r", ""):gsub("%s+@", "@")
+		if not name then name = info.Name end
 
-		local name = documentation:match("@name%s+([^@%s]+)")
-		local doctype = documentation:match("@type%s(%w+)") or "default"
+		-- Check the type
+		targetType = getTargetType(info, name, targetType)
 
-		if name then
-			info.Documentation = info.Documentation or setmetatable({__OwnerInfo=info}, _MetaDoc)
-			info.Documentation[doctype .. "-" .. name] = documentation
+		-- Get the head space in the first line and remove it from all lines
+		local space = data:match("^%s+")
+
+		if space then
+			data = data:gsub("^%s+", ""):gsub("([\n\r]+)"..space, "%1"):gsub("([\n\r]+)%s+$", "%1")
 		end
+
+		local key = name
+
+		if targetType then key = tostring(targetType) .. name end
+
+		info.Documentation = info.Documentation or {}
+		info.Documentation[key] = data
 	end
 
-	function HasDocumentPart(ns, doctype, name)
-		if type(ns) == "string" then
-			ns = GetNameSpace(GetDefaultNameSpace(), ns)
-		end
-		local info = rawget(_NSInfo, ns)
+	function GetDocument(owner, name, targetType)
+		if not DOCUMENT_ENABLED then return end
 
-		doctype = type(doctype) == "string" and doctype or "default"
+		if type(owner) == "string" then owner = GetNameSpace(GetDefaultNameSpace(), owner) end
 
-		if info and type(name) == "string" then
-			info.Documentation = info.Documentation or setmetatable({__OwnerInfo=info}, _MetaDoc)
+		local info = rawget(_NSInfo, owner)
+		if not info then return end
 
-			if info.Documentation[doctype .. "-" .. name] then
-				return true
-			end
-		end
+		name = name or info.Name
+		if type(name) ~= "string" then return end
+
+		targetType = getTargetType(info, name, targetType)
+
+		local key = targetType and tostring(targetType) .. name or nil
+
+		return info.Documentation and (info.Documentation[key] or info.Documentation[name]) or (targetType ~= "CLASS" and targetType ~= "INTERFACE") and getSuperDoc(info, key, name) or nil
 	end
 
-	function GetDocumentPart(ns, doctype, name, part)
-		if type(ns) == "string" then
-			ns = GetNameSpace(GetDefaultNameSpace(), ns)
-		end
-		local info = rawget(_NSInfo, ns)
+	do
+		local _name
+		local _owner
 
-		doctype = type(doctype) == "string" and doctype or "default"
-
-		if info and type(name) == "string" then
-			info.Documentation = info.Documentation or setmetatable({__OwnerInfo=info}, _MetaDoc)
-
-			local value = info.Documentation[doctype .. "-" .. name]
-
-			if value then
-				if type(part) == "string" then
-					if part == "param" or part == "return" or part == "need" or part == "overridable" then
-						if value:match("@" .. part .. "%s+([^@%s]+)%s*([^@]*)") then
-							return value:gmatch("@" .. part .. "%s+([^@%s]+)%s*([^@]*)")
-						end
-					else
-						if value:match("@" .. part .. "%s+([^@]*)") then
-							return value:gmatch("@" .. part .. "%s+([^@]*)")
-						end
-					end
-				else
-					if value:match("@(%w+)%s+([^@]*)") then
-						return value:gmatch("@(%w+)%s+([^@]*)")
-					end
-				end
+		local function parseDoc(data)
+			local info = _NSInfo[_owner]
+			if _name == info.Name then
+				return SaveDocument(data, _name, AttributeTargets[info.Type], _owner)
+			else
+				return SaveDocument(data, _name, AttributeTargets.Method, _owner)
 			end
 		end
 
-		return
-	end
+		function document(name)
+			_name = name
+			_owner = getfenv(2)[OWNER_FIELD]
 
-	function EnableDocument(enabled)
-		_EnableDocument = enabled and true or false
-	end
-
-	function IsDocumentEnabled()
-		return _EnableDocument or false
+			return parseDoc
+		end
 	end
 end
 
@@ -850,7 +830,7 @@ end
 -- Interface
 ------------------------------------------------------
 do
-	_KeyWord4IFEnv = _KeyWord4IFEnv or {}
+	_KeyWord4IFEnv = {}
 
 	do
 		local Verb2Adj = {
@@ -1265,8 +1245,8 @@ do
 	end
 
 	-- metatable for interface's env
-	_MetaIFEnv = _MetaIFEnv or {}
-	_MetaIFDefEnv = _MetaIFDefEnv or {}
+	_MetaIFEnv = {}
+	_MetaIFDefEnv = {}
 	do
 		_MetaIFEnv.__index = function(self, key)
 			local info = _NSInfo[self[OWNER_FIELD]]
@@ -1443,8 +1423,8 @@ do
 
 	------------------------------------
 	--- Create interface in currect environment's namespace or default namespace
-	-- @param name the interface's name
-	-- @usage interface "IFSocket"
+	-- <param name="name">the interface's name</param>
+	-- <usage>interface "IFSocket"</usage>
 	------------------------------------
 	function interface(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then
@@ -1527,8 +1507,8 @@ do
 	--- Set the current interface' extended interface
 	-- @name extend
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage extend "System.IFSocket"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>extend "System.IFSocket"</usage>
 	------------------------------------
 	function extend_IF(name)
 		if name and type(name) ~= "string" and not IsNameSpace(name) then
@@ -1603,8 +1583,8 @@ do
 	--- import classes from the given name's namespace to the current environment
 	-- @name import
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage import "System.Widget"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>import "System.Widget"</usage>
 	------------------------------------
 	function import_IF(name)
 		if type(name) ~= "string" and not IsNameSpace(name) then
@@ -1644,8 +1624,8 @@ do
 	--- Add an event for current interface
 	-- @name event
 	-- @class function
-	-- @param name the name of the event
-	-- @usage event "OnClick"
+	-- <param name="name">the name of the event</param>
+	-- <usage>event "OnClick"</usage>
 	------------------------------------
 	function event_IF(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then
@@ -1685,8 +1665,8 @@ do
 	--- set a propert to the current interface
 	-- @name property
 	-- @class function
-	-- @param name the name of the property
-	-- @usage property "Title" {
+	-- <param name="name">the name of the property</param>
+	-- <usage>property "Title" {</usage>
 	--		Get = function(self)
 	--			-- return the property's value
 	--		end,
@@ -1710,8 +1690,8 @@ do
 	--- End the interface's definition and restore the environment
 	-- @name class
 	-- @class function
-	-- @param name the name of the interface
-	-- @usage endinterface "IFSocket"
+	-- <param name="name">the name of the interface</param>
+	-- <usage>endinterface "IFSocket"</usage>
 	------------------------------------
 	function endinterface(name)
 		if __Attribute__ then
@@ -1799,7 +1779,7 @@ do
 	_SuperIndex = "Super"
 	_ThisIndex = "This"
 
-	_KeyWord4ClsEnv = _KeyWord4ClsEnv or {}
+	_KeyWord4ClsEnv = {}
 
 	_KeyMeta = {
 		__add = true,		-- a + b
@@ -1887,8 +1867,8 @@ do
 	end
 
 	-- metatable for class's env
-	_MetaClsEnv = _MetaClsEnv or {}
-	_MetaClsDefEnv = _MetaClsDefEnv or {}
+	_MetaClsEnv = {}
+	_MetaClsDefEnv = {}
 	do
 		_MetaClsEnv.__index = function(self, key)
 			local info = _NSInfo[self[OWNER_FIELD]]
@@ -2486,8 +2466,8 @@ do
 
 	------------------------------------
 	--- Create class in currect environment's namespace or default namespace
-	-- @param name the class's name
-	-- @usage class "Form"
+	-- <param name="name">the class's name</param>
+	-- <usage>class "Form"</usage>
 	------------------------------------
 	function class(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then
@@ -2580,8 +2560,8 @@ do
 	--- Set the current class' super class
 	-- @name inherit
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage inherit "System.Widget.Frame"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>inherit "System.Widget.Frame"</usage>
 	------------------------------------
 	function inherit_Cls(name)
 		if name and type(name) ~= "string" and not IsNameSpace(name) then
@@ -2670,8 +2650,8 @@ do
 	--- Set the current class' extended interface
 	-- @name extend
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage extend "System.IFSocket"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>extend "System.IFSocket"</usage>
 	------------------------------------
 	function extend_Cls(name)
 		if name and type(name) ~= "string" and not IsNameSpace(name) then
@@ -2766,8 +2746,8 @@ do
 	--- import classes from the given name's namespace to the current environment
 	-- @name import
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage import "System.Widget"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>import "System.Widget"</usage>
 	------------------------------------
 	function import_Cls(name)
 		if type(name) ~= "string" and not IsNameSpace(name) then
@@ -2803,8 +2783,8 @@ do
 	--- Add an event for current class
 	-- @name event
 	-- @class function
-	-- @param name the name of the event
-	-- @usage event "OnClick"
+	-- <param name="name">the name of the event</param>
+	-- <usage>event "OnClick"</usage>
 	------------------------------------
 	function event_Cls(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then
@@ -2829,8 +2809,8 @@ do
 	--- set a propert to the current class
 	-- @name property
 	-- @class function
-	-- @param name the name of the property
-	-- @usage property "Title" {
+	-- <param name="name">the name of the property</param>
+	-- <usage>property "Title" {</usage>
 	--		Get = function(self)
 	--			-- return the property's value
 	--		end,
@@ -2854,8 +2834,8 @@ do
 	--- End the class's definition and restore the environment
 	-- @name class
 	-- @class function
-	-- @param name the name of the class
-	-- @usage endclass "Form"
+	-- <param name="name">the name of the class</param>
+	-- <usage>endclass "Form"</usage>
 	------------------------------------
 	function endclass(name)
 		if __Attribute__ then
@@ -2998,8 +2978,8 @@ do
 	--- create a enumeration
 	-- @name enum
 	-- @class function
-	-- @param name the name of the enum
-	-- @usage enum "ButtonState" {
+	-- <param name="name">the name of the enum</param>
+	-- <usage>enum "ButtonState" {</usage>
 	--		"PUSHED",
 	--		"NORMAL",
 	--}
@@ -3062,15 +3042,15 @@ end
 -- Struct
 ------------------------------------------------------
 do
-	_KeyWord4StrtEnv = _KeyWord4StrtEnv or {}
+	_KeyWord4StrtEnv = {}
 
 	_STRUCT_TYPE_MEMBER = "MEMBER"
 	_STRUCT_TYPE_ARRAY = "ARRAY"
 	_STRUCT_TYPE_CUSTOM = "CUSTOM"
 
-	-- metatable for class's env
-	_MetaStrtEnv = _MetaStrtEnv or {}
-	_MetaStrtDefEnv = _MetaStrtDefEnv or {}
+	-- metatable for struct's env
+	_MetaStrtEnv = {}
+	_MetaStrtDefEnv = {}
 	do
 		_MetaStrtEnv.__index = function(self, key)
 			local info = _NSInfo[self[OWNER_FIELD]]
@@ -3510,8 +3490,8 @@ do
 	--- create a structure
 	-- @name struct
 	-- @class function
-	-- @param name the name of the enum
-	-- @usage struct "Point"
+	-- <param name="name">the name of the enum</param>
+	-- <usage>struct "Point"</usage>
 	--    x = System.Number
 	--    y = System.Number
 	-- endstruct "Point"
@@ -3588,8 +3568,8 @@ do
 	--- import classes from the given name's namespace to the current environment
 	-- @name import
 	-- @class function
-	-- @param name the namespace's name list, using "." to split.
-	-- @usage import "System.Widget"
+	-- <param name="name">the namespace's name list, using "." to split.</param>
+	-- <usage>import "System.Widget"</usage>
 	------------------------------------
 	function import_STRT(name)
 		if type(name) ~= "string" and not IsNameSpace(name) then
@@ -3625,8 +3605,8 @@ do
 	--- End the class's definition and restore the environment
 	-- @name class
 	-- @class function
-	-- @param name the name of the class
-	-- @usage endclass "Form"
+	-- <param name="name">the name of the class</param>
+	-- <usage>endclass "Form"</usage>
 	------------------------------------
 	function endstruct(name)
 		if __Attribute__ then
@@ -3795,262 +3775,236 @@ do
 	endstruct "Any"
 
 	------------------------------------------------------
+	-- System.AttributeTargets
+	------------------------------------------------------
+	enum "AttributeTargets" {
+		All = 0,
+		Class = 1,
+		Constructor = 2,
+		Enum = 4,
+		Event = 8,
+		Interface = 16,
+		Method = 32,
+		Property = 64,
+		Struct = 128,
+		Field = 256,
+		NameSpace = 512,
+	}
+
+	------------------------------------------------------
 	-- System.Reflector
 	------------------------------------------------------
 	interface "Reflector"
 
-		doc [======[
-			@name Reflector
-			@type interface
-			@desc This interface contains much methodes to get the running object-oriented system's informations.
-		]======]
+		doc "Reflector" [[This interface contains many apis used to get the running object-oriented system's informations.]]
 
-		doc [======[
-			@name GetCurrentNameSpace
-			@type method
-			@desc Get the namespace used by the environment
-			@param env table
-			@param rawOnly boolean, rawget data from the env if true
-			@return namespace
-		]======]
+		doc "GetCurrentNameSpace" [[
+			<desc>Get the namespace used by the environment</desc>
+			<param name="env" type="table" optional="true">the environment, default the current environment</param>
+			<param name="rawOnly" type="boolean" optional="true">skip metatable settings if true</param>
+			<return type="namespace">the namespace of the environment</return>
+		]]
 		function GetCurrentNameSpace(env, rawOnly)
 			env = type(env) == "table" and env or getfenv(2)
 
 			return GetNameSpace4Env(env, rawOnly)
 		end
 
-		doc [======[
-			@name SetCurrentNameSpace
-			@type method
-			@desc set the namespace used by the environment
-			@param ns the namespace that set for the environment
-			@param env table
-			@return nil
-		]======]
+		doc "SetCurrentNameSpace" [[
+			<desc>set the namespace used by the environment</desc>
+			<param name="ns" type="namespace|string|nil">the namespace that set for the environment</param>
+			<param name="env" type="table" optional="true">the environment, default the current environment</param>
+		]]
 		function SetCurrentNameSpace(ns, env)
 			env = type(env) == "table" and env or getfenv(2)
 
 			return SetNameSpace4Env(env, ns)
 		end
 
-		doc [======[
-			@name ForName
-			@type method
-			@desc Get the namespace for the name
-			@param name the namespace's name, split by "."
-			@return namespace the namespace
-			@usage System.Reflector.ForName("System")
-		]======]
-		function ForName(name)
+		doc "GetNameSpaceForName" [[
+			<desc>Get the namespace by the name</desc>
+			<param name="name" type="string">the namespace's name, split by "."</param>
+			<return type="namespace">the namespace</return>
+			<usage>ns = System.Reflector.GetNameSpaceForName("System")</usage>
+		]]
+		function GetNameSpaceForName(name)
 			return GetNameSpace(GetDefaultNameSpace(), name)
 		end
 
-		doc [======[
-			@name GetType
-			@type method
-			@desc Get the class|enum|struct|interface for the namespace
-			@param name the namespace
-			@return type
-			@usage System.Reflector.GetType("System.Object")
-		]======]
-		function GetType(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+		doc "GetNameSpaceType" [[
+			<desc>Get the type of the namespace</desc>
+			<param name="name" type="namespace|string">the namespace</param>
+			<return type="string">The namespace's type like NameSpace|Class|Struct|Enum|Interface</return>
+			<usage>type = System.Reflector.GetNameSpaceType("System.Object")</usage>
+		]]
+		function GetNameSpaceType(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type
 		end
 
-		doc [======[
-			@name GetName
-			@type method
-			@desc Get the name for the namespace
-			@param namespace the namespace to query
-			@return name
-			@usage System.Reflector.GetName(System.Object)
-		]======]
-		function GetName(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
-
+		doc "GetNameSpaceName" [[
+			<desc>Get the name of the namespace</desc>
+			<param name="namespace">the namespace to query</param>
+			<return type="string">the namespace's name</return>
+			<usage>System.Reflector.GetNameSpaceName(System.Object)</usage>
+		]]
+		function GetNameSpaceName(ns)
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Name
 		end
 
-		doc [======[
-			@name GetFullName
-			@type method
-			@desc Get the full name for the namespace
-			@param namespace the namespace to query
-			@return fullname
-			@usage System.Reflector.GetFullName(System.Object)
-		]======]
-		function GetFullName(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+		doc "GetNameSpaceFullName" [[
+			<desc>Get the full name of the namespace</desc>
+			<param name="namespace|string">the namespace to query</param>
+			<return type="string">the full path of the namespace</return>
+			<usage>path = System.Reflector.GetNameSpaceFullName(System.Object)</usage>
+		]]
+		function GetNameSpaceFullName(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return GetFullName4NS(ns)
 		end
 
-		doc [======[
-			@name GetSuperClass
-			@type method
-			@desc Get the superclass for the class
-			@param class the class object to query
-			@return superclass
-			@usage System.Reflector.GetSuperClass(System.Object)
-		]======]
+		doc "GetSuperClass" [[
+			<desc>Get the superclass of the class</desc>
+			<param name="class">the class object to query</param>
+			<return type="class">the super class if existed</return>
+			<usage>System.Reflector.GetSuperClass(System.Object)</usage>
+		]]
 		function GetSuperClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].SuperClass
 		end
 
-		doc [======[
-			@name IsNameSpace
-			@type method
-			@desc Check if the object is a NameSpace
-			@param object the object to query
-			@return boolean true if the object is a NameSpace
-			@usage System.Reflector.IsNameSpace(System.Object)
-		]======]
+		doc "IsNameSpace" [[
+			<desc>Check if the object is a NameSpace</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the object is a NameSpace</return>
+			<usage>System.Reflector.IsNameSpace(System.Object)</usage>
+		]]
 		function IsNameSpace(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and true or false
 		end
 
-		doc [======[
-			@name IsClass
-			@type method
-			@desc Check if the namespace is a class
-			@param object
-			@return boolean true if the object is a class
-			@usage System.Reflector.IsClass(System.Object)
-		]======]
+		doc "IsClass" [[
+			<desc>Check if the namespace is a class</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the object is a class</return>
+			<usage>System.Reflector.IsClass(System.Object)</usage>
+		]]
 		function IsClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_CLASS or false
 		end
 
-		doc [======[
-			@name IsStruct
-			@type method
-			@desc Check if the namespace is a struct
-			@param object
-			@return boolean true if the object is a struct
-			@usage System.Reflector.IsStruct(System.Object)
-		]======]
+		doc "IsStruct" [[
+			<desc>Check if the namespace is a struct</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the object is a struct</return>
+			<usage>System.Reflector.IsStruct(System.Object)</usage>
+		]]
 		function IsStruct(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_STRUCT or false
 		end
 
-		doc [======[
-			@name IsEnum
-			@type method
-			@desc Check if the namespace is an enum
-			@param object
-			@return boolean true if the object is a enum
-			@usage System.Reflector.IsEnum(System.Object)
-		]======]
+		doc "IsEnum" [[
+			<desc>Check if the namespace is an enum</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the object is a enum</return>
+			<usage>System.Reflector.IsEnum(System.Object)</usage>
+		]]
 		function IsEnum(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_ENUM or false
 		end
 
-		doc [======[
-			@name IsInterface
-			@type method
-			@desc Check if the namespace is an interface
-			@param object
-			@return boolean true if the object is an Interface
-			@usage System.Reflector.IsInterface(System.IFSocket)
-		]======]
+		doc "IsInterface" [[
+			<desc>Check if the namespace is an interface</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the object is an Interface</return>
+			<usage>System.Reflector.IsInterface(System.IFSocket)</usage>
+		]]
 		function IsInterface(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].Type == TYPE_INTERFACE or false
 		end
 
-		doc [======[
-			@name IsFinal
-			@type method
-			@desc Check if the class|interface is final, can't be re-defined
-			@param object
-			@return boolean true if the class|interface is final
-			@usage System.Reflector.IsFinal(System.Object)
-		]======]
+		doc "IsFinal" [[
+			<desc>Check if the class|interface is final, can't be re-defined</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the class|interface is final</return>
+			<usage>System.Reflector.IsFinal(System.Object)</usage>
+		]]
 		function IsFinal(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].IsFinal or false
 		end
 
-		doc [======[
-			@name IsNonInheritable
-			@type method
-			@desc Check if the class|interface is non-inheritable
-			@param object
-			@return boolean true if the class|interface is non-inheritable
-			@usage System.Reflector.IsNonInheritable(System.Object)
-		]======]
+		doc "IsNonInheritable" [[
+			<desc>Check if the class|interface is non-inheritable</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the class|interface is non-inheritable</return>
+			<usage>System.Reflector.IsNonInheritable(System.Object)</usage>
+		]]
 		function IsNonInheritable(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonInheritable or false
 		end
 
-		doc [======[
-			@name IsUniqueClass
-			@type method
-			@desc Check if the class is unique, can only have one object
-			@param object
-			@return boolean true if the class is unique
-			@usage System.Reflector.IsUniqueClass(System.Object)
-		]======]
+		doc "IsUniqueClass" [[
+			<desc>Check if the class is unique, can only have one object</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the class is unique</return>
+			<usage>System.Reflector.IsUniqueClass(System.Object)</usage>
+		]]
 		function IsUniqueClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].UniqueObject and true or false
 		end
 
-		doc [======[
-			@name IsAutoCacheClass
-			@type method
-			@desc Whether the class is auto-cache, the objects of the class will keep methods in itself when called
-			@param object
-			@return boolean true if the class is auto-cache
-			@usage System.Reflector.IsAutoCacheClass(System.Object)
-		]======]
+		doc "IsAutoCacheClass" [[
+			<desc>Whether the class is auto-cache, the objects of the class will keep methods in itself when called</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the class is auto-cache</return>
+			<usage>System.Reflector.IsAutoCacheClass(System.Object)</usage>
+		]]
 		function IsAutoCacheClass(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].AutoCache or false
 		end
 
-		doc [======[
-			@name IsNonExpandable
-			@type method
-			@desc Check if the class|interface is non-expandable
-			@param object
-			@return boolean true if the class|interface is non-expandable
-			@usage System.Reflector.IsNonExpandable(System.Object)
-		]======]
+		doc "IsNonExpandable" [[
+			<desc>Check if the class|interface is non-expandable</desc>
+			<param name="object">the object to query</param>
+			<return type="boolean">true if the class|interface is non-expandable</return>
+			<usage>System.Reflector.IsNonExpandable(System.Object)</usage>
+		]]
 		function IsNonExpandable(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].NonExpandable or false
 		end
 
-		doc [======[
-			@name GetSubNamespace
-			@type method
-			@desc Get the sub namespace of the namespace
-			@param namespace
-			@return table the sub-namespace list
-			@usage System.Reflector.GetSubNamespace(System)
-		]======]
+		doc "GetSubNamespace" [[
+			<desc>Get the sub namespace of the namespace</desc>
+			<param name="namespace">the object to query</param>
+			<return type="table">the sub-namespace list</return>
+			<usage>System.Reflector.GetSubNamespace(System)</usage>
+		]]
 		function GetSubNamespace(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4067,16 +4021,14 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetExtendInterfaces
-			@type method
-			@desc Get the extend interfaces of the class
-			@param class
-			@return table the extend interface list
-			@usage System.Reflector.GetExtendInterfaces(System.Object)
-		]======]
+		doc "GetExtendInterfaces" [[
+			<desc>Get the extend interfaces of the class|interface</desc>
+			<param name="object">the object to query</param>
+			<return type="table">the extend interface list</return>
+			<usage>System.Reflector.GetExtendInterfaces(System.Object)</usage>
+		]]
 		function GetExtendInterfaces(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
 
 			local info = cls and _NSInfo[cls]
 
@@ -4091,16 +4043,14 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetAllExtendInterfaces
-			@type method
-			@desc Get all the extend interfaces of the class
-			@param class
-			@return table the full extend interface list in the inheritance tree
-			@usage System.Reflector.GetAllExtendInterfaces(System.Object)
-		]======]
+		doc "GetAllExtendInterfaces" [[
+			<desc>Get all the extend interfaces of the class|interface</desc>
+			<param name="object">the object to query</param>
+			<return type="table">the full extend interface list in the inheritance tree</return>
+			<usage>System.Reflector.GetAllExtendInterfaces(System.Object)</usage>
+		]]
 		function GetAllExtendInterfaces(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
 
 			local info = cls and _NSInfo[cls]
 
@@ -4115,16 +4065,14 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetChildClasses
-			@type method
-			@desc Get the child classes of the class
-			@param class
-			@return table the child class list
-			@usage System.Reflector.GetChildClasses(System.Object)
-		]======]
+		doc "GetChildClasses" [[
+			<desc>Get the classes that inherited from the class</desc>
+			<param name="object">the object to query</param>
+			<return type="table">the child class list</return>
+			<usage>System.Reflector.GetChildClasses(System.Object)</usage>
+		]]
 		function GetChildClasses(cls)
-			if type(cls) == "string" then cls = ForName(cls) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
 
 			local info = cls and _NSInfo[cls]
 
@@ -4139,18 +4087,16 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetEvents
-			@type method
-			@desc Get the events of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super event handlers
-			@return table the event handler list
-			@usage System.Reflector.GetEvents(System.Object)
-		]======]
+		doc "GetEvents" [[
+			<desc>Get the events of the class</desc>
+			<format>class|interface[, noSuper]</format>
+			<param name="class"></param>|interface the class or interface to query
+			<param name="noSuper">no super event handlers</param>
+			<return name="table">the event handler list</return>
+			<usage>System.Reflector.GetEvents(System.Object)</usage>
+		]]
 		function GetEvents(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4169,18 +4115,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetProperties
-			@type method
-			@desc Get the properties of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super properties
-			@return table the property list
-			@usage System.Reflector.GetProperties(System.Object)
-		]======]
+		doc "GetProperties" [[
+			<desc>Get the properties of the class|interface</desc>
+			<param name="object">the class or interface to query</param>|
+			<param name="noSuper" optional="true" type="boolean">no super properties</param>
+			<return type="table">the property list</return>
+			<usage>System.Reflector.GetProperties(System.Object)</usage>
+		]]
 		function GetProperties(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4199,18 +4142,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetMethods
-			@type method
-			@desc Get the methods of the class
-			@format class|interface[, noSuper]
-			@param class|interface the class or interface to query
-			@param noSuper no super methodes
-			@return table the method list
-			@usage System.Reflector.GetMethods(System.Object)
-		]======]
+		doc "GetMethods" [[
+			<desc>Get the methods of the class|interface</desc>
+			<param name="object">the class or interface to query</param>
+			<param name="noSuper" optional="true" type="boolean">no super methodes</param>
+			<return type="table">the method list</return>
+			<usage>System.Reflector.GetMethods(System.Object)</usage>
+		]]
 		function GetMethods(ns, noSuper)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4235,17 +4175,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetPropertyType
-			@type method
-			@desc Get the property type of the class
-			@param class|interface
-			@param propName the property name
-			@return type the property type
-			@usage System.Reflector.GetPropertyType(System.Object, "Name")
-		]======]
+		doc "GetPropertyType" [[
+			<desc>Get the property type of the property</desc>
+			<param name="owner" type="class|interface">the property's owner</param>
+			<param name="propName" type="string">the property name</param>
+			<return type="System.Type">the property type</return>
+			<usage>System.Reflector.GetPropertyType(System.Object, "Name")</usage>
+		]]
 		function GetPropertyType(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4256,17 +4194,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name HasProperty
-			@type method
-			@desc whether the property is existed
-			@param class|interface
-			@param propName
-			@return boolean true if the class|interface has the property
-			@usage System.Reflector.HasProperty(System.Object, "Name")
-		]======]
+		doc "HasProperty" [[
+			<desc>whether the property is existed</desc>
+			<param name="owner" type="class|interface">The owner of the property</param>
+			<param name="propName" type="string">The property's name</param>
+			<return type="boolean">true if the class|interface has the property</return>
+			<usage>System.Reflector.HasProperty(System.Object, "Name")</usage>
+		]]
 		function HasProperty(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4277,17 +4213,15 @@ do
 			return false
 		end
 
-		doc [======[
-			@name IsPropertyReadable
-			@type method
-			@desc whether the property is readable
-			@param class|interface
-			@param propName
-			@return boolean true if the property is readable
-			@usage System.Reflector.IsPropertyReadable(System.Object, "Name")
-		]======]
+		doc "IsPropertyReadable" [[
+			<desc>whether the property is readable</desc>
+			<param name="owner" type="class|interface">the property's owner</param>
+			<param name="propName" type="string">the property's name</param>
+			<return type="boolean">true if the property is readable</return>
+			<usage>System.Reflector.IsPropertyReadable(System.Object, "Name")</usage>
+		]]
 		function IsPropertyReadable(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4301,17 +4235,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name IsPropertyWritable
-			@type method
-			@desc whether the property is writable
-			@param class|interface
-			@param propName
-			@return boolean true if the property is writable
-			@usage System.Reflector.IsPropertyWritable(System.Object, "Name")
-		]======]
+		doc "IsPropertyWritable" [[
+			<desc>whether the property is writable</desc>
+			<param name="owner" type="class|interface">the property's owner</param>
+			<param name="propName" type="string">the property's name</param>
+			<return type="boolean">true if the property is writable</return>
+			<usage>System.Reflector.IsPropertyWritable(System.Object, "Name")</usage>
+		]]
 		function IsPropertyWritable(ns, propName)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4325,94 +4257,82 @@ do
 			end
 		end
 
-		doc [======[
-			@name IsRequireMethod
-			@type method
-			@desc Whether the method is required to be overridden
-			@param ns the interface
-			@param name the method's name
-			@return boolean
-		]======]
+		doc "IsRequireMethod" [[
+			<desc>Whether the method is required to be overridden</desc>
+			<param name="owner" type="interface">the method's owner</param>
+			<param name="name" type="string">the method's name</param>
+			<return type="boolean">true if the method must be overridden</return>
+		]]
 		function IsRequireMethod(ns, name)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
 			return info and info.Type == TYPE_INTERFACE and info.RequireMethod and info.RequireMethod[name] or false
 		end
 
-		doc [======[
-			@name IsRequireProperty
-			@type method
-			@desc Whether the property is required to be overridden
-			@param ns the interface
-			@param name the property's name
-			@return boolean
-		]======]
+		doc "IsRequireProperty" [[
+			<desc>Whether the property is required to be overridden</desc>
+			<param name="owner" type="interface">the property's owner</param>
+			<param name="name" type="string">the property's name</param>
+			<return type="boolean">true if the property must be overridden</return>
+		]]
 		function IsRequireProperty(ns, name)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
 			return info and info.Type == TYPE_INTERFACE and info.RequireProperty and info.RequireProperty[name] or false
 		end
 
-		doc [======[
-			@name IsOptionalMethod
-			@type method
-			@desc Whether the method is optional to be overridden
-			@param ns the interface
-			@param name the method's name
-			@return boolean
-		]======]
+		doc "IsOptionalMethod" [[
+			<desc>Whether the method is optional to be overridden</desc>
+			<param name="owner" type="interface">the method's owner</param>
+			<param name="name" type="string">the method's name</param>
+			<return type="boolean">true if the method should be overridden</return>
+		]]
 		function IsOptionalMethod(ns, name)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
 			return info and info.Type == TYPE_INTERFACE and info.OptionalMethod and info.OptionalMethod[name] or false
 		end
 
-		doc [======[
-			@name IsOptionalProperty
-			@type method
-			@desc Whether the property is optional to be overridden
-			@param ns the interface
-			@param name the property's name
-			@return boolean
-		]======]
+		doc "IsOptionalProperty" [[
+			<desc>Whether the property is optional to be overridden</desc>
+			<param name="owner" type="interface">the property's owner</param>
+			<param name="name" type="string">the property's name</param>
+			<return type="boolean">true if the property should be overridden</return>
+		]]
 		function IsOptionalProperty(ns, name)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
 			return info and info.Type == TYPE_INTERFACE and info.OptionalProperty and info.OptionalProperty[name] or false
 		end
 
-		doc [======[
-			@name IsFlagsEnum
-			@type method
-			@desc Whether the enum is flags or not
-			@param object
-			@return boolean
-			@usage System.Reflector.IsFlagsEnum(System.Object)
-		]======]
+		doc "IsFlagsEnum" [[
+			<desc>Whether the enum is flags or not</desc>
+			<param name="object" type="enum">The enum type</param>
+			<return name="boolean">true if the enum is a flag enumeration</return>
+			<usage>System.Reflector.IsFlagsEnum(System.AttributeTargets)</usage>
+		]]
 		function IsFlagsEnum(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			return ns and rawget(_NSInfo, ns) and _NSInfo[ns].IsFlags or false
 		end
 
-		doc [======[
-			@name GetEnums
-			@type method
-			@desc Get the enums of the enum
-			@param enum
-			@return table the enum index list
-			@usage System.Reflector.GetEnums(System.SampleEnum)
-		]======]
+		doc "GetEnums" [[
+			<desc>Get the enumeration keys of the enum</desc>
+			<param name="enum" type="enum">the enum tyep</param>
+			<return type="table">the enum key list</return>
+			<usage>System.Reflector.GetEnums(System.AttributeTargets)</usage>
+		]]
 		function GetEnums(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
 
@@ -4450,17 +4370,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name ParseEnum
-			@type method
-			@desc Get the enum index of the enum value
-			@param enum
-			@param value
-			@return index
-			@usage System.Reflector.ParseEnum(System.SampleEnum, 1)
-		]======]
+		doc "ParseEnum" [[
+			<desc>Get the enum key of the enum value</desc>
+			<param name="enum" type="enum">the enum type</param>
+			<param name="value">the value</param>
+			<return type="string">the key of the value</return>
+			<usage>System.Reflector.ParseEnum(System.SampleEnum, 1)</usage>
+		]]
 		function ParseEnum(ns, value)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			if ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_ENUM and _NSInfo[ns].Enum then
 				if _NSInfo[ns].IsFlags and type(value) == "number" then
@@ -4491,30 +4409,26 @@ do
 			end
 		end
 
-		doc [======[
-			@name ValidateFlags
-			@type method
-			@desc  hether the value is contains on the target value
-			@param checkValue like 1, 2, 4, 8, ...
-			@param targetValue like 3 : (1 + 2)
-			@return boolean true if the targetValue contains the checkValue
-		]======]
+		doc "ValidateFlags" [[
+			<desc>Whether the value is contains on the target value</desc>
+			<param name="checkValue" type="number">like 1, 2, 4, 8, ...</param>
+			<param name="targetValue" type="number">like 3 : (1 + 2)</param>
+			<return type="boolean">true if the targetValue contains the checkValue</return>
+		]]
 		function ValidateFlags(checkValue, targetValue)
 			targetValue = targetValue % (2 * checkValue)
 			return (targetValue - targetValue % checkValue) == checkValue
 		end
 
-		doc [======[
-			@name HasEvent
-			@type method
-			@desc Check if the class|interface has that event
-			@param class|interface
-			@param event the event handler name
-			@return true if the class|interface has the event
-			@usage System.Reflector.HasEvent(Addon, "OnEvent")
-		]======]
+		doc "HasEvent" [[
+			<desc>Check if the class|interface has that event</desc>
+			<param name="owner" type="class|interface">the event's owner</param>|interface
+			<param name="event" type="string">the event's name</param>
+			<return type="boolean">if the owner has the event</return>
+			<usage>System.Reflector.HasEvent(Addon, "OnEvent")</usage>
+		]]
 		function HasEvent(cls, sc)
-			if type(cls) == "string" then cls = ForName(cls) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
 
 			local info = _NSInfo[cls]
 
@@ -4523,15 +4437,13 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetStructType
-			@type method
-			@desc Get the type of the struct
-			@param struct
-			@return string
-		]======]
+		doc "GetStructType" [[
+			<desc>Get the type of the struct type</desc>
+			<param name="struct" type="struct">the structtype</param>
+			<return type="string">the type of the struct type</return>
+		]]
 		function GetStructType(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and rawget(_NSInfo, ns)
 
@@ -4540,33 +4452,29 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetStructArrayElement
-			@type method
-			@desc Get the array element type of the struct
-			@param ns
-			@return type the array element's type
-		]======]
+		doc "GetStructArrayElement" [[
+			<desc>Get the array element types of the struct</desc>
+			<param name="struct" type="struct">the struct type</param>
+			<return type="System.Type">the array element's type</return>
+		]]
 		function GetStructArrayElement(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and rawget(_NSInfo, ns)
 
 			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY then
-				return info.ArrayElement
+				return info.ArrayElement and info.ArrayElement:Copy()
 			end
 		end
 
-		doc [======[
-			@name GetStructParts
-			@type method
-			@desc Get the parts of the struct
-			@param struct
-			@return table struct part name list
-			@usage System.Reflector.GetStructParts(Position)
-		]======]
+		doc "GetStructParts" [[
+			<desc>Get the parts of the struct type</desc>
+			<param name="struct" type="struct">the struct type</param>
+			<return type="table">the struct part name list</return>
+			<usage>System.Reflector.GetStructParts(Position)</usage>
+		]]
 		function GetStructParts(ns)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and rawget(_NSInfo, ns)
 
@@ -4597,17 +4505,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name GetStructPart
-			@type method
-			@desc Get the part's type of the struct
-			@param struct
-			@param part the part's name
-			@return type the part's type
-			@usage System.Reflector.GetStructPart(Position, "x")
-		]======]
+		doc "GetStructPart" [[
+			<desc>Get the part's type of the struct</desc>
+			<param name="struct" type="struct">the struct type</param>
+			<param name="part" type="string">the part's name</param>
+			<return type="System.Type">the part's type</return>
+			<usage>System.Reflector.GetStructPart(Position, "x")</usage>
+		]]
 		function GetStructPart(ns, part)
-			if type(ns) == "string" then ns = ForName(ns) end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and rawget(_NSInfo, ns)
 
@@ -4628,87 +4534,74 @@ do
 			end
 		end
 
-		doc [======[
-			@name IsSuperClass
-			@type method
-			@desc Check if this first arg is a child class of the next arg
-			@param childclass
-			@param superclass
-			@return boolean true if the supeclass is the childclass's super class
-			@usage System.Reflector.IsSuperClass(UIObject, Object)
-		]======]
+		doc "IsSuperClass" [[
+			<desc>Check if this class is inherited from the target class</desc>
+			<param name="class" type="class">the child class</param>
+			<param name="superclass" type="class">the super class</param>
+			<return type="boolean">true if the class is inherited from the target class</return>
+			<usage>System.Reflector.IsSuperClass(UIObject, Object)</usage>
+		]]
 		function IsSuperClass(child, super)
-			if type(child) == "string" then child = ForName(child) end
-			if type(super) == "string" then super = ForName(super) end
+			if type(child) == "string" then child = GetNameSpaceForName(child) end
+			if type(super) == "string" then super = GetNameSpaceForName(super) end
 
 			return IsClass(child) and IsClass(super) and IsChildClass(super, child)
 		end
 
-		doc [======[
-			@name IsExtendedInterface
-			@type method
-			@desc Check if the class is extended from the interface
-			@param class|interface
-			@param interface
-			@return boolean true if the first arg is extend from the second
-			@usage System.Reflector.IsExtendedInterface(UIObject, IFSocket)
-		]======]
+		doc "IsExtendedInterface" [[
+			<desc>Check if the class|interface is extended from the interface</desc>
+			<param name="object" type="interface|class">the class or interface</param>
+			<param name="interface" type="interface">the target interface</param>
+			<return type="boolean">true if the first arg is extend from the second</return>
+			<usage>System.Reflector.IsExtendedInterface(UIObject, IFSocket)</usage>
+		]]
 		function IsExtendedInterface(cls, IF)
-			if type(cls) == "string" then cls = ForName(cls) end
-			if type(IF) == "string" then IF = ForName(IF) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
+			if type(IF) == "string" then IF = GetNameSpaceForName(IF) end
 
 			return IsExtend(IF, cls)
 		end
 
-		doc [======[
-			@name GetObjectClass
-			@type method
-			@desc Get the class type of this object
-			@param object
-			@return class the object's class
-			@usage System.Reflector.GetObjectClass(obj)
-		]======]
+		doc "GetObjectClass" [[
+			<desc>Get the class type of the object</desc>
+			<param name="object">the object</param>
+			<return type="class">the object's class</return>
+			<usage>System.Reflector.GetObjectClass(obj)</usage>
+		]]
 		function GetObjectClass(obj)
 			return type(obj) == "table" and getmetatable(obj)
 		end
 
-		doc [======[
-			@name ObjectIsClass
-			@type method
-			@desc Check if this object is an instance of the class
-			@param object
-			@param class
-			@return true if the object is an instance of the class or it's child class
-			@usage System.Reflector.ObjectIsClass(obj, Object)
-		]======]
+		doc "ObjectIsClass" [[
+			<desc>Check if this object is an instance of the class</desc>
+			<param name="object">the object</param>
+			<param name="class">the class</param>
+			<return type="boolean">true if the object is an instance of the class or it's child class</return>
+			<usage>System.Reflector.ObjectIsClass(obj, Object)</usage>
+		]]
 		function ObjectIsClass(obj, cls)
-			if type(cls) == "string" then cls = ForName(cls) end
+			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
 			return (obj and cls and IsChildClass(cls, GetObjectClass(obj))) or false
 		end
 
-		doc [======[
-			@name ObjectIsInterface
-			@type method
-			@desc Check if this object is an instance of the interface
-			@param object
-			@param interface
-			@return true if the object's class is extended from the interface
-			@usage System.Reflector.ObjectIsInterface(obj, IFSocket)
-		]======]
+		doc "ObjectIsInterface" [[
+			<desc>Check if this object is an instance of the interface</desc>
+			<param name="object">the object</param>
+			<param name="interface">the interface</param>
+			<return type="boolean">true if the object's class is extended from the interface</return>
+			<usage>System.Reflector.ObjectIsInterface(obj, IFSocket)</usage>
+		]]
 		function ObjectIsInterface(obj, IF)
-			if type(IF) == "string" then IF = ForName(IF) end
+			if type(IF) == "string" then IF = GetNameSpaceForName(IF) end
 			return (obj and IF and IsExtend(IF, GetObjectClass(obj))) or false
 		end
 
-		doc [======[
-			@name FireObjectEvent
-			@type method
-			@desc Fire an object's event, to trigger the object's event handlers
-			@param object the object
-			@param event the event name
-			@param ... the event's arguments
-			@return nil
-		]======]
+		doc "FireObjectEvent" [[
+			<desc>Fire an object's event, to trigger the object's event handlers</desc>
+			<param name="object">the object</param>
+			<param name="event">the event name</param>
+			<param name="...">the event's arguments</param>
+		]]
 		function FireObjectEvent(obj, sc, ...)
 			-- No more check , just fire the event as quick as we can
 			local handler = rawget(obj, "__Events")
@@ -4716,15 +4609,12 @@ do
 			if handler then return handler(obj, ...) end
 		end
 
-		doc [======[
-			@name ActiveThread
-			@type method
-			@desc Active thread mode for special events.
-			@param object
-			@param ... event handler name list
-			@return nil
-			@usage System.Reflector.ActiveThread(obj, "OnClick", "OnEnter")
-		]======]
+		doc "ActiveThread" [[
+			<desc>Active thread mode for special events.</desc>
+			<param name="object">the object</param>
+			<param name="...">the event name list</param>
+			<usage>System.Reflector.ActiveThread(obj, "OnClick", "OnEnter")</usage>
+		]]
 		function ActiveThread(obj, ...)
 			local cls = GetObjectClass(obj)
 			local name
@@ -4745,15 +4635,13 @@ do
 			end
 		end
 
-		doc [======[
-			@name IsThreadActivated
-			@type method
-			@desc Whether the thread mode is activated for special events.
-			@param obect
-			@param event
-			@return boolean true if the object has active thread mode for the given event.
-			@usage System.Reflector.IsThreadActivated(obj, "OnClick")
-		]======]
+		doc "IsThreadActivated" [[
+			<desc>Whether the thread mode is activated for special events.</desc>
+			<param name="obect">the object</param>
+			<param name="event">the event name</param>
+			<return type="boolean">true if the object has active thread mode for the given event.</return>
+			<usage>System.Reflector.IsThreadActivated(obj, "OnClick")</usage>
+		]]
 		function IsThreadActivated(obj, sc)
 			if IsClass(obj) then
 				local evt = _NSInfo[obj].Cache4Event[sc]
@@ -4770,15 +4658,12 @@ do
 			return false
 		end
 
-		doc [======[
-			@name InactiveThread
-			@type method
-			@desc Inactive thread mode for special events.
-			@param object
-			@param ... event name list
-			@return nil
-			@usage System.Reflector.InactiveThread(obj, "OnClick", "OnEnter")
-		]======]
+		doc "InactiveThread" [[
+			<desc>Inactive thread mode for special events.</desc>
+			<param name="object">the object</param>
+			<param name="...">the event name list</param>
+			<usage>System.Reflector.InactiveThread(obj, "OnClick", "OnEnter")</usage>
+		]]
 		function InactiveThread(obj, ...)
 			local cls = GetObjectClass(obj)
 			local name
@@ -4799,15 +4684,12 @@ do
 			end
 		end
 
-		doc [======[
-			@name BlockEvent
-			@type method
-			@desc Block event for object
-			@param object
-			@param ... the event handler name list
-			@return nil
-			@usage System.Reflector.BlockEvent(obj, "OnClick", "OnEnter")
-		]======]
+		doc "BlockEvent" [[
+			<desc>Block event for object</desc>
+			<param name="object">the object</param>
+			<param name="...">the event name list</param>
+			<usage>System.Reflector.BlockEvent(obj, "OnClick", "OnEnter")</usage>
+		]]
 		function BlockEvent(obj, ...)
 			local cls = GetObjectClass(obj)
 			local name
@@ -4823,15 +4705,13 @@ do
 			end
 		end
 
-		doc [======[
-			@name IsEventBlocked
-			@type method
-			@desc Whether the event is blocked for object
-			@param object
-			@param event
-			@return boolean true if the event is blocked
-			@usage System.Reflector.IsEventBlocked(obj, "OnClick")
-		]======]
+		doc "IsEventBlocked" [[
+			<desc>Whether the event is blocked for object</desc>
+			<param name="object">the object</param>
+			<param name="event">the event's name</param>
+			<return type="boolean">true if the event is blocked</return>
+			<usage>System.Reflector.IsEventBlocked(obj, "OnClick")</usage>
+		]]
 		function IsEventBlocked(obj, sc)
 			local cls = GetObjectClass(obj)
 			local name
@@ -4843,15 +4723,12 @@ do
 			return false
 		end
 
-		doc [======[
-			@name UnBlockEvent
-			@type method
-			@desc Un-Block event for object
-			@param object
-			@param ... event handler name list
-			@return nil
-			@usage System.Reflector.UnBlockEvent(obj, "OnClick", "OnEnter")
-		]======]
+		doc "UnBlockEvent" [[
+			<desc>Un-Block event for object</desc>
+			<param name="object">the object</param>
+			<param name="...">the event name list</param>
+			<usage>System.Reflector.UnBlockEvent(obj, "OnClick", "OnEnter")</usage>
+		]]
 		function UnBlockEvent(obj, ...)
 			local cls = GetObjectClass(obj)
 			local name
@@ -4886,19 +4763,17 @@ do
 			end,
 		})
 
-		doc [======[
-			@name Validate
-			@type method
-			@desc Validating the value to the given type.
-			@format type, value, name[, prefix[, stacklevel]]
-			@param type such like Object+String+nil
-			@param value the test value
-			@param name the parameter's name
-			@param prefix the prefix string
-			@param stacklevel set if not in the main function call, only work when prefix is setted
-			@return nil
-			@usage System.Reflector.Validate(System.String+nil, "Test")
-		]======]
+		doc "Validate" [[
+			<desc>Validating the value to the given type.</desc>
+			<format>type, value, name[, prefix[, stacklevel] ]</format>
+			<param name="type">such like Object+String+nil</param>
+			<param name="value">the test value</param>
+			<param name="name">the parameter's name</param>
+			<param name="prefix">the prefix string</param>
+			<param name="stacklevel">set if not in the main function call, only work when prefix is setted</param>
+			<return>the validated value</return>
+			<usage>System.Reflector.Validate(System.String+nil, "Test")</usage>
+		]]
 		function Validate(types, value, name, prefix, stacklevel)
 			stacklevel = type(stacklevel) == "number" and stacklevel > 0 and stacklevel or 0
 
@@ -4958,74 +4833,22 @@ do
 			return value
 		end
 
-		doc [======[
-			@name EnableDocumentSystem
-			@type method
-			@desc Enable or disbale the document system, only effect later created document
-			@param enabled true to enable the document system
-			@return nil
-			@usage System.Reflector.EnableDocumentSystem(true)
-		]======]
-		function EnableDocumentSystem(enabled)
-			EnableDocument(enabled)
-		end
+		doc "GetDocument" [[
+			<desc>Get the document</desc>
+			<param name="owner">the document's owner</param>
+			<param name="name" optional="true">the query name, default the owner's name</param>
+			<param name="targetType" optional="true" type="System.AttributeTargets">the query target type, can be auto-generated by the name</param>
+			<return type="string">the document</return>
+		]]
+		GetDocument = GetDocument
 
-		doc [======[
-			@name IsDocumentSystemEnabled
-			@type method
-			@desc Whether the document system is enabled
-			@return boolean
-		]======]
-		function IsDocumentSystemEnabled()
-			return IsDocumentEnabled()
-		end
-
-		doc [======[
-			@name GetDocument
-			@type method
-			@desc Get the document settings
-			@format namespace, docType, name[, part]
-			@param namespace
-			@param doctype such as "property"
-			@param name the query name
-			@param part the part name
-			@return Iterator the iterator to get detail
-			@usage
-				for part, value in System.Reflector.GetDocument(System.Object, "method", "GetClass")
-			<br>	do print(part, value)
-			<br>end
-		]======]
-		function GetDocument(ns, doctype, name, part)
-			return GetDocumentPart(ns, doctype, name, part)
-		end
-
-		doc [======[
-			@name HasDocument
-			@type method
-			@desc Check if has the document
-			@param namespace
-			@param doctype
-			@param name
-			@return true if the document is present
-		]======]
-		function HasDocument(ns, doctype, name)
-			return HasDocumentPart(ns, doctype, name)
-		end
-
-		doc [======[
-			@name Help
-			@type method
-			@desc Get the document detail
-			@format class|interface[, 'event'|'property'|'method', name]
-			@format class|interface, name
-			@format class|interface, includeSuper
-			@format enum|struct
-			@param class|interface|enum|struct
-			@param event|property|method
-			@param name the name to query
-			@param includeSuper boolean, whether include all details
-			@return string the detail information
-		]======]
+		doc "Help" [[
+			<desc>Return help information of the target</desc>
+			<param name="owner">the target's owner</param>
+			<param name="name" optional="true">the query name, default the owner's name</param>
+			<param name="targetType" optional="true" type="System.AttributeTargets">the query target type, can be auto-generated by the name</param>
+			<return type="string">the detail information of the target</return>
+		]]
 
 		-- The cache for constructor parameters
 		local function buildSubNamespace(ns)
@@ -5060,7 +4883,7 @@ do
 					result = result .. "\n\n Sub Enum :"
 
 					for _, sns in ipairs(_Enums) do
-						result = result .. "\n    " .. GetName(sns)
+						result = result .. "\n    " .. GetNameSpaceName(sns)
 					end
 				end
 
@@ -5068,7 +4891,7 @@ do
 					result = result .. "\n\n Sub Struct :"
 
 					for _, sns in ipairs(_Structs) do
-						result = result .. "\n    " .. GetName(sns)
+						result = result .. "\n    " .. GetNameSpaceName(sns)
 					end
 				end
 
@@ -5076,7 +4899,7 @@ do
 					result = result .. "\n\n Sub Interface :"
 
 					for _, sns in ipairs(_Interfaces) do
-						result = result .. "\n    " .. GetName(sns)
+						result = result .. "\n    " .. GetNameSpaceName(sns)
 					end
 				end
 
@@ -5084,7 +4907,7 @@ do
 					result = result .. "\n\n Sub Class :"
 
 					for _, sns in ipairs(_Classes) do
-						result = result .. "\n    " .. GetName(sns)
+						result = result .. "\n    " .. GetNameSpaceName(sns)
 					end
 				end
 
@@ -5092,7 +4915,7 @@ do
 					result = result .. "\n\n Sub NameSpace :"
 
 					for _, sns in ipairs(_Namespaces) do
-						result = result .. "\n    " .. GetName(sns)
+						result = result .. "\n    " .. GetNameSpaceName(sns)
 					end
 				end
 			end
@@ -5106,8 +4929,8 @@ do
 			return result
 		end
 
-		function Help(ns, doctype, name)
-			if type(ns) == "string" then ns = ForName(ns) end
+		function Help(ns, targetType, name)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			if ns and rawget(_NSInfo, ns) then
 				local info = _NSInfo[ns]
@@ -5125,7 +4948,7 @@ do
 						result = result .. "[__Flags__]\n"
 					end
 
-					result = result .. "[Enum] " .. GetFullName(ns) .. " :"
+					result = result .. "[Enum] " .. GetNameSpaceFullName(ns) .. " :"
 
 					for _, enums in ipairs(GetEnums(ns)) do
 						value = ns[enums]
@@ -5153,7 +4976,7 @@ do
 						result = result .. "[__StructType__(StructType.Custom)]\n"
 					end
 
-					result = result .. "[Struct] " .. GetFullName(ns) .. " :"
+					result = result .. "[Struct] " .. GetNameSpaceFullName(ns) .. " :"
 
 					-- SubNameSpace
 					result = result .. buildSubNamespace(ns)
@@ -5177,11 +5000,11 @@ do
 					return result
 				elseif info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
 					-- Interface & Class
-					if type(doctype) ~= "string" then
+					if type(targetType) ~= "string" then
 						local result = ""
 						local desc
 
-						doctype = doctype and true or false
+						targetType = targetType and true or false
 
 						if info.IsFinal then
 							result = result .. "[__Final__]\n"
@@ -5196,12 +5019,12 @@ do
 						end
 
 						if info.Type == TYPE_INTERFACE then
-							result = result .. "[Interface] " .. GetFullName(ns) .. " :"
+							result = result .. "[Interface] " .. GetNameSpaceFullName(ns) .. " :"
 
-							if HasDocumentPart(ns, "interface", GetName(ns)) then
-								desc = GetDocumentPart(ns, "interface", GetName(ns), "desc")
-							elseif HasDocumentPart(ns, "default", GetName(ns)) then
-								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+							if HasPartDocument(ns, "interface", GetNameSpaceName(ns)) then
+								desc = GetPartDocument(ns, "interface", GetNameSpaceName(ns), "desc")
+							elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
+								desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
 							end
 						else
 							if info.AutoCache then
@@ -5230,12 +5053,12 @@ do
 								end
 							end
 
-							result = result .. "[Class] " .. GetFullName(ns) .. " :"
+							result = result .. "[Class] " .. GetNameSpaceFullName(ns) .. " :"
 
-							if HasDocumentPart(ns, "class", GetName(ns)) then
-								desc = GetDocumentPart(ns, "class", GetName(ns), "desc")
-							elseif HasDocumentPart(ns, "default", GetName(ns)) then
-								desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+							if HasPartDocument(ns, "class", GetNameSpaceName(ns)) then
+								desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "desc")
+							elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
+								desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
 							end
 						end
 
@@ -5247,14 +5070,14 @@ do
 
 						-- Inherit
 						if info.SuperClass then
-							result = result .. "\n\n  Super Class :\n    " .. GetFullName(info.SuperClass)
+							result = result .. "\n\n  Super Class :\n    " .. GetNameSpaceFullName(info.SuperClass)
 						end
 
 						-- Extend
 						if info.ExtendInterface and next(info.ExtendInterface) then
 							result = result .. "\n\n  Extend Interface :"
 							for _, IF in ipairs(info.ExtendInterface) do
-								result = result .. "\n    " .. GetFullName(IF)
+								result = result .. "\n    " .. GetNameSpaceFullName(IF)
 							end
 						end
 
@@ -5264,7 +5087,7 @@ do
 						-- Event
 						if next(info.Event) then
 							result = result .. "\n\n  Event :"
-							for _, evt in ipairs(GetEvents(ns, not doctype)) do
+							for _, evt in ipairs(GetEvents(ns, not targetType)) do
 								-- Desc
 								desc = HasDocument(ns, "event", evt) and GetDocument(ns, "event", evt, "desc")
 								desc = desc and desc()
@@ -5281,7 +5104,7 @@ do
 						-- Property
 						if next(info.Property) then
 							result = result .. "\n\n  Property :"
-							for _, prop in ipairs(GetProperties(ns, not doctype)) do
+							for _, prop in ipairs(GetProperties(ns, not targetType)) do
 								-- Desc
 								desc = HasDocument(ns, "property", prop) and GetDocument(ns, "property", prop, "desc")
 								desc = desc and desc()
@@ -5298,7 +5121,7 @@ do
 						-- Method
 						if next(info.Method) then
 							result = result .. "\n\n  Method :"
-							for _, method in ipairs(GetMethods(ns, not doctype)) do
+							for _, method in ipairs(GetMethods(ns, not targetType)) do
 								-- Desc
 								desc = HasDocument(ns, "method", method) and GetDocument(ns, "method", method, "desc")
 								desc = desc and desc()
@@ -5313,7 +5136,7 @@ do
 
 						-- Need
 						if info.Type == TYPE_INTERFACE then
-							desc = GetDocumentPart(ns, "interface", GetName(ns), "overridable")
+							desc = GetPartDocument(ns, "interface", GetNameSpaceName(ns), "overridable")
 
 							if desc then
 								result = result .. "\n\n  Overridable :"
@@ -5389,16 +5212,16 @@ do
 
 								desc = nil
 
-								if HasDocumentPart(ns, "class", GetName(ns)) then
-									desc = GetDocumentPart(ns, "class", GetName(ns), "format")
+								if HasPartDocument(ns, "class", GetNameSpaceName(ns)) then
+									desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "format")
 									if not desc then
-										desc = GetDocumentPart(ns, "class", GetName(ns), "param")
+										desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "param")
 										isFormat = false
 									end
-								elseif HasDocumentPart(ns, "default", GetName(ns)) then
-									desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+								elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
+									desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
 									if not desc then
-										desc = GetDocumentPart(ns, "default", GetName(ns), "param")
+										desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "param")
 										isFormat = false
 									end
 								end
@@ -5408,10 +5231,10 @@ do
 									result = result .. "\n\n  Constructor :"
 									if isFormat then
 										for fmt in desc do
-											result = result .. "\n    " .. GetName(ns) .. "(" .. fmt .. ")"
+											result = result .. "\n    " .. GetNameSpaceName(ns) .. "(" .. fmt .. ")"
 										end
 									else
-										result = result .. "\n    " .. GetName(ns) .. "("
+										result = result .. "\n    " .. GetNameSpaceName(ns) .. "("
 
 										local isFirst = true
 
@@ -5428,7 +5251,7 @@ do
 									end
 
 									-- Params
-									desc = GetDocumentPart(ns, "class", GetName(ns), "param") or GetDocumentPart(ns, "default", GetName(ns), "param")
+									desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "param") or GetPartDocument(ns, "default", GetNameSpaceName(ns), "param")
 									if desc then
 										result = result .. "\n\n  Parameter :"
 										for param, info in desc do
@@ -5453,16 +5276,16 @@ do
 						local querytype
 
 						if info.Type == TYPE_INTERFACE then
-							result = "[Interface] " .. GetFullName(ns) .. " - "
+							result = "[Interface] " .. GetNameSpaceFullName(ns) .. " - "
 						else
-							result = "[Class] " .. GetFullName(ns) .. " - "
+							result = "[Class] " .. GetNameSpaceFullName(ns) .. " - "
 						end
 
 						if type(name) ~= "string" then
-							doctype, name = nil, doctype
+							targetType, name = nil, targetType
 						end
 
-						querytype = doctype
+						querytype = targetType
 
 						if not querytype then
 							if HasEvent(ns, name) then
@@ -5476,18 +5299,18 @@ do
 							end
 						end
 
-						doctype = querytype or "default"
+						targetType = querytype or "default"
 
-						if doctype:match("^%a") then
-							result = result .. "[" .. doctype:match("^%a"):upper() .. doctype:sub(2, -1) .. "] " .. name .. " :"
+						if targetType:match("^%a") then
+							result = result .. "[" .. targetType:match("^%a"):upper() .. targetType:sub(2, -1) .. "] " .. name .. " :"
 						else
-							result = result .. "[" .. doctype .. "] " .. name .. " :"
+							result = result .. "[" .. targetType .. "] " .. name .. " :"
 						end
 
-						local hasDocument = HasDocumentPart(ns, doctype, name)
+						local hasDocument = HasPartDocument(ns, targetType, name)
 
 						-- Desc
-						local desc = hasDocument and GetDocumentPart(ns, doctype, name, "desc")
+						local desc = hasDocument and GetPartDocument(ns, targetType, name, "desc")
 						desc = desc and desc()
 						if desc then
 							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
@@ -5500,7 +5323,7 @@ do
 							end
 
 							-- Format
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "format")
 							if desc then
 								result = result .. "\n\n  Format :"
 								for fmt in desc do
@@ -5509,7 +5332,7 @@ do
 							else
 								result = result .. "\n\n  Format :\n    function object:" .. name .. "("
 
-								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+								desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
 
 								if desc then
 									local isFirst = true
@@ -5528,7 +5351,7 @@ do
 							end
 
 							-- Params
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
 							if desc then
 								result = result .. "\n\n  Parameter :"
 								for param, info in desc do
@@ -5628,24 +5451,24 @@ do
 							end
 
 							-- Format
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "format")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "format")
 							result = result .. "\n\n  Format :"
 							if desc then
 								for fmt in desc do
 									if isGlobal then
-										result = result .. "\n    " .. GetName(ns) .. "." .. name .. "(" .. fmt .. ")"
+										result = result .. "\n    " .. GetNameSpaceName(ns) .. "." .. name .. "(" .. fmt .. ")"
 									else
 										result = result .. "\n    object:" .. name .. "(" .. fmt .. ")"
 									end
 								end
 							else
 								if isGlobal then
-									result = result .. "\n    " .. GetName(ns) .. "." .. name .. "("
+									result = result .. "\n    " .. GetNameSpaceName(ns) .. "." .. name .. "("
 								else
 									result = result .. "\n    object:" .. name .. "("
 								end
 
-								desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+								desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
 
 								if desc then
 									local isFirst = true
@@ -5664,7 +5487,7 @@ do
 							end
 
 							-- Params
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "param")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
 							if desc then
 								result = result .. "\n\n  Parameter :"
 								for param, info in desc do
@@ -5677,7 +5500,7 @@ do
 							end
 
 							-- ReturnFormat
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "returnformat")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "returnformat")
 							if desc then
 								result = result .. "\n\n  Return Format :"
 								for fmt in desc do
@@ -5686,7 +5509,7 @@ do
 							end
 
 							-- Returns
-							desc = hasDocument and GetDocumentPart(ns, doctype, name, "return")
+							desc = hasDocument and GetPartDocument(ns, targetType, name, "return")
 							if desc then
 								result = result .. "\n\n  Return :"
 								for ret, info in desc do
@@ -5702,7 +5525,7 @@ do
 						end
 
 						-- Usage
-						desc = hasDocument and GetDocumentPart(ns, doctype, name, "usage")
+						desc = hasDocument and GetPartDocument(ns, targetType, name, "usage")
 						if desc then
 							result = result .. "\n\n  Usage :"
 							for usage in desc do
@@ -5713,13 +5536,13 @@ do
 						return result
 					end
 				else
-					local result = "[NameSpace] " .. GetFullName(ns) .. " :"
+					local result = "[NameSpace] " .. GetNameSpaceFullName(ns) .. " :"
 					local desc
 
-					if HasDocumentPart(ns, "namespace", GetName(ns)) then
-						desc = GetDocumentPart(ns, "namespace", GetName(ns), "desc")
-					elseif HasDocumentPart(ns, "default", GetName(ns)) then
-						desc = GetDocumentPart(ns, "default", GetName(ns), "desc")
+					if HasPartDocument(ns, "namespace", GetNameSpaceName(ns)) then
+						desc = GetPartDocument(ns, "namespace", GetNameSpaceName(ns), "desc")
+					elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
+						desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
 					end
 
 					-- Desc
@@ -5736,15 +5559,12 @@ do
 			end
 		end
 
-		doc [======[
-			@name Serialize
-			@type method
-			@desc Serialize the data
-			@format data[, type]
-			@param data the data
-			@param type the data's type
-			@return string
-		]======]
+		doc "Serialize" [[
+			<desc>Serialize the data</desc>
+			<param name="data">the data</param>
+			<param name="type" optional="true">the data's type</param>
+			<return type="string"></return>
+		]]
 		local function SerializeData(data)
 			if type(data) == "string" then
 				return strformat("%q", data)
@@ -5791,7 +5611,7 @@ do
 						return "nil"
 					end
 				elseif type(ns) == "string" then
-					ns = ForName(ns)
+					ns = GetNameSpaceForName(ns)
 				end
 			end
 
@@ -5891,26 +5711,22 @@ do
 			end
 		end
 
-		doc [======[
-			@name ThreadCall
-			@type method
-			@desc Call the function in a thread from the thread pool of the system
-			@param func the function
-			@param ... the parameters
-			@return any
-		]======]
+		doc "ThreadCall" [[
+			<desc>Call the function in a thread from the thread pool of the system</desc>
+			<param name="func">the function</param>
+			<param name="...">the parameters</param>
+			<return>the return value of the func</return>
+		]]
 		function ThreadCall(func, ...)
 			return CallThread(func, ...)
 		end
 
-		doc [======[
-			@name IsEqual
-			@type method
-			@desc Whether the two objects are objects with same settings
-			@param obj1 object, the object used to compare
-			@param obj2 object, the object used to compare to
-			@return boolean
-		]======]
+		doc "IsEqual" [[
+			<desc>Whether the two objects are objects with same settings</desc>
+			<param name="obj1">the object used to compare</param>
+			<param name="obj2">the object used to compare to</param>
+			<return type="boolean">true if the obj1 has same settings with the obj2</return>
+		]]
 		local function checkEqual(obj1, obj2, cache)
 			if obj1 == obj2 then return true end
 			if type(obj1) ~= "table" then return false end
@@ -5976,27 +5792,20 @@ do
 	namespace( nil )
 
 	class "Type"
-		doc [======[
-			@name Type
-			@type class
-			@desc The type object used to handle the value's validation
-		]======]
+		doc "Type" [[The type object used to handle the value's validation]]
 
 		_ALLOW_NIL = "AllowNil"
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name Validate
-			@type method
-			@desc Used to validate the value
-			@format value[, name[, stack]]
-			@param value
-			@param name the name present the value
-			@param stack the stack level, default 1
-			@return value
-		]======]
+		doc "Validate" [[
+			<desc>Used to validate the value</desc>
+			<param name="value"></param>
+			<param name="name" optional="true">the name present the value</param>
+			<param name="stack" optional="true">the stack level, default 1</param>
+			<return>the validated value</return>
+		]]
 		function Validate(self, value, name, stack)
 			if value == nil and rawget(self, _ALLOW_NIL) then
 				return value
@@ -6156,12 +5965,10 @@ do
 			return value
 		end
 
-		doc [======[
-			@name Copy
-			@type method
-			@desc Copy the type object
-			@return the clone
-		]======]
+		doc "Copy" [[
+			<desc>Copy the type object</desc>
+			<return>the copy</return>
+		]]
 		function Copy(self)
 			local _type = Type()
 
@@ -6172,14 +5979,12 @@ do
 			return _type
 		end
 
-		doc [======[
-			@name Is
-			@type method
-			@desc Check if the type object constains such type
-			@param type class | struct | enum | nil
-			@param onlyClass true if the type only much class, not class' object
-			@return boolean
-		]======]
+		doc "Is" [[
+			<desc>Check if the type object constains such type</desc>
+			<param name="type" type="struct|enum|class|interface|nil">the target type</param>
+			<param name="onlyClass" optional="true">true if the type only match class, not class' object</param>
+			<return type="boolean"></return>
+		]]
 		function Is(self, ns, onlyClass)
 			local fenv = getfenv(2)
 
@@ -6209,13 +6014,11 @@ do
 			return false
 		end
 
-		doc [======[
-			@name GetObjectType
-			@type method
-			@desc Get the object type if validated, false if nothing match
-			@param value
-			@return type struct | enum | class | interface | nil
-		]======]
+		doc "GetObjectType" [[
+			<desc>Get the object type if validated, false if nothing match</desc>
+			<param name="value">the value</param>
+			<return name="type">the value's validated type</return>
+		]]
 		function GetObjectType(self, value)
 			if value == nil and rawget(self, _ALLOW_NIL) then
 				return
@@ -6418,24 +6221,12 @@ do
 	endclass "Type"
 
 	class "Event"
-		doc [======[
-			@name Event
-			@type class
-			@desc The object event definition
-		]======]
+		doc "Event" [[The object event definition]]
 
-		doc [======[
-			@name Name
-			@type property
-			@desc The event's name
-		]======]
+		doc "Name" [[The event's name]]
 		property "Name" { Type = String }
 
-		doc [======[
-			@name ThreadActivated
-			@type property
-			@desc Whether the event is thread activated
-		]======]
+		doc "ThreadActivated" [[Whether the event is thread activated]]
 		property "ThreadActivated" { Type = Boolean }
 
 		------------------------------------------------------
@@ -6454,11 +6245,7 @@ do
 	endclass "Event"
 
 	class "EventHandler"
-		doc [======[
-			@name EventHandler
-			@type class
-			@desc The object event handler
-		]======]
+		doc "EventHandler" [[The object event handler]]
 
 		local function FireOnEventHandlerChanged(self)
 			return Reflector.FireObjectEvent(self.Owner, "OnEventHandlerChanged", self.Event.Name)
@@ -6467,22 +6254,15 @@ do
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name IsEmpty
-			@type method
-			@desc Check if the event handler is empty
-			@return boolean true if the event handler has no functions
-		]======]
+		doc "IsEmpty" [[
+			<desc>Check if the event handler is empty</desc>
+			<return type="boolean">true if the event handler has no functions</return>
+		]]
 		function IsEmpty(self)
 			return #self == 0 and self[0] == nil
 		end
 
-		doc [======[
-			@name Clear
-			@type method
-			@desc Clear all handlers
-			@return nil
-		]======]
+		doc "Clear" [[Clear all handlers]]
 		function Clear(self)
 			local flag = false
 
@@ -6496,13 +6276,10 @@ do
 			end
 		end
 
-		doc [======[
-			@name Copy
-			@type method
-			@desc Copy handlers from the source event handler
-			@param src the event handler source
-			@return nil
-		]======]
+		doc "Copy" [[
+			<desc>Copy handlers from the source event handler</desc>
+			<param name="src" type="System.EventHandler">the event handler source</param>
+		]]
 		function Copy(self, src)
 			local flag = false
 
@@ -6526,39 +6303,19 @@ do
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
-		doc [======[
-			@name Owner
-			@type property
-			@desc The owner of the event handler
-		]======]
+		doc "Owner" [[The owner of the event handler]]
 		property "Owner" { Type = Table }
 
-		doc [======[
-			@name Event
-			@type property
-			@desc The event type of the handler
-		]======]
+		doc "Event" [[The event type of the handler]]
 		property "Event" { Type = Event }
 
-		doc [======[
-			@name Blocked
-			@type property
-			@desc Whether the event handler is blocked
-		]======]
+		doc "Blocked" [[Whether the event handler is blocked]]
 		property "Blocked" { Type = Boolean }
 
-		doc [======[
-			@name ThreadActivated
-			@type property
-			@desc Whether the event handler is thread activated
-		]======]
+		doc "ThreadActivated" [[Whether the event handler is thread activated]]
 		property "ThreadActivated" { Type = Boolean }
 
-		doc [======[
-			@name Handler
-			@type property
-			@desc description
-		]======]
+		doc "Handler" [[description]]
 		property "Handler" {
 			Get = function(self)
 				return self[0]
@@ -6702,11 +6459,7 @@ do
 	endclass "EventHandler"
 
 	class "FixedMethod"
-		doc [======[
-			@name FixedMethod
-			@type class
-			@desc Used to control method with fixed arguments
-		]======]
+		doc "FixedMethod" [[Used to control method with fixed arguments]]
 
 		-- Reduce cache table cost
 		local function keepArgs(...)
@@ -6749,13 +6502,7 @@ do
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name MatchArgs
-			@type method
-			@desc Whether the fixed method can handler the arguments
-			@param ...
-			@return boolean
-		]======]
+		doc "MatchArgs" [[Whether the fixed method can handler the arguments]]
 		function MatchArgs(self, ...)
 			local base = self.HasSelf and 1 or 0
 			local count = select('#', ...) - base
@@ -6845,11 +6592,7 @@ do
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
-		doc [======[
-			@name Next
-			@type property
-			@desc The next fixed method
-		]======]
+		doc "Next" [[The next fixed method]]
 		property "Next" {
 			Field = "__Next",
 			Get = function (self)
@@ -6897,11 +6640,7 @@ do
 			Type = FixedMethod + Function + nil,
 		}
 
-		doc [======[
-			@name Usage
-			@type property
-			@desc The usage of the fixed method
-		]======]
+		doc "Usage" [[The usage of the fixed method]]
 		property "Usage" {
 			Get = function (self)
 				if self.__Usage then return self.__Usage end
@@ -7030,40 +6769,24 @@ do
 	------------------------------------------------------
 	-- System.__Attribute__
 	------------------------------------------------------
-	enum "AttributeTargets" {
-		All = 0,
-		Class = 1,
-		Constructor = 2,
-		Enum = 4,
-		Event = 8,
-		Interface = 16,
-		Method = 32,
-		Property = 64,
-		Struct = 128,
-		Field = 256,
-	}
-
 	class "__Attribute__"
 
-		doc [======[
-			@name __Attribute__
-			@type class
-			@desc The __Attribute__ class associates predefined system information or user-defined custom information with a target element.
-		]======]
+		doc "__Attribute__" [[The __Attribute__ class associates predefined system information or user-defined custom information with a target element.]]
 
 		_PreparedAttributes = {}
-		_ThreadPreparedAttributes = _ThreadPreparedAttributes or setmetatable({}, WEAK_KEY)
+		_ThreadPreparedAttributes = setmetatable({}, WEAK_KEY)
 
 		-- Since the targets are stable, so a big table is a good storage
-		_Attribute4Class = _Attribute4Class or setmetatable({}, WEAK_KEY)
-		_Attribute4Constructor = _Attribute4Constructor or setmetatable({}, WEAK_KEY)
-		_Attribute4Enum = _Attribute4Enum or setmetatable({}, WEAK_KEY)
-		_Attribute4Event = _Attribute4Event or setmetatable({}, WEAK_KEY)
-		_Attribute4Interface = _Attribute4Interface or setmetatable({}, WEAK_KEY)
-		_Attribute4Method = _Attribute4Method or setmetatable({}, WEAK_KEY)
-		_Attribute4Property = _Attribute4Property or setmetatable({}, WEAK_KEY)
-		_Attribute4Struct = _Attribute4Struct or setmetatable({}, WEAK_KEY)
-		_Attribute4Field = _Attribute4Field or setmetatable({}, WEAK_KEY)
+		_Attribute4Class = setmetatable({}, WEAK_KEY)
+		_Attribute4Constructor = setmetatable({}, WEAK_KEY)
+		_Attribute4Enum = setmetatable({}, WEAK_KEY)
+		_Attribute4Event = setmetatable({}, WEAK_KEY)
+		_Attribute4Interface = setmetatable({}, WEAK_KEY)
+		_Attribute4Method = setmetatable({}, WEAK_KEY)
+		_Attribute4Property = setmetatable({}, WEAK_KEY)
+		_Attribute4Struct = setmetatable({}, WEAK_KEY)
+		_Attribute4Field = setmetatable({}, WEAK_KEY)
+		_Attribute4NameSpace = setmetatable({}, WEAK_KEY)
 
 		_AttributeCache = {
 			[AttributeTargets.Class] = _Attribute4Class,
@@ -7075,10 +6798,8 @@ do
 			[AttributeTargets.Property] = _Attribute4Property,
 			[AttributeTargets.Struct] = _Attribute4Struct,
 			[AttributeTargets.Field] = _Attribute4Field,
+			[AttributeTargets.NameSpace] = _Attribute4NameSpace,
 		}
-
-		TYPE_CLASS = TYPE_CLASS
-		TYPE_INTERFACE = TYPE_INTERFACE
 
 		-- Recycle the cache for dispose attributes
 		_AttributeCache4Dispose = setmetatable({}, {
@@ -7161,6 +6882,8 @@ do
 				return "[Struct]" .. tostring(target)
 			elseif targetType == AttributeTargets.Field then
 				return "[Struct]" .. tostring(owner) .. " [Field]" .. tostring(name)
+			elseif targetType == AttributeTargets.NameSpace then
+				return "[NameSpace]" .. tostring(target)
 			end
 		end
 
@@ -7184,6 +6907,8 @@ do
 				return Reflector.IsStruct(target)
 			elseif targetType == AttributeTargets.Field then
 				return Reflector.ObjectIsClass(target, Type)
+			elseif targetType == AttributeTargets.NameSpace then
+				return Reflector.GetNameSpaceName(target)
 			end
 		end
 
@@ -7211,21 +6936,6 @@ do
 			return true
 		end
 
-		------------------------------------------------------
-		-- Method
-		------------------------------------------------------
-		--[======[
-			@name _ApplyAttributes
-			@type method
-			@desc Apply the attributes for the target
-			@format target, targetType[, superTarget, owner, name]
-			@param target class | event | method | property | struct | interface | enum | field
-			@param targetType System.AttributeTargets
-			@param superTarget the super target the contains several attributes to be inherited
-			@param owner the class|interface|struct object, the owner of the target
-			@param name the target's name
-			@return target
-		]======]
 		local function _ApplyAttributes(target, targetType, owner, name, start)
 			-- Apply the attributes
 			local config = _AttributeCache[targetType][target]
@@ -7332,12 +7042,10 @@ do
 			return target
 		end
 
-		doc [======[
-			@name _ClearPreparedAttributes
-			@type method
-			@desc Clear the prepared attributes
-			@return nil
-		]======]
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		doc "_ClearPreparedAttributes" [[Clear the prepared attributes]]
 		function _ClearPreparedAttributes(noDispose)
 			local thread = running()
 
@@ -7360,18 +7068,15 @@ do
 			end
 		end
 
-		doc [======[
-			@name _ConsumePreparedAttributes
-			@type method
-			@desc Set the prepared attributes for target
-			@format target, targetType[, superTarget[, owner, name]]
-			@param target class | event | method | property | struct | interface | enum
-			@param targetType System.AttributeTargets
-			@param superTarget the super target the contains several attributes to be inherited
-			@param owner the class|interface object, the owner of the target
-			@param name the target's name
-			@return target
-		]======]
+		doc "_ConsumePreparedAttributes" [[
+			<desc>Set the prepared attributes for target</desc>
+			<param name="target">the target's owner</param>
+			<param name="targetType" type="System.AttributeTargets">the target's type</param>
+			<param name="superTarget" optional="true">the super target the contains several attributes to be inherited</param>
+			<param name="owner" optional="true">the class|interface object, the owner of the target</param>
+			<param name="name" optional="true">the target's name</param>
+			<return name="target"></return>
+		]]
 		function _ConsumePreparedAttributes(target, targetType, superTarget, owner, name)
 			if not _AttributeCache[targetType] then
 				error("Usage : __Attribute__._ConsumePreparedAttributes(target, targetType[, superTarget[, owner, name]]) - 'targetType' is invalid.", 2)
@@ -7533,17 +7238,16 @@ do
 			return target
 		end
 
-		doc [======[
-			@name _CloneAttributes
-			@type method
-			@desc Clone the attributes
-			@param source the source
-			@param target the target
-			@param targetType System.AttributeTargets
-			@param owner the class|interface object, the owner of the target
-			@param name the target's name
-			@return target
-		]======]
+		doc "_CloneAttributes" [[
+			<desc>Clone the attributes</desc>
+			<param name="source">the source</param>
+			<param name="target">the target</param>
+			<param name="targetType" type="System.AttributeTargets">the target's type</param>
+			<param name="owner" optional="true">the class|interface object, the owner of the target</param>
+			<param name="name" optional="true">the target's name</param>
+			<param name="removeSource" type="boolean" optional="true">true if remove attributes settings from the source</param>
+			<return name="target"></return>
+		]]
 		function _CloneAttributes(source, target, targetType, owner, name, removeSource)
 			if not _AttributeCache[targetType] then
 				error("Usage : __Attribute__._CloneAttributes(source, target, targetType[, owner, name]) - 'targetType' is invalid.", 2)
@@ -7637,15 +7341,13 @@ do
 			return target
 		end
 
-		doc [======[
-			@name _IsDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class | event | method | property | struct | interface | enum
-			@param targetType System.AttributeTargets
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | event | method | property | struct | interface | enum</param>
+			<param name="targetType" type="System.AttributeTargets">the target's type</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsDefined(target, targetType, type)
 			local config = _AttributeCache[targetType][target]
 
@@ -7663,57 +7365,49 @@ do
 			end
 		end
 
-		doc [======[
-			@name _IsClassAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsClassAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsClassAttributeDefined(target, type)
 			if Reflector.IsClass(target) then
 				return _IsDefined(target, AttributeTargets.Class, type)
 			end
 		end
 
-		doc [======[
-			@name _IsConstructorAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsConstructorAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsConstructorAttributeDefined(target, type)
 			if Reflector.IsClass(target) then
 				return _IsDefined(target, AttributeTargets.Constructor, type)
 			end
 		end
 
-		doc [======[
-			@name _IsEnumAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target enum
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsEnumAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">enum</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsEnumAttributeDefined(target, type)
 			if Reflector.IsEnum(target) then
 				return _IsDefined(target, AttributeTargets.Enum, type)
 			end
 		end
 
-		doc [======[
-			@name _IsEventAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class | interface
-			@param event the event's name
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsEventAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface</param>
+			<param name="event">the event's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsEventAttributeDefined(target, event, type)
 			local info = rawget(_NSInfo, target)
 
@@ -7722,29 +7416,25 @@ do
 			end
 		end
 
-		doc [======[
-			@name _IsInterfaceAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target interface
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsInterfaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsInterfaceAttributeDefined(target, type)
 			if Reflector.IsInterface(target) then
 				return _IsDefined(target, AttributeTargets.Interface, type)
 			end
 		end
 
-		doc [======[
-			@name _IsMethodAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class | interface
-			@param method the method's name
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsMethodAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface</param>
+			<param name="method">the method's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsMethodAttributeDefined(target, method, type)
 			if type(target) == "function" then
 				return _IsDefined(target, AttributeTargets.Method, method)
@@ -7761,15 +7451,13 @@ do
 			end
 		end
 
-		doc [======[
-			@name _IsPropertyAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target class | interface
-			@param property the property's name
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsPropertyAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface</param>
+			<param name="property">the property's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsPropertyAttributeDefined(target, prop, type)
 			local info = rawget(_NSInfo, target)
 
@@ -7778,29 +7466,25 @@ do
 			end
 		end
 
-		doc [======[
-			@name _IsStructAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target struct
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsStructAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsStructAttributeDefined(target, type)
 			if Reflector.IsStruct(target) then
 				return _IsDefined(target, AttributeTargets.Struct, type)
 			end
 		end
 
-		doc [======[
-			@name _IsFieldAttributeDefined
-			@type method
-			@desc Check whether the target contains such type attribute
-			@param target struct
-			@param field the field's name
-			@param type the attribute class type
-			@return boolean true if the target contains attribute with the type
-		]======]
+		doc "_IsFieldAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">struct</param>
+			<param name="field">the field's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
 		function _IsFieldAttributeDefined(target, field, type)
 			local info = rawget(_NSInfo, target)
 
@@ -7821,15 +7505,25 @@ do
 			return false
 		end
 
-		doc [======[
-			@name _GetCustomAttribute
-			@type method
-			@desc Return the attributes of the given type for the target
-			@param target class | event | method | property | struct | interface | enum
-			@param targetType System.AttributeTargets
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_IsNameSpaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">the name space</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		function _IsNameSpaceAttributeDefined(target, type)
+			if Reflector.IsStruct(target) then
+				return _IsDefined(target, AttributeTargets.NameSpace, type)
+			end
+		end
+
+		doc "_GetCustomAttribute" [[
+			<desc>Return the attributes of the given type for the target</desc>
+			<param name="target">class | event | method | property | struct | interface | enum</param>
+			<param name="targetType" type="System.AttributeTargets">the target's type</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetCustomAttribute(target, targetType, type)
 			local config = _AttributeCache[targetType][target]
 
@@ -7863,57 +7557,49 @@ do
 			end
 		end
 
-		doc [======[
-			@name _GetClassAttribute
-			@type method
-			@desc Return the attributes of the given type for the class
-			@param target class
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetClassAttribute" [[
+			<desc>Return the attributes of the given type for the class</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetClassAttribute(target, type)
 			if Reflector.IsClass(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Class, type)
 			end
 		end
 
-		doc [======[
-			@name _GetConstructorAttribute
-			@type method
-			@desc Return the attributes of the given type for the class's constructor
-			@param target class
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetConstructorAttribute" [[
+			<desc>Return the attributes of the given type for the class's constructor</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetConstructorAttribute(target, type)
 			if Reflector.IsClass(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Constructor, type)
 			end
 		end
 
-		doc [======[
-			@name _GetEnumAttribute
-			@type method
-			@desc Return the attributes of the given type for the enum
-			@param target enum
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetEnumAttribute" [[
+			<desc>Return the attributes of the given type for the enum</desc>
+			<param name="target">enum</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetEnumAttribute(target, type)
 			if Reflector.IsEnum(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Enum, type)
 			end
 		end
 
-		doc [======[
-			@name _GetEventAttribute
-			@type method
-			@desc Return the attributes of the given type for the class|interface's event
-			@param target class|interface
-			@param event the event's name
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetEventAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's event</desc>
+			<param name="target">class|interface</param>
+			<param name="event">the event's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetEventAttribute(target, event, type)
 			local info = rawget(_NSInfo, target)
 
@@ -7922,31 +7608,27 @@ do
 			end
 		end
 
-		doc [======[
-			@name _GetInterfaceAttribute
-			@type method
-			@desc Return the attributes of the given type for the interface
-			@param target interface
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetInterfaceAttribute" [[
+			<desc>Return the attributes of the given type for the interface</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetInterfaceAttribute(target, type)
 			if Reflector.IsInterface(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Interface, type)
 			end
 		end
 
-		doc [======[
-			@name _GetMethodAttribute
-			@type method
-			@desc Return the attributes of the given type for the class|interface's method
-			@format target, method, type
-			@format method, type
-			@param target class|interface
-			@param method the method's name(with target) or the method itself(without target)
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetMethodAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's method</desc>
+			<format>target, method, type</format>
+			<format>method, type</format>
+			<param name="target">class|interface</param>
+			<param name="method">the method's name(with target) or the method itself(without target)</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetMethodAttribute(target, method, type)
 			if type(target) == "function" then
 				return _GetCustomAttribute(target, AttributeTargets.Method, method)
@@ -7966,15 +7648,13 @@ do
 			end
 		end
 
-		doc [======[
-			@name _GetPropertyAttribute
-			@type method
-			@desc Return the attributes of the given type for the class|interface's property
-			@param target class|interface
-			@param prop the property's name
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetPropertyAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's property</desc>
+			<param name="target">class|interface</param>
+			<param name="prop">the property's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetPropertyAttribute(target, prop, type)
 			local info = rawget(_NSInfo, target)
 
@@ -7983,29 +7663,25 @@ do
 			end
 		end
 
-		doc [======[
-			@name _GetStructAttribute
-			@type method
-			@desc Return the attributes of the given type for the struct
-			@param target struct
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetStructAttribute" [[
+			<desc>Return the attributes of the given type for the struct</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetStructAttribute(target, type)
 			if Reflector.IsStruct(target) then
 				return _GetCustomAttribute(target, AttributeTargets.Struct, type)
 			end
 		end
 
-		doc [======[
-			@name _GetFieldAttribute
-			@type method
-			@desc Return the attributes of the given type for the struct's field
-			@param target struct
-			@param field the field's name
-			@param type the attribute class type
-			@return ... the attribute objects
-		]======]
+		doc "_GetFieldAttribute" [[
+			<desc>Return the attributes of the given type for the struct's field</desc>
+			<param name="target">struct</param>
+			<param name="field">the field's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
 		function _GetFieldAttribute(target, field, type)
 			local info = rawget(_NSInfo, target)
 
@@ -8024,18 +7700,47 @@ do
 			end
 		end
 
-		doc [======[
-			@name ApplyAttribute
-			@type method
-			@desc Apply the attribute to the target, overridable
-			@param target the attribute's target
-			@param targetType System.AttributeTargets
-			@param owner the target's owner
-			@param name the target's name
-			@return nil
-		]======]
+		doc "_GetNameSpaceAttribute" [[
+			<desc>Return the attributes of the given type for the NameSpace</desc>
+			<param name="target">NameSpace</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		function _GetNameSpaceAttribute(target, type)
+			if Reflector.GetNameSpaceName(target) then
+				return _GetCustomAttribute(target, AttributeTargets.NameSpace, type)
+			end
+		end
+
+		doc "ApplyAttribute" [[
+			<desc>Apply the attribute to the target, overridable</desc>
+			<param name="target">the attribute's target</param>
+			<param name="targetType" type="System.AttributeTargets">the target's type</param>
+			<param name="owner">the target's owner</param>
+			<param name="name">the target's name</param>
+			<return>the target, also can be modified</return>
+		]]
 		function ApplyAttribute(self, target, targetType, owner, name)
 			-- Pass
+		end
+
+		doc [[Remove self from the prepared attributes]]
+		function RemoveSelf(self)-- Send to prepared cache
+			local thread = running()
+			local prepared
+
+			if thread then
+				_ThreadPreparedAttributes[thread] = _ThreadPreparedAttributes[thread] or {}
+				prepared = _ThreadPreparedAttributes[thread]
+			else
+				prepared = _PreparedAttributes
+			end
+
+			for i, v in ipairs(prepared) do
+				if v == self then
+					return tremove(prepared, i)
+				end
+			end
 		end
 
 		------------------------------------------------------
@@ -8049,11 +7754,7 @@ do
 	class "__Unique__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Unique__
-			@type class
-			@desc Mark the class will only create one unique object, and can't be disposed, also the class can't be inherited
-		]======]
+		doc "__Unique__" [[Mark the class will only create one unique object, and can't be disposed, also the class can't be inherited]]
 
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsClass(target) then
@@ -8066,11 +7767,7 @@ do
 	class "__Flags__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Flags__
-			@type class
-			@desc Indicates that an enumeration can be treated as a bit field; that is, a set of flags.
-		]======]
+		doc "__Flags__" [[Indicates that an enumeration can be treated as a bit field; that is, a set of flags.]]
 
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsEnum(target) then
@@ -8135,52 +7832,28 @@ do
 	class "__AttributeUsage__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __AttributeUsage__
-			@type class
-			@desc Specifies the usage of another attribute class.
-		]======]
+		doc "__AttributeUsage__" [[Specifies the usage of another attribute class.]]
 
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
-		doc [======[
-			@name AttributeTarget
-			@type property
-			@desc The attribute target type, default AttributeTargets.All
-		]======]
+		doc "AttributeTarget" [[The attribute target type, default AttributeTargets.All]]
 		property "AttributeTarget" { Default = AttributeTargets.All, Type = AttributeTargets }
 
-		doc [======[
-			@name Inherited
-			@type property
-			@desc Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true
-		]======]
+		doc "Inherited" [[Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true]]
 		property "Inherited" { Default = true, Type = Boolean }
 
-		doc [======[
-			@name AllowMultiple
-			@type property
-			@desc whether multiple instances of your attribute can exist on an element. default false
-		]======]
+		doc "AllowMultiple" [[whether multiple instances of your attribute can exist on an element. default false]]
 		property "AllowMultiple" { Type = Boolean }
 
-		doc [======[
-			@name RunOnce
-			@type property
-			@desc Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation
-		]======]
+		doc "RunOnce" [[Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation]]
 		property "RunOnce" { Type = Boolean }
 	endclass "__AttributeUsage__"
 
 	class "__Final__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Final__
-			@type class
-			@desc Mark the class|interface|struct|enum to be final, and can't be re-defined again
-		]======]
+		doc "__Final__" [[Mark the class|interface|struct|enum to be final, and can't be re-defined again]]
 
 		function ApplyAttribute(self, target, targetType)
 			if rawget(_NSInfo, target) then
@@ -8192,11 +7865,7 @@ do
 	class "__NonInheritable__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __NonInheritable__
-			@type class
-			@desc Mark the class can't be inherited
-		]======]
+		doc "__NonInheritable__" [[Mark the class can't be inherited]]
 
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsClass(target) or Reflector.IsInterface(target) then
@@ -8227,11 +7896,7 @@ do
 	class "__Arguments__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Arguments__
-			@type class
-			@desc The argument definitions of the target method or class's constructor
-		]======]
+		doc "__Arguments__" [[The argument definitions of the target method or class's constructor]]
 
 		_Error_Header = [[Usage : __Arguments__{ arg1[, arg2[, ...] ] } : ]]
 		_Error_NotArgument = [[arg%d must be System.Argument]]
@@ -8362,8 +8027,6 @@ do
 		------------------------------------------------------
 		-- For structs
 		------------------------------------------------------
-		_KeyWord4StrtEnv.structtype = nil
-
 		__Final__:ApplyAttribute(Boolean)
 		__Final__:ApplyAttribute(String)
 		__Final__:ApplyAttribute(Number)
@@ -8452,15 +8115,10 @@ do
 
 	-- More usable attributes
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__Thread__"
 		inherit "__Attribute__"
-		doc [======[
-			@name __Thread__
-			@type class
-			@desc Whether the event is thread activated by defalut, or wrap the method as coroutine
-		]======]
+		doc "__Thread__" [[Whether the event is thread activated by defalut, or wrap the method as coroutine]]
 
 		------------------------------------------------------
 		-- Method
@@ -8482,15 +8140,10 @@ do
 	endclass "__Thread__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__Cache__"
 		inherit "__Attribute__"
-		doc [======[
-			@name __Cache__
-			@type class
-			@desc Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .
-		]======]
+		doc "__Cache__" [[Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .]]
 
 		function ApplyAttribute(self, target, targetType)
 			if Reflector.IsClass(target) then
@@ -8506,16 +8159,11 @@ do
 	}
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__StructType__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __StructType__
-			@type class
-			@desc Mark the struct's type, default 'Member'
-		]======]
+		doc "__StructType__" [[Mark the struct's type, default 'Member']]
 
 		------------------------------------------------------
 		-- Method
@@ -8544,11 +8192,7 @@ do
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
-		doc [======[
-			@name Type
-			@type property
-			@desc The struct's type
-		]======]
+		doc "Type" [[The struct's type]]
 		property "Type" { Type = StructType }
 
 		------------------------------------------------------
@@ -8570,17 +8214,14 @@ do
 	endclass "__StructType__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Class, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__NonExpandable__"
 		inherit "__Attribute__"
-		doc [======[
-			@name __NonExpandable__
-			@type class
-			@desc Mark the class|interface can't receive functions as new methods like :
+		doc "__NonExpandable__" [[
+			<desc>Mark the class|interface can't receive functions as new methods like :</desc>
 				System.Object.Print = function(self) print(self) end, give all object of System.Object a new method.
 				The cost should be expensive, use it carefully.
-		]======]
+		]]
 
 		function ApplyAttribute(self, target, targetType)
 			if rawget(_NSInfo, target) then
@@ -8590,16 +8231,11 @@ do
 	endclass "__NonExpandable__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__InitTable__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __InitTable__
-			@type class
-			@desc Used to mark the class can use init table like: obj = cls(name) { Age = 123 }
-		]======]
+		doc "__InitTable__" [[Used to mark the class can use init table like: obj = cls(name) { Age = 123 }]]
 
 		__Arguments__{ RawTable }
 		function InitWithTable(self, initTable)
@@ -8624,16 +8260,11 @@ do
 	endclass "__InitTable__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__Require__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Require__
-			@type class
-			@desc Whether the method or property of the interface is required to be override
-		]======]
+		doc "__Require__" [[Whether the method or property of the interface is required to be override]]
 
 		function ApplyAttribute(self, target, targetType, owner, name)
 			local info = rawget(_NSInfo, owner)
@@ -8651,16 +8282,11 @@ do
 	endclass "__Require__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__Optional__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Optional__
-			@type class
-			@desc Whether the method or property of the interface is optional to be override
-		]======]
+		doc "__Optional__" [[Whether the method or property of the interface is optional to be override]]
 
 		function ApplyAttribute(self, target, targetType, owner, name)
 			local info = rawget(_NSInfo, owner)
@@ -8678,27 +8304,18 @@ do
 	endclass "__Optional__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
-	__Final__()
-	__Unique__()
+	__Final__() __Unique__()
 	class "__Synthesize__"
 		inherit "__Attribute__"
 
-		doc [======[
-			@name __Synthesize__
-			@type class
-			@desc Used to generate property accessors automatically
-		]======]
+		doc "__Synthesize__" [[Used to generate property accessors automatically]]
 
 		enum "NameCase" {
 			"Camel",	-- setName
 			"Pascal",	-- SetName
 		}
 
-		doc [======[
-			@name NameCase
-			@type property
-			@desc The name case of the generate method, in one program, only need to be set once, default is Pascal case
-		]======]
+		doc "NameCase" [[The name case of the generate method, in one program, only need to be set once, default is Pascal case]]
 		property "NameCase" { Type = NameCase, Default = NameCase.Pascal }
 
 		------------------------------------------------------
@@ -8708,6 +8325,50 @@ do
 			target.Synthesize = self.NameCase
 		end
 	endclass "__Synthesize__"
+
+	__AttributeUsage__{Inherited = false, RunOnce = true}
+	__Final__() __Unique__()
+	class "__Doc__"
+		inherit "__Attribute__"
+
+		doc "__Doc__" [[Used to document the features like : class, struct, enum, interface, property, event and method]]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self, target, targetType, owner, name)
+			if type(self.Doc) == "string" and targetType and (owner or target) then
+				SaveDocument(self.Doc, name, targetType, owner or target)
+			end
+
+			self.Doc = nil
+		end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+	    function __Doc__(self, data)
+	    	self.Doc = data
+
+	    	return Super(self)
+	    end
+
+		------------------------------------------------------
+		-- Meta-method
+		------------------------------------------------------
+		doc "__call" [[__Doc__ "Target" "Document"]]
+		function __call(self, data)
+			self:RemoveSelf()
+
+			local owner = getfenv(2)[OWNER_FIELD]
+
+			if type(self.Doc) == "string" and owner and IsNameSpace(owner) then
+				SaveDocument(data, self.Doc, nil, owner)
+			end
+
+			self.Doc = nil
+		end
+	endclass "__Doc__"
 end
 
 ------------------------------------------------------
@@ -8715,35 +8376,26 @@ end
 ------------------------------------------------------
 do
 	__Final__()
+	__Doc__[[The root class of other classes. Object class contains several methodes for common use.]]
 	class "Object"
-
-		doc [======[
-			@name Object
-			@type class
-			@desc The root class of other classes. Object class contains several methodes for common use.
-		]======]
 
 		------------------------------------------------------
 		-- Event
 		------------------------------------------------------
-		doc [======[
-			@name OnEventHandlerChanged
-			@type event
-			@desc Fired when an event's handler is changed
-			@param name the changed event handler's event name
-		]======]
+		__Doc__[[
+			<desc>Fired when an event's handler is changed</desc>
+			<param name="name">the changed event handler's event name</param>
+		]]
 		event "OnEventHandlerChanged"
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name HasEvent
-			@type method
-			@desc Check if the event type is supported by the object
-			@param name the event's name
-			@return boolean true if the object has that event type
-		]======]
+		__Doc__[[
+			<desc>Check if the event type is supported by the object</desc>
+			<param name="name">the event's name</param>
+			<return type="boolean">true if the object has that event type</return>
+		]]
 		function HasEvent(self, name)
 			if type(name) ~= "string" then
 				error(("Usage : object:HasEvent(name) : 'name' - string expected, got %s."):format(type(name)), 2)
@@ -8751,47 +8403,37 @@ do
 			return Reflector.HasEvent(Reflector.GetObjectClass(self), name) or false
 		end
 
-		doc [======[
-			@name GetClass
-			@type method
-			@desc Get the class type of the object
-			@return class the object's class
-		]======]
+		__Doc__[[
+			<desc>Get the class type of the object</desc>
+			<return type="class">the object's class</return>
+		]]
 		function GetClass(self)
 			return Reflector.GetObjectClass(self)
 		end
 
-		doc [======[
-			@name IsClass
-			@type method
-			@desc Check if the object is an instance of the class
-			@param class
-			@return boolean true if the object is an instance of the class
-		]======]
+		__Doc__[[
+			<desc>Check if the object is an instance of the class</desc>
+			<param name="class"></param>
+			<return type="boolean">true if the object is an instance of the class</return>
+		]]
 		function IsClass(self, cls)
 			return Reflector.ObjectIsClass(self, cls)
 		end
 
-		doc [======[
-			@name IsInterface
-			@type method
-			@desc Check if the object is extend from the interface
-			@param interface
-			@return boolean true if the object is extend from the interface
-		]======]
+		__Doc__[[
+			<desc>Check if the object is extend from the interface</desc>
+			<param name="interface"></param>
+			<return type="boolean">true if the object is extend from the interface</return>
+		]]
 		function IsInterface(self, IF)
 			return Reflector.ObjectIsInterface(self, IF)
 		end
 
-		doc [======[
-			@name Fire
-			@type method
-			@desc Fire an object's event, to trigger the object's event handlers
-			@param event the event name
-			@param ... the event's arguments
-			@return nil
-		]======]
-		local rawget = rawget
+		__Doc__[[
+			<desc>Fire an object's event, to trigger the object's event handlers</desc>
+			<param name="event">the event name</param>
+			<param name="...">the event's arguments</param>
+		]]
 		function Fire(self, sc, ...)
 			-- No more check , just fire the event as quick as we can
 			local handler = rawget(self, "__Events")
@@ -8799,88 +8441,62 @@ do
 			return handler and handler(self, ...)
 		end
 
-		doc [======[
-			@name ActiveThread
-			@type method
-			@desc Active the thread mode for special events
-			@format event[, ...]
-			@param event the event name
-			@param ... other event's name list
-			@return nil
-		]======]
+		__Doc__[[
+			<desc>Active the thread mode for special events</desc>
+			<param name="...">the event's name list</param>
+		]]
 		function ActiveThread(self, ...)
 			return Reflector.ActiveThread(self, ...)
 		end
 
-		doc [======[
-			@name IsThreadActivated
-			@type method
-			@desc Check if the thread mode is actived for the event
-			@param event the event's name
-			@return boolean true if the event is in thread mode
-		]======]
+		__Doc__[[
+			<desc>Check if the thread mode is actived for the event</desc>
+			<param name="event">the event's name</param>
+			<return type="boolean">true if the event is in thread mode</return>
+		]]
 		function IsThreadActivated(self, sc)
 			return Reflector.IsThreadActivated(self, sc)
 		end
 
-		doc [======[
-			@name InactiveThread
-			@type method
-			@desc Turn off the thread mode for the events
-			@format event[, ...]
-			@param event the event's name
-			@param ... other event's name list
-			@return nil
-		]======]
+		__Doc__[[
+			<desc>Turn off the thread mode for the events</desc>
+			<param name="...">the event's name list</param>
+		]]
 		function InactiveThread(self, ...)
 			return Reflector.InactiveThread(self, ...)
 		end
 
-		doc [======[
-			@name BlockEvent
-			@type method
-			@desc Block some events for the object
-			@format event[, ...]
-			@param event the event's name
-			@param ... other event's name list
-			@return nil
-		]======]
+		__Doc__[[
+			<desc>Block some events for the object</desc>
+			<param name="...">the event's name list</param>
+		]]
 		function BlockEvent(self, ...)
 			return Reflector.BlockEvent(self, ...)
 		end
 
-		doc [======[
-			@name IsEventBlocked
-			@type method
-			@desc Check if the event is blocked for the object
-			@param event the event's name
-			@return boolean true if th event is blocked
-		]======]
+		__Doc__[[
+			<desc>Check if the event is blocked for the object</desc>
+			<param name="event">the event's name</param>
+			<return type="boolean">true if th event is blocked</return>
+		]]
 		function IsEventBlocked(self, sc)
 			return Reflector.IsEventBlocked(self, sc)
 		end
 
-		doc [======[
-			@name UnBlockEvent
-			@type method
-			@desc Un-Block some events for the object
-			@format event[, ...]
-			@param event the event's name
-			@param ... other event's name list
-			@return nil
-		]======]
+		__Doc__[[
+			<desc>Un-Block some events for the object</desc>
+			<param name="...">the event's name list</param>
+		]]
 		function UnBlockEvent(self, ...)
 			return Reflector.UnBlockEvent(self, ...)
 		end
 
-		doc [======[
-			@name ThreadCall
-			@type method
-			@desc Call method or function as a thread
-			@param methodname|function
-			@param ... the arguments
-			@return nil
-		]======]
+		__Doc__[[
+			<desc>Call method or function as a thread</desc>
+			<param name="method" type="string|function">the target method</param>
+			<param name="...">the arguments</param>
+			<return>the return value of the target method</return>
+		]]
 		function ThreadCall(self, method, ...)
 			if type(method) == "string" then
 				method = self[method]
@@ -8890,29 +8506,17 @@ do
 				return CallThread(method, self, ...)
 			end
 		end
-
-		------------------------------------------------------
-		-- Meta-methods
-		------------------------------------------------------
-		--[[function __tostring(self)
-			return "[Object]" .. tostring(getmetatable(self)) .. "()"
-		end--]]
 	endclass "Object"
 
 	__Final__()
+	__Doc__[[Used to create an hierarchical environment with class system settings, like : Module "Root.ModuleA" "v72"]]
 	class "Module"
 		inherit "Object"
 
-		doc [======[
-			@name Module
-			@type class
-			@desc Used to create an hierarchical environment with class system settings, like : Module "Root.ModuleA" "v72"
-		]======]
+		_Module = {}
+		_ModuleInfo = setmetatable({}, WEAK_KEY)
 
-		_Module = _Module or {}
-		_ModuleInfo = _ModuleInfo or setmetatable({}, WEAK_KEY)
-
-		_ModuleEnv = _ModuleEnv or {}
+		_ModuleEnv = {}
 
 		_ModuleEnv.class = class
 		_ModuleEnv.enum = enum
@@ -8923,7 +8527,7 @@ do
 			local ns = name
 
 			if type(name) == "string" then
-				ns = Reflector.ForName(name)
+				ns = Reflector.GetNameSpaceForName(name)
 
 				if not ns then
 					error(("no namespace is found with name : %s"):format(name), 2)
@@ -8956,23 +8560,17 @@ do
 		------------------------------------------------------
 		-- Event
 		------------------------------------------------------
-		doc [======[
-			@name OnDispose
-			@type event
-			@desc Fired when the module is disposed
-		]======]
+		__Doc__[[Fired when the module is disposed]]
 		event "OnDispose"
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name ValidateVersion
-			@type method
-			@desc Return true if the version is greater than the current version of the module
-			@param version
-			@return boolean true if the version is a validated version
-		]======]
+		__Doc__[[
+			<desc>Return true if the version is greater than the current version of the module</desc>
+			<param name="version"></param>
+			<return name="boolean">true if the version is a validated version</return>
+		]]
 		function ValidateVersion(self, version)
 			local info = _ModuleInfo[self]
 
@@ -9049,13 +8647,11 @@ do
 			return false
 		end
 
-		doc [======[
-			@name GetModule
-			@type method
-			@desc Get the child-module with the name
-			@param name string, the child-module's name
-			@return System.Module the child-module
-		]======]
+		__Doc__[[
+			<desc>Get the child-module with the name</desc>
+			<param name="name">string, the child-module's name</param>
+			<return name="System"></return>.Module the child-module
+		]]
 		function GetModule(self, name)
 			if type(name) ~= "string" or strtrim(name) == "" then
 				return
@@ -9074,12 +8670,10 @@ do
 			return mdl
 		end
 
-		doc [======[
-			@name GetModules
-			@type method
-			@desc Get all child-modules of the module
-			@return table the list of the the child-modules
-		]======]
+		__Doc__[[
+			<desc>Get all child-modules of the module</desc>
+			<return name="table">the list of the the child-modules</return>
+		]]
 		function GetModules(self)
 			if _ModuleInfo[self] and _ModuleInfo[self].Modules then
 				local lst = {}
@@ -9095,44 +8689,28 @@ do
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
-		doc [======[
-			@name _M
-			@type property
-			@desc The module itself
-		]======]
+		__Doc__[[The module itself]]
 		property "_M" {
 			Get = function(self)
 				return self
 			end,
 		}
 
-		doc [======[
-			@name _Name
-			@type property
-			@desc The module's name
-		]======]
+		__Doc__[[The module's name]]
 		property "_Name" {
 			Get = function(self)
 				return _ModuleInfo[self].Name
 			end,
 		}
 
-		doc [======[
-			@name _Parent
-			@type property
-			@desc The module's parent module
-		]======]
+		__Doc__[[The module's parent module]]
 		property "_Parent" {
 			Get = function(self)
 				return _ModuleInfo[self].Parent
 			end,
 		}
 
-		doc [======[
-			@name _Version
-			@type property
-			@desc The module's version
-		]======]
+		__Doc__[[The module's version]]
 		property "_Version" {
 			Get = function(self)
 				return _ModuleInfo[self].Version
@@ -9268,8 +8846,8 @@ do
 				parent = _ModuleInfo[parent].Parent
 			end
 
-			if ns and Reflector.GetName(ns) then
-				if key == Reflector.GetName(ns) then
+			if ns and Reflector.GetNameSpaceName(ns) then
+				if key == Reflector.GetNameSpaceName(ns) then
 					rawset(self, key, ns)
 					return rawget(self, key)
 				elseif ns[key] then
@@ -9283,7 +8861,7 @@ do
 			-- Check imports
 			if info.Import then
 				for _, ns in ipairs(info.Import) do
-					if key == Reflector.GetName(ns) then
+					if key == Reflector.GetNameSpaceName(ns) then
 						rawset(self, key, ns)
 						return rawget(self, key)
 					elseif ns[key] then
@@ -9294,8 +8872,8 @@ do
 			end
 
 			-- Check base namespace
-			if Reflector.ForName(key) then
-				rawset(self, key, Reflector.ForName(key))
+			if Reflector.GetNameSpaceForName(key) then
+				rawset(self, key, Reflector.GetNameSpaceForName(key))
 				return rawget(self, key)
 			end
 
@@ -9431,15 +9009,23 @@ end
 -- Global Settings
 ------------------------------------------------------
 do
+	------------------------------------------------------
+	-- Clear useless keywords
+	------------------------------------------------------
+	_KeyWord4IFEnv.doc = nil
+	_KeyWord4ClsEnv.doc = nil
+	_KeyWord4StrtEnv.structtype = nil
+
+
 	-- Keep the root so can't be disposed
-	System = Reflector.ForName("System")
+	System = Reflector.GetNameSpaceForName("System")
 
 	function import_install(name, all)
-		local ns = Reflector.ForName(name)
+		local ns = Reflector.GetNameSpaceForName(name)
 		local env = getfenv(2)
 
 		if ns and env then
-			env[Reflector.GetName(ns)] = ns
+			env[Reflector.GetNameSpaceName(ns)] = ns
 
 			if all then
 				for _, subNs in ipairs(Reflector.GetSubNamespace(ns)) do

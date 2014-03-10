@@ -1,10 +1,6 @@
 <snippet>
 	<content><![CDATA[
-${3:doc [======[
-	@name ${1:property_name}
-	@type property
-	@desc ${2:description}
-]======]
+${3:__Doc__[[${2:description}]]
 }property "${1:property_name}" { Type = ${4:System.Any}${5:, Default = ${6:System.Any}} }
 ]]></content>
     <tabTrigger>property</tabTrigger>

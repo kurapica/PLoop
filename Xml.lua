@@ -1,8 +1,16 @@
-<snippet>
-	<content><![CDATA[
-__Doc__[[${2:description}]]
-interface "${1:interface_name}"
+-- Author      : Kurapica
+-- Create Date : 2014/03/10
+-- ChangeLog   :
 
+Module "System.Xml" "1.0.0"
+
+import "System"
+
+__Doc__[[The System.Xml namespace provides standards-based support for processing XML.]]
+namespace "System.Xml"
+
+__Doc__[[Represents a single node in the XML document.]]
+class "XmlNode"
 	------------------------------------------------------
 	-- Event
 	------------------------------------------------------
@@ -16,20 +24,9 @@ interface "${1:interface_name}"
 	------------------------------------------------------
 
 	------------------------------------------------------
-	-- Dispose
+	-- Constructor
 	------------------------------------------------------
-	function Dispose(self)
-	end
-
-	------------------------------------------------------
-	-- Initialize
-	------------------------------------------------------
-    function ${1:interface_name}(self)
+    function XmlNode(self, ...)
 
     end
-endinterface "${1:interface_name}"
-]]></content>
-    <tabTrigger>interface</tabTrigger>
-    <scope>source.lua</scope>
-    <description>interface</description>
-</snippet>
+endclass "XmlNode"

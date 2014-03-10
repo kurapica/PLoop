@@ -98,6 +98,42 @@
 		</dict>
 		<dict>
 			<key>begin</key>
+			<string>(__Doc__)\s*(\[(=*)\[)</string>
+			<key>beginCaptures</key>
+			<dict>
+				<key>1</key>
+				<dict>
+					<key>name</key>
+					<string>keyword.control.lua.igas</string>
+				</dict>
+				<key>2</key>
+				<dict>
+					<key>name</key>
+					<string>string.begin.lua.igas.doc</string>
+				</dict>
+			</dict>
+			<key>end</key>
+			<string>\]\3\]</string>
+			<key>endCaptures</key>
+			<dict>
+				<key>0</key>
+				<dict>
+					<key>name</key>
+					<string>string.end.lua.igas.doc</string>
+				</dict>
+			</dict>
+			<key>name</key>
+			<string>text.xml.embedded.lua.igas</string>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>include</key>
+					<string>text.xml</string>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>begin</key>
 			<string>"</string>
 			<key>beginCaptures</key>
 			<dict>
@@ -185,7 +221,7 @@
 		</dict>
 		<dict>
 			<key>match</key>
-			<string>\b(break|do|else|for|if|elseif|return|then|repeat|while|until|end|function|local|in|class|event|property|import|extend|inherit|namespace|endclass|struct|endstruct|enum|interface|endinterface|doc)\b</string>
+			<string>\b(break|do|else|for|if|elseif|return|then|repeat|while|until|end|function|local|in|class|event|property|import|extend|inherit|namespace|endclass|struct|endstruct|enum|interface|endinterface)\b</string>
 			<key>name</key>
 			<string>keyword.control.lua</string>
 		</dict>

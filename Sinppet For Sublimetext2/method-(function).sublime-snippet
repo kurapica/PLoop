@@ -1,12 +1,10 @@
 <snippet>
     <content><![CDATA[
-doc [======[
-	@name ${1:function_name}
-	@type method
-	@desc ${2:description}
-	@param ${3:...}
-	${4:@return nil}
-]======]
+__Doc__[[
+	<desc>${2:description}</desc>
+	<format>${3:...}</format>
+	<returnformat>${4:...}</returnformat>
+]]
 function ${1:function_name}(self, ${3:...})
 	${0:-- body}
 end]]></content>

@@ -6,14 +6,8 @@ Module "System.IFIterator" "1.0.1"
 
 namespace "System"
 
+__Doc__[[The IFiterator interface provide objrect Each, EachK method to help itertor object's element]]
 interface "IFIterator"
-
-	doc [======[
-		@name IFIterator
-		@type interface
-		@desc The IFiterator interface provide objrect Each, EachK method to help itertor object's element.
-		@overridable Next method return itertor, itertor object, first key to help traverse elements
-	]======]
 
 	local function SetObjectProperty(self, prop, value)
 		self[prop] = value
@@ -22,31 +16,27 @@ interface "IFIterator"
 	------------------------------------------------------
 	-- Method
 	------------------------------------------------------
-	doc [======[
-		@name Next
-		@type method
-		@desc return the itertor function, itertor object, first key to help traverse elements
-		@param key
-		@return itertor
-		@return self
-		@return firstkey
-	]======]
+	__Doc__[[
+		<desc>return the itertor function, itertor object, first key to help traverse elements</desc>
+		<param name="key">the init key</param>
+		<return>itertor</return>
+		<return>self</return>
+		<return>firstkey</return>
+	]]
+	__Optional__()
 	function Next(self, key)
 		return next, self, key and self[key] ~= nil and key or nil
 	end
 
-	doc [======[
-		@name EachK
-		@type method
-		@desc Traverse the object's elements to perform operation
-		@format fisrtkey, method[, ...]
-		@format firstkey, propertyName, propertyValue
-		@param firstkey the start index
-		@param method function or method name to operation
-		@param propertyName property to be set
-		@param propertyValue property value
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Traverse the object's elements to perform operation</desc>
+		<format>fisrtkey, method[, ...]</format>
+		<format>firstkey, propertyName, propertyValue</format>
+		<param name="firstkey">the start index</param>
+		<param name="method">function or method name to operation</param>
+		<param name="propertyName">property to be set</param>
+		<param name="propertyValue">property value</param>
+	]]
 	function EachK(self, key, oper, ...)
 		if not oper then return end
 
@@ -97,17 +87,14 @@ interface "IFIterator"
 		end
 	end
 
-	doc [======[
-		@name EachK
-		@type method
-		@desc Traverse the object's all elements to perform operation
-		@format method[, ...]
-		@format propertyName, propertyValue
-		@param method function or method name to operation
-		@param propertyName property to be set
-		@param propertyValue property value
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Traverse the object's all elements to perform operation</desc>
+		<format>method[, ...]</format>
+		<format>propertyName, propertyValue</format>
+		<param name="method">function or method name to operation</param>
+		<param name="propertyName">property to be set</param>
+		<param name="propertyValue">property value</param>
+	]]
 	function Each(self, oper, ...)
 		return EachK(self, nil, oper, ...)
 	end

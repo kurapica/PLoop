@@ -6,113 +6,94 @@ Module "System.Recycle" "1.0.0"
 
 namespace "System"
 
+__Doc__[[
+	Recycle object is used as an object factory and manager.
+	Recycle's constructor receive a class as it's first argument, the class would be used to generate new object to be recycle.
+	The other arugments for the constructor is passed to the class's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
+	After the recycle object is created as recycleObject, can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
+]]
 class "Recycle"
 	inherit "Object"
-
-	_RecycleInfo = _RecycleInfo or setmetatable({}, {__mode = "k",})
-
-	doc [======[
-		@name Recycle
-		@type class
-		@param class the class used to generate objects
-		@param ... the arguments that transform to the class's constructor
-		@desc
-				Recycle object is used as an object factory and manager.
-		<br><br>Recycle's constructor receive a class as it's first argument, the class would be used to generate new object to be recycle.
-		<br><br>The other arugments for the constructor is passed to the class's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
-		<br><br>After the recycle object is created as recycleObject, can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
-		<br>
-	]======]
 
 	------------------------------------------------------
 	-- Event
 	------------------------------------------------------
-	doc [======[
-		@name OnPush
-		@type event
-		@desc Fired when an no-used object is put in
-		@param object no-used object
-	]======]
+	__Doc__[[
+		<desc>Fired when an no-used object is put in</desc>
+		<param name="object">no-used object</param>
+	]]
 	event "OnPush"
 
-	doc [======[
-		@name OnPop
-		@type event
-		@desc Fired when an un-used object is send out
-		@param object send-out object
-	]======]
+	__Doc__[[
+		<desc>Fired when an un-used object is send out</desc>
+		<param name="object">send-out object</param>
+	]]
 	event "OnPop"
 
-	doc [======[
-		@name OnInit
-		@type event
-		@desc Fired when a new object is created
-		@param object the new object
-	]======]
+	__Doc__[[
+		<desc>Fired when a new object is created</desc>
+		<param name="object">the new object</param>
+	]]
 	event "OnInit"
 
-	_Args = {}
 	local function parseArgs(self)
-		if not _RecycleInfo[self] or not _RecycleInfo[self].Args then
-			return
-		end
+		if not self.Arguments then return end
 
-		local index = _RecycleInfo[self].Index or 1
-		_RecycleInfo[self].Index = index + 1
+		local index = (self.Index or 0) + 1
+		self.Index = index
 
-		wipe(_Args)
+		self.__NowArgs = self.__NowArgs or {}
 
-		for _, arg in ipairs(_RecycleInfo[self].Args) do
+		for i, arg in ipairs(self.Arguments) do
 			if type(arg) == "string" and arg:find("%%d") then
 				arg = arg:format(index)
 			end
 
-			tinsert(_Args, arg)
+			self.__NowArgs[i] = arg
 		end
 
-		return unpack(_Args)
+		return unpack(self.__NowArgs)
 	end
 
 	------------------------------------------------------
 	-- Method
 	------------------------------------------------------
-	doc [======[
-		@name Push
-		@type method
-		@desc Push object in recycle bin
-		@param object
-		@return nil
-	]======]
+	__Doc__[[
+		<desc>Push object in recycle bin</desc>
+		<param name="object">the object that put in</param>
+	]]
 	function Push(self, obj)
 		if obj then
 			-- Won't check obj because using cache means want quick-using.
 			tinsert(self, obj)
-			if _RecycleInfo[self] then
-				return self:Fire("OnPush", obj)
-			end
+
+			return self:Fire("OnPush", obj)
 		end
 	end
 
-	doc [======[
-		@name Pop
-		@type method
-		@desc Pop object from recycle bin
-		@return object
-	]======]
+	__Doc__[[
+		<desc>Pop object from recycle bin</desc>
+		<return name="object">the object that pop out</return>
+	]]
 	function Pop(self)
 		-- give out item
 		if #self > 0 then
-			if _RecycleInfo[self] then
-				self:Fire("OnPop", self[#self])
-			end
-			return tremove(self, #self)
+			local ret = tremove(self, #self)
+
+			self:Fire("OnPop", ret)
+
+			return ret
 		end
 
 		-- create new
-		if not _RecycleInfo[self] then
-			return {}
+		if not self.Type then
+			local ret = {}
+
+			self:Fire("OnPop", ret)
+
+			return ret
 		else
-			local obj = _RecycleInfo[self].Type(parseArgs(self))
+			local obj = self.Type(parseArgs(self))
 
 			self:Fire("OnInit", obj)
 
@@ -129,21 +110,16 @@ class "Recycle"
 	------------------------------------------------------
 	-- Constructor
 	------------------------------------------------------
+	__Doc__ [[
+		<param name="class" type="class">the class used to generate objects</param>
+		<param name="...">the arguments that transform to the class's constructor</param>
+	]]
     function Recycle(self, cls, ...)
-		if type(cls) == "string" then
-			cls = Reflector.ForName(cls)
-		end
+		if type(cls) == "string" then cls = Reflector.GetNameSpaceForName(cls) end
 
-		if cls and Reflector.IsClass(cls) then
-			_RecycleInfo[self] = {
-				Type = cls,
-				Args = select('#', ...) > 0 and {...},
-			}
-		elseif cls and Reflector.IsStruct(cls) then
-			_RecycleInfo[self] = {
-				Type = cls,
-				Args = select('#', ...) > 0 and {...},
-			}
+		if cls and (Reflector.IsClass(cls) or Reflector.IsStruct(cls)) then
+			self.Type = cls
+			self.Arguments = select('#', ...) > 0 and {...}
 		end
     end
 
@@ -152,7 +128,7 @@ class "Recycle"
 	------------------------------------------------------
 	function __call(self, obj)
 		if obj then
-			Push(self, obj)
+			return Push(self, obj)
 		else
 			return Pop(self)
 		end

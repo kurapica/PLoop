@@ -6,23 +6,13 @@ Module "System.Error" "0.1.0"
 
 namespace "System"
 
+__Doc__[[Error object is used to contain the error messages and debug informations]]
 class "Error"
-	doc [======[
-		@name Error
-		@type class
-		@desc Error object is used to contain the error messages and debug informations.
-		@param message string, the error message
-	]======]
 
 	--------------------------------------
 	--- Method
 	--------------------------------------
-	doc [======[
-		@name Throw
-		@type method
-		@desc Throw out self as an error
-		@return nil
-	]======]
+	__Doc__[[Throw out self as an error]]
 	function Throw(self)
 		error(self, 2)
 	end
@@ -30,22 +20,14 @@ class "Error"
 	--------------------------------------
 	--- Property
 	--------------------------------------
-	doc [======[
-		@name Name
-		@type property
-		@desc The type name of the error object
-	]======]
+	__Doc__[[The type name of the error object]]
 	property "Name" {
 		Get = function(self)
 			return Reflector.GetName(Reflector.GetObjectClass(self))
 		end,
 	}
 
-	doc [======[
-		@name Message
-		@type property
-		@desc The error message
-	]======]
+	__Doc__[[The error message]]
 	property "Message" { Type = System.String + nil }
 
 	--------------------------------------

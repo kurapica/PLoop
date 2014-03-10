@@ -1,13 +1,8 @@
 <snippet>
 	<content><![CDATA[
+__Doc__[[${3:description}]]
 class "${1:class_name}"
 	inherit "${2:System.Object}"
-
-	doc [======[
-		@name ${1:class_name}
-		@type class
-		@desc ${3:description}
-	]======]
 
 	------------------------------------------------------
 	-- Event

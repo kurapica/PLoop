@@ -6,13 +6,9 @@ Module "System.Threading" "1.0.2"
 
 namespace "System"
 
+__Doc__[[Used for threading control]]
+__NonInheritable__()
 interface "Threading"
-
-	doc [======[
-		@name Threading
-		@type interface
-		@desc Used for threading control
-	]======]
 
 	enum "ThreadStatus" {
 		"running",
@@ -45,24 +41,24 @@ interface "Threading"
 		end,
 	})
 
-	------------------------------------------------------
-	-- System.Threading.Iterator
-	--
-	-- Example :
-	--
-	-- function a(start, endp)
-	--   for i = start, endp do
-	--     yield(i, "i_"..i)
-	--   end
-	-- end
-	--
-	-- for k, v in Threading.Iterator(a, 1, 3) do print(k, v) end
-	--
-	-- 1       i_1
-	-- 2       i_2
-	-- 3       i_3
-	--
-	------------------------------------------------------
+	__Doc__[[
+		<desc>Used to make iterator from functions</desc>
+		<param name="func" type="function">the function contains yield instructions</param>
+		<usage>
+			function a(start, endp)
+				for i = start, endp do
+				    yield(i, "i_"..i)
+				end
+			end
+
+			for k, v in Threading.Iterator(a), 1, 3 do print(k, v) end
+
+			-- Oupput
+			-- 1       i_1
+			-- 2       i_2
+			-- 3       i_3
+		</usage>
+	]]
 	function Iterator(func)
 		return Reflector.ThreadCall(function()
 			local th = ITER_POOL()
@@ -74,21 +70,14 @@ interface "Threading"
 	------------------------------------------------------
 	-- System.Threading.Thread
 	------------------------------------------------------
+	__Doc__[[
+		Thread object is used to control lua coroutines.
+		Thread object can be created with a default function that will be convert to coroutine, also can create a empty Thread object.
+		Thread object can use 'Thread' property to receive function, coroutine, other Thread object as it's	control coroutine.
+		Thread object can use 'Resume' method to resume coroutine like 'obj:Resume(arg1, arg2, arg3)'. Also can use 'obj(arg1, arg2, arg3)' for short.
+		In the Thread object's controling function, can use the System.Threading's method to control the coroutine.
+	]]
 	class "Thread"
-
-		doc [======[
-			@name Thread
-			@type class
-			@format [function]
-			@param function the function to be convert to thread
-			@desc
-					Thread object is used to control lua coroutines.
-			<br><br>Thread object can be created with a default function that will be convert to coroutine, also can create a empty Thread object.
-			<br><br>Thread object can use 'Thread' property to receive function, coroutine, other Thread object as it's	control coroutine.
-			<br><br>Thread object can use 'Resume' method to resume coroutine like 'obj:Resume(arg1, arg2, arg3)'. Also can use 'obj(arg1, arg2, arg3)' for short.
-			<br><br>In the Thread object's controling function, can use the System.Threading's method to control the coroutine.
-			<br>
-		]======]
 
 		local function chkValue(self, flag, ...)
 			if flag then
@@ -120,13 +109,11 @@ interface "Threading"
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		doc [======[
-			@name Resume
-			@type method
-			@desc Resume the thread
-			@param ... resume arguments
-			@return ... return values from thread
-		]======]
+		__Doc__[[
+			<desc>Resume the thread</desc>
+			<param name="...">any arguments passed to the thread</param>
+			<return name="..."> any return values from the thread</return>
+		]]
 		function Resume(self, ...)
 			if running() then
 				self.Thread = running()
@@ -136,12 +123,10 @@ interface "Threading"
 			end
 		end
 
-		doc [======[
-			@name Yield
-			@type method
-			@desc Yield the thread
-			@param ... return arguments
-		]======]
+		__Doc__[[
+			<desc>Yield the thread</desc>
+			<param name="...">return arguments</param>
+		]]
 		function Yield(self, ...)
 			local co = running()
 
@@ -152,33 +137,27 @@ interface "Threading"
 			end
 		end
 
-		doc [======[
-			@name IsRunning
-			@type method
-			@desc Whether the thread is running
-			@return boolean true if the thread is running
-		]======]
+		__Doc__[[
+			<desc>Whether the thread is running</desc>
+			<return type="boolean">true if the thread is running</return>
+		]]
 		function IsRunning(self)
 			local co = self.Thread
 			return co and (status(co) == "running" or status(co) == "normal") or false
 		end
 
-		doc [======[
-			@name IsSuspended
-			@type method
-			@desc Whether the thread is suspended
-			@return boolean true if the thread is suspended
-		]======]
+		__Doc__[[
+			<desc>Whether the thread is suspended</desc>
+			<return type="boolean">true if the thread is suspended</return>
+		]]
 		function IsSuspended(self)
 			return self.Thread and status(self.Thread) == "suspended" or false
 		end
 
-		doc [======[
-			@name IsDead
-			@type method
-			@desc Whether the thread is dead
-			@return boolean true if the thread is dead
-		]======]
+		__Doc__[[
+			<desc>Whether the thread is dead</desc>
+			<return type="boolean">true if the thread is dead</return>
+		]]
 		function IsDead(self)
 			return not self.Thread or status(self.Thread) == "dead" or false
 		end
@@ -186,6 +165,7 @@ interface "Threading"
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
+		__Doc__[[Get the thread's status]]
 		property "Status" {
 			Get = function(self)
 				if self.Thread then
@@ -197,6 +177,7 @@ interface "Threading"
 			Type = ThreadStatus,
 		}
 
+		__Doc__[[Get the thread object's coroutine or set a new function/coroutine to it]]
 		property "Thread" {
 			Field = "__Thread",
 			Set = function(self, th)
@@ -216,6 +197,9 @@ interface "Threading"
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
+		__Doc__[[
+			<param name="func" type="function|thread" optional="true">The init function or thread</param>
+		]]
 		function Thread(self, func)
 			if type(func) == "function" then
 				self.Thread = create(func)

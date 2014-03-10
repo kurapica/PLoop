@@ -1,10 +1,6 @@
 <snippet>
 	<content><![CDATA[
-doc [======[
-	@name ${1:event_name}
-	@type event
-	@desc ${2:description}
-]======]
+__Doc__[[${2:description}]]
 event "${1:event_name}"
 ]]></content>
     <tabTrigger>event</tabTrigger>
