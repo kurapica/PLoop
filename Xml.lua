@@ -508,7 +508,7 @@ do
 
 				[ newIndex() ] = _Token.OPEN_TAG,
 				[ newIndex() ] = {
-					[ _Token.ELEMENT = true,
+					[ _Token.ELEMENT] = true,
 					[ _Token.WHITE_SPACE] = true,
 				}, [ -newIndex(true) ] = "*",
 				[ newIndex() ] = _Token.CLOSE_TAG,
@@ -724,9 +724,9 @@ do
 end
 
 struct "XmlAttribute"
-	prefix = String + nil
-	key = String
-	value = String
+	Prefix = String + nil
+	Key = String
+	Value = String
 endstruct "XmlAttribute"
 
 __Doc__[[Represents a single node in the XML document.]]
@@ -838,8 +838,8 @@ class "XmlNode"
 	------------------------------------------------------
 	-- Constructor
 	------------------------------------------------------
-    function XmlNode(self, ...)
-
+	__Arguments__{}
+    function XmlNode(self)
     end
 endclass "XmlNode"
 

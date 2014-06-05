@@ -1,3 +1,6 @@
+2014/06/04
+    Overload system added for struct's constructor.
+
 2014/05/16
     Save memory usage by replace property and struct field's type to an unique version, complex types won't be replaced for now.
 

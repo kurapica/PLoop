@@ -32,8 +32,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author		   kurapica.igas@gmail.com
 -- Create Date	  2011/02/01
--- Last Update Date 2014/05/016
--- Version		  r95
+-- Last Update Date 2014/06/03
+-- Version		  r96
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2210,7 +2210,7 @@ do
 					fixedMethod.Thread = nil
 
 					if #fixedMethod == 0 and initTable then
-						noArgMethod = fixedMethod
+						noArgMethod = noArgMethod or fixedMethod
 					elseif fixedMethod:MatchArgs(obj, ...) then
 						if fixedMethod.Thread then
 							return fixedMethod.Method(select(2, resume(fixedMethod.Thread, false)))
@@ -2862,8 +2862,7 @@ do
 
 			if key == info.Name then
 				if type(value) == "function" then
-					info.Constructor = value
-					return
+					return SaveFixedMethod(info, "Constructor", value, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 				else
 					error(("'%s' must be a function as the constructor."):format(key), 2)
 				end
@@ -2883,10 +2882,8 @@ do
 					-- Cache the method for the struct data
 					info.Method = info.Method or {}
 
-					SaveFixedMethod(info.Method, key, value, info.Owner)
-
 					-- Don't save to environment until need it
-					value = nil
+					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				elseif (value == nil or IsType(value) or IsNameSpace(value)) then
 					local ok, ret = pcall(BuildType, value)
 
@@ -2981,56 +2978,69 @@ do
 		return value
 	end
 
+	function CopyStructMethods(info, dest)
+		if info.Method and type(dest) == "table" then
+			for k, v in pairs(info.Method) do
+				if dest[k] == nil then dest[k] = v end
+			end
+		end
+		return dest
+	end
+
 	function Struct2Obj(strt, ...)
 		local info = _NSInfo[strt]
 
-		local max = select("#", ...)
-		local init = select(1, ...)
+		local count = select("#", ...)
+		local initTable = select(1, ...)
 
-		if max == 1 and type(init) == "table" and getmetatable(init) == nil then
-			local continue = true
+		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
 
-			if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
-				if not info.StructEnv[info.Members[1]]:GetObjectType(init) then continue = false end
-			elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-				if not info.ArrayElement:GetObjectType(init) then continue = false end
-			end
+		if initTable then
+			local ok, value = pcall(ValidateStruct, strt, initTable)
 
-			local ok, value = pcall(ValidateStruct, strt, init)
+			if ok then return CopyStructMethods(info, value) end
+		end
 
-			if ok then
-				if info.Method and type(value) == "table" then for k, v in pairs(info.Method) do value[k] = v end end
-				return value
-			elseif not continue then
-				if info.SubType == _STRUCT_TYPE_MEMBER then
-					value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-					value = value:gsub("%%s%.", ""):gsub("%%s", "")
+		-- Constructor
+		if info.Constructor then
+			local ctor = info.Constructor
 
-					local args = ""
-					for i, n in ipairs(info.Members) do
-						if info.StructEnv[n]:Is(nil) and not args:find("%[") then n = "["..n end
-						if i == 1 then args = n else args = args..", "..n end
-					end
-					if args:find("%[") then args = args.."]" end
-					error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
-				else
-					value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-					value = value:gsub("%%s%.", ""):gsub("%%s", "")
-					error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
+			while getmetatable(ctor) do
+				ctor.Thread = nil
+
+				if ctor:MatchArgs(...) then
+					break
+				elseif ctor.Thread then
+					-- Remove argument container
+					resume(ctor.Thread, false)
+					ctor.Thread = nil
 				end
-			end
-		end
 
-		if type(info.Constructor) == "function" then
-			local ok, ret = pcall(info.Constructor, ...)
-			if ok then
-				if info.Method and type(ret) == "table" then for k, v in pairs(info.Method) do ret[k] = v end end
-				return ret
+				ctor = ctor.Next
+			end
+
+			local ok, value
+
+			if type(ctor) == "function" then
+				ok, value = pcall(ctor, ...)
+			elseif ctor then
+				if ctor.Thread then
+					ok, value = pcall(ctor.Method, select(2, resume(ctor.Thread, false)))
+				else
+					ok, value = pcall(ctor.Method, ...)
+				end
 			else
-				error(strtrim(ret:match(":%d+:%s*(.-)$") or ret), 3)
+				error(("%s has no constructor support such arguments"):format(tostring(strt)), 2)
+			end
+
+			if ok then
+				return CopyStructMethods(info, value)
+			else
+				error(strtrim(value:match(":%d+:%s*(.-)$") or value), 3)
 			end
 		end
 
+		-- Default Constructor
 		if info.SubType == _STRUCT_TYPE_MEMBER then
 			local ret = {}
 
@@ -3039,8 +3049,7 @@ do
 			local ok, value = pcall(ValidateStruct, strt, ret)
 
 			if ok then
-				if info.Method then for k, v in pairs(info.Method) do value[k] = v end end
-				return value
+				return CopyStructMethods(info, value)
 			else
 				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
@@ -3053,9 +3062,7 @@ do
 				if args:find("%[") then args = args.."]" end
 				error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
 			end
-		end
-
-		if info.SubType == _STRUCT_TYPE_ARRAY then
+		elseif info.SubType == _STRUCT_TYPE_ARRAY then
 			local ret = {}
 
 			for i = 1, select('#', ...) do ret[i] = select(i, ...) end
@@ -3063,17 +3070,14 @@ do
 			local ok, value = pcall(ValidateStruct, strt, ret)
 
 			if ok then
-				if info.Method then for k, v in pairs(info.Method) do value[k] = v end end
-				return value
+				return CopyStructMethods(info, value)
 			else
 				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
 				error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
 			end
-		end
-
-		-- For custom at last
-		if type(info.UserValidate) == "function"  then
+		elseif type(info.UserValidate) == "function"  then
+			-- For custom struct
 			local ok, ret = pcall(info.UserValidate, ...)
 
 			if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s", "[".. info.Name .."]"), 3) end
@@ -7214,7 +7218,8 @@ do
 					self.HasSelf = true
 				end
 			else
-				self.HasSelf = true
+				-- No self for struct constructor
+				self.HasSelf = Reflector.IsClass(owner)
 			end
 
 			-- Quick match
