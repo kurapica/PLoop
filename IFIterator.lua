@@ -6,7 +6,7 @@ Module "System.IFIterator" "1.0.1"
 
 namespace "System"
 
-__Doc__[[The IFiterator interface provide objrect Each, EachK method to help itertor object's element]]
+__Doc__[[The IFIterator interface provide Each, EachK method to help itertor object's element]]
 interface "IFIterator"
 
 	local function SetObjectProperty(self, prop, value)

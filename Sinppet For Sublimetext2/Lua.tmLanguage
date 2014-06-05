@@ -104,12 +104,12 @@
 				<key>1</key>
 				<dict>
 					<key>name</key>
-					<string>keyword.control.lua.igas</string>
+					<string>keyword.control.lua.ploop</string>
 				</dict>
 				<key>2</key>
 				<dict>
 					<key>name</key>
-					<string>string.begin.lua.igas.doc</string>
+					<string>string.begin.lua.ploop.doc</string>
 				</dict>
 			</dict>
 			<key>end</key>
@@ -119,11 +119,11 @@
 				<key>0</key>
 				<dict>
 					<key>name</key>
-					<string>string.end.lua.igas.doc</string>
+					<string>string.end.lua.ploop.doc</string>
 				</dict>
 			</dict>
 			<key>name</key>
-			<string>text.xml.embedded.lua.igas</string>
+			<string>text.xml.embedded.lua.ploop</string>
 			<key>patterns</key>
 			<array>
 				<dict>

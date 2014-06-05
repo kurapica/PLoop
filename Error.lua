@@ -13,9 +13,7 @@ class "Error"
 	--- Method
 	--------------------------------------
 	__Doc__[[Throw out self as an error]]
-	function Throw(self)
-		error(self, 2)
-	end
+	Throw = error
 
 	--------------------------------------
 	--- Property
@@ -23,7 +21,7 @@ class "Error"
 	__Doc__[[The type name of the error object]]
 	property "Name" {
 		Get = function(self)
-			return Reflector.GetName(Reflector.GetObjectClass(self))
+			return Reflector.GetNameSpaceName(Reflector.GetObjectClass(self))
 		end,
 	}
 
@@ -33,9 +31,11 @@ class "Error"
 	--------------------------------------
 	--- Constructor
 	--------------------------------------
-	function Error(self, message)
-		self.Message = type(message) == "string" and message or nil
-	end
+	__Arguments__{ String }
+	function Error(self, message) self.Message = message end
+
+	__Arguments__{}
+	function Error(self) end
 
 	--------------------------------------
 	--- Metamethod

@@ -1,9 +1,10 @@
 -- Author      : Kurapica
 -- Create Date : 2011/02/28
 -- ChangeLog   :
---				2011/03/17	the msg can be formatted string.
+--				2011/03/17 the msg can be formatted string.
+--				2014/03/01 improve the log method
 
-Module "System.Logger" "1.0.0"
+Module "System.Logger" "1.0.1"
 
 namespace "System"
 
@@ -138,8 +139,10 @@ class "Logger"
 			local fenv = getfenv(2)
 
 			if not fenv[method] then
-				fenv[method] = function(msg)
-					return self:Log(loglvl, msg)
+				fenv[method] = function(msg, ...)
+					if loglvl >= self.LogLevel then
+						return self:Log(loglvl, msg, ...)
+					end
 				end
 			end
 		end

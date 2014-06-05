@@ -1,3 +1,15 @@
+2014/05/16
+    Save memory usage by replace property and struct field's type to an unique version, complex types won't be replaced for now.
+
+2014/04/04
+    __Default__ attribute added to provide default value for custom struct and enum, when used as property type, the default value would be used for the property.
+
+2014/04/03
+    __Event__ and __Handler__ attributes added to provide handlers for property value's changing.
+
+2013/03/20
+    __Doc__ attribute added to support new document system.
+
 2013/12/31
     'This' is added for class definition, used in the class's constructor to call other constructors.
 
