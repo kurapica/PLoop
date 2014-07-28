@@ -30,10 +30,10 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
--- Author		   kurapica.igas@gmail.com
--- Create Date	  2011/02/01
--- Last Update Date 2014/06/03
--- Version		  r96
+-- Author			kurapica.igas@gmail.com
+-- Create Date		2011/02/01
+-- Last Update Date 2014/07/25
+-- Version			r102
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -65,7 +65,7 @@ do
 	strupper = string.upper
 	strlower = string.lower
 	strtrim = strtrim or function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
-	wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end end
+	wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 
 	tblconcat = tblconcat or table.concat
 	tinsert = tinsert or table.insert
@@ -135,14 +135,20 @@ do
 
 	-- Base env field
 	BASE_ENV_FIELD = "__PLOOP_BASE_ENV"
+
+	-- Local env field
+	LOCAL_ENV_FIELD = "__PLOOP_LOCAL"
 end
 
 ------------------------------------------------------
 -- Thread Pool & Tools
 ------------------------------------------------------
 do
+	ATTRIBUTE_INSTALLED = false
+
 	WEAK_KEY = {__mode = "k"}
 	WEAK_VALUE = {__mode = "v"}
+	WEAK_ALL = {__mode = "kv"}
 
 	SYNTHESIZE_ENV = {
 		rawset = rawset,
@@ -188,7 +194,7 @@ do
 	end
 
 	function CallThread(func, ...)
-		if running() then return func( ... ) end
+		if type(func) == "thread" and status(func) == "suspended" then return chkValue( resume(func, ...) ) end
 
 		local th = THREAD_POOL()
 
@@ -213,11 +219,11 @@ do
 	})
 
 	function SaveFixedMethod(storage, key, value, owner, targetType)
-		if __Attribute__ and __Attribute__._ConsumePreparedAttributes then
+		if ATTRIBUTE_INSTALLED then
 			value = __Attribute__._ConsumePreparedAttributes(value, targetType or AttributeTargets.Method, targetType ~= AttributeTargets.Constructor and GetSuperMethod(owner, key) or nil, owner, key) or value
 		end
 
-		if __Attribute__ and targetType ~= AttributeTargets.Constructor then
+		if ATTRIBUTE_INSTALLED and targetType ~= AttributeTargets.Constructor then
 			-- Hide the real fixed method for method and meta-method, started with '0', strange but useful
 			local rKey = "0" .. key
 
@@ -336,6 +342,12 @@ do
 	end
 
 	SYNTHESIZE_ENV.clone = CloneObj
+
+	-- Local marker
+	LOCAL_CACHE = setmetatable({}, WEAK_KEY)
+
+	function SetLocal(flag) LOCAL_CACHE[running() or 0] = flag or nil end
+	function IsLocal() return LOCAL_CACHE[running() or 0] end
 end
 
 ------------------------------------------------------
@@ -354,7 +366,7 @@ do
 		__mode = "k",
 	})
 
-	_SuperMap = setmetatable({}, {__mode = "kv"})
+	_SuperMap = setmetatable({}, WEAK_ALL)
 
 	-- metatable for namespaces
 	_MetaNS = getmetatable(_NameSpace)
@@ -589,7 +601,7 @@ do
 
 		local ns = SetNameSpace4Env(getfenv(2), name)
 
-		return ns and __Attribute__ and __Attribute__._ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
+		return ns and ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
 	end
 end
 
@@ -1031,8 +1043,8 @@ do
 
 					-- Validate the Getter
 					if prop.Getter then
-						prop.GetClone = Reflector.ValidateFlags(Getter.Clone, prop.Getter) or nil
 						prop.GetDeepClone = Reflector.ValidateFlags(Getter.DeepClone, prop.Getter) or nil
+						prop.GetClone = Reflector.ValidateFlags(Getter.Clone, prop.Getter) or prop.GetDeepClone
 
 						prop.Getter = nil
 					end
@@ -1060,9 +1072,9 @@ do
 							tinsert(gbody, [[return function (self)]])
 							tinsert(gbody, [[local value]])
 							if prop.SetWeak then
-								tinsert(gbody, [[value = rawget(self, "__Weaks")]])
+								tinsert(gbody, [[value = rawget(self, "__WeakFields")]])
 								tinsert(gbody, [[if type(value) == "table" then]])
-								tinsert(gbody, [[value = rawget(value, field)]])
+								tinsert(gbody, [[value = value[field] ]])
 								tinsert(gbody, [[else]])
 								tinsert(gbody, [[value = nil]])
 								tinsert(gbody, [[end]])
@@ -1070,7 +1082,7 @@ do
 								tinsert(gbody, [[value = rawget(self, field)]])
 							end
 							if prop.Default ~= nil then tinsert(gbody, [[if value == nil then value = default end]]) end
-							if prop.GetClone or prop.GetDeepClone then
+							if prop.GetClone then
 								if prop.GetDeepClone then
 									tinsert(gbody, [[value = clone(value, true)]])
 								else
@@ -1105,10 +1117,10 @@ do
 							end
 							tinsert(gbody, [[local container = self]])
 							if prop.SetWeak then
-								tinsert(gbody, [[container = rawget(self, "__Weaks")]])
+								tinsert(gbody, [[container = rawget(self, "__WeakFields")]])
 								tinsert(gbody, [[if type(container) ~= "table" then]])
 								tinsert(gbody, [[	container = setmetatable({}, WEAK_VALUE)]])
-								tinsert(gbody, [[	rawset(self, "__Weaks", container)]])
+								tinsert(gbody, [[	rawset(self, "__WeakFields", container)]])
 								tinsert(gbody, [[end]])
 							end
 							tinsert(gbody, [[local old = rawget(container, field)]])
@@ -1226,6 +1238,9 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
+
 			-- Check keywords
 			if _KeyWord4IFEnv[key] then return _KeyWord4IFEnv[key] end
 
@@ -1264,12 +1279,16 @@ do
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same interface
 			value = info.Method[key]
-
 			if value then rawset(self, key, value) return value end
+
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then rawset(self, key, value) return value end
+			end
 
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
-
 			if value ~= nil then rawset(self, key, value) return value end
 		end
 
@@ -1280,6 +1299,9 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
+
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			-- Check keywords
 			if _KeyWord4IFEnv[key] then return _KeyWord4IFEnv[key] end
@@ -1313,6 +1335,12 @@ do
 			value = info.Method[key]
 			if value then return value end
 
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then return value end
+			end
+
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
 		end
@@ -1343,7 +1371,11 @@ do
 
 			if type(key) == "string" and type(value) == "function" then
 				-- Don't save to environment until need it
-				return SaveFixedMethod(info.Method, key, value, info.Owner)
+				if IsLocal() then
+					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
+				else
+					return SaveFixedMethod(info.Method, key, value, info.Owner)
+				end
 			end
 
 			rawset(self, key, value)
@@ -1370,7 +1402,7 @@ do
 	function interface(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: interface "interfacename"]], 2) end
 		local fenv = getfenv(2)
-		local ns = GetNameSpace4Env(fenv)
+		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create interface or get it
 		local IF
@@ -1433,7 +1465,7 @@ do
 		setfenv(2, interfaceEnv)
 
 		-- No super target for interface
-		return __Attribute__ and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface)
+		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface)
 	end
 
 	------------------------------------
@@ -1536,7 +1568,7 @@ do
 
 		info.Event[name] = info.Event[name] or Event(name)
 
-		return __Attribute__ and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
+		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
 	end
 
 	function SetPropertyWithSet(info, name, set)
@@ -1550,7 +1582,7 @@ do
 		prop.Name = name
 		prop.Predefined = set
 
-		return __Attribute__ and __Attribute__._ConsumePreparedAttributes(prop, AttributeTargets.Property, GetSuperProperty(info.Owner, name), info.Owner, name)
+		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(prop, AttributeTargets.Property, GetSuperProperty(info.Owner, name), info.Owner, name)
 	end
 
 	------------------------------------
@@ -1566,7 +1598,7 @@ do
 	--- End the interface's definition and restore the environment
 	------------------------------------
 	function endinterface(name)
-		if __Attribute__ then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endinterface "interfacename"]], 2) end
 
@@ -1727,6 +1759,9 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
+
 			if key == _SuperIndex then
 				if info.SuperClass then
 					local superInfo = _NSInfo[info.SuperClass]
@@ -1800,12 +1835,16 @@ do
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same class
 			value = info.Method[key]
-
 			if value then rawset(self, key, value) return value end
+
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then rawset(self, key, value) return value end
+			end
 
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
-
 			if value ~= nil then rawset(self, key, value) return value end
 		end
 
@@ -1815,6 +1854,9 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
+
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			if key == _SuperIndex then
 				if info.SuperClass then
@@ -1881,8 +1923,13 @@ do
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same class
 			value = info.Method[key]
-
 			if value then return value end
+
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then return value end
+			end
 
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
@@ -1925,7 +1972,11 @@ do
 
 			if type(key) == "string" and type(value) == "function" then
 				-- Don't save to environment until need it
-				return SaveFixedMethod(info.Method, key, value, info.Owner)
+				if IsLocal() then
+					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
+				else
+					return SaveFixedMethod(info.Method, key, value, info.Owner)
+				end
 			end
 
 			rawset(self, key, value)
@@ -2029,9 +2080,9 @@ do
 					end
 				elseif oper.Field then
 					if oper.SetWeak then
-						value = rawget(self, "__Weaks")
+						value = rawget(self, "__WeakFields")
 						if type(value) == "table" then
-							value = rawget(value, oper.Field)
+							value = value[oper.Field]
 						else
 							value = nil
 						end
@@ -2044,7 +2095,7 @@ do
 
 				if value == nil then value = oper.Default end
 
-				if oper.GetClone or oper.GetDeepClone then value = clone(value, oper.GetDeepClone) end
+				if oper.GetClone then value = clone(value, oper.GetDeepClone) end
 
 				return value
 			end
@@ -2095,7 +2146,7 @@ do
 			oper = Cache4Property[key]
 			if oper then
 				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
-				if oper.SetClone or oper.SetDeepClone then value = clone(value, oper.SetDeepClone) end
+				if oper.SetClone then value = clone(value, oper.SetDeepClone) end
 
 				if oper.Set then
 					return oper.Set(self, value)
@@ -2111,10 +2162,10 @@ do
 					-- Check container
 					local container = self
 					if oper.SetWeak then
-						container = rawget(self, "__Weaks")
+						container = rawget(self, "__WeakFields")
 						if type(container) ~= "table" then
 							container = setmetatable({}, WEAK_VALUE)
-							rawset(self, "__Weaks", container)
+							rawset(self, "__WeakFields", container)
 						end
 					end
 
@@ -2163,20 +2214,17 @@ do
 
 				if value == nil and not oper[key] then return end
 
-				if not oper[key] then
-					oper[key] = EventHandler(Cache4Event[key], self)
-				end
+				if not oper[key] then oper[key] = EventHandler(Cache4Event[key], self) end
 				oper = oper[key]
 
 				if value == nil or type(value) == "function" then
 					oper.Handler = value
+					return
 				elseif type(value) == "table" and Reflector.ObjectIsClass(value, EventHandler) then
-					oper:Copy(value)
+					return oper:Copy(value)
 				else
 					error("Can't set this value to the event handler.", 2)
 				end
-
-				return
 			end
 
 			-- Custom newindex metametods
@@ -2295,7 +2343,7 @@ do
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: class "classname"]], 2) end
 
 		local fenv = getfenv(2)
-		local ns = GetNameSpace4Env(fenv)
+		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
 		local cls
@@ -2356,7 +2404,7 @@ do
 		-- MetaTable
 		info.MetaTable = info.MetaTable or {}
 
-		if __Attribute__ and cls ~= __Attribute__ then
+		if ATTRIBUTE_INSTALLED then
 			local isCached = info.AutoCache or false
 
 			__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Class, info.SuperClass)
@@ -2417,7 +2465,7 @@ do
 		-- rawset(env, _SuperIndex, superCls)
 
 		-- Copy Metatable
-		if __Attribute__ then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
 
 		for meta, flag in pairs(_KeyMeta) do
 			local rMeta = flag and meta or "_" .. meta
@@ -2426,7 +2474,7 @@ do
 		end
 
 		-- Clone Attributes
-		if __Attribute__ then
+		if ATTRIBUTE_INSTALLED then
 			local isCached = info.AutoCache or false
 
 			__Attribute__._CloneAttributes(superCls, info.Owner, AttributeTargets.Class)
@@ -2549,7 +2597,7 @@ do
 
 		info.Event[name] = info.Event[name] or Event(name)
 
-		return __Attribute__ and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
+		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
 	end
 
 	------------------------------------
@@ -2565,7 +2613,7 @@ do
 	--- End the class's definition and restore the environment
 	------------------------------------
 	function endclass(name)
-		if __Attribute__ then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endclass "classname"]], 2) end
 
@@ -2662,7 +2710,7 @@ do
 			end
 		end
 
-		if __Attribute__ then __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Enum) end
+		if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Enum) end
 
 		-- Cache
 		info.Cache = info.Cache or {}
@@ -2708,7 +2756,7 @@ do
 		end
 
 		local fenv = getfenv(2)
-		local ns = GetNameSpace4Env(fenv)
+		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
 		local enm
@@ -2764,7 +2812,8 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
-			if key == "Validate" then return info.UserValidate end
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			-- Check keywords
 			if _KeyWord4StrtEnv[key] then return _KeyWord4StrtEnv[key] end
@@ -2805,9 +2854,14 @@ do
 			value = info.Method and info.Method[key]
 			if value then rawset(self, key, value) return value end
 
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then rawset(self, key, value) return value end
+			end
+
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
-
 			if value ~= nil then rawset(self, key, value) return value end
 		end
 
@@ -2818,7 +2872,8 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
-			if key == "Validate" then return info.UserValidate end
+			-- Check local
+			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			-- Check keywords
 			if _KeyWord4StrtEnv[key] then return _KeyWord4StrtEnv[key] end
@@ -2851,6 +2906,12 @@ do
 			value = info.Method and info.Method[key]
 			if value then return value end
 
+			-- Check Local
+			if rawget(self, LOCAL_ENV_FIELD) then
+				value = self[LOCAL_ENV_FIELD][key]
+				if value then return value end
+			end
+
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
 		end
@@ -2862,28 +2923,24 @@ do
 
 			if key == info.Name then
 				if type(value) == "function" then
-					return SaveFixedMethod(info, "Constructor", value, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
-				else
-					error(("'%s' must be a function as the constructor."):format(key), 2)
-				end
-			end
-
-			if key == "Validate" then
-				if value == nil or type(value) == "function" then
-					info.UserValidate = value
+					info.Validator = value
 					return
 				else
-					error(("'%s' must be a function used for validation."):format(key), 2)
+					error(("'%s' must be a function as the Validator."):format(key), 2)
 				end
 			end
 
 			if type(key) == "string"  then
 				if type(value) == "function" then
-					-- Cache the method for the struct data
-					info.Method = info.Method or {}
+					if IsLocal() then
+						return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
+					else
+						-- Cache the method for the struct data
+						info.Method = info.Method or {}
 
-					-- Don't save to environment until need it
-					return SaveFixedMethod(info.Method, key, value, info.Owner)
+						-- Don't save to environment until need it
+						return SaveFixedMethod(info.Method, key, value, info.Owner)
+					end
 				elseif (value == nil or IsType(value) or IsNameSpace(value)) then
 					local ok, ret = pcall(BuildType, value)
 
@@ -2893,7 +2950,7 @@ do
 						if info.SubType == _STRUCT_TYPE_MEMBER then
 							info.Members = info.Members or {}
 							tinsert(info.Members, key)
-							if __Attribute__ then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
 
 							-- Auto generate Default
 							if not ret:Is(nil) and #ret == 1 and (not info.DefaultField or info.DefaultField[key] == nil) then
@@ -2906,7 +2963,7 @@ do
 							end
 						elseif info.SubType == _STRUCT_TYPE_ARRAY then
 							info.ArrayElement = ret
-							if __Attribute__ then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
 						end
 
 						return
@@ -2921,7 +2978,7 @@ do
 	end
 
 	-- Some struct object may ref to each others, that would crash the validation
-	_ValidatedCache = setmetatable({}, {__mode = "kv"})
+	_ValidatedCache = setmetatable({}, WEAK_ALL)
 
 	function ValidateStruct(strt, value)
 		if _ValidatedCache[value] then return value end
@@ -2943,9 +3000,7 @@ do
 						value[n] = info.StructEnv[n]:Validate(value[n], n)
 					end
 				end
-			end
-
-			if info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+			elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
 				local flag, ret
 				local ele = info.ArrayElement
 
@@ -2962,8 +3017,8 @@ do
 			end
 		end
 
-		if type(info.UserValidate) == "function" then
-			local flag, ret = pcall(info.UserValidate, value)
+		if type(info.Validator) == "function" then
+			local flag, ret = pcall(info.Validator, value)
 
 			if not flag then
 				wipe(_ValidatedCache)
@@ -2978,13 +3033,14 @@ do
 		return value
 	end
 
-	function CopyStructMethods(info, dest)
-		if info.Method and type(dest) == "table" then
+	function CopyStructMethods(info, obj)
+		if info.Method and type(obj) == "table" then
 			for k, v in pairs(info.Method) do
-				if dest[k] == nil then dest[k] = v end
+				if obj[k] == nil then obj[k] = v end
 			end
 		end
-		return dest
+
+		return obj
 	end
 
 	function Struct2Obj(strt, ...)
@@ -2992,6 +3048,7 @@ do
 
 		local count = select("#", ...)
 		local initTable = select(1, ...)
+		local initErrMsg
 
 		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
 
@@ -2999,45 +3056,8 @@ do
 			local ok, value = pcall(ValidateStruct, strt, initTable)
 
 			if ok then return CopyStructMethods(info, value) end
-		end
 
-		-- Constructor
-		if info.Constructor then
-			local ctor = info.Constructor
-
-			while getmetatable(ctor) do
-				ctor.Thread = nil
-
-				if ctor:MatchArgs(...) then
-					break
-				elseif ctor.Thread then
-					-- Remove argument container
-					resume(ctor.Thread, false)
-					ctor.Thread = nil
-				end
-
-				ctor = ctor.Next
-			end
-
-			local ok, value
-
-			if type(ctor) == "function" then
-				ok, value = pcall(ctor, ...)
-			elseif ctor then
-				if ctor.Thread then
-					ok, value = pcall(ctor.Method, select(2, resume(ctor.Thread, false)))
-				else
-					ok, value = pcall(ctor.Method, ...)
-				end
-			else
-				error(("%s has no constructor support such arguments"):format(tostring(strt)), 2)
-			end
-
-			if ok then
-				return CopyStructMethods(info, value)
-			else
-				error(strtrim(value:match(":%d+:%s*(.-)$") or value), 3)
-			end
+			initErrMsg = value
 		end
 
 		-- Default Constructor
@@ -3051,6 +3071,7 @@ do
 			if ok then
 				return CopyStructMethods(info, value)
 			else
+				value = initErrMsg or value
 				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
@@ -3072,20 +3093,19 @@ do
 			if ok then
 				return CopyStructMethods(info, value)
 			else
+				value = initErrMsg or value
 				value = strtrim(value:match(":%d+:%s*(.-)$") or value)
 				value = value:gsub("%%s%.", ""):gsub("%%s", "")
 				error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
 			end
-		elseif type(info.UserValidate) == "function"  then
+		else
 			-- For custom struct
-			local ok, ret = pcall(info.UserValidate, ...)
+			local ok, value = pcall(ValidateStruct, strt, ...)
 
-			if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s", "[".. info.Name .."]"), 3) end
+			if not ok then error(strtrim(value:match(":%d+:%s*(.-)$") or value):gsub("%%s", "[".. info.Name .."]"), 3) end
 
-			return ret
+			return value
 		end
-
-		error(("struct '%s' is abstract."):format(tostring(strt)), 3)
 	end
 
 	function BuildStructValidate(strt)
@@ -3106,7 +3126,7 @@ do
 	function struct(name)
 		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: struct "structname"]], 2) end
 		local fenv = getfenv(2)
-		local ns = GetNameSpace4Env(fenv)
+		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
 		local strt
@@ -3143,10 +3163,9 @@ do
 		info.Default = nil
 		info.DefaultField = nil
 		info.ArrayElement = nil
-		info.UserValidate = nil
+		info.Validator = nil
 		info.Validate = nil
 		info.Method = nil
-		info.Constructor = nil
 		info.Import4Env = nil
 
 		info.StructEnv = setmetatable({
@@ -3160,7 +3179,7 @@ do
 		-- Set the environment to class's environment
 		setfenv(2, info.StructEnv)
 
-		return __Attribute__ and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
+		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
 	end
 
 	------------------------------------
@@ -3192,7 +3211,7 @@ do
 	--- End the class's definition and restore the environment
 	------------------------------------
 	function endstruct(name)
-		if __Attribute__ then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endstruct "structname"]], 2) end
 
@@ -3215,10 +3234,14 @@ do
 			-- Make field type unique
 			if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
 				for _, n in ipairs(info.Members) do
-					info.StructEnv[n] = GetUniqueType(info.StructEnv[n])
+					if not ATTRIBUTE_INSTALLED or not __Attribute__._IsFieldAttributeDefined(info.Owner, n) then
+						info.StructEnv[n] = GetUniqueType(info.StructEnv[n])
+					end
 				end
 			elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-				info.ArrayElement = GetUniqueType(info.ArrayElement)
+				if not ATTRIBUTE_INSTALLED or not __Attribute__._IsFieldAttributeDefined(info.Owner) then
+					info.ArrayElement = GetUniqueType(info.ArrayElement)
+				end
 			end
 		else
 			error(("%s is not closed."):format(info.Name), 2)
@@ -3282,14 +3305,14 @@ do
 		structtype "CUSTOM"
 		default( false )
 
-		function Validate(value) return value and true or false end
+		function Boolean(value) return value and true or false end
 	endstruct "Boolean"
 
 	struct "String"
 		structtype "CUSTOM"
 		default( "" )
 
-		function Validate(value)
+		function String(value)
 			if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3299,7 +3322,7 @@ do
 		structtype "CUSTOM"
 		default( 0 )
 
-		function Validate(value)
+		function Number(value)
 			if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3308,7 +3331,7 @@ do
 	struct "Function"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function Function(value)
 			if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3317,7 +3340,7 @@ do
 	struct "Table"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function Table(value)
 			if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3326,7 +3349,7 @@ do
 	struct "RawTable"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function RawTable(value)
 			if type(value) ~= "table" then
 				error(("%s must be a table, got %s."):format("%s", type(value)))
 			elseif getmetatable(value) ~= nil then
@@ -3339,7 +3362,7 @@ do
 	struct "Userdata"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function Userdata(value)
 			if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3348,7 +3371,7 @@ do
 	struct "Thread"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function Thread(value)
 			if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end
 			return value
 		end
@@ -3357,7 +3380,7 @@ do
 	struct "Any"
 		structtype "CUSTOM"
 
-		function Validate(value)
+		function Any(value)
 			assert(value ~= nil, "%s can't be nil.")
 
 			return value
@@ -4132,67 +4155,6 @@ do
 			local handler = rawget(obj, "__Events")
 			handler = handler and rawget(handler, evt)
 			if handler then return handler(obj, ...) end
-		end
-
-		doc "ActiveThread" [[
-			<desc>Active thread mode for special events.</desc>
-			<param name="object">the object</param>
-			<param name="...">the event name list</param>
-			<usage>System.Reflector.ActiveThread(obj, "OnClick", "OnEnter")</usage>
-		]]
-		function ActiveThread(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then obj[name].ThreadActivated = true end
-				end
-			end
-		end
-
-		doc "IsThreadActivated" [[
-			<desc>Whether the thread mode is activated for special events.</desc>
-			<param name="obect">the object</param>
-			<param name="event">the event name</param>
-			<return type="boolean">true if the object has active thread mode for the given event.</return>
-			<usage>System.Reflector.IsThreadActivated(obj, "OnClick")</usage>
-		]]
-		function IsThreadActivated(obj, sc)
-			if IsClass(obj) then
-				local evt = _NSInfo[obj].Cache4Event[sc]
-
-				return evt and evt.ThreadActivated or false
-			else
-				local cls = GetObjectClass(obj)
-
-				if cls and HasEvent(cls, sc) then
-					return obj[sc].ThreadActivated or false
-				end
-			end
-
-			return false
-		end
-
-		doc "InactiveThread" [[
-			<desc>Inactive thread mode for special events.</desc>
-			<param name="object">the object</param>
-			<param name="...">the event name list</param>
-			<usage>System.Reflector.InactiveThread(obj, "OnClick", "OnEnter")</usage>
-		]]
-		function InactiveThread(obj, ...)
-			local cls = GetObjectClass(obj)
-			local name
-
-			if cls then
-				for i = 1, select('#', ...) do
-					name = select(i, ...)
-
-					if HasEvent(cls, name) then obj[name].ThreadActivated = false end
-				end
-			end
 		end
 
 		doc "BlockEvent" [[
@@ -5252,9 +5214,7 @@ do
 			<param name="...">the parameters</param>
 			<return>the return value of the func</return>
 		]]
-		function ThreadCall(func, ...)
-			return CallThread(func, ...)
-		end
+		ThreadCall = CallThread
 
 		doc "IsEqual" [[
 			<desc>Whether the two objects are objects with same settings</desc>
@@ -5676,8 +5636,8 @@ do
 		doc "Name" [[The event's name]]
 		property "Name" { Type = String, Default = "Anonymous" }
 
-		doc "ThreadActivated" [[Whether the event is thread activated]]
-		property "ThreadActivated" { Type = Boolean }
+		doc "Delegate" [[The delegate for the event handler, used to wrap the event call]]
+		property "Delegate" { Type = Function + nil }
 
 		------------------------------------------------------
 		-- Constructor
@@ -5695,7 +5655,7 @@ do
 	class "EventHandler"
 		doc "EventHandler" [[The object event handler]]
 
-		local function FireOnEventHandlerChanged(self) return Reflector.FireObjectEvent(self.Owner, "OnEventHandlerChanged", self.Event.Name) end
+		local function FireOnEventHandlerChanged(self) return Reflector.FireObjectEvent(self.Owner, "OnEventHandlerChanged", self.Event) end
 
 		------------------------------------------------------
 		-- Method
@@ -5704,17 +5664,14 @@ do
 			<desc>Check if the event handler is empty</desc>
 			<return type="boolean">true if the event handler has no functions</return>
 		]]
-		function IsEmpty(self)
-			return #self == 0 and self[0] == nil
-		end
+		function IsEmpty(self) return #self == 0 and self[0] == nil end
 
 		doc "Clear" [[Clear all handlers]]
 		function Clear(self)
-			local flag = false
-
-			for i = #self, 0, -1 do flag = true self[i] = nil end
-
-			return flag and FireOnEventHandlerChanged(self)
+			if #self > 0 or self[0] then
+				for i = #self, 1, -1 do self[i] = nil end self[0] = nil
+				return FireOnEventHandlerChanged(self)
+			end
 		end
 
 		doc "Copy" [[
@@ -5722,15 +5679,12 @@ do
 			<param name="src" type="System.EventHandler">the event handler source</param>
 		]]
 		function Copy(self, src)
-			local flag = false
+			if self ~= src and getmetatable(src) == EventHandler and self.Event == src.Event then
+				for i = #self, 1, -1 do self[i] = nil end self[0] = nil
+				for i = #src, 1, -1 do self[i] = src[i] end self[0] = src[0]
 
-			if Reflector.ObjectIsClass(src, EventHandler) and self.Event == src.Event and self ~= src then
-				for i = #self, 0, -1 do flag = true self[i] = nil end
-
-				for i = #src, 0, -1 do flag = true self[i] = src[i] end
+				return FireOnEventHandlerChanged(self)
 			end
-
-			return flag and FireOnEventHandlerChanged(self)
 		end
 
 		------------------------------------------------------
@@ -5739,17 +5693,17 @@ do
 		doc "Owner" [[The owner of the event handler]]
 		property "Owner" { Type = Table }
 
-		doc "Event" [[The event type of the handler]]
-		property "Event" { Type = Event }
+		doc "Event" [[The event's name]]
+		property "Event" { Type = String }
 
 		doc "Blocked" [[Whether the event handler is blocked]]
 		property "Blocked" { Type = Boolean }
 
-		doc "ThreadActivated" [[Whether the event handler is thread activated]]
-		property "ThreadActivated" { Type = Boolean }
-
-		doc "Handler" [[description]]
+		doc "Handler" [[The customer's handler]]
 		property "Handler" { Field = 0, Type = Function + nil, Handler = FireOnEventHandlerChanged }
+
+		doc "Delegate" [[The delegate for the event handler, used to wrap the event call]]
+		property "Delegate" { Type = Function + nil }
 
 		------------------------------------------------------
 		-- Constructor
@@ -5758,11 +5712,9 @@ do
 			if not Reflector.ObjectIsClass(evt, Event) then error("Usage : EventHandler(event, owner) - 'event' must be an object of 'System.Event'.") end
 			if not Reflector.GetObjectClass(owner) then error("Usage : EventHandler(event, owner) - 'owner' must be an object.") end
 
-			self.Event = evt
+			self.Event = evt.Name
 			self.Owner = owner
-
-			-- Active the thread status based on the attribute setting
-			if evt.ThreadActivated then self.ThreadActivated = true end
+			self.Delegate = evt.Delegate
 		end
 
 		------------------------------------------------------
@@ -5774,7 +5726,6 @@ do
 			for _, f in ipairs(self) do if f == func then return self end end
 
 			tinsert(self, func)
-
 			FireOnEventHandlerChanged(self)
 
 			return self
@@ -5788,62 +5739,41 @@ do
 			return self
 		end
 
-		function __call(self, obj, ...)
-			-- The event call is so frequent
-			-- keep local for optimization
-			if self.Blocked then return end
-
-			local owner = self.Owner
-			local asParam, useThread, ret
-
-			asParam = (obj ~= owner)
-			useThread = self.ThreadActivated
+		local function raiseEvent(self, owner, ...)
+			local ret = false
 
 			-- Call the stacked handlers
 			for _, handler in ipairs(self) do
-				-- Call the handler
-				if useThread then
-					if asParam then
-						ret = CallThread(handler, owner, obj, ...)
-					else
-						ret = CallThread(handler, obj, ...)
-					end
-				else
-					if asParam then
-						ret = handler(owner, obj, ...)
-					else
-						ret = handler(obj, ...)
-					end
-				end
-
-				-- means it's disposed
-				if rawget(owner, "Disposed") then ret = true end
+				ret = handler(owner, ...) or rawget(owner, "Disposed")
 
 				-- Any handler return true means to stop all
 				if ret then break end
 			end
 
-			-- Call the final handler
-			if not ret and self[0] then
-				local handler = self[0]
+			-- Call the custom handler
+			return not ret and self[0] and self[0](owner, ...)
+		end
 
-				if useThread then
-					if asParam then
-						CallThread(handler, owner, obj, ...)
-					else
-						CallThread(handler, obj, ...)
-					end
+		function __call(self, obj, ...)
+			if self.Blocked then return end
+
+			local owner = self.Owner
+			local delegte = self.Delegate
+
+			if delegte then
+				if owner == obj then
+					return delegte(raiseEvent, self, obj, ...)
 				else
-					if asParam then
-						handler(owner, obj, ...)
-					else
-						handler(obj, ...)
-					end
+					return delegte(raiseEvent, self, owner, obj, ...)
+				end
+			else
+				if owner == obj then
+					return raiseEvent(self, obj, ...)
+				else
+					return raiseEvent(self, owner, obj, ...)
 				end
 			end
 		end
-
-		function __tostring(self) return tostring(EventHandler) .. "( " .. tostring(self.Event) .. " )" end
 	endclass "EventHandler"
 
 	class "FixedMethod"
@@ -6117,30 +6047,21 @@ do
 		_PreparedAttributes = {}
 		_ThreadPreparedAttributes = setmetatable({}, WEAK_KEY)
 
-		-- Since the targets are stable, so a big table is a good storage
-		_Attribute4Class = setmetatable({}, WEAK_KEY)
-		_Attribute4Constructor = setmetatable({}, WEAK_KEY)
-		_Attribute4Enum = setmetatable({}, WEAK_KEY)
-		_Attribute4Event = setmetatable({}, WEAK_KEY)
-		_Attribute4Interface = setmetatable({}, WEAK_KEY)
-		_Attribute4Method = setmetatable({}, WEAK_KEY)
-		_Attribute4Property = setmetatable({}, WEAK_KEY)
-		_Attribute4Struct = setmetatable({}, WEAK_KEY)
-		_Attribute4Field = setmetatable({}, WEAK_KEY)
-		_Attribute4NameSpace = setmetatable({}, WEAK_KEY)
-
 		_AttributeCache = {
-			[AttributeTargets.Class] = _Attribute4Class,
-			[AttributeTargets.Constructor] = _Attribute4Constructor,
-			[AttributeTargets.Enum] = _Attribute4Enum,
-			[AttributeTargets.Event] = _Attribute4Event,
-			[AttributeTargets.Interface] = _Attribute4Interface,
-			[AttributeTargets.Method] = _Attribute4Method,
-			[AttributeTargets.Property] = _Attribute4Property,
-			[AttributeTargets.Struct] = _Attribute4Struct,
-			[AttributeTargets.Field] = _Attribute4Field,
-			[AttributeTargets.NameSpace] = _Attribute4NameSpace,
+			[AttributeTargets.Class] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Constructor] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Enum] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Event] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Interface] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Method] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Property] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Struct] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.Field] = setmetatable({}, WEAK_KEY),
+			[AttributeTargets.NameSpace] = setmetatable({}, WEAK_KEY),
 		}
+
+		-- A little trick
+		_AttributeTargetsCache = _NSInfo[AttributeTargets].Cache
 
 		-- Recycle the cache for dispose attributes
 		_AttributeCache4Dispose = setmetatable({}, {
@@ -6407,9 +6328,10 @@ do
 				error("Usage : __Attribute__._ConsumePreparedAttributes(target, targetType[, superTarget[, owner, name]]) - 'superTarget' is invalid.", 2)
 			end
 
+			if not owner and IsNameSpace(target) then owner = target end
+
 			-- Consume the prepared Attributes
-			local thread = running()
-			local prepared = thread and _ThreadPreparedAttributes[thread] or _PreparedAttributes
+			local prepared = _ThreadPreparedAttributes[running()] or _PreparedAttributes
 
 			-- Filter with the usage
 			if prepared and #prepared > 0 then
@@ -6418,22 +6340,24 @@ do
 				local usableAttr = _AttributeCache4Dispose()
 
 				for i = 1, #prepared do
-					cls = getmetatable(prepared[i])
+					local attr = prepared[i]
+					cls = getmetatable(attr)
 					usage = _GetCustomAttribute(cls, AttributeTargets.Class, __AttributeUsage__)
 
 					if usage and usage.AttributeTarget > 0 and not Reflector.ValidateFlags(targetType, usage.AttributeTarget) then
 						errorhandler("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseTarget(target, targetType, owner, name))
-					elseif ValidateUsable(usableAttr, prepared[i]) then
-						usableAttr[prepared[i]] = true
-						tinsert(usableAttr, prepared[i])
+					elseif ValidateUsable(usableAttr, attr) then
+						usableAttr[attr] = true
+						tinsert(usableAttr, attr)
 					else
 						errorhandler("Can't apply the " .. tostring(cls) .. " attribute for multi-times.")
 					end
 				end
 
 				for i = #prepared, 1, -1 do
-					if not usableAttr[prepared[i]] then
-						noUseAttr[prepared[i]] = true
+					local attr = prepared[i]
+					if not usableAttr[attr] then
+						noUseAttr[attr] = true
 						tremove(prepared, i)
 					end
 				end
@@ -6642,6 +6566,8 @@ do
 
 			if not config then
 				return false
+			elseif not type then
+				return true
 			elseif getmetatable(config) then
 				return getmetatable(config) == type
 			else
@@ -6994,6 +6920,9 @@ do
 		function __Attribute__(self) SendToPrepared(self) end
 	endclass "__Attribute__"
 
+	-- Attribute system on
+	ATTRIBUTE_INSTALLED = true
+
 	class "__Unique__"
 		inherit "__Attribute__"
 
@@ -7117,7 +7046,7 @@ do
 		Default = Any + nil
 		IsList = Boolean + nil
 
-		function Validate(value)
+		function Argument(value)
 			value.Type = value.Type and BuildType(value.Type) or nil
 
 			if value.Type and value.Default ~= nil then
@@ -7342,26 +7271,50 @@ do
 	-- More usable attributes
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()
-	class "__Thread__"
+	class "__Delegate__"
 		inherit "__Attribute__"
-		doc "__Thread__" [[Whether the event is thread activated by defalut, or wrap the method as coroutine]]
+		doc "__Delegate__" [[Wrap the method/event call in a delegate function]]
+
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc "Delegate" [[The delegate function]]
+		property "Delegate" { Type = Function + nil }
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
-			local CallThread = CallThread
+			local delegate = self.Delegate
+			if not delegate then return end
 
 			if targetType == AttributeTargets.Method then
 				if type(target) == "function" then
 					-- Wrap the target method
-					return function (...) return CallThread(target, ...) end
+					return function (...) return delegate(target, ...) end
 				end
 			elseif targetType == AttributeTargets.Event then
-				_NSInfo[owner].Event[target].ThreadActivated = true
+				_NSInfo[owner].Event[target].Delegate = delegate
 			end
+
+			self.Delegate = nil
 		end
-	endclass "__Thread__"
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		__Arguments__{}
+		function __Delegate__(self)
+			self.Delegate = nil
+			return Super(self)
+		end
+
+		__Arguments__{ Function }
+		function __Delegate__(self, value)
+			self.Delegate = value
+			return Super(self)
+		end
+	endclass "__Delegate__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()
@@ -7615,6 +7568,7 @@ do
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
 			target.Handler = self.Handler
+			self.Handler = nil
 		end
 
 		------------------------------------------------------
@@ -7819,6 +7773,23 @@ do
 			self.Doc = nil
 		end
 	endclass "__Doc__"
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Interface + AttributeTargets.Method, Inherited = false, RunOnce = true}
+	class "__Local__"
+		inherit "__Attribute__"
+
+		doc "__Local__" [[Used to mark the features like class, struct, interface, enum and method as local.]]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self) return SetLocal(false) end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		function __Local__(self) SetLocal(true) return Super(self) end
+	endclass "__Local__"
 end
 
 ------------------------------------------------------
@@ -7828,15 +7799,12 @@ do
 	------------------------------------------------------
 	-- System.ICloneable
 	------------------------------------------------------
+	__Doc__ [[Supports cloning, which creates a new instance of a class with the same value as an existing instance.]]
 	interface "ICloneable"
-
-		doc "ICloneable" [[Supports cloning, which creates a new instance of a class with the same value as an existing instance.]]
-
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		__Require__()
-		doc "Clone" [[Creates a new object that is a copy of the current instance.]]
+		__Require__() __Doc__[[Creates a new object that is a copy of the current instance.]]
 		function Clone(self) end
 	endinterface "ICloneable"
 
@@ -7872,89 +7840,47 @@ do
 			<desc>Get the class type of the object</desc>
 			<return type="class">the object's class</return>
 		]]
-		function GetClass(self)
-			return Reflector.GetObjectClass(self)
-		end
+		GetClass = Reflector.GetObjectClass
 
 		__Doc__[[
 			<desc>Check if the object is an instance of the class</desc>
 			<param name="class"></param>
 			<return type="boolean">true if the object is an instance of the class</return>
 		]]
-		function IsClass(self, cls)
-			return Reflector.ObjectIsClass(self, cls)
-		end
+		IsClass = Reflector.ObjectIsClass
 
 		__Doc__[[
 			<desc>Check if the object is extend from the interface</desc>
 			<param name="interface"></param>
 			<return type="boolean">true if the object is extend from the interface</return>
 		]]
-		function IsInterface(self, IF)
-			return Reflector.ObjectIsInterface(self, IF)
-		end
+		IsInterface = Reflector.ObjectIsInterface
 
 		__Doc__[[
 			<desc>Fire an object's event, to trigger the object's event handlers</desc>
 			<param name="event">the event name</param>
 			<param name="...">the event's arguments</param>
 		]]
-		function Fire(self, evt, ...)
-			-- No more check , just fire the event as quick as we can
-			local handler = rawget(self, "__Events")
-			handler = handler and handler[evt]
-			return handler and handler(self, ...)
-		end
-
-		__Doc__[[
-			<desc>Active the thread mode for special events</desc>
-			<param name="...">the event's name list</param>
-		]]
-		function ActiveThread(self, ...)
-			return Reflector.ActiveThread(self, ...)
-		end
-
-		__Doc__[[
-			<desc>Check if the thread mode is actived for the event</desc>
-			<param name="event">the event's name</param>
-			<return type="boolean">true if the event is in thread mode</return>
-		]]
-		function IsThreadActivated(self, sc)
-			return Reflector.IsThreadActivated(self, sc)
-		end
-
-		__Doc__[[
-			<desc>Turn off the thread mode for the events</desc>
-			<param name="...">the event's name list</param>
-		]]
-		function InactiveThread(self, ...)
-			return Reflector.InactiveThread(self, ...)
-		end
+		Fire = Reflector.FireObjectEvent
 
 		__Doc__[[
 			<desc>Block some events for the object</desc>
 			<param name="...">the event's name list</param>
 		]]
-		function BlockEvent(self, ...)
-			return Reflector.BlockEvent(self, ...)
-		end
+		BlockEvent = Reflector.BlockEvent
 
 		__Doc__[[
 			<desc>Check if the event is blocked for the object</desc>
 			<param name="event">the event's name</param>
 			<return type="boolean">true if th event is blocked</return>
 		]]
-		function IsEventBlocked(self, sc)
-			return Reflector.IsEventBlocked(self, sc)
-		end
+		IsEventBlocked = Reflector.IsEventBlocked
 
 		__Doc__[[
 			<desc>Un-Block some events for the object</desc>
 			<param name="...">the event's name list</param>
 		]]
-		function UnBlockEvent(self, ...)
-			return Reflector.UnBlockEvent(self, ...)
-		end
+		UnBlockEvent = Reflector.UnBlockEvent
 
 		__Doc__[[
 			<desc>Call method or function as a thread</desc>

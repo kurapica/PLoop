@@ -1,3 +1,6 @@
+2014/07/15
+    __Local__ attribute added to mark features like class, enum, struct, method as local, Delegate system added for event and method.
+
 2014/06/04
     Overload system added for struct's constructor.
 
