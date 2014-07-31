@@ -253,7 +253,7 @@ do
 			local fixedMethod = storage[key]
 
 			while getmetatable(fixedMethod) and fixedMethod.Owner == owner do
-				if getmetatable(value) and #fixedMethod == #value then
+				if getmetatable(value) and #fixedMethod == #value and fixedMethod.MinArgs == value.MinArgs then
 					local isEqual = true
 
 					if fixedMethod == value then return end
@@ -5237,10 +5237,12 @@ do
 			end
 
 			local cls = getmetatable(obj1)
-			local info = cls and _NSInfo[cls]
+			if cls == TYPE_NAMESPACE then return false end
 
+			local info = cls and _NSInfo[cls]
 			if info then
 				if cls ~= getmetatable(obj2) then return false end
+				if info.MetaTable.__eq then return false end
 
 				-- Check properties
 				for name, prop in pairs(info.Cache4Property) do
@@ -5248,15 +5250,17 @@ do
 						if not checkEqual(obj1[name], obj2[name], cache) then return false end
 					end
 				end
+
+				return true
 			end
 
 			-- Check fields
 			for k, v in pairs(obj1) do
-				if not checkEqual(v, rawget(obj2, k), cache) then return false end
+				if not checkEqual(v, obj2[k], cache) then return false end
 			end
 
 			for k, v in pairs(obj2) do
-				if rawget(obj1, k) == nil then return false end
+				if obj1[k] == nil then return false end
 			end
 
 			return true
@@ -5477,8 +5481,7 @@ do
 		function GetObjectType(self, value)
 			if value == nil and rawget(self, _ALLOW_NIL) then return end
 
-			local flag, msg, info, new
-
+			local info
 			local index = -1
 
 			while self[index] do
@@ -5499,8 +5502,6 @@ do
 
 			for _, ns in ipairs(self) do
 				info = _NSInfo[ns]
-
-				new = nil
 
 				if not info then
 					-- do nothing
@@ -5530,13 +5531,79 @@ do
 					end
 				elseif info.Type == TYPE_STRUCT then
 					-- Check if the value is an enumeration value of this structure
-					flag, new = pcall(ValidateStruct, ns, value)
-
-					if flag then return ns end
+					if pcall(ValidateStruct, ns, value) then return ns end
 				end
 			end
 
 			return false
+		end
+
+		doc "GetValidatedValue" [[
+			<desc>Get the validated value if validated, nil if not match</desc>
+			<param name="value">the value</param>
+			<return name="value">the validated value</return>
+		]]
+		function GetValidatedValue(self, value)
+			if value == nil and rawget(self, _ALLOW_NIL) then return end
+
+			local info
+			local index = -1
+
+			while self[index] do
+				info = _NSInfo[self[index]]
+
+				if not info then
+					-- skip
+				elseif info.Type == TYPE_CLASS then
+					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsChildClass(info.Owner, value) then return value end
+				elseif info.Type == TYPE_INTERFACE then
+					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsExtend(info.Owner, value) then return value end
+				elseif info.Type then
+					if value == info.Owner then return value end
+				end
+
+				index = index - 1
+			end
+
+			for _, ns in ipairs(self) do
+				info = _NSInfo[ns]
+
+				if not info then
+					-- do nothing
+				elseif info.Type == TYPE_CLASS then
+					-- Check if the value is an instance of this class
+					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then return value end
+				elseif info.Type == TYPE_INTERFACE then
+					-- Check if the value is an instance of this interface
+					if type(value) == "table" and getmetatable(value) and IsExtend(ns, getmetatable(value)) then return value end
+				elseif info.Type == TYPE_ENUM then
+					-- Check if the value is an enumeration value of this enum
+					if type(value) == "string" then
+						local uValue = info.Enum[strupper(value)]
+						if uValue ~= nil then return uValue end
+					end
+
+					if info.MaxValue then
+						-- Bit flag validation, use MaxValue check to reduce cost
+						value = tonumber(value)
+
+						if value then
+							if value >= 1 and value <= info.MaxValue then
+								return value
+							elseif value == 0 and info.Cache[value] then
+								return value
+							end
+						end
+					elseif info.Cache[value] then
+						return value
+					end
+				elseif info.Type == TYPE_STRUCT then
+					-- Check if the value is an enumeration value of this structure
+					local flag, new = pcall(ValidateStruct, ns, value)
+
+					if flag then return new end
+				end
+			end
 		end
 
 		------------------------------------------------------
@@ -5610,6 +5677,29 @@ do
 		end
 
 		function __unm(v1) error("Can't use unary '-' before a Type", 2) end
+
+		function __eq(v1, v2)
+			if getmetatable(v1) == Type and getmetatable(v2) == Type and v1.AllowNil == v2.AllowNil and #v1 == #v2 then
+				local index = -1
+				while rawget(v1, index) do
+					if v1[index] == v2[index] then
+						index = index - 1
+					else
+						return false
+					end
+				end
+
+				if rawget(v2, index) then return false end
+
+				for i = 1, #v1 do
+					if v1[i] ~= v2[i] then return false end
+				end
+
+				return true
+			else
+				return false
+			end
+		end
 
 		function __tostring(self)
 			local ret = ""
@@ -5788,30 +5878,26 @@ do
 			return ...
 		end
 
-		-- Find the real fixed method in class | interface
-		local function getFixedMethod(ns, name)
+		-- Find the real next method in class | interface
+		local function getNextMethod(ns, name, noFunc, chkSelf)
 			local info = _NSInfo[ns]
 
-			if info.Method[name] then return info.Method["0" .. name] or info.Method[name] end
+			if chkSelf and info.Method[name] then return info.Method["0" .. name] or (not noFunc and info.Method[name]) end
 
 			if info.SuperClass then
-				local handler = getFixedMethod(info.SuperClass, name)
+				local handler = getNextMethod(info.SuperClass, name, noFunc, true)
 
 				if handler then return handler end
 			end
 
 			if info.ExtendInterface then
 				for _, IF in ipairs(info.ExtendInterface) do
-					local handler = getFixedMethod(IF, name)
+					local handler = getNextMethod(IF, name, noFunc, true)
 
 					if handler then return handler end
 				end
 			end
 		end
-
-		------------------------------------------------------
-		-- Event
-		------------------------------------------------------
 
 		------------------------------------------------------
 		-- Method
@@ -5821,6 +5907,7 @@ do
 			local base = self.HasSelf and 1 or 0
 			local count = select('#', ...) - base
 			local argsCount = #self
+			local argsChanged = false
 
 			-- Empty methods won't accept any arguments
 			if argsCount == 0 then return count == 0 end
@@ -5830,7 +5917,17 @@ do
 				local cache = CACHE_TABLE()
 
 				-- Cache first
-				for i = 1, count do cache[i] = select(i + base, ...) end
+				if count == 1 then
+					cache[1] = select(1 + base, ...)
+				elseif count == 2 then
+					cache[1], cache[2] = select(1 + base, ...)
+				elseif count == 3 then
+					cache[1], cache[2], cache[3] = select(1 + base, ...)
+				elseif count == 4 then
+					cache[1], cache[2], cache[3], cache[4] = select(1 + base, ...)
+				else
+					for i = 1, count do cache[i] = select(i + base, ...) end
+				end
 
 				-- required
 				for i = 1, self.MinArgs do
@@ -5838,21 +5935,20 @@ do
 					local value = cache[i]
 
 					if value == nil then
-						-- No check
-						if arg.Default ~= nil then
-							value = arg.Default
-						else
-							CACHE_TABLE(cache)
-
-							return false
-						end
-					elseif arg.Type and arg.Type:GetObjectType(value) == false then
+						-- Required argument can't be nil
+						return CACHE_TABLE(cache)
+					elseif arg.Type then
+						-- Clone if needed
+						if arg.CloneNeeded then value = CloneObj(value, true) end
 						-- Validate the value
-						CACHE_TABLE(cache)
-						return false
+						value = arg.Type:GetValidatedValue(value)
+						if value == nil then return CACHE_TABLE(cache) end
 					end
 
-					cache[i] = value
+					if cache[i] ~= value then
+						argsChanged = true
+						cache[i] = value
+					end
 				end
 
 				-- optional
@@ -5862,27 +5958,79 @@ do
 
 					if value == nil then
 						-- No check
-						if arg.Default ~= nil then value = arg.Default end
-					elseif arg.Type and arg.Type:GetObjectType(value) == false then
+						if arg.Default ~= nil then value = CloneObj(arg.Default, true) end
+					elseif arg.Type then
+						-- Clone if needed
+						if arg.CloneNeeded then value = CloneObj(value, true) end
 						-- Validate the value
-						CACHE_TABLE(cache)
-						return false
+						value = arg.Type:GetValidatedValue(value)
+						if value == nil then return CACHE_TABLE(cache) end
 					end
 
-					cache[i] = value
+					if cache[i] ~= value then
+						argsChanged = true
+						cache[i] = value
+					end
 				end
 
 				if base == 1 then tinsert(cache, 1, (select(1, ...))) end
 
 				-- Keep arguments in thread, so cache can be recycled
-				self.Thread = CallThread(keepArgs, unpack(cache, 1, base + count))
+				if argsChanged then
+					count = base + count
+
+					if count == 1 then
+						self.Thread = CallThread(keepArgs, cache[1])
+					elseif count == 2 then
+						self.Thread = CallThread(keepArgs, cache[1], cache[2])
+					elseif count == 3 then
+						self.Thread = CallThread(keepArgs, cache[1], cache[2], cache[3])
+					elseif count == 4 then
+						self.Thread = CallThread(keepArgs, cache[1], cache[2], cache[3], cache[4])
+					else
+						self.Thread = CallThread(keepArgs, unpack(cache, 1, count))
+					end
+				end
 
 				CACHE_TABLE(cache)
 
 				return true
 			end
+		end
 
-			return false
+		doc "RaiseError" [[Fire the error to show the usage of the fixedMethod link list]]
+		function RaiseError(self, obj)
+			-- Get the root call fixmethod
+			if self.HasSelf then
+				local cls = getmetatable(obj)
+
+				-- Can't figure out the class method that start the call
+				if not cls then error(self.Usage, 2) end
+
+				self = getNextMethod(cls, self.Name, true, true)
+			else
+				self = getNextMethod(self.Owner, self.Name, true, true)
+			end
+
+			-- Generate the usage list
+			local usage = CACHE_TABLE()
+
+			while getmetatable(self) do
+				local fUsage = self.Usage
+				local params = fUsage:match("Usage : %w+.(.+)")
+
+				if params and not usage[params] then
+					usage[params] = true
+					tinsert(usage, fUsage)
+				end
+
+				self = self.Next
+			end
+
+			local msg = tblconcat(usage, "\n")
+			CACHE_TABLE(usage)
+
+			error(msg, 2)
 		end
 
 		------------------------------------------------------
@@ -5892,25 +6040,9 @@ do
 		property "Next" {
 			Field = "__Next",
 			Get = function (self)
-				if not self.__Next and self.HasSelf then
-					if self.TargetType == AttributeTargets.Method  then
-						-- Check super for object method
-						local info = _NSInfo[self.Owner]
-						local name = self.Name
-						local handler
-
-						if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then handler = getFixedMethod(info.SuperClass, name) end
-
-						if not handler and info.ExtendInterface then
-							for _, IF in ipairs(info.ExtendInterface) do
-								if _NSInfo[IF].Cache4Method[name] then handler = getFixedMethod(IF, name) end
-
-								if handler then break end
-							end
-						end
-
-						-- Keep link for a quick inheritance
-						if handler then self.__Next = handler end
+				if self.__Next == nil and self.HasSelf then
+					if self.TargetType == AttributeTargets.Method then
+						self.__Next = getNextMethod(self.Owner, self.Name) or false
 					elseif self.TargetType == AttributeTargets.Constructor then
 						local info = _NSInfo[self.Owner]
 
@@ -5923,7 +6055,7 @@ do
 					end
 				end
 
-				return self.__Next
+				return self.__Next or nil
 			end,
 			Type = FixedMethod + Function + nil,
 		}
@@ -5935,11 +6067,10 @@ do
 
 				-- Generate usage message
 				local usage = CACHE_TABLE()
-				local targetType = self.TargetType
 				local name = self.Name
 				local owner = self.Owner
 
-				if targetType == AttributeTargets.Method then
+				if self.TargetType == AttributeTargets.Method then
 					if (name:match("^_") and not (Reflector.IsClass(owner) and (_KeyMeta[name] or _KeyMeta[name:sub(2)] == false))) or
 						( Reflector.IsInterface(owner) and Reflector.IsNonInheritable(owner) ) then
 						tinsert(usage, "Usage : " .. tostring(owner) .. "." .. name .. "( ")
@@ -5994,11 +6125,8 @@ do
 		-- Meta-methods
 		------------------------------------------------------
 		function __call(self, ...)
-			-- Clear the thread
-			self.Thread = nil
-
 			--[[ Validation self once, maybe no need to waste time
-			if false and self.HasSelf then
+			if self.HasSelf then
 				local value = select(1, ...)
 				local owner = self.Owner
 
@@ -6010,21 +6138,33 @@ do
 					error(self.Usage, 2)
 				end
 			end--]]
+			local matchFunc = self
 
-			if MatchArgs(self, ...) then
-				if self.Thread then
-					return self.Method( select(2, resume(self.Thread, false)) )
-				else
-					return self.Method( ... )
+			-- FixedMethod
+			while getmetatable(matchFunc) do
+				matchFunc.Thread = nil
+
+				if MatchArgs(matchFunc, ...) then
+					if matchFunc.Thread then
+						return matchFunc.Method( select(2, resume(matchFunc.Thread, false)) )
+					else
+						return matchFunc.Method( ... )
+					end
 				end
+
+				-- Remove argument container
+				if matchFunc.Thread then
+					resume(matchFunc.Thread, false)
+					matchFunc.Thread = nil
+				end
+
+				matchFunc = matchFunc.Next
 			end
 
-			-- Remove argument container
-			if self.Thread then resume(self.Thread, false) self.Thread = nil end
+			-- Function
+			if matchFunc then return matchFunc( ... ) end
 
-			if self.Next then return self.Next( ... ) end
-
-			return error(self.Usage, 2)
+			return RaiseError(self, ...)
 		end
 
 		function __tostring(self) return self.Usage end
@@ -7046,14 +7186,39 @@ do
 		Default = Any + nil
 		IsList = Boolean + nil
 
+		local function isCloneNeeded(self)
+			if getmetatable(self) ~= Type then return end
+
+			for _, ns in ipairs(self) do
+				local info = _NSInfo[ns]
+
+				if info and info.Type == TYPE_STRUCT then
+					if info.SubType == _STRUCT_TYPE_MEMBER then
+						if info.Validator then return true end
+
+						if info.Members then
+							for _, n in ipairs(info.Members) do
+								if isCloneNeeded(info.StructEnv[n]) then return true end
+							end
+						end
+					elseif info.SubType == _STRUCT_TYPE_ARRAY then
+						if isCloneNeeded(info.ArrayElement) then return true end
+					elseif info.SubType == _STRUCT_TYPE_CUSTOM and info.Validator then
+						return true
+					end
+				end
+			end
+		end
+
 		function Argument(value)
-			value.Type = value.Type and BuildType(value.Type) or nil
+			value.Type = GetUniqueType(value.Type and BuildType(value.Type) or nil)
 
 			if value.Type and value.Default ~= nil then
-				if value.Type:GetObjectType(value.Default) == false then value.Default = nil end
+				value.Default = value.Type:GetValidatedValue(value.Default)
 			end
 
-			return value
+			-- Whether the value should be clone, argument match would change some value, Just for safe
+			value.CloneNeeded = isCloneNeeded(value.Type)
 		end
 	endstruct "Argument"
 
@@ -7112,7 +7277,7 @@ do
 
 			-- Convert type to Argument
 			if IsType(self[i]) then
-				self[i] = { Type = self[i] }
+				self[i] = Argument { Type = self[i] }
 
 				-- Check optional args
 				if self[i].Type:Is(nil) then
