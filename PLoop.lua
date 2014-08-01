@@ -5290,8 +5290,6 @@ end
 -- Local Namespace (Inner classes)
 ------------------------------------------------------
 do
-	namespace( nil )
-
 	class "Type"
 		doc "Type" [[The type object used to handle the value's validation]]
 
@@ -5607,6 +5605,13 @@ do
 		end
 
 		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		function Type(self, ns)
+			if IsNameSpace(ns) then self[1] = ns end
+		end
+
+		------------------------------------------------------
 		-- MetaMethod
 		------------------------------------------------------
 		function __add(v1, v2)
@@ -5719,6 +5724,8 @@ do
 			return ret
 		end
 	endclass "Type"
+
+	namespace( nil )
 
 	class "Event"
 		doc "Event" [[The object event definition]]
