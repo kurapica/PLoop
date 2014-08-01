@@ -5465,8 +5465,6 @@ do
 			<return type="boolean"></return>
 		]]
 		function Is(self, ns, onlyClass)
-			local fenv = getfenv(2)
-
 			if ns == nil then return self.AllowNil or false end
 
 			if IsNameSpace(ns) then
@@ -6117,7 +6115,7 @@ do
 
 					if arg.Type then str = str .. tostring(arg.Type) end
 
-					if arg.Default ~= nil then
+					if arg.Default ~= nil and i > self.MinArgs then
 						local serialize = Reflector.Serialize(arg.Default, arg.Type)
 
 						if serialize then str = str .. " = " .. serialize end
@@ -7256,17 +7254,27 @@ do
 		local function ValidateArgument(self, i)
 			local isLast = i == #self
 
-			local flag, arg = pcall( Argument.Validate, self[i] )
+			-- Convert to type
+			if Reflector.IsNameSpace(self[i]) then self[i] = Type(self[i]) end
 
-			if flag then
+			-- Convert type to Argument
+			if getmetatable(self[i]) == Type then
+				self[i] = Argument { Type = self[i] }
+
 				-- Check optional args
-				if not arg.Type or arg.Type:Is(nil) then
+				if self[i].Type:Is(nil) then
 					if not self.MinArgs then self.MinArgs = i - 1 end
 				elseif self.MinArgs then
 					-- Only optional args can be defined after optional args
 					error(_Error_Header .. _Error_NotOptional:format(i))
 				end
 
+				return
+			end
+
+			local flag, arg = pcall( Argument.Validate, self[i] )
+
+			if flag then
 				-- Check ... args
 				if arg.IsList then
 					if isLast then
@@ -7288,20 +7296,7 @@ do
 					else
 						error(_Error_Header .. _Error_NotList:format(i))
 					end
-				end
-
-				return
-			end
-
-			-- Convert to type
-			if Reflector.IsNameSpace(self[i]) then self[i] = BuildType(self[i]) end
-
-			-- Convert type to Argument
-			if IsType(self[i]) then
-				self[i] = Argument { Type = self[i] }
-
-				-- Check optional args
-				if self[i].Type:Is(nil) then
+				elseif not arg.Type or arg.Type:Is(nil) then
 					if not self.MinArgs then self.MinArgs = i - 1 end
 				elseif self.MinArgs then
 					-- Only optional args can be defined after optional args
