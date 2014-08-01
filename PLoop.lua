@@ -1843,6 +1843,13 @@ do
 				if value then rawset(self, key, value) return value end
 			end
 
+			-- Check meta-methods
+			if _KeyMeta[key] ~= nil then
+				local rMeta = _KeyMeta[key] and key or "_"..key
+				value = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
+				if value then rawset(self, key, value) return value end
+			end
+
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 			if value ~= nil then rawset(self, key, value) return value end
@@ -1928,6 +1935,13 @@ do
 			-- Check Local
 			if rawget(self, LOCAL_ENV_FIELD) then
 				value = self[LOCAL_ENV_FIELD][key]
+				if value then return value end
+			end
+
+			-- Check meta-methods
+			if _KeyMeta[key] ~= nil then
+				local rMeta = _KeyMeta[key] and key or "_"..key
+				value = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
 				if value then return value end
 			end
 
