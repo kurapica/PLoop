@@ -7252,32 +7252,36 @@ do
 		_Error_NotList = [[arg%d can't be a list]]
 
 		local function ValidateArgument(self, i)
-			local isLast = i == #self
+			local arg = self[i]
 
-			-- Convert to type
-			if Reflector.IsNameSpace(self[i]) then self[i] = Type(self[i]) end
+			if getmetatable(arg) ~= nil then
+				-- Convert to type
+				if getmetatable(arg) == TYPE_NAMESPACE then arg = Type(arg) end
 
-			-- Convert type to Argument
-			if getmetatable(self[i]) == Type then
-				self[i] = Argument { Type = self[i] }
+				-- Convert type to Argument
+				if getmetatable(arg) == Type then
+					arg = Argument { Type = arg }
 
-				-- Check optional args
-				if self[i].Type:Is(nil) then
-					if not self.MinArgs then self.MinArgs = i - 1 end
-				elseif self.MinArgs then
-					-- Only optional args can be defined after optional args
-					error(_Error_Header .. _Error_NotOptional:format(i))
+					-- Check optional args
+					if arg.Type:Is(nil) then
+						if not self.MinArgs then self.MinArgs = i - 1 end
+					elseif self.MinArgs then
+						-- Only optional args can be defined after optional args
+						error(_Error_Header .. _Error_NotOptional:format(i))
+					end
+
+					self[i] = arg
+
+					return
+				else
+					error(_Error_Header .. _Error_NotArgument:format(i))
 				end
-
-				return
 			end
 
-			local flag, arg = pcall( Argument.Validate, self[i] )
-
-			if flag then
+			if pcall( Argument.Validate, arg ) then
 				-- Check ... args
 				if arg.IsList then
-					if isLast then
+					if i == #self then
 						if self.MinArgs then
 							error(_Error_Header .. _Error_NotList:format(i))
 						else

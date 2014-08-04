@@ -19,7 +19,7 @@ do
 	strbyte = string.byte
 	strchar = string.char
 	strtrim = strtrim or function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
-	wipe = function(t) for k in pairs(t) do t[k] = nil end end
+	wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 	cache = setmetatable({}, {__call = function(self, tbl) if tbl then wipe(tbl) tinsert(self, tbl) else return tremove(self) or {} end end,})
 	newIndex = function(flag) _M.AutoIndex = type(flag) == "number" and flag or flag and _M.AutoIndex or (_M.AutoIndex + 1); return _M.AutoIndex end
 	stackAPI = {
