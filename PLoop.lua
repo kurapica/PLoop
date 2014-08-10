@@ -1190,6 +1190,41 @@ do
 				end
 			end
 
+			-- AutoCache
+			if info.SuperClass and _NSInfo[info.SuperClass].AutoCache == true then
+				info.AutoCache = true
+			elseif info.AutoCache ~= true and info.Type == TYPE_CLASS then
+				local cache = CACHE_TABLE()
+
+				if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then
+					tinsert(cache, _NSInfo[info.SuperClass].AutoCache)
+				end
+
+				for _, IF in ipairs(info.ExtendInterface) do
+					if _NSInfo[IF].AutoCache == true then
+						tinsert(cache, _NSInfo[IF].Method)
+					elseif _NSInfo[IF].AutoCache then
+						tinsert(cache, _NSInfo[IF].AutoCache)
+					end
+				end
+
+				if #cache > 0 then
+					local autoCache = info.AutoCache or {}
+
+					for _, sCache in ipairs(cache) do
+						for name in pairs(sCache) do
+							if not name:match("^_") then
+								autoCache[name] = true
+							end
+						end
+					end
+
+					if next(autoCache) then info.AutoCache = autoCache end
+				end
+
+				CACHE_TABLE(cache)
+			end
+
 			-- Refresh branch
 			if info.ChildClass then
 				for subcls in pairs(info.ChildClass) do RefreshCache(subcls) end
@@ -2050,15 +2085,12 @@ do
 
 	function TrySetProperty(self, name, value) self[name] = value end
 
-	function UpdateMetaTable4Cls(cls, update)
-		local info = _NSInfo[cls]
-		local MetaTable = info.MetaTable
-
-		local Cache4Event = info.Cache4Event
-		local Cache4Property = info.Cache4Property
-		local Cache4Method = info.Cache4Method
-
+	do
 		local DISPOSE_METHOD = DISPOSE_METHOD
+		local _NSInfo = _NSInfo
+
+		local getmetatable = getmetatable
+		local DisposeObject = DisposeObject
 		local type = type
 		local rawget = rawget
 		local rawset = rawset
@@ -2066,20 +2098,15 @@ do
 		local tostring = tostring
 		local clone = CloneObj
 
-		local isCached = info.AutoCache or false
-
-		if update then MetaTable.__index = nil end
-
-		MetaTable.__metatable = cls
-
-		MetaTable.__index = MetaTable.__index or function(self, key)
+		function Object_Index(self, key)
 			local oper
+			local info = _NSInfo[getmetatable(self)]
 
 			-- Dispose Method
 			if key == DISPOSE_METHOD then return DisposeObject end
 
 			-- Property Get
-			oper = Cache4Property[key]
+			oper = info.Cache4Property[key]
 			if oper then
 				local value
 
@@ -2090,7 +2117,7 @@ do
 					if type(func) == "function" then
 						value = func(self)
 					else
-						value = Cache4Method[oper.GetMethod](self)
+						value = info.Cache4Method[oper.GetMethod](self)
 					end
 				elseif oper.Field then
 					if oper.SetWeak then
@@ -2115,9 +2142,9 @@ do
 			end
 
 			-- Method Get
-			oper = Cache4Method[key]
+			oper = info.Cache4Method[key]
 			if oper then
-				if isCached then
+				if info.AutoCache == true then
 					rawset(self, key, oper)
 					return oper
 				else
@@ -2126,7 +2153,7 @@ do
 			end
 
 			-- Events
-			if Cache4Event[key] then
+			if info.Cache4Event[key] then
 				oper = rawget(self, "__Events")
 				if type(oper) ~= "table" then
 					oper = {}
@@ -2137,13 +2164,13 @@ do
 				if oper[key] then
 					return oper[key]
 				else
-					oper[key] = EventHandler(Cache4Event[key], self)
+					oper[key] = EventHandler(info.Cache4Event[key], self)
 					return oper[key]
 				end
 			end
 
 			-- Custom index metametods
-			oper = MetaTable["___index"]
+			oper = info.MetaTable["___index"]
 			if oper then
 				if type(oper) == "function" or getmetatable(oper) == FixedMethod then
 					return oper(self, key)
@@ -2153,11 +2180,12 @@ do
 			end
 		end
 
-		MetaTable.__newindex = MetaTable.__newindex or function(self, key, value)
+		function Object_NewIndex(self, key, value)
 			local oper
+			local info = _NSInfo[getmetatable(self)]
 
 			-- Property Set
-			oper = Cache4Property[key]
+			oper = info.Cache4Property[key]
 			if oper then
 				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
 				if oper.SetClone then value = clone(value, oper.SetDeepClone) end
@@ -2170,7 +2198,7 @@ do
 					if type(func) == "function" then
 						return func(self, value)
 					else
-						return Cache4Method[oper](self, value)
+						return info.Cache4Method[oper](self, value)
 					end
 				elseif oper.Field then
 					-- Check container
@@ -2219,7 +2247,7 @@ do
 			end
 
 			-- Events
-			if Cache4Event[key] then
+			if info.Cache4Event[key] then
 				oper = rawget(self, "__Events")
 				if type(oper) ~= "table" then
 					oper = {}
@@ -2228,7 +2256,7 @@ do
 
 				if value == nil and not oper[key] then return end
 
-				if not oper[key] then oper[key] = EventHandler(Cache4Event[key], self) end
+				if not oper[key] then oper[key] = EventHandler(info.Cache4Event[key], self) end
 				oper = oper[key]
 
 				if value == nil or type(value) == "function" then
@@ -2242,7 +2270,7 @@ do
 			end
 
 			-- Custom newindex metametods
-			oper = MetaTable["___newindex"]
+			oper = info.MetaTable["___newindex"]
 			if oper and (type(oper) == "function" or getmetatable(oper) == FixedMethod) then
 				return oper(self, key, value)
 			end
@@ -2345,6 +2373,15 @@ do
 
 		InitObjectWithInterface(cls, obj)
 
+		-- Auto-Cache methods
+		if type(info.AutoCache) == "table" then
+			for name in pairs(info.AutoCache) do
+				if rawget(obj, name) == nil then
+					rawset(obj, name, info.Cache4Method[name])
+				end
+			end
+		end
+
 		if info.UniqueObject then info.UniqueObject = obj end
 
 		return obj
@@ -2416,18 +2453,15 @@ do
 		info.Import4Env = info.Import4Env or {}
 
 		-- MetaTable
-		info.MetaTable = info.MetaTable or {}
+		info.MetaTable = info.MetaTable or {
+			__metatable = cls,
+			__index = Object_Index,
+			__newindex = Object_NewIndex,
+		}
 
 		if ATTRIBUTE_INSTALLED then
-			local isCached = info.AutoCache or false
-
 			__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Class, info.SuperClass)
-
-			-- So, the __index need re-build
-			if not isCached and info.AutoCache then info.MetaTable.__index = nil end
 		end
-
-		UpdateMetaTable4Cls(cls)
 
 		-- Set the environment to class's environment
 		setfenv(2, classEnv)
@@ -2489,14 +2523,7 @@ do
 
 		-- Clone Attributes
 		if ATTRIBUTE_INSTALLED then
-			local isCached = info.AutoCache or false
-
 			__Attribute__._CloneAttributes(superCls, info.Owner, AttributeTargets.Class)
-
-			if not isCached and info.AutoCache then
-				-- So, the __index need re-build
-				UpdateMetaTable4Cls(info.Owner, true)
-			end
 		end
 	end
 
@@ -7501,21 +7528,28 @@ do
 		end
 	endclass "__Delegate__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Method + AttributeTargets.Interface, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()
 	class "__Cache__"
 		inherit "__Attribute__"
 		doc "__Cache__" [[Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .]]
 
-		function ApplyAttribute(self, target, targetType)
-			if Reflector.IsClass(target) then _NSInfo[target].AutoCache = true end
+		function ApplyAttribute(self, target, targetType, owner, name)
+			if targetType == AttributeTargets.Class or targetType == AttributeTargets.Interface then
+				_NSInfo[target].AutoCache = true
+			elseif Reflector.IsClass(owner) or Reflector.IsInterface(owner) and not name:match("^_") then
+				local info = _NSInfo[owner]
+				if info.AutoCache == true then return end
+
+				if not info.AutoCache then info.AutoCache = {} end
+				info.AutoCache[name] = true
+			end
 		end
 	endclass "__Cache__"
 
 	-- Apply Attribute to Type class
 	do
 		__Cache__:ApplyAttribute(Type, AttributeTargets.Class)
-		UpdateMetaTable4Cls(Type, true)
 	end
 
 	enum "StructType" {
