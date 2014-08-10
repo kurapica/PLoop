@@ -3627,16 +3627,19 @@ do
 			return ns and _NSInfo[ns] and _NSInfo[ns].UniqueObject and true or false
 		end
 
-		doc "IsAutoCacheClass" [[
-			<desc>Whether the class is auto-cache, the objects of the class will keep methods in itself when called</desc>
+		doc "IsAutoCache" [[
+			<desc>Whether the class|interface|method is auto-cached</desc>
 			<param name="object">the object to query</param>
-			<return type="boolean">true if the class is auto-cache</return>
-			<usage>System.Reflector.IsAutoCacheClass(System.Object)</usage>
+			<param name="name" optional="true" type="string">the meethod name to query</param>
+			<return type="boolean">true if auto-cached</return>
+			<usage>System.Reflector.IsAutoCache(System.Object)</usage>
 		]]
-		function IsAutoCacheClass(ns)
+		function IsAutoCache(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			return ns and _NSInfo[ns] and _NSInfo[ns].AutoCache or false
+			local autoCache = ns and _NSInfo[ns] and _NSInfo[ns].AutoCache
+
+			return autoCache == true or (name and autoCache[name]) or false
 		end
 
 		doc "IsNonExpandable" [[
@@ -4457,7 +4460,7 @@ do
 				if IsFlagsEnum(ns) then tinsert(rs, "[__Flags__]") end
 				if IsNonInheritable(ns) then tinsert(rs, "[__NonInheritable__]") end
 				if IsNonExpandable(ns) then tinsert(rs, "[__NonExpandable__]") end
-				if IsAutoCacheClass(ns) then tinsert(rs, "[__Cache__]") end
+				if IsAutoCache(ns) then tinsert(rs, "[__Cache__]") end
 				if IsUniqueClass(ns) then tinsert(rs, "[__Unique__]") end
 				if IsChildClass(__Attribute__, ns) then
 					local usage = __Attribute__._GetClassAttribute(ns, __AttributeUsage__)
