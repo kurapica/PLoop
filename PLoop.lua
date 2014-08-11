@@ -3639,7 +3639,7 @@ do
 
 			local autoCache = ns and _NSInfo[ns] and _NSInfo[ns].AutoCache
 
-			return autoCache == true or (name and autoCache[name]) or false
+			return autoCache == true or (name and autoCache and autoCache[name]) or false
 		end
 
 		doc "IsNonExpandable" [[
