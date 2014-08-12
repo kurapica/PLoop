@@ -2325,7 +2325,8 @@ do
 				if type(fixedMethod) == "function" then
 					return fixedMethod(obj, ...)
 				else
-					error(("%s has no constructor support such arguments"):format(tostring(cls)), 2)
+					return info.Constructor:RaiseError(obj)
+					--error(("%s has no constructor support such arguments"):format(tostring(cls)), 2)
 				end
 			end
 		end
@@ -5978,7 +5979,7 @@ do
 					for i = 1, count do cache[i] = select(i + base, ...) end
 				end
 
-				-- required
+				-- Required
 				for i = 1, self.MinArgs do
 					local arg = self[i]
 					local value = cache[i]
@@ -6000,8 +6001,8 @@ do
 					end
 				end
 
-				-- optional
-				for i = self.MinArgs + 1, count do
+				-- Optional
+				for i = self.MinArgs + 1, count >= argsCount and count or argsCount do
 					local arg = self[i] or self[argsCount]
 					local value = cache[i]
 
@@ -6026,7 +6027,7 @@ do
 
 				-- Keep arguments in thread, so cache can be recycled
 				if argsChanged then
-					count = base + count
+					count = #cache
 
 					if count == 1 then
 						self.Thread = CallThread(keepArgs, cache[1])
@@ -6050,15 +6051,25 @@ do
 		doc "RaiseError" [[Fire the error to show the usage of the fixedMethod link list]]
 		function RaiseError(self, obj)
 			-- Get the root call fixmethod
-			if self.HasSelf then
-				local cls = getmetatable(obj)
+			if self.TargetType == AttributeTargets.Method then
+				if self.HasSelf then
+					local cls = getmetatable(obj)
 
-				-- Can't figure out the class method that start the call
-				if not cls then error(self.Usage, 2) end
+					-- Can't figure out the class method that start the call
+					if not cls then error(self.Usage, 2) end
 
-				self = getNextMethod(cls, self.Name, true, true)
+					self = getNextMethod(cls, self.Name, true, true)
+				else
+					self = getNextMethod(self.Owner, self.Name, true, true)
+				end
 			else
-				self = getNextMethod(self.Owner, self.Name, true, true)
+				local info = _NSInfo[getmetatable(obj)]
+
+				while info and not info.Constructor and info.SuperClass do
+					info = _NSInfo[info.SuperClass]
+				end
+
+				self = info.Constructor
 			end
 
 			-- Generate the usage list
