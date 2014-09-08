@@ -1,0 +1,5 @@
+{
+	"cmd": ["lua", "$file"],
+	"file_regex": "([a-zA-Z]:[^:]*):([0-9]*):",
+	"selector": "source.lua"
+}
