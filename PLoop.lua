@@ -32,8 +32,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/07/25
--- Version			r102
+-- Last Update Date 2014/09/11
+-- Version			r104
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -210,17 +210,15 @@ do
 			if key then
 				wipe(key)
 				tinsert(self, key)
-			elseif next(self) then
-				return tremove(self)
 			else
-				return {}
+				return tremove(self) or {}
 			end
 		end,
 	})
 
 	function SaveFixedMethod(storage, key, value, owner, targetType)
 		if ATTRIBUTE_INSTALLED then
-			value = __Attribute__._ConsumePreparedAttributes(value, targetType or AttributeTargets.Method, targetType ~= AttributeTargets.Constructor and GetSuperMethod(owner, key) or nil, owner, key) or value
+			value = ConsumePreparedAttributes(value, targetType or AttributeTargets.Method, owner, key) or value
 		end
 
 		if ATTRIBUTE_INSTALLED and targetType ~= AttributeTargets.Constructor then
@@ -601,7 +599,7 @@ do
 
 		local ns = SetNameSpace4Env(getfenv(2), name)
 
-		return ns and ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
+		return ns and ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
 	end
 end
 
@@ -1232,34 +1230,6 @@ do
 				for subcls in pairs(info.ExtendClass) do RefreshCache(subcls) end
 			end
 		end
-
-		function GetSuperProperty(cls, name)
-			local info = _NSInfo[cls]
-
-			if info.SuperClass and _NSInfo[info.SuperClass].Cache4Property[name] then
-				return _NSInfo[info.SuperClass].Cache4Property[name]
-			end
-
-			if info.ExtendInterface then
-				for _, IF in ipairs(info.ExtendInterface) do
-					if _NSInfo[IF].Cache4Property[name] then return _NSInfo[IF].Cache4Property[name] end
-				end
-			end
-		end
-
-		function GetSuperMethod(cls, name)
-			local info = _NSInfo[cls]
-
-			if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
-				return _NSInfo[info.SuperClass].Cache4Method[name]
-			end
-
-			if info.ExtendInterface then
-				for _, IF in ipairs(info.ExtendInterface) do
-					if _NSInfo[IF].Cache4Method[name] then return _NSInfo[IF].Cache4Method[name] end
-				end
-			end
-		end
 	end
 
 	-- metatable for interface's env
@@ -1500,7 +1470,7 @@ do
 		setfenv(2, interfaceEnv)
 
 		-- No super target for interface
-		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface)
+		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface)
 	end
 
 	------------------------------------
@@ -1603,7 +1573,7 @@ do
 
 		info.Event[name] = info.Event[name] or Event(name)
 
-		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
+		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, info.Owner, name)
 	end
 
 	function SetPropertyWithSet(info, name, set)
@@ -1617,7 +1587,7 @@ do
 		prop.Name = name
 		prop.Predefined = set
 
-		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(prop, AttributeTargets.Property, GetSuperProperty(info.Owner, name), info.Owner, name)
+		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(prop, AttributeTargets.Property, info.Owner, name)
 	end
 
 	------------------------------------
@@ -1633,7 +1603,7 @@ do
 	--- End the interface's definition and restore the environment
 	------------------------------------
 	function endinterface(name)
-		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endinterface "interfacename"]], 2) end
 
@@ -2461,7 +2431,7 @@ do
 		}
 
 		if ATTRIBUTE_INSTALLED then
-			__Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Class, info.SuperClass)
+			ConsumePreparedAttributes(info.Owner, AttributeTargets.Class)
 		end
 
 		-- Set the environment to class's environment
@@ -2514,7 +2484,7 @@ do
 		-- rawset(env, _SuperIndex, superCls)
 
 		-- Copy Metatable
-		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		for meta, flag in pairs(_KeyMeta) do
 			local rMeta = flag and meta or "_" .. meta
@@ -2523,9 +2493,7 @@ do
 		end
 
 		-- Clone Attributes
-		if ATTRIBUTE_INSTALLED then
-			__Attribute__._CloneAttributes(superCls, info.Owner, AttributeTargets.Class)
-		end
+		return ATTRIBUTE_INSTALLED and InheritAttributes(superCls, info.Owner, AttributeTargets.Class)
 	end
 
 	------------------------------------
@@ -2639,7 +2607,7 @@ do
 
 		info.Event[name] = info.Event[name] or Event(name)
 
-		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, nil, info.Owner, name)
+		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, info.Owner, name)
 	end
 
 	------------------------------------
@@ -2655,7 +2623,7 @@ do
 	--- End the class's definition and restore the environment
 	------------------------------------
 	function endclass(name)
-		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endclass "classname"]], 2) end
 
@@ -2752,7 +2720,7 @@ do
 			end
 		end
 
-		if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Enum) end
+		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Enum) end
 
 		-- Cache
 		info.Cache = info.Cache or {}
@@ -2828,6 +2796,12 @@ do
 
 		info.Type = TYPE_ENUM
 		info.NameSpace = ns
+
+		-- Clear Attributes
+		if ATTRIBUTE_INSTALLED then
+			DisposeAttributes(info.Attribute)
+			info.Attribute = nil
+		end
 
 		return function(set) return BuildEnum(info, set) end
 	end
@@ -2992,7 +2966,7 @@ do
 						if info.SubType == _STRUCT_TYPE_MEMBER then
 							info.Members = info.Members or {}
 							tinsert(info.Members, key)
-							if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Field, info.Owner, key) end
 
 							-- Auto generate Default
 							if not ret:Is(nil) and #ret == 1 and (not info.DefaultField or info.DefaultField[key] == nil) then
@@ -3005,7 +2979,7 @@ do
 							end
 						elseif info.SubType == _STRUCT_TYPE_ARRAY then
 							info.ArrayElement = ret
-							if ATTRIBUTE_INSTALLED then __Attribute__._ConsumePreparedAttributes(ret, AttributeTargets.Field, nil, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Field, info.Owner, key) end
 						end
 
 						return
@@ -3210,6 +3184,17 @@ do
 		info.Method = nil
 		info.Import4Env = nil
 
+		-- Clear Attribute
+		if ATTRIBUTE_INSTALLED then
+			DisposeAttributes(info.Attribute)
+			DisposeAttributes(info.ElementAttribute)
+			DisposeAttributes(info.Attributes)
+
+			info.Attribute = nil
+			info.ElementAttribute = nil
+			info.Attributes = nil
+		end
+
 		info.StructEnv = setmetatable({
 			[OWNER_FIELD] = strt,
 			[BASE_ENV_FIELD] = fenv,
@@ -3221,7 +3206,7 @@ do
 		-- Set the environment to class's environment
 		setfenv(2, info.StructEnv)
 
-		return ATTRIBUTE_INSTALLED and __Attribute__._ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
+		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
 	end
 
 	------------------------------------
@@ -3253,7 +3238,7 @@ do
 	--- End the class's definition and restore the environment
 	------------------------------------
 	function endstruct(name)
-		if ATTRIBUTE_INSTALLED then __Attribute__._ClearPreparedAttributes() end
+		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		if type(name) ~= "string" or name:find("%.") then error([[Usage: endstruct "structname"]], 2) end
 
@@ -3276,14 +3261,10 @@ do
 			-- Make field type unique
 			if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
 				for _, n in ipairs(info.Members) do
-					if not ATTRIBUTE_INSTALLED or not __Attribute__._IsFieldAttributeDefined(info.Owner, n) then
-						info.StructEnv[n] = GetUniqueType(info.StructEnv[n])
-					end
+					info.StructEnv[n] = GetUniqueType(info.StructEnv[n])
 				end
 			elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-				if not ATTRIBUTE_INSTALLED or not __Attribute__._IsFieldAttributeDefined(info.Owner) then
-					info.ArrayElement = GetUniqueType(info.ArrayElement)
-				end
+				info.ArrayElement = GetUniqueType(info.ArrayElement)
 			end
 		else
 			error(("%s is not closed."):format(info.Name), 2)
@@ -4343,770 +4324,6 @@ do
 		]]
 		GetDocument = GetDocument
 
-		doc "Help" [[
-			<desc>Return help information of the target</desc>
-			<param name="owner">the target's owner</param>
-			<param name="name" optional="true">the query name, default the owner's name</param>
-			<param name="targetType" optional="true" type="System.AttributeTargets">the query target type, can be auto-generated by the name</param>
-			<return type="string">the detail information of the target</return>
-		]]
-
-		-- The cache for constructor parameters
-		local function buildSubNamespace(ns, rs)
-			local _Enums = CACHE_TABLE()
-			local _Structs = CACHE_TABLE()
-			local _Classes = CACHE_TABLE()
-			local _Interfaces = CACHE_TABLE()
-			local _Namespaces = CACHE_TABLE()
-
-			local subNS = GetSubNamespace(ns)
-
-			if subNS and next(subNS) then
-				for _, sns in ipairs(subNS) do
-					sns = ns[sns]
-
-					if IsEnum(sns) then
-						tinsert(_Enums, sns)
-					elseif IsStruct(sns) then
-						tinsert(_Structs, sns)
-					elseif IsInterface(sns) then
-						tinsert(_Interfaces, sns)
-					elseif IsClass(sns) then
-						tinsert(_Classes, sns)
-					else
-						tinsert(_Namespaces, sns)
-					end
-				end
-
-				if next(_Enums) then
-					tinsert(rs, "\n Sub Enum :")
-
-					for _, sns in ipairs(_Enums) do tinsert(rs, "    " .. GetNameSpaceName(sns)) end
-				end
-
-				if next(_Structs) then
-					tinsert(rs, "\n Sub Struct :")
-
-					for _, sns in ipairs(_Structs) do tinsert(rs, "    " .. GetNameSpaceName(sns)) end
-				end
-
-				if next(_Interfaces) then
-					tinsert(rs, "\n Sub Interface :")
-
-					for _, sns in ipairs(_Interfaces) do tinsert(rs, "    " .. GetNameSpaceName(sns)) end
-				end
-
-				if next(_Classes) then
-					tinsert(rs, "\n Sub Class :")
-
-					for _, sns in ipairs(_Classes) do tinsert(rs, "    " .. GetNameSpaceName(sns)) end
-				end
-
-				if next(_Namespaces) then
-					tinsert(rs, "\n Sub NameSpace :")
-
-					for _, sns in ipairs(_Namespaces) do tinsert(rs, "    " .. GetNameSpaceName(sns)) end
-				end
-			end
-
-			CACHE_TABLE(_Enums)
-			CACHE_TABLE(_Structs)
-			CACHE_TABLE(_Classes)
-			CACHE_TABLE(_Interfaces)
-			CACHE_TABLE(_Namespaces)
-		end
-
-		local function getDocumentPart(doc, part)
-			if doc:match("^%s*<") then
-				-- parse as xml
-				return doc:gmatch("<" .. part .. ".->.-</" .. part .. ">")
-			else
-				-- only description
-				if part == "desc" or "description" then return doc end
-			end
-		end
-
-		local function getDescription(ns, name, targetType)
-			local doc = GetDocument(ns, name, targetType)
-
-			if doc then
-				doc = getDocumentPart(doc, "desc") or getDocumentPart(doc, "description")
-
-				if type(doc) == "function" then doc = doc() end
-
-				return doc
-			end
-		end
-
-		local function parseOptions(opt)
-			if type(opt) ~= "string" then return end
-
-			local ret = CACHE_TABLE()
-
-			pcall(setfenv(loadstring(opt:gsub("<%w+%s+(.-)>(.-)</%w+>", "%1 desc=[[%2]]")), ret))
-
-			return ret
-		end
-
-		function Help(ns, name, targetType)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			if not IsNameSpace(ns) then return "" end
-
-			local rs = CACHE_TABLE()
-
-			if not name or name == GetNameSpaceName(ns) then
-				-- Scan attributes
-				if IsFinal(ns) then tinsert(rs, "[__Final__]") end
-				if IsFlagsEnum(ns) then tinsert(rs, "[__Flags__]") end
-				if IsNonInheritable(ns) then tinsert(rs, "[__NonInheritable__]") end
-				if IsNonExpandable(ns) then tinsert(rs, "[__NonExpandable__]") end
-				if IsAutoCache(ns) then tinsert(rs, "[__Cache__]") end
-				if IsUniqueClass(ns) then tinsert(rs, "[__Unique__]") end
-				if IsChildClass(__Attribute__, ns) then
-					local usage = __Attribute__._GetClassAttribute(ns, __AttributeUsage__)
-
-					if usage then
-						tinsert(rs,
-							"[__AttributeUsage__{ " ..
-							"AttributeTarget = " .. Serialize(usage.AttributeTarget, AttributeTargets) .. ", " ..
-							"Inherited = " .. tostring(usage.Inherited and true or false) .. ", " ..
-							"AllowMultiple = " .. tostring(usage.AllowMultiple and true or false) .. ", " ..
-							"RunOnce = " .. tostring(usage.RunOnce and true or false) ..
-							" }]")
-					end
-				end
-
-				tinsert(rs, "[" .. (GetNameSpaceType(ns) or TYPE_NAMESPACE) .. "] " .. GetNameSpaceFullName(ns) .. " :")
-
-				-- Scan document
-				local doc = getDescription(ns)
-
-				if type(doc) == "string" then
-					tinsert(rs, "  Description :")
-					tinsert(rs, "    " .. doc:gsub("[\n\r]", "%1    "))
-				end
-
-				-- Special settings
-				if IsEnum(ns) then
-					-- Scan enum values
-					tinsert("  Enumeration :")
-					for _, enums in ipairs(GetEnums(ns)) do
-						local value = ns[enums]
-
-						if type(value) == "string" then
-							value = ("%q"):format(value)
-						else
-							value = tostring(value)
-						end
-
-						tinsert(rs, "    " .. enums .. " = " .. value)
-					end
-				elseif IsStruct(ns) then
-					-- Scan parts
-					if stype == _STRUCT_TYPE_MEMBER or stype == _STRUCT_TYPE_CUSTOM then
-						local parts = GetStructParts(ns)
-
-						if parts and next(parts) then
-							tinsert(rs, "\n  Field :")
-
-							for _, name in ipairs(parts) do
-								tinsert(rs, "    " .. name .. " = " .. tostring(info.StructEnv[name]))
-							end
-						end
-					elseif stype == _STRUCT_TYPE_ARRAY then
-						local ele = GetStructArrayElement(ns)
-
-						if ele then
-							tinsert(rs, "\n  Element :\n    " .. tostring(ele))
-						end
-					end
-				elseif IsClass(ns) or IsInterface(ns) then
-					-- Scan super class
-					local super = GetSuperClass(ns)
-					if super then
-						tinsert(rs, "\n  Super Class :\n    " .. GetNameSpaceFullName(super))
-					end
-
-					-- Scan extend interfaces
-					local extends = GetExtendInterfaces(ns)
-					if extends and next(extends) then
-						tinsert(rs, "\n  Extend Interface :")
-						for _, IF in ipairs(extends) do
-							tinsert(rs, "    " .. GetNameSpaceFullName(IF))
-						end
-					end
-				end
-
-				-- Scan SubNameSpace
-				buildSubNamespace(ns, rs)
-
-				-- Scan events
-				local evts = GetEvents(ns)
-
-				if evts and next(evts) then
-					tinsert(rs, "  Event :")
-
-					for _, name in ipairs(evts) do
-						local desc = getDescription(ns, name, AttributeTargets.Event)
-
-						if desc then
-							tinsert(rs, "    " .. name .. " - " .. desc)
-						else
-							tinsert(rs, "    " .. name)
-						end
-					end
-				end
-
-				-- Scan require or optional features
-				local opt = getDocumentPart(GetDocument(ns), "optional")
-				local req = getDocumentPart(GetDocument(ns), "require")
-
-				local opts = CACHE_TABLE()
-				local reqs = CACHE_TABLE()
-
-				if opt then local v = parseOptions(opt()) while v do opts[v.name] = v; v = parseOptions(opt()) end end
-				if req then local v = parseOptions(req()) while v do reqs[v.name] = v; v = parseOptions(req()) end end
-
-				-- Scan methods
-				local methods = GetMethods(ns)
-				local hasMethodHeader = false
-
-				if methods and next(methods) then
-					tinsert(rs, "  Method :")
-					hasMethodHeader = true
-
-					for _, name in ipairs(methods) do
-						local desc = getDescription(ns, name, AttributeTargets.Method)
-						local isOptional = IsOptionalMethod(ns, name)
-						local isRequire = IsRequireMethod(ns, name)
-
-						if opts[name] then isOptional = true; desc = desc or opts[name].desc end
-						if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
-
-						tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
-												(isRequire and "[__Require__]" or "") ..
-												name ..
-												(desc and (" - " .. desc) or ""))
-
-						if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
-						if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
-					end
-				end
-
-				for name, req in pairs(reqs) do
-					if req.type == "method" then
-						if not hasMethodHeader then
-							tinsert(rs, "  Method :")
-							hasMethodHeader = true
-						end
-
-						tinsert(rs, "    [__Require__]" .. name .. (req.desc and (" - " .. req.desc) or ""))
-
-						reqs[name] = nil
-
-						CACHE_TABLE(req)
-					end
-				end
-
-				for name, opt in pairs(opts) do
-					if opt.type == "method" then
-						if not hasMethodHeader then
-							tinsert(rs, "  Method :")
-							hasMethodHeader = true
-						end
-
-						tinsert(rs, "    [__Optional__]" .. name .. (opt.desc and (" - " .. opt.desc) or ""))
-
-						opts[name] = nil
-
-						CACHE_TABLE(opt)
-					end
-				end
-
-				-- Scan properties
-				local props = GetProperties(ns)
-				local hasPropertyHeader = false
-
-				if props and next(props) then
-					tinsert(rs, "  Property :")
-					hasPropertyHeader = true
-
-					for _, name in ipairs(props) do
-						local desc = getDescription(ns, name, AttributeTargets.Property)
-						local isOptional = IsOptionalMethod(ns, name)
-						local isRequire = IsRequireMethod(ns, name)
-
-						if opts[name] then isOptional = true; desc = desc or opts[name].desc end
-						if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
-
-						tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
-												(isRequire and "[__Require__]" or "") ..
-												name ..
-												(desc and (" - " .. desc) or ""))
-
-						if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
-						if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
-					end
-				end
-
-				for name, req in pairs(reqs) do
-					if req.type == "property" then
-						if not hasPropertyHeader then
-							tinsert(rs, "  Property :")
-							hasPropertyHeader = true
-						end
-
-						tinsert(rs, "    [__Require__]" .. name .. (req.desc and (" - " .. req.desc) or ""))
-
-						reqs[name] = nil
-
-						CACHE_TABLE(req)
-					end
-				end
-
-				for name, opt in pairs(opts) do
-					if opt.type == "method" then
-						if not hasPropertyHeader then
-							tinsert(rs, "  Property :")
-							hasPropertyHeader = true
-						end
-
-						tinsert(rs, "    [__Optional__]" .. name .. (opt.desc and (" - " .. opt.desc) or ""))
-
-						opts[name] = nil
-
-						CACHE_TABLE(opt)
-					end
-				end
-
-				-- Recycle
-				for name, req in pairs(reqs) do reqs[name] = nil; CACHE_TABLE(req) end CACHE_TABLE(reqs)
-				for name, opt in pairs(opts) do opts[name] = nil; CACHE_TABLE(opt) end CACHE_TABLE(opts)
-
-				-- Scan constructors
-				if IsClass(ns) then
-
-				end
-			else
-			end
-
-
-
-			if ns and _NSInfo[ns] then
-				local info = _NSInfo[ns]
-
-				if info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
-					-- Interface & Class
-					if type(targetType) ~= "string" then
-						-- Constructor
-						local isFormat = false
-
-						if info.Type == TYPE_CLASS then
-							-- Check FixedMethod
-							local sinfo = info
-
-							while not sinfo.Constructor and sinfo.SuperClass do
-								sinfo = _NSInfo[sinfo.SuperClass]
-							end
-
-							if getmetatable(sinfo.Constructor) then
-								result = result .. "\n\n Fixed Constructor : "
-
-								local cache = CACHE_TABLE()
-								local owner = sinfo.Owner
-								local ctor = sinfo.Constructor
-
-								while getmetatable(ctor) do
-									if ctor.Owner == owner then
-										tinsert(cache, ctor)
-									else
-										local isEqual = false
-
-										for _, ex in ipairs(cache) do
-											if #ex == #ctor then
-												isEqual = true
-
-												for i = 1, #ctor do
-													if not IsEqual(ex[i], ctor[i]) then
-														isEqual = false
-														break
-													end
-												end
-
-												if isEqual then break end
-											end
-										end
-
-										if not isEqual then
-											tinsert(cache, ctor)
-										end
-									end
-
-									ctor = ctor.Next
-								end
-
-								for _, ctor in ipairs(cache) do
-									local usage = ctor.Usage:match("Usage : (.*)$")
-
-									result = result .. "\n    " .. usage
-								end
-
-								CACHE_TABLE(cache)
-							end
-
-							while ns do
-								isFormat = true
-
-								desc = nil
-
-								if HasPartDocument(ns, "class", GetNameSpaceName(ns)) then
-									desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "format")
-									if not desc then
-										desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "param")
-										isFormat = false
-									end
-								elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
-									desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
-									if not desc then
-										desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "param")
-										isFormat = false
-									end
-								end
-
-								if desc then
-									-- Constructor
-									result = result .. "\n\n  Constructor :"
-									if isFormat then
-										for fmt in desc do
-											result = result .. "\n    " .. GetNameSpaceName(ns) .. "(" .. fmt .. ")"
-										end
-									else
-										result = result .. "\n    " .. GetNameSpaceName(ns) .. "("
-
-										local isFirst = true
-
-										for param in desc do
-											if isFirst then
-												isFirst = false
-												result = result .. param
-											else
-												result = result .. ", " .. param
-											end
-										end
-
-										result = result .. ")"
-									end
-
-									-- Params
-									desc = GetPartDocument(ns, "class", GetNameSpaceName(ns), "param") or GetPartDocument(ns, "default", GetNameSpaceName(ns), "param")
-									if desc then
-										result = result .. "\n\n  Parameter :"
-										for param, info in desc do
-											if info and info:len() > 0 then
-												result = result .. "\n    " .. param .. " - " .. info
-											else
-												result = result .. "\n    " .. param
-											end
-										end
-									end
-
-									break
-								end
-
-								ns = GetSuperClass(ns)
-							end
-						end
-
-						return result
-					else
-						local result
-						local querytype
-
-						if info.Type == TYPE_INTERFACE then
-							result = "[Interface] " .. GetNameSpaceFullName(ns) .. " - "
-						else
-							result = "[Class] " .. GetNameSpaceFullName(ns) .. " - "
-						end
-
-						if type(name) ~= "string" then
-							targetType, name = nil, targetType
-						end
-
-						querytype = targetType
-
-						if not querytype then
-							if HasEvent(ns, name) then
-								querytype = "event"
-							elseif HasProperty(ns, name) then
-								querytype = "property"
-							elseif type(ns[name]) == "function" then
-								querytype = "method"
-							else
-								return
-							end
-						end
-
-						targetType = querytype or "default"
-
-						if targetType:match("^%a") then
-							result = result .. "[" .. strupper(targetType:match("^%a")) .. targetType:sub(2, -1) .. "] " .. name .. " :"
-						else
-							result = result .. "[" .. targetType .. "] " .. name .. " :"
-						end
-
-						local hasDocument = HasPartDocument(ns, targetType, name)
-
-						-- Desc
-						local desc = hasDocument and GetPartDocument(ns, targetType, name, "desc")
-						desc = desc and desc()
-						if desc then
-							result = result .. "\n\n  Description :\n    " .. desc:gsub("<br>", "\n    ")
-						end
-
-						if querytype == "event" then
-							-- __Thread__
-							if IsThreadActivated(ns, name) then
-								result = result .. "\n\n  [__Thread__]"
-							end
-
-							-- Format
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "format")
-							if desc then
-								result = result .. "\n\n  Format :"
-								for fmt in desc do
-									result = result .. "\n    " .. "function object:" .. name .. "(" .. fmt .. ")\n        -- Handle the event\n    end"
-								end
-							else
-								result = result .. "\n\n  Format :\n    function object:" .. name .. "("
-
-								desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
-
-								if desc then
-									local isFirst = true
-
-									for param in desc do
-										if isFirst then
-											isFirst = false
-											result = result .. param
-										else
-											result = result .. ", " .. param
-										end
-									end
-								end
-
-								result = result .. ")\n        -- Handle the event\n    end"
-							end
-
-							-- Params
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
-							if desc then
-								result = result .. "\n\n  Parameter :"
-								for param, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. param .. " - " .. info
-									else
-										result = result .. "\n    " .. param
-									end
-								end
-							end
-						elseif querytype == "property" then
-							local types = GetPropertyType(ns, name)
-
-							if types then
-								result = result .. "\n\n  Type :\n    " .. tostring(types)
-							end
-
-							-- Readonly
-							result = result .. "\n\n  Readable :\n    " .. tostring(IsPropertyReadable(ns, name))
-
-							-- Writable
-							result = result .. "\n\n  Writable :\n    " .. tostring(IsPropertyWritable(ns, name))
-						elseif querytype == "method" then
-							local isGlobal = false
-
-							if name:match("^_") then
-								isGlobal = true
-							else
-								if info.Type == TYPE_INTERFACE and info.NonInheritable then
-									isGlobal = true
-								end
-							end
-
-							-- Fixed Method
-							local sinfo = info
-							local func = info.Cache4Method[name] or info.Method[name]
-
-							while sinfo and not sinfo.Method[name] do
-								if sinfo.SuperClass and _NSInfo[sinfo.SuperClass].Cache4Method[name] == func then
-									sinfo = _NSInfo[sinfo.SuperClass]
-								elseif sinfo.ExtendInterface then
-									for _, IF in ipairs(info.ExtendInterface) do
-										if _NSInfo[IF].Cache4Method[name] == func then
-											sinfo = _NSInfo[IF]
-											break
-										end
-									end
-								else
-									break
-								end
-							end
-
-							if sinfo and sinfo.Method[name] and getmetatable(sinfo.Method["0" .. name]) then
-								local fm = sinfo.Method["0" .. name]
-
-								result = result .. "\n\n Overload Format : "
-
-								local cache = CACHE_TABLE()
-								local owner = sinfo.Owner
-
-								while getmetatable(fm) do
-									if fm.Owner == owner then
-										tinsert(cache, fm)
-									else
-										local isEqual = false
-
-										for _, ex in ipairs(cache) do
-											if #ex == #fm then
-												isEqual = true
-
-												for i = 1, #fm do
-													if not IsEqual(ex[i], fm[i]) then
-														isEqual = false
-														break
-													end
-												end
-
-												if isEqual then break end
-											end
-										end
-
-										if not isEqual then
-											tinsert(cache, fm)
-										end
-									end
-
-									fm = fm.Next
-								end
-
-								for _, fm in ipairs(cache) do
-									local usage = fm.Usage:match("Usage : (.*)$")
-
-									result = result .. "\n    " .. usage
-								end
-
-								CACHE_TABLE(cache)
-							end
-
-							-- Format
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "format")
-							result = result .. "\n\n  Format :"
-							if desc then
-								for fmt in desc do
-									if isGlobal then
-										result = result .. "\n    " .. GetNameSpaceName(ns) .. "." .. name .. "(" .. fmt .. ")"
-									else
-										result = result .. "\n    object:" .. name .. "(" .. fmt .. ")"
-									end
-								end
-							else
-								if isGlobal then
-									result = result .. "\n    " .. GetNameSpaceName(ns) .. "." .. name .. "("
-								else
-									result = result .. "\n    object:" .. name .. "("
-								end
-
-								desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
-
-								if desc then
-									local isFirst = true
-
-									for param in desc do
-										if isFirst then
-											isFirst = false
-											result = result .. param
-										else
-											result = result .. ", " .. param
-										end
-									end
-								end
-
-								result = result .. ")"
-							end
-
-							-- Params
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "param")
-							if desc then
-								result = result .. "\n\n  Parameter :"
-								for param, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. param .. " - " .. info
-									else
-										result = result .. "\n    " .. param
-									end
-								end
-							end
-
-							-- ReturnFormat
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "returnformat")
-							if desc then
-								result = result .. "\n\n  Return Format :"
-								for fmt in desc do
-									result = result .. "\n    " .. fmt
-								end
-							end
-
-							-- Returns
-							desc = hasDocument and GetPartDocument(ns, targetType, name, "return")
-							if desc then
-								result = result .. "\n\n  Return :"
-								for ret, info in desc do
-									if info and info:len() > 0 then
-										result = result .. "\n    " .. ret .. " - " .. info
-									else
-										result = result .. "\n    " .. ret
-									end
-								end
-							end
-						else
-							-- skip
-						end
-
-						-- Usage
-						desc = hasDocument and GetPartDocument(ns, targetType, name, "usage")
-						if desc then
-							result = result .. "\n\n  Usage :"
-							for usage in desc do
-								result = result .. "\n    " .. usage:gsub("<br>", "\n    ")
-							end
-						end
-
-						return result
-					end
-				else
-					local result = "[NameSpace] " .. GetNameSpaceFullName(ns) .. " :"
-					local desc
-
-					if HasPartDocument(ns, "namespace", GetNameSpaceName(ns)) then
-						desc = GetPartDocument(ns, "namespace", GetNameSpaceName(ns), "desc")
-					elseif HasPartDocument(ns, "default", GetNameSpaceName(ns)) then
-						desc = GetPartDocument(ns, "default", GetNameSpaceName(ns), "desc")
-					end
-
-					-- Desc
-					desc = desc and desc()
-					if desc then
-						result = result .. "\n\n  Description :\n    " .. desc
-					end
-
-					-- SubNameSpace
-					result = result .. buildSubNamespace(ns)
-
-					return result
-				end
-			end
-		end
-
 		doc "Serialize" [[
 			<desc>Serialize the data</desc>
 			<param name="data">the data</param>
@@ -5338,7 +4555,11 @@ do
 	class "Type"
 		doc "Type" [[The type object used to handle the value's validation]]
 
-		_ALLOW_NIL = "AllowNil"
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc [[Whether allow nil or not]]
+		property "AllowNil" { Type = Boolean }
 
 		------------------------------------------------------
 		-- Method
@@ -5353,7 +4574,7 @@ do
 			<return>the validated type</return>
 		]]
 		function Validate(self, value, partName, mainName, stack)
-			if value == nil and rawget(self, _ALLOW_NIL) then return value end
+			if value == nil and self.AllowNil then return value end
 
 			local flag, errorMsg, info, tmpMsg
 			local index = -1
@@ -5466,7 +4687,7 @@ do
 				end
 			end
 
-			if errorMsg and rawget(self, _ALLOW_NIL) and not errorMsg:match("%(Optional%)$") then errorMsg = errorMsg .. "(Optional)" end
+			if errorMsg and self.AllowNil and not errorMsg:match("%(Optional%)$") then errorMsg = errorMsg .. "(Optional)" end
 
 			if errorMsg then
 				if mainName and errorMsg:find("%%s") then errorMsg = errorMsg:gsub("%%s[_%w]*", mainName) end
@@ -5520,7 +4741,7 @@ do
 			<return name="type">the value's validated type</return>
 		]]
 		function GetObjectType(self, value)
-			if value == nil and rawget(self, _ALLOW_NIL) then return end
+			if value == nil and self.AllowNil then return end
 
 			local info
 			local index = -1
@@ -5585,7 +4806,7 @@ do
 			<return name="value">the validated value</return>
 		]]
 		function GetValidatedValue(self, value)
-			if value == nil and rawget(self, _ALLOW_NIL) then return end
+			if value == nil and self.AllowNil then return end
 
 			local info
 			local index = -1
@@ -6238,80 +5459,180 @@ do
 	namespace "System"
 
 	------------------------------------------------------
-	-- System.__Attribute__
+	-- Attribute Core
 	------------------------------------------------------
-	class "__Attribute__"
-
-		doc "__Attribute__" [[The __Attribute__ class associates predefined system information or user-defined custom information with a target element.]]
-
+	do
 		_PreparedAttributes = {}
-		_ThreadPreparedAttributes = setmetatable({}, WEAK_KEY)
-
-		_AttributeCache = {
-			[AttributeTargets.Class] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Constructor] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Enum] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Event] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Interface] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Method] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Property] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Struct] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.Field] = setmetatable({}, WEAK_KEY),
-			[AttributeTargets.NameSpace] = setmetatable({}, WEAK_KEY),
-		}
-
-		-- A little trick
-		_AttributeTargetsCache = _NSInfo[AttributeTargets].Cache
-
-		-- Recycle the cache for dispose attributes
-		_AttributeCache4Dispose = setmetatable({}, {
-			__call = function(self, key)
+		_ThreadPreparedAttributes = setmetatable({}, {
+			__mode = "k",
+			__index = function (self, key)
 				if key then
-					if type(key) == "table" and self[key] then
-						for attr in pairs(key) do
-							key[attr] = nil
-							if not rawget(attr, "Disposed") then attr:Dispose() end
-						end
-
-						tinsert(self, key)
-					end
+					rawset(self, key, {})
+					return rawget(self, key)
 				else
-					if #self > 0 then
-						return tremove(self, #self)
-					else
-						local ret = {}
-
-						-- Mark it as recycle table
-						self[ret] = true
-
-						return ret
-					end
+					return _PreparedAttributes
 				end
 			end,
 		})
 
-		local function SendToPrepared(self)
-			-- Send to prepared cache
-			local thread = running()
-			local prepared
+		-- Recycle the cache for dispose attributes
+		_AttributeCache4Dispose = setmetatable({}, {
+			__call = function(self, cache)
+				if cache then
+					for attr in pairs(cache) do
+						if getmetatable(attr) then attr:Dispose() end
+					end
+					wipe(cache)
+					tinsert(self, cache)
+				else
+					return tremove(self) or {}
+				end
+			end,
+		})
 
-			if thread then
-				_ThreadPreparedAttributes[thread] = _ThreadPreparedAttributes[thread] or {}
-				prepared = _ThreadPreparedAttributes[thread]
+		function DisposeAttributes(config)
+			if type(config) ~= "table" then return end
+			if getmetatable(config) then
+				return config:Dispose()
 			else
-				prepared = _PreparedAttributes
+				for _, attr in pairs(config) do DisposeAttributes(attr) end
+				return wipe(config)
 			end
-
-			for i, v in ipairs(prepared) do if v == self then return end end
-
-			tinsert(prepared, self)
 		end
 
-		local function ParseTarget(target, targetType, owner, name)
+		function GetTargetAttributes(target, targetType, owner, name)
+			local info = _NSInfo[owner or target]
+
+			if targetType == AttributeTargets.Event then
+				return target.Attribute
+			elseif targetType == AttributeTargets.Method then
+				if info.Method[name] then
+					return info.Attributes and info.Attributes[name]
+				else
+					if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
+						return GetTargetAttributes(target, targetType, info.SuperClass, name)
+					end
+
+					if info.ExtendInterface then
+						for _, IF in ipairs(info.ExtendInterface) do
+							if _NSInfo[IF].Cache4Method[name] then
+								return GetTargetAttributes(target, targetType, IF, name)
+							end
+						end
+					end
+				end
+			elseif targetType == AttributeTargets.Property then
+				local pInfo = info.Cache4Property[name]
+				return pInfo and pInfo.Attribute
+			elseif targetType == AttributeTargets.Field then
+				if info.SubType == _STRUCT_TYPE_MEMBER then
+					return info.Attributes and info.Attributes[name]
+				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+					return info.ElementAttribute
+				end
+			elseif targetType ~= AttributeTargets.Constructor then
+				return info.Attribute
+			end
+		end
+
+		function GetSuperAttributes(target, targetType, owner, name)
+			local info = _NSInfo[owner or target]
+
+			if targetType == AttributeTargets.Event then
+				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Event[name] then
+					return _NSInfo[info.SuperClass].Cache4Event[name].Attribute
+				end
+
+				if info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						if _NSInfo[IF].Cache4Event[name] then
+							return _NSInfo[IF].Cache4Event[name].Attribute
+						end
+					end
+				end
+			elseif targetType == AttributeTargets.Method then
+				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
+					return GetTargetAttributes(nil, targetType, info.SuperClass, name)
+				end
+
+				if info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						if _NSInfo[IF].Cache4Method[name] then
+							return GetTargetAttributes(nil, targetType, IF, name)
+						end
+					end
+				end
+			elseif targetType == AttributeTargets.Property then
+				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Property[name] then
+					return GetTargetAttributes(nil, targetType, info.SuperClass, name)
+				end
+
+				if info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						if _NSInfo[IF].Cache4Property[name] then
+							return GetTargetAttributes(nil, targetType, IF, name)
+						end
+					end
+				end
+			elseif targetType == AttributeTargets.Class then
+				if info.SuperClass then
+					return _NSInfo[info.SuperClass].Attribute
+				end
+			end
+		end
+
+		function SaveTargetAttributes(target, targetType, owner, name, config)
+			local info = _NSInfo[owner or target]
+
+			if targetType == AttributeTargets.Event then
+				target.Attribute = config
+			elseif targetType == AttributeTargets.Method then
+				if info.Method[name] then
+					if config then
+						info.Attributes = info.Attributes or {}
+						info.Attributes[name] = config
+					elseif info.Attributes then
+						info.Attributes[name] = nil
+					end
+				end
+			elseif targetType == AttributeTargets.Property then
+				local pInfo = info.Property[name]
+				if pInfo then pInfo.Attribute = config end
+			elseif targetType == AttributeTargets.Field then
+				if info.SubType == _STRUCT_TYPE_MEMBER then
+					if config then
+						info.Attributes = info.Attributes or {}
+						info.Attributes[name] = config
+					elseif info.Attributes then
+						info.Attributes[name] = nil
+					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+					info.ElementAttribute = config
+				end
+			elseif targetType ~= AttributeTargets.Constructor then
+				info.Attribute = config
+			else
+				DisposeAttributes(config)
+			end
+		end
+
+		function GetAttributeUsage(target)
+			local config = GetTargetAttributes(target, AttributeTargets.Class)
+
+			if not config then
+				return
+			elseif getmetatable(config) then
+				return getmetatable(config) == __AttributeUsage__ and config or nil
+			else
+				for _, attr in ipairs(config) do if getmetatable(attr) == __AttributeUsage__ then return attr end end
+			end
+		end
+
+		function ParseAttributeTarget(target, targetType, owner, name)
 			if targetType == AttributeTargets.Class then
 				return "[Class]" .. tostring(target)
 			elseif targetType == AttributeTargets.Constructor then
-				return "[Class.Constructor]" .. tostring(target)
+				return "[Class.Constructor]" .. tostring(owner)
 			elseif targetType == AttributeTargets.Enum then
 				return "[Enum]" .. tostring(target)
 			elseif targetType == AttributeTargets.Event then
@@ -6343,52 +5664,32 @@ do
 			end
 		end
 
-		local function ValidateTargetType(target, targetType)
-			if targetType == AttributeTargets.Class then
-				return Reflector.IsClass(target)
-			elseif targetType == AttributeTargets.Constructor then
-				return type(target) == "function"
-			elseif targetType == AttributeTargets.Enum then
-				return Reflector.IsEnum(target)
-			elseif targetType == AttributeTargets.Event then
-				return Reflector.ObjectIsClass(target, Event)
-			elseif targetType == AttributeTargets.Interface then
-				return Reflector.IsInterface(target)
-			elseif targetType == AttributeTargets.Method then
-				return type(target) == "function" or getmetatable(target) == FixedMethod
-			elseif targetType == AttributeTargets.Property then
-				-- Normally, this only be called by the system
-				return type(target) == "table" and type(target.Name) == "string"
-			elseif targetType == AttributeTargets.Struct then
-				return Reflector.IsStruct(target)
-			elseif targetType == AttributeTargets.Field then
-				return Reflector.ObjectIsClass(target, Type)
-			elseif targetType == AttributeTargets.NameSpace then
-				return Reflector.GetNameSpaceName(target)
-			end
-		end
-
-		local function ValidateUsable(config, attr, skipMulti)
+		function ValidateAttributeUsable(config, attr, skipMulti)
 			if getmetatable(config) then
 				if Reflector.IsEqual(config, attr) then return false end
 
 				if not skipMulti and getmetatable(config) == getmetatable(attr) then
-					local usage = _GetCustomAttribute(getmetatable(config), AttributeTargets.Class, __AttributeUsage__)
+					local usage = GetAttributeUsage(getmetatable(config))
 
 					if not usage or not usage.AllowMultiple then return false end
 				end
 			else
-				for _, v in ipairs(config) do if not ValidateUsable(v, attr, skipMulti) then return false end end
+				for _, v in ipairs(config) do if not ValidateAttributeUsable(v, attr, skipMulti) then return false end end
 			end
 
 			return true
 		end
 
-		local function _ApplyAttributes(target, targetType, owner, name, start)
-			-- Apply the attributes
-			local config = _AttributeCache[targetType][target]
+		function ApplyAttributes(target, targetType, owner, name, start, config)
+			-- Check config
+			config = config or GetTargetAttributes(target, targetType, owner, name)
 
+			-- Clear
+			SaveTargetAttributes(target, targetType, owner, name, nil)
+
+			-- Apply the attributes
 			if config then
+				local oldTarget = target
 				local ok, ret, arg1, arg2, arg3, arg4
 
 				-- Some target can't be send to the attribute's ApplyAttribute directly
@@ -6411,7 +5712,7 @@ do
 					arg2 = targetType
 					arg3 = owner
 				elseif targetType == AttributeTargets.Constructor then
-					arg1 = target
+					arg1 = getmetatable(target) and target.Method or target
 					arg2 = targetType
 					arg3 = owner
 					arg4 = name
@@ -6426,115 +5727,108 @@ do
 					if not ok then
 						errorhandler(ret)
 
-						_AttributeCache[targetType][target] = nil
+						config:Dispose()
+						config = nil
 					else
-						local usage = _GetCustomAttribute(getmetatable(config), AttributeTargets.Class, __AttributeUsage__)
+						local usage = GetAttributeUsage(getmetatable(config))
 
 						if usage and not usage.Inherited and usage.RunOnce then
-							_AttributeCache[targetType][target] = nil
-
 							config:Dispose()
+							config = nil
 						end
 
 						if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
 							-- The method may be wrapped in the apply operation
-							if type(ret) == "function" or getmetatable(ret) == FixedMethod then target = ret end
+							if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
+								if getmetatable(target) then
+									if getmetatable(ret) then
+										target = ret
+									else
+										target.Method = ret
+									end
+								else
+									target = ret
+								end
+							end
 						end
 					end
 				else
-					local oldTarget = target
-
 					start = start or 1
 
 					for i = #config, start, -1 do
 						ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3, arg4)
 
 						if not ok then
+							tremove(config, i):Dispose()
 							errorhandler(ret)
-
-							tremove(config, i)
 						else
-							local usage = _GetCustomAttribute(getmetatable(config[i]), AttributeTargets.Class, __AttributeUsage__)
+							local usage = GetAttributeUsage(getmetatable(config[i]))
 
 							if usage and not usage.Inherited and usage.RunOnce then
-								config[i]:Dispose()
-								tremove(config, i)
+								tremove(config, i):Dispose()
 							end
 
 							if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
-								if type(ret) == "function" then
-									if type(target) == "function" then
-										target = ret
+								-- The method may be wrapped in the apply operation
+								if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
+									if getmetatable(target) then
+										if getmetatable(ret) then
+											target = ret
+											arg1 = target.Method
+										else
+											target.Method = ret
+										end
 									else
-										target.Method = ret
+										target = ret
 									end
-									arg1 = ret
-								elseif getmetatable(ret) == FixedMethod then
-									target = ret
-									arg1 = target.Method
 								end
 							end
 						end
 					end
 
-					if #config == 0 then
-						_AttributeCache[targetType][oldTarget] = nil
-					elseif #config == 1 then
-						_AttributeCache[targetType][oldTarget] = config[1]
+					if #config == 0 or #config == 1 then
+						config = config[1] or nil
 					end
 				end
 			end
+
+			SaveTargetAttributes(target, targetType, owner, name, config)
 
 			return target
 		end
 
-		------------------------------------------------------
-		-- Method
-		------------------------------------------------------
-		doc "_ClearPreparedAttributes" [[Clear the prepared attributes]]
-		function _ClearPreparedAttributes(noDispose)
-			local thread = running()
+		function SendAttributeToPrepared(self)
+			-- Send to prepared cache
+			local prepared = _ThreadPreparedAttributes[running()]
 
-			if thread then
-				if _ThreadPreparedAttributes[thread] then
-					if not noDispose then
-						for _, attr in ipairs(_ThreadPreparedAttributes[thread]) do attr:Dispose() end
-					end
-					wipe(_ThreadPreparedAttributes[thread])
-				end
-			else
-				if not noDispose then
-					for _, attr in ipairs(_PreparedAttributes) do attr:Dispose() end
-				end
-				wipe(_PreparedAttributes)
-			end
+			for i, v in ipairs(prepared) do if v == self then return end end
+
+			tinsert(prepared, self)
 		end
 
-		doc "_ConsumePreparedAttributes" [[
-			<desc>Set the prepared attributes for target</desc>
-			<param name="target">the target's owner</param>
-			<param name="targetType" type="System.AttributeTargets">the target's type</param>
-			<param name="superTarget" optional="true">the super target the contains several attributes to be inherited</param>
-			<param name="owner" optional="true">the class|interface object, the owner of the target</param>
-			<param name="name" optional="true">the target's name</param>
-			<return name="target"></return>
-		]]
-		function _ConsumePreparedAttributes(target, targetType, superTarget, owner, name)
-			if not _AttributeCache[targetType] then
-				error("Usage : __Attribute__._ConsumePreparedAttributes(target, targetType[, superTarget[, owner, name]]) - 'targetType' is invalid.", 2)
-			elseif not ValidateTargetType(target, targetType) then
-				error("Usage : __Attribute__._ConsumePreparedAttributes(target, targetType[, superTarget[, owner, name]]) - 'target' is invalid.", 2)
-			elseif superTarget and not ValidateTargetType(superTarget, targetType) then
-				error("Usage : __Attribute__._ConsumePreparedAttributes(target, targetType[, superTarget[, owner, name]]) - 'superTarget' is invalid.", 2)
-			end
+		function RemoveAttributeToPrepared(self)-- Send to prepared cache
+			local prepared = _ThreadPreparedAttributes[running()]
 
-			if not owner and IsNameSpace(target) then owner = target end
+			for i, v in ipairs(prepared) do if v == self then return tremove(prepared, i) end end
+		end
+
+		function ClearPreparedAttributes(noDispose)
+			local prepared = _ThreadPreparedAttributes[running()]
+
+			if not noDispose then
+				for _, attr in ipairs(prepared) do attr:Dispose() end
+			end
+			wipe(prepared)
+		end
+
+		function ConsumePreparedAttributes(target, targetType, owner, name)
+			owner = owner or target
 
 			-- Consume the prepared Attributes
-			local prepared = _ThreadPreparedAttributes[running()] or _PreparedAttributes
+			local prepared = _ThreadPreparedAttributes[running()]
 
 			-- Filter with the usage
-			if prepared and #prepared > 0 then
+			if #prepared > 0 then
 				local cls, usage
 				local noUseAttr = _AttributeCache4Dispose()
 				local usableAttr = _AttributeCache4Dispose()
@@ -6542,11 +5836,11 @@ do
 				for i = 1, #prepared do
 					local attr = prepared[i]
 					cls = getmetatable(attr)
-					usage = _GetCustomAttribute(cls, AttributeTargets.Class, __AttributeUsage__)
+					usage = GetAttributeUsage(cls)
 
 					if usage and usage.AttributeTarget > 0 and not Reflector.ValidateFlags(targetType, usage.AttributeTarget) then
-						errorhandler("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseTarget(target, targetType, owner, name))
-					elseif ValidateUsable(usableAttr, attr) then
+						errorhandler("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
+					elseif ValidateAttributeUsable(usableAttr, attr) then
 						usableAttr[attr] = true
 						tinsert(usableAttr, attr)
 					else
@@ -6557,8 +5851,7 @@ do
 				for i = #prepared, 1, -1 do
 					local attr = prepared[i]
 					if not usableAttr[attr] then
-						noUseAttr[attr] = true
-						tremove(prepared, i)
+						noUseAttr[tremove(prepared, i)] = true
 					end
 				end
 
@@ -6568,16 +5861,17 @@ do
 			end
 
 			-- Check if already existed
-			if _AttributeCache[targetType][target] then
-				if prepared and #prepared > 0 then
-					local config = _AttributeCache[targetType][target]
+			local pconfig = GetTargetAttributes(target, targetType, owner, name)
+			local sconfig = GetSuperAttributes(target, targetType, owner, name)
+
+			if pconfig then
+				if #prepared > 0 then
 					local noUseAttr = _AttributeCache4Dispose()
 
 					-- remove equal attributes
 					for i = #prepared, 1, -1 do
-						if not ValidateUsable(config, prepared[i], true) then
-							noUseAttr[prepared[i]] = true
-							tremove(prepared, i)
+						if not ValidateAttributeUsable(pconfig, prepared[i], true) then
+							noUseAttr[tremove(prepared, i)] = true
 						end
 					end
 
@@ -6585,40 +5879,38 @@ do
 
 					if prepared and #prepared > 0 then
 						-- Erase old no-multi attributes
-						if getmetatable(config) then
-							if not ValidateUsable(prepared, config) then _AttributeCache[targetType][target] = nil end
+						if getmetatable(pconfig) then
+							if not ValidateAttributeUsable(prepared, pconfig) then
+								SaveTargetAttributes(target, targetType, owner, name, nil)
+								pconfig:Dispose()
+							end
 						else
-							for i = #config, 1, -1 do
-								if not ValidateUsable(prepared, config[i]) then tremove(config, i) end
+							for i = #pconfig, 1, -1 do
+								if not ValidateAttributeUsable(prepared, pconfig[i]) then
+									tremove(pconfig, i):Dispose()
+								end
 							end
 
-							if #config == 0 then _AttributeCache[targetType][target] = nil end
+							if #pconfig == 0 then SaveTargetAttributes(target, targetType, owner, name, nil) end
 						end
 					end
 				end
-			elseif superTarget then
+			elseif sconfig then
 				-- get inheritable attributes from superTarget
-				local config = _AttributeCache[targetType][superTarget]
 				local usage
 
-				if config then
-					if getmetatable(config) then
-						usage = _GetCustomAttribute(getmetatable(config), AttributeTargets.Class, __AttributeUsage__)
+				if getmetatable(sconfig) then
+					usage = GetAttributeUsage(getmetatable(sconfig))
+
+					if not usage or usage.Inherited then
+						if ValidateAttributeUsable(prepared, sconfig) then sconfig:Clone() end
+					end
+				else
+					for _, attr in ipairs(sconfig) do
+						usage = GetAttributeUsage(getmetatable(attr))
 
 						if not usage or usage.Inherited then
-							prepared = prepared or {}
-
-							if ValidateUsable(prepared, config) then tinsert(prepared, config) end
-						end
-					else
-						for _, attr in ipairs(config) do
-							usage = _GetCustomAttribute(getmetatable(attr), AttributeTargets.Class, __AttributeUsage__)
-
-							if not usage or usage.Inherited then
-								prepared = prepared or {}
-
-								if ValidateUsable(prepared, attr) then tinsert(prepared, attr) end
-							end
+							if ValidateAttributeUsable(prepared, attr) then attr:Clone() end
 						end
 					end
 				end
@@ -6627,9 +5919,10 @@ do
 			-- Save & apply the attributes for target
 			if #prepared > 0 then
 				local start = 1
+				local config = nil
 
-				if _AttributeCache[targetType][target] then
-					local config = _AttributeCache[targetType][target]
+				if pconfig then
+					config = pconfig
 
 					if getmetatable(config) then config = { config } end
 
@@ -6637,132 +5930,63 @@ do
 
 					for _, attr in ipairs(prepared) do tinsert(config, attr) end
 
-					_AttributeCache[targetType][target] = config
 				else
 					if #prepared == 1 then
-						_AttributeCache[targetType][target] = prepared[1]
+						config = prepared[1]
 					else
-						_AttributeCache[targetType][target] = { unpack(prepared) }
+						config = { unpack(prepared) }
 					end
 				end
 
 				wipe(prepared)
 
-				local ret =  _ApplyAttributes(target, targetType, owner, name, start) or target
-
-				if target ~= ret then
-					_AttributeCache[targetType][ret] = _AttributeCache[targetType][target]
-					_AttributeCache[targetType][target] = nil
-
-					target = ret
-				end
+				target = ApplyAttributes(target, targetType, owner, name, start, config) or target
 			end
 
-			_ClearPreparedAttributes()
+			ClearPreparedAttributes()
 
 			return target
 		end
 
-		doc "_CloneAttributes" [[
-			<desc>Clone the attributes</desc>
-			<param name="source">the source</param>
-			<param name="target">the target</param>
-			<param name="targetType" type="System.AttributeTargets">the target's type</param>
-			<param name="owner" optional="true">the class|interface object, the owner of the target</param>
-			<param name="name" optional="true">the target's name</param>
-			<param name="removeSource" type="boolean" optional="true">true if remove attributes settings from the source</param>
-			<return name="target"></return>
-		]]
-		function _CloneAttributes(source, target, targetType, owner, name, removeSource)
-			if not _AttributeCache[targetType] then
-				error("Usage : __Attribute__._CloneAttributes(source, target, targetType[, owner, name]) - 'targetType' is invalid.", 2)
-			elseif  not ValidateTargetType(source, targetType) then
-				error("Usage : __Attribute__._CloneAttributes(source, target, targetType[, owner, name]) - 'source' is invalid.", 2)
-			elseif  not ValidateTargetType(target, targetType) then
-				error("Usage : __Attribute__._CloneAttributes(source, target, targetType[, owner, name]) - 'target' is invalid.", 2)
-			end
-
+		function InheritAttributes(source, target, targetType)
 			if source == target then return end
 
-			local config = _AttributeCache[targetType][source]
+			local sconfig = GetTargetAttributes(source, targetType)
 
 			-- Save & apply the attributes for target
-			if config then
-				local start = 1
+			if sconfig then
+				local config = GetTargetAttributes(target, targetType)
+				local hasAttr = false
 
 				-- Check existed attributes
-				if _AttributeCache[targetType][target] then
-					local attrs = _AttributeCache[targetType][target]
+				if getmetatable(sconfig) then
+					if config and not ValidateAttributeUsable(config, sconfig) then return end
 
-					if getmetatable(config) then
-						if not ValidateUsable(attrs, config) then
-							if removeSource then _AttributeCache[targetType][source] = nil end
-
-							return target
-						end
-
-						if getmetatable(attrs) then
-							attrs = { attrs }
-							_AttributeCache[targetType][target] = attrs
-						end
-
-						start = #attrs + 1
-
-						tinsert(attrs, config)
-					else
-						local usableAttr = _AttributeCache4Dispose()
-
-						for i = 1, #config do if ValidateUsable(attrs, config[i]) then tinsert(usableAttr, config[i]) end end
-
-						if #usableAttr == 0 then
-							if removeSource then _AttributeCache[targetType][source] = nil end
-
-							_AttributeCache4Dispose(usableAttr)
-
-							return target
-						end
-
-						if getmetatable(attrs) then
-							attrs = { attrs }
-							_AttributeCache[targetType][target] = attrs
-						end
-
-						start = #attrs + 1
-
-						for i = 1, #usableAttr do tinsert(attrs, usableAttr[i]) end
-
-						wipe(usableAttr)
-
-						_AttributeCache4Dispose(usableAttr)
-					end
+					sconfig:Clone()
+					hasAttr = true
 				else
-					_AttributeCache[targetType][target] = config
+					for i = 1, #sconfig do
+						if not config or ValidateAttributeUsable(config, sconfig[i]) then
+							sconfig[i]:Clone()
+							hasAttr = true
+						end
+					end
 				end
 
-				local ret =  _ApplyAttributes(target, targetType, owner, name, start) or target
-
-				if target ~= ret then
-					_AttributeCache[targetType][ret] = _AttributeCache[targetType][target]
-					_AttributeCache[targetType][target] = nil
-
-					target = ret
-				end
-
-				if removeSource then _AttributeCache[targetType][source] = nil end
+				return hasAttr and ConsumePreparedAttributes(target, targetType)
 			end
-
-			return target
 		end
+	end
 
-		doc "_IsDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class | event | method | property | struct | interface | enum</param>
-			<param name="targetType" type="System.AttributeTargets">the target's type</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsDefined(target, targetType, type)
-			local config = _AttributeCache[targetType][target]
+	------------------------------------------------------
+	-- System.__Attribute__
+	------------------------------------------------------
+	class "__Attribute__"
+
+		doc "__Attribute__" [[The __Attribute__ class associates predefined system information or user-defined custom information with a target element.]]
+
+		function _IsDefined(target, targetType, owner, name, type)
+			local config = GetTargetAttributes(target, targetType, owner, name)
 
 			if not config then
 				return false
@@ -6772,8 +5996,8 @@ do
 				return getmetatable(config) == type
 			else
 				for _, attr in ipairs(config) do if getmetatable(attr) == type then return true end end
-				return false
 			end
+			return false
 		end
 
 		doc "_IsClassAttributeDefined" [[
@@ -6783,17 +6007,8 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function _IsClassAttributeDefined(target, type)
-			if Reflector.IsClass(target) then return _IsDefined(target, AttributeTargets.Class, type) end
-		end
-
-		doc "_IsConstructorAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsConstructorAttributeDefined(target, type)
-			if Reflector.IsClass(target) then return _IsDefined(target, AttributeTargets.Constructor, type) end
+			if Reflector.IsClass(target) then return _IsDefined(target, AttributeTargets.Class, nil, nil, type) end
+			return false
 		end
 
 		doc "_IsEnumAttributeDefined" [[
@@ -6803,7 +6018,8 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function _IsEnumAttributeDefined(target, type)
-			if Reflector.IsEnum(target) then return _IsDefined(target, AttributeTargets.Enum, type) end
+			if Reflector.IsEnum(target) then return _IsDefined(target, AttributeTargets.Enum, nil, nil, type) end
+			return false
 		end
 
 		doc "_IsEventAttributeDefined" [[
@@ -6817,8 +6033,9 @@ do
 			local info = _NSInfo[target]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Event[event] then
-				return _IsDefined(info.Cache4Event[event], AttributeTargets.Event, type)
+				return _IsDefined(info.Cache4Event[event], AttributeTargets.Event, target, event, type)
 			end
+			return false
 		end
 
 		doc "_IsInterfaceAttributeDefined" [[
@@ -6828,28 +6045,22 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function _IsInterfaceAttributeDefined(target, type)
-			if Reflector.IsInterface(target) then return _IsDefined(target, AttributeTargets.Interface, type) end
+			if Reflector.IsInterface(target) then return _IsDefined(target, AttributeTargets.Interface, nil, nil, type) end
+			return false
 		end
 
 		doc "_IsMethodAttributeDefined" [[
 			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class | interface</param>
+			<param name="target">class | interface | struct</param>
 			<param name="method">the method's name</param>
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		function _IsMethodAttributeDefined(target, method, type)
-			if type(target) == "function" then
-				return _IsDefined(target, AttributeTargets.Method, method)
-			elseif getmetatable(target) == FixedMethod then
-				while target do
-					if _IsDefined(target, AttributeTargets.Method, method) then return true end
-
-					target = getmetatable(target) and target.Next
-				end
-			elseif (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return _IsMethodAttributeDefined(target[method], type)
+		function _IsMethodAttributeDefined(target, method, ty)
+			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return _IsDefined(nil, AttributeTargets.Method, target, method, ty)
 			end
+			return false
 		end
 
 		doc "_IsPropertyAttributeDefined" [[
@@ -6863,8 +6074,9 @@ do
 			local info = _NSInfo[target]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[prop] then
-				return _IsDefined(info.Cache4Property[prop], AttributeTargets.Property, type)
+				return _IsDefined(info.Cache4Property[prop], AttributeTargets.Property, target, prop, type)
 			end
+			return false
 		end
 
 		doc "_IsStructAttributeDefined" [[
@@ -6874,7 +6086,8 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function _IsStructAttributeDefined(target, type)
-			if Reflector.IsStruct(target) then return _IsDefined(target, AttributeTargets.Struct, type) end
+			if Reflector.IsStruct(target) then return _IsDefined(target, AttributeTargets.Struct, nil, nil, type) end
+			return false
 		end
 
 		doc "_IsFieldAttributeDefined" [[
@@ -6884,19 +6097,9 @@ do
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		function _IsFieldAttributeDefined(target, field, type)
-			local info = _NSInfo[target]
-
-			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
-					for _, part in ipairs(info.Members) do
-						if part == field then return _IsDefined(info.StructEnv[field], AttributeTargets.Field, type) end
-					end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-					return _IsDefined(info.ArrayElement, AttributeTargets.Field, type)
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					return _IsDefined(info.StructEnv[field], AttributeTargets.Field, type)
-				end
+		function _IsFieldAttributeDefined(target, field, ty)
+			if Reflector.IsStruct(target) and type(field) == "string" then
+				return _IsDefined(nil, AttributeTargets.Field, target, field, ty)
 			end
 
 			return false
@@ -6909,42 +6112,52 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function _IsNameSpaceAttributeDefined(target, type)
-			if Reflector.IsStruct(target) then return _IsDefined(target, AttributeTargets.NameSpace, type) end
+			if Reflector.GetNameSpaceName(target) then return _IsDefined(target, AttributeTargets.NameSpace, nil, nil, type) end
+			return false
 		end
 
-		doc "_GetCustomAttribute" [[
-			<desc>Return the attributes of the given type for the target</desc>
-			<param name="target">class | event | method | property | struct | interface | enum</param>
-			<param name="targetType" type="System.AttributeTargets">the target's type</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetCustomAttribute(target, targetType, type)
-			local config = _AttributeCache[targetType][target]
+		-- Reduce cache table cost
+		local function keepArgs(...)
+			yield( running() )
+			return ...
+		end
+
+		local function _GetCustomAttribute(target, targetType, owner, name, type)
+			local config = GetTargetAttributes(target, targetType, owner, name)
 
 			if not config then
 				return
 			elseif getmetatable(config) then
-				return getmetatable(config) == type and config or nil
-			else
-				local cache = _AttributeCache4Dispose()
+				return (not type or getmetatable(config) == type) and config or nil
+			elseif type then
+				local cache = CACHE_TABLE()
 
 				for _, attr in ipairs(config) do if getmetatable(attr) == type then tinsert(cache, attr) end end
 
-				if #cache == 0 then
-					_AttributeCache4Dispose(cache)
+				local count = #cache
+
+				if count == 0 then
+					CACHE_TABLE(cache)
 					return
-				elseif #cache == 1 then
-					local ret = cache[1]
-					wipe(cache)
-					_AttributeCache4Dispose(cache)
-					return ret
+				elseif count == 1 then
+					local r1 = cache[1]
+					CACHE_TABLE(cache)
+					return r1
+				elseif count == 2 then
+					local r1, r2 = cache[1], cache[2]
+					CACHE_TABLE(cache)
+					return r1, r2
+				elseif count == 3 then
+					local r1, r2, r3 = cache[1], cache[2], cache[3]
+					CACHE_TABLE(cache)
+					return r1, r2, r3
 				else
-					local ret = {unpack(cache)}
-					wipe(cache)
-					_AttributeCache4Dispose(cache)
-					return unpack(ret)
+					local thread = CallThread(keepArgs, unpack(cache))
+					CACHE_TABLE(cache)
+					return select(2, resume(thread))
 				end
+			else
+				return unpack(config)
 			end
 		end
 
@@ -6955,17 +6168,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function _GetClassAttribute(target, type)
-			if Reflector.IsClass(target) then return _GetCustomAttribute(target, AttributeTargets.Class, type) end
-		end
-
-		doc "_GetConstructorAttribute" [[
-			<desc>Return the attributes of the given type for the class's constructor</desc>
-			<param name="target">class</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetConstructorAttribute(target, type)
-			if Reflector.IsClass(target) then return _GetCustomAttribute(target, AttributeTargets.Constructor, type) end
+			if Reflector.IsClass(target) then return _GetCustomAttribute(target, AttributeTargets.Class, nil, nil, type) end
 		end
 
 		doc "_GetEnumAttribute" [[
@@ -6975,7 +6178,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function _GetEnumAttribute(target, type)
-			if Reflector.IsEnum(target) then return _GetCustomAttribute(target, AttributeTargets.Enum, type) end
+			if Reflector.IsEnum(target) then return _GetCustomAttribute(target, AttributeTargets.Enum, nil, nil, type) end
 		end
 
 		doc "_GetEventAttribute" [[
@@ -6989,7 +6192,7 @@ do
 			local info = _NSInfo[target]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Event[event] then
-				return _GetCustomAttribute(info.Cache4Event[event], AttributeTargets.Event, type)
+				return _GetCustomAttribute(info.Cache4Event[event],AttributeTargets.Event, target, event, type)
 			end
 		end
 
@@ -7000,7 +6203,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function _GetInterfaceAttribute(target, type)
-			if Reflector.IsInterface(target) then return _GetCustomAttribute(target, AttributeTargets.Interface, type) end
+			if Reflector.IsInterface(target) then return _GetCustomAttribute(target, AttributeTargets.Interface, nil, nil, type) end
 		end
 
 		doc "_GetMethodAttribute" [[
@@ -7012,20 +6215,9 @@ do
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		function _GetMethodAttribute(target, method, type)
-			if type(target) == "function" then
-				return _GetCustomAttribute(target, AttributeTargets.Method, method)
-			elseif getmetatable(target) == FixedMethod then
-				local result
-
-				while target do
-					result = _GetCustomAttribute(target, AttributeTargets.Method, method)
-					if result then return result end
-
-					target = getmetatable(target) and target.Next
-				end
-			elseif (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return _GetMethodAttribute(target[method], type)
+		function _GetMethodAttribute(target, method, ty)
+			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return _GetMethodAttribute(nil, AttributeTargets.Method, target, method, ty)
 			end
 		end
 
@@ -7040,7 +6232,7 @@ do
 			local info = _NSInfo[target]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[prop] then
-				return _GetCustomAttribute(info.Cache4Property[prop], AttributeTargets.Property, type)
+				return _GetCustomAttribute(info.Cache4Property[prop], AttributeTargets.Property, target, prop, type)
 			end
 		end
 
@@ -7051,7 +6243,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function _GetStructAttribute(target, type)
-			if Reflector.IsStruct(target) then return _GetCustomAttribute(target, AttributeTargets.Struct, type) end
+			if Reflector.IsStruct(target) then return _GetCustomAttribute(target, AttributeTargets.Struct, nil, nil, type) end
 		end
 
 		doc "_GetFieldAttribute" [[
@@ -7061,19 +6253,9 @@ do
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		function _GetFieldAttribute(target, field, type)
-			local info = _NSInfo[target]
-
-			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
-					for _, part in ipairs(info.Members) do
-						if part == field then return _GetCustomAttribute(info.StructEnv[field], AttributeTargets.Field, type) end
-					end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-					return _GetCustomAttribute(info.ArrayElement, AttributeTargets.Field, type)
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					return _GetCustomAttribute(info.StructEnv[field], AttributeTargets.Field, type)
-				end
+		function _GetFieldAttribute(target, field, ty)
+			if Reflector.IsStruct(target) and type(field) == "string" then
+				return _GetCustomAttribute(nil, AttributeTargets.Field, target, field, ty)
 			end
 		end
 
@@ -7084,7 +6266,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function _GetNameSpaceAttribute(target, type)
-			if Reflector.GetNameSpaceName(target) then return _GetCustomAttribute(target, AttributeTargets.NameSpace, type) end
+			if Reflector.GetNameSpaceName(target) then return _GetCustomAttribute(target, AttributeTargets.NameSpace, nil, nil, type) end
 		end
 
 		doc "ApplyAttribute" [[
@@ -7100,24 +6282,31 @@ do
 		end
 
 		doc [[Remove self from the prepared attributes]]
-		function RemoveSelf(self)-- Send to prepared cache
-			local thread = running()
-			local prepared
+		RemoveSelf = RemoveAttributeToPrepared
 
-			if thread then
-				_ThreadPreparedAttributes[thread] = _ThreadPreparedAttributes[thread] or {}
-				prepared = _ThreadPreparedAttributes[thread]
-			else
-				prepared = _PreparedAttributes
+		doc [[Creates a copy of the attribute.]]
+		function Clone(self)
+			-- Defualt behavior
+			local cache = CACHE_TABLE()
+
+			for name, prop in pairs(_NSInfo[getmetatable(self)].Cache4Property) do
+				if (prop.Get or prop.GetMethod or prop.Field) and (prop.Set or prop.SetMethod or prop.Field) then
+					cache[name] = self[name]
+				end
 			end
 
-			for i, v in ipairs(prepared) do if v == self then return tremove(prepared, i) end end
+			-- Clone
+			local obj = getmetatable(self)(cache)
+
+			CACHE_TABLE(cache)
+
+			return obj
 		end
 
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
-		function __Attribute__(self) SendToPrepared(self) end
+		__Attribute__ = SendAttributeToPrepared
 	endclass "__Attribute__"
 
 	-- Attribute system on
@@ -7436,37 +6625,37 @@ do
 
 		-- System.__Unique__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
-		__Attribute__._ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Unique__)
 		__Final__:ApplyAttribute(__Unique__)
 
 		-- System.__Flags__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false, RunOnce = true}
-		__Attribute__._ConsumePreparedAttributes(__Flags__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__Flags__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Flags__)
 		__Final__:ApplyAttribute(__Flags__)
 
 		-- System.__AttributeUsage__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
-		__Attribute__._ConsumePreparedAttributes(__AttributeUsage__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__AttributeUsage__, AttributeTargets.Class)
 		__Final__:ApplyAttribute(__AttributeUsage__)
 		__NonInheritable__:ApplyAttribute(__AttributeUsage__)
 
 		-- System.__Final__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
-		__Attribute__._ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Final__)
 		__Final__:ApplyAttribute(__Final__)
 
 		-- System.__NonInheritable__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
-		__Attribute__._ConsumePreparedAttributes(__NonInheritable__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__NonInheritable__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__NonInheritable__)
 		__Final__:ApplyAttribute(__NonInheritable__)
 
 		-- System.__Arguments__
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor, Inherited = false, RunOnce = true }
-		__Attribute__._ConsumePreparedAttributes(__Arguments__, AttributeTargets.Class)
+		ConsumePreparedAttributes(__Arguments__, AttributeTargets.Class)
 		__Arguments__()
 		SaveFixedMethod(_NSInfo[__Arguments__], "Constructor", _NSInfo[__Arguments__].Constructor, __Arguments__, AttributeTargets.Constructor)
 
@@ -8559,7 +7748,7 @@ do
 
 			setfenv(depth + 1, self)
 
-			__Attribute__._ClearPreparedAttributes()
+			ClearPreparedAttributes()
 		end
 
 		--[[
