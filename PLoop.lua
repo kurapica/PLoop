@@ -2966,7 +2966,7 @@ do
 						if info.SubType == _STRUCT_TYPE_MEMBER then
 							info.Members = info.Members or {}
 							tinsert(info.Members, key)
-							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Field, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, key) end
 
 							-- Auto generate Default
 							if not ret:Is(nil) and #ret == 1 and (not info.DefaultField or info.DefaultField[key] == nil) then
@@ -2979,7 +2979,7 @@ do
 							end
 						elseif info.SubType == _STRUCT_TYPE_ARRAY then
 							info.ArrayElement = ret
-							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Field, info.Owner, key) end
+							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, key) end
 						end
 
 						return
@@ -3423,7 +3423,7 @@ do
 		Method = 32,
 		Property = 64,
 		Struct = 128,
-		Field = 256,
+		Member = 256,
 		NameSpace = 512,
 	}
 
@@ -4051,13 +4051,13 @@ do
 			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement:Clone() or nil
 		end
 
-		doc "GetStructParts" [[
+		doc "GetStructMembers" [[
 			<desc>Get the parts of the struct type</desc>
 			<param name="struct" type="struct">the struct type</param>
 			<return type="table">the struct part name list</return>
-			<usage>System.Reflector.GetStructParts(Position)</usage>
+			<usage>System.Reflector.GetStructMembers(Position)</usage>
 		]]
-		function GetStructParts(ns)
+		function GetStructMembers(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
@@ -4083,14 +4083,14 @@ do
 			end
 		end
 
-		doc "GetStructPart" [[
+		doc "GetStructMember" [[
 			<desc>Get the part's type of the struct</desc>
 			<param name="struct" type="struct">the struct type</param>
 			<param name="part" type="string">the part's name</param>
 			<return type="System.Type">the part's type</return>
-			<usage>System.Reflector.GetStructPart(Position, "x")</usage>
+			<usage>System.Reflector.GetStructMember(Position, "x")</usage>
 		]]
-		function GetStructPart(ns, part)
+		function GetStructMember(ns, part)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = ns and _NSInfo[ns]
@@ -4399,7 +4399,7 @@ do
 					return tostring(data)
 				elseif Reflector.IsStruct(ns) then
 					if Reflector.GetStructType(ns) == "MEMBER" and type(data) == "table" then
-						local parts = Reflector.GetStructParts(ns)
+						local parts = Reflector.GetStructMembers(ns)
 
 						if not parts or not next(parts) then
 							-- Well, what a no member struct can be used for?
@@ -4408,7 +4408,7 @@ do
 							local ret = tostring(ns) .. "( "
 
 							for i, part in ipairs(parts) do
-								local sty = Reflector.GetStructPart(ns, part)
+								local sty = Reflector.GetStructMember(ns, part)
 								local value = data[part]
 
 								if sty and #sty == 1 then
@@ -5462,16 +5462,12 @@ do
 	-- Attribute Core
 	------------------------------------------------------
 	do
-		_PreparedAttributes = {}
-		_ThreadPreparedAttributes = setmetatable({}, {
+		_PreparedAttributes = setmetatable({}, {
 			__mode = "k",
+			__call = function (self) return self[running() or 0] end,
 			__index = function (self, key)
-				if key then
-					rawset(self, key, {})
-					return rawget(self, key)
-				else
-					return _PreparedAttributes
-				end
+				rawset(self, key, {})
+				return rawget(self, key)
 			end,
 		})
 
@@ -5524,7 +5520,7 @@ do
 			elseif targetType == AttributeTargets.Property then
 				local pInfo = info.Cache4Property[name]
 				return pInfo and pInfo.Attribute
-			elseif targetType == AttributeTargets.Field then
+			elseif targetType == AttributeTargets.Member then
 				if info.SubType == _STRUCT_TYPE_MEMBER then
 					return info.Attributes and info.Attributes[name]
 				elseif info.SubType == _STRUCT_TYPE_ARRAY then
@@ -5598,7 +5594,7 @@ do
 			elseif targetType == AttributeTargets.Property then
 				local pInfo = info.Property[name]
 				if pInfo then pInfo.Attribute = config end
-			elseif targetType == AttributeTargets.Field then
+			elseif targetType == AttributeTargets.Member then
 				if info.SubType == _STRUCT_TYPE_MEMBER then
 					if config then
 						info.Attributes = info.Attributes or {}
@@ -5657,7 +5653,7 @@ do
 				end
 			elseif targetType == AttributeTargets.Struct then
 				return "[Struct]" .. tostring(target)
-			elseif targetType == AttributeTargets.Field then
+			elseif targetType == AttributeTargets.Member then
 				return "[Struct]" .. tostring(owner) .. " [Field]" .. tostring(name)
 			elseif targetType == AttributeTargets.NameSpace then
 				return "[NameSpace]" .. tostring(target)
@@ -5707,7 +5703,7 @@ do
 					arg2 = targetType
 					arg3 = owner
 					arg4 = name
-				elseif targetType == AttributeTargets.Field then
+				elseif targetType == AttributeTargets.Member then
 					arg1 = name
 					arg2 = targetType
 					arg3 = owner
@@ -5799,7 +5795,7 @@ do
 
 		function SendAttributeToPrepared(self)
 			-- Send to prepared cache
-			local prepared = _ThreadPreparedAttributes[running()]
+			local prepared = _PreparedAttributes()
 
 			for i, v in ipairs(prepared) do if v == self then return end end
 
@@ -5807,13 +5803,13 @@ do
 		end
 
 		function RemoveAttributeToPrepared(self)-- Send to prepared cache
-			local prepared = _ThreadPreparedAttributes[running()]
+			local prepared = _PreparedAttributes()
 
 			for i, v in ipairs(prepared) do if v == self then return tremove(prepared, i) end end
 		end
 
 		function ClearPreparedAttributes(noDispose)
-			local prepared = _ThreadPreparedAttributes[running()]
+			local prepared = _PreparedAttributes()
 
 			if not noDispose then
 				for _, attr in ipairs(prepared) do attr:Dispose() end
@@ -5825,7 +5821,7 @@ do
 			owner = owner or target
 
 			-- Consume the prepared Attributes
-			local prepared = _ThreadPreparedAttributes[running()]
+			local prepared = _PreparedAttributes()
 
 			-- Filter with the usage
 			if #prepared > 0 then
@@ -5985,7 +5981,7 @@ do
 
 		doc "__Attribute__" [[The __Attribute__ class associates predefined system information or user-defined custom information with a target element.]]
 
-		function _IsDefined(target, targetType, owner, name, type)
+		local function _IsDefined(target, targetType, owner, name, type)
 			local config = GetTargetAttributes(target, targetType, owner, name)
 
 			if not config then
@@ -6090,16 +6086,16 @@ do
 			return false
 		end
 
-		doc "_IsFieldAttributeDefined" [[
+		doc "_IsMemberAttributeDefined" [[
 			<desc>Check whether the target contains such type attribute</desc>
 			<param name="target">struct</param>
 			<param name="field">the field's name</param>
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		function _IsFieldAttributeDefined(target, field, ty)
+		function _IsMemberAttributeDefined(target, field, ty)
 			if Reflector.IsStruct(target) and type(field) == "string" then
-				return _IsDefined(nil, AttributeTargets.Field, target, field, ty)
+				return _IsDefined(nil, AttributeTargets.Member, target, field, ty)
 			end
 
 			return false
@@ -6246,16 +6242,16 @@ do
 			if Reflector.IsStruct(target) then return _GetCustomAttribute(target, AttributeTargets.Struct, nil, nil, type) end
 		end
 
-		doc "_GetFieldAttribute" [[
+		doc "_GetMemberAttribute" [[
 			<desc>Return the attributes of the given type for the struct's field</desc>
 			<param name="target">struct</param>
 			<param name="field">the field's name</param>
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		function _GetFieldAttribute(target, field, ty)
+		function _GetMemberAttribute(target, field, ty)
 			if Reflector.IsStruct(target) and type(field) == "string" then
-				return _GetCustomAttribute(nil, AttributeTargets.Field, target, field, ty)
+				return _GetCustomAttribute(nil, AttributeTargets.Member, target, field, ty)
 			end
 		end
 
@@ -7011,7 +7007,7 @@ do
 		end
 	endclass "__Handler__"
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Property + AttributeTargets.Field, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()
 	class "__Default__"
 		inherit "__Attribute__"
@@ -7032,7 +7028,7 @@ do
 
 			if targetType == AttributeTargets.Property then
 				target.Default = self.Default
-			elseif targetType == AttributeTargets.Field then
+			elseif targetType == AttributeTargets.Member then
 				local info = _NSInfo[owner]
 				if not info or info.SubType ~= _STRUCT_TYPE_MEMBER then return end
 				local ty = rawget(info.StructEnv, target)
