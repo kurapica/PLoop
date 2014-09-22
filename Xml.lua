@@ -22,19 +22,19 @@ do
 	wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 	cache = setmetatable({}, {__call = function(self, tbl) if tbl then wipe(tbl) tinsert(self, tbl) else return tremove(self) or {} end end,})
 	newIndex = function(flag) _M.AutoIndex = type(flag) == "number" and flag or flag and _M.AutoIndex or (_M.AutoIndex + 1); return _M.AutoIndex end
-	stackAPI = {
-		New = function( data, getChar, parser )
-			local stack = { Token = {}, Pos = {}, Info = {}, Line = {}, StackLen = 0 }
 
-			for k, v in pairs(stackAPI) do if k ~= "New" then stack[k] = v end end
+	__Local__() struct "Stack"
+		------------------------
+		-- Member
+		------------------------
+		Data = String
+		GetChar = Function
+		Parser = Table
 
-			stack.Data = data
-			stack.GetChar = getChar
-			stack.Parser = parser
-
-			return stack
-		end,
-		Push = function(self, token, pos, info)
+		------------------------
+		-- Method
+		------------------------
+		function Push(self, token, pos, info)
 			-- Scan line and combine white space
 			if token == _Token.LF then
 				return self.PreToken ~= _Token.CR and tinsert(self.Line, pos)
@@ -55,8 +55,9 @@ do
 			self.PreToken = token
 
 			return self:Parse()
-		end,
-		Pop = function(self)
+		end
+
+		function Pop(self)
 			local index = self.StackLen
 
 			if index == 0 then return end
@@ -72,8 +73,9 @@ do
 			self.StackLen = self.StackLen - 1
 
 			return token, pos, info
-		end,
-		Parse = function(self)
+		end
+
+		function Parse(self)
 			local index = self.StackLen
 			local token = self.Token[index]
 
@@ -152,8 +154,9 @@ do
 					end
 				end
 			end
-		end,
-		ThrowError = function(self, msg, pos)
+		end
+
+		function ThrowError(self, msg, pos)
 			local line = 0
 			local linePos = 0
 
@@ -180,8 +183,19 @@ do
 			end
 
 			return error(([[Error at line %d column %d : %s]]):format(line, wlen + 1, msg), 2)
-		end,
-	}
+		end
+
+		------------------------
+		-- Validator
+		------------------------
+		function Stack(self)
+			self.Token = {}
+			self.Pos = {}
+			self.Info = {}
+			self.Line = {}
+			self.StackLen = 0
+		end
+	endstruct "Stack"
 
 	_Token = {
 		NAME_START	= newIndex(1),

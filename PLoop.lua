@@ -404,12 +404,18 @@ do
 				elseif _KeyMeta[key] ~= nil then
 					if _KeyMeta[key] then return info.MetaTable[key] else return info.MetaTable["_"..key] end
 				else
-					return info.Method[key] or info.Cache4Method[key]
+					local ret = info.Method[key] or info.Cache[key]
+					return type(ret) == "function" and ret or nil
 				end
 			elseif info.Type == TYPE_ENUM then
 				return type(key) == "string" and info.Enum[strupper(key)] or error(("%s is not an enumeration value of %s."):format(tostring(key), tostring(self)), 2)
 			elseif info.Type == TYPE_INTERFACE then
-				if info.SubNS and info.SubNS[key] then return info.SubNS[key] else return info.Method[key] or info.Cache4Method[key] end
+				if info.SubNS and info.SubNS[key] then
+					return info.SubNS[key]
+				else
+					local ret = info.Method[key] or info.Cache[key]
+					return type(ret) == "function" and ret or nil
+				end
 			else
 				return info.SubNS and info.SubNS[key]
 			end
@@ -419,14 +425,14 @@ do
 			local info = _NSInfo[self]
 
 			if info.Type == TYPE_CLASS and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
-				if not info.Cache4Method[key] then
+				if not info.Cache[key] then
 					SaveFixedMethod(info.Method, key, value, info.Owner)
 					return RefreshCache(self)
 				else
 					error("Can't override the existed method.", 2)
 				end
 			elseif info.Type == TYPE_INTERFACE and not info.NonExpandable and type(key) == "string" and type(value) == "function" then
-				if not info.Cache4Method[key] then
+				if not info.Cache[key] then
 					SaveFixedMethod(info.Method, key, value, info.Owner)
 					return RefreshCache(self)
 				else
@@ -492,7 +498,8 @@ do
 			elseif _KeyMeta[key] ~= nil then
 				if _KeyMeta[key] then return info.MetaTable[key] else return info.MetaTable["_"..key] end
 			else
-				return info.Method[key] or info.Cache4Method[key]
+				local ret = info.Method[key] or info.Cache[key]
+				return type(ret) == "function" and ret or nil
 			end
 		end
 
@@ -691,12 +698,15 @@ do
 			-- Find the targetType based on the name
 			if name == info.Name then
 				targetType = AttributeTargets[info.Type or TYPE_NAMESPACE]
-			elseif info.Cache4Event[name] then
-				targetType = AttributeTargets.Event
-			elseif info.Cache4Property[name] then
-				targetType = AttributeTargets.Property
-			elseif info.Cache4Method[name] then
-				targetType = AttributeTargets.Method
+			elseif info.Cache[name] then
+				local tar = info.Cache[name]
+				if type(tar) == "function" then
+					return AttributeTargets.Method
+				elseif getmetatable(tar) then
+					return AttributeTargets.Event
+				else
+					return AttributeTargets.Property
+				end
 			end
 		elseif type(targetType) == "string" then
 			targetType = AttributeTargets[targetType]
@@ -779,7 +789,7 @@ do
 	_KeyWord4IFEnv = {}
 
 	do
-		local Verb2Adj = {
+		Verb2Adj = {
 			"(.+)(ed)$",
 			"(.+)(able)$",
 			"(.+)(ing)$",
@@ -791,7 +801,7 @@ do
 			"(.+)(ful)$",
 		}
 
-		local function ParseAdj(str, useIs)
+		function ParseAdj(str, useIs)
 			local noun, adj = str:match("^(.-)(%u%l+)$")
 
 			if noun and adj and #noun > 0 and #adj > 0 then
@@ -811,50 +821,54 @@ do
 			end
 		end
 
-		function CloneWithoutOverride(dest, src)
-			for key, value in pairs(src) do
-				if dest[key] == nil then dest[key] = value end
-			end
+		function CloneWithOverride(dest, src)
+			for key, value in pairs(src) do dest[key] = value end
 		end
 
-		function CloneWithoutOverride4Method(dest, src)
-			for key, value in pairs(src) do
-				if not dest[key] and not key:match("^[%d_]") then dest[key] = src[key] end
-			end
+		function CloneWithoutOverride(dest, src)
+			for key, value in pairs(src) do if dest[key] == nil then dest[key] = value end end
+		end
+
+		function CloneObjectMethod(dest, src)
+			for key, value in pairs(src) do if not key:match("^[%d_]") then dest[key] = src[key] end end
 		end
 
 		function CloneInterfaceCache(dest, src, cache)
 			if not src then return end
-			for _, IF in ipairs(src) do
-				if not cache[IF] then cache[IF] = true tinsert(dest, IF) end
-			end
+			for _, IF in ipairs(src) do if not cache[IF] then cache[IF] = true tinsert(dest, IF) end end
 		end
 
-		function RefreshCache(ns, env)
+		function RefreshCache(ns)
 			local info = _NSInfo[ns]
+			local iCache = info.Cache
 
-			-- Cache4Interface
+			-- Cache For Interface
 			local cache = CACHE_TABLE()
-			wipe(info.Cache4Interface)
-			-- superclass interface
-			if info.SuperClass then CloneInterfaceCache(info.Cache4Interface, _NSInfo[info.SuperClass].Cache4Interface, cache) end
-			-- extend interface
-			for _, IF in ipairs(info.ExtendInterface) do CloneInterfaceCache(info.Cache4Interface, _NSInfo[IF].Cache4Interface, cache) end
-			-- self interface
-			CloneInterfaceCache(info.Cache4Interface, info.ExtendInterface, cache)
+			local cache4Interface = CACHE_TABLE()
+
+			if info.SuperClass then CloneInterfaceCache(cache4Interface, _NSInfo[info.SuperClass].Cache4Interface, cache) end
+			if info.ExtendInterface then
+				for _, IF in ipairs(info.ExtendInterface) do CloneInterfaceCache(cache4Interface, _NSInfo[IF].Cache4Interface, cache) end
+				CloneInterfaceCache(cache4Interface, info.ExtendInterface, cache)
+			end
+
 			CACHE_TABLE(cache)
+			if next(cache4Interface) then
+				info.Cache4Interface = cache4Interface
+			else
+				info.Cache4Interface = nil
+				CACHE_TABLE(cache4Interface)
+			end
 
-			-- Cache4Event
-			wipe(info.Cache4Event)
-			--- self event
-			CloneWithoutOverride(info.Cache4Event, info.Event)
-			--- superclass event
-			if info.SuperClass then CloneWithoutOverride(info.Cache4Event, _NSInfo[info.SuperClass].Cache4Event) end
-			--- extend event
-			for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(info.Cache4Event, _NSInfo[IF].Cache4Event) end
+			-- Cache for all
+			wipe(iCache)
+			if info.SuperClass then CloneWithOverride(iCache, _NSInfo[info.SuperClass].Cache) end
+			if info.ExtendInterface then for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(iCache, _NSInfo[IF].Cache) end end
 
-			-- Cache4Method
-			wipe(info.Cache4Method)
+			-- Cache for event
+			CloneWithOverride(iCache, info.Event)
+
+			-- Cache for Method
 			-- Validate fixedMethods, remove link to parent
 			for name, method in pairs(info.Method) do
 				if getmetatable(method) then
@@ -868,35 +882,16 @@ do
 							end
 						else
 							-- Remove header 0
-							name = name:match("^%d*(.-)$")
-
-							--- superclass method
-							if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] == method.Next then
-								method.Next = nil
-							elseif info.ExtendInterface then
-								--- extend method
-								for _, IF in ipairs(info.ExtendInterface) do
-									if _NSInfo[IF].Cache4Method[name] == method.Next then
-										method.Next = nil
-										break
-									end
-								end
-							end
+							if iCache[name:match("^%d*(.-)$")] == method.Next then method.Next = nil end
 
 							break
 						end
 					end
 				end
 			end
-			--- self method
-			CloneWithoutOverride4Method(info.Cache4Method, info.Method)
-			--- superclass method
-			if info.SuperClass then CloneWithoutOverride4Method(info.Cache4Method, _NSInfo[info.SuperClass].Cache4Method) end
-			--- extend method
-			for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride4Method(info.Cache4Method, _NSInfo[IF].Cache4Method) end
+			CloneObjectMethod(iCache, info.Method)
 
-			-- Cache4Property
-			wipe(info.Cache4Property)
+			-- Cache for Property
 			-- Validate the properties
 			for name, prop in pairs(info.Property) do
 				if prop.Predefined then
@@ -960,29 +955,29 @@ do
 
 					local uname = name:gsub("^%a", strupper)
 
-					if prop.GetMethod and not info.Cache4Method[prop.GetMethod] then prop.GetMethod = nil end
-					if prop.SetMethod and not info.Cache4Method[prop.SetMethod] then prop.SetMethod = nil end
+					if prop.GetMethod and type(iCache[prop.GetMethod]) ~= "function" then prop.GetMethod = nil end
+					if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
 
 					-- Auto generate GetMethod
 					if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
 						-- GetMethod
-						if info.Cache4Method["get" .. uname] then
+						if type(iCache["get" .. uname]) == "function" then
 							prop.GetMethod = "get" .. uname
-						elseif info.Cache4Method["Get" .. uname] then
+						elseif type(iCache["Get" .. uname]) == "function" then
 							prop.GetMethod = "Get" .. uname
 						elseif prop.Type and prop.Type:Is(Boolean) then
 							-- FlagEnabled -> IsFlagEnabled
-							if info.Cache4Method["is" .. uname] then
+							if type(iCache["is" .. uname]) == "function" then
 								prop.GetMethod = "is" .. uname
-							elseif info.Cache4Method["Is" .. uname] then
+							elseif type(iCache["Is" .. uname]) == "function" then
 								prop.GetMethod = "Is" .. uname
 							else
 								-- FlagEnable -> IsEnableFlag
 								local pattern = ParseAdj(uname, true)
 
 								if pattern then
-									for mname in pairs(info.Cache4Method) do
-										if mname:match(pattern) then prop.GetMethod = mname break end
+									for mname, method in pairs(iCache) do
+										if type(method) == "function" and mname:match(pattern) then prop.GetMethod = mname break end
 									end
 								end
 							end
@@ -992,27 +987,30 @@ do
 					-- Auto generate SetMethod
 					if ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and prop.Field == nil then
 						-- SetMethod
-						if info.Cache4Method["set" .. uname] then
+						if type(iCache["set" .. uname]) == "function" then
 							prop.SetMethod = "set" .. uname
-						elseif info.Cache4Method["Set" .. uname] then
+						elseif type(iCache["Set" .. uname]) == "function" then
 							prop.SetMethod = "Set" .. uname
 						elseif prop.Type and prop.Type:Is(Boolean) then
 							-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 							local pattern = ParseAdj(uname)
 
 							if pattern then
-								for mname in pairs(info.Cache4Method) do
-									if mname:match(pattern) then prop.SetMethod = mname break end
+								for mname, method in pairs(iCache) do
+									if type(method) == "function" and mname:match(pattern) then prop.SetMethod = mname break end
 								end
 							end
 						end
 					end
 
 					-- Validate the Event
-					if prop.Event and not info.Cache4Event[prop.Event] then prop.Event = nil end
+					if prop.Event and not getmetatable(iCache[prop.Event]) then prop.Event = nil end
 
 					-- Validate the Handler
-					if prop.HandlerName then prop.Handler = info.Cache4Method[prop.HandlerName] end
+					if prop.HandlerName then
+						prop.Handler = iCache[prop.HandlerName]
+						if type(prop.Handler) ~= "function" then prop.Handler = nil end
+					end
 
 					-- Validate the Setter
 					if prop.Setter then
@@ -1153,8 +1151,8 @@ do
 							setfenv(info.Method[getName], SYNTHESIZE_ENV)
 							setfenv(info.Method[setName], SYNTHESIZE_ENV)
 
-							info.Cache4Method[getName] = info.Method[getName]
-							info.Cache4Method[setName] = info.Method[setName]
+							iCache[getName] = info.Method[getName]
+							iCache[setName] = info.Method[setName]
 
 							prop.GetMethod = getName
 							prop.SetMethod = setName
@@ -1172,18 +1170,16 @@ do
 				end
 			end
 			--- self property
-			CloneWithoutOverride(info.Cache4Property, info.Property)
-			--- superclass property
-			if info.SuperClass then CloneWithoutOverride(info.Cache4Property, _NSInfo[info.SuperClass].Cache4Property) end
-			--- extend property
-			for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(info.Cache4Property, _NSInfo[IF].Cache4Property) end
+			CloneWithOverride(iCache, info.Property)
 
 			-- Requires
 			if info.Type == TYPE_INTERFACE then
-				for _, IF in ipairs(info.ExtendInterface) do
-					if _NSInfo[IF].Requires then
-						info.Requires = info.Requires or {}
-						CloneWithoutOverride(info.Requires, _NSInfo[IF].Requires)
+				if info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						if _NSInfo[IF].Requires and next(_NSInfo[IF].Requires) then
+							info.Requires = info.Requires or {}
+							CloneWithoutOverride(info.Requires, _NSInfo[IF].Requires)
+						end
 					end
 				end
 			end
@@ -1198,11 +1194,13 @@ do
 					tinsert(cache, _NSInfo[info.SuperClass].AutoCache)
 				end
 
-				for _, IF in ipairs(info.ExtendInterface) do
-					if _NSInfo[IF].AutoCache == true then
-						tinsert(cache, _NSInfo[IF].Method)
-					elseif _NSInfo[IF].AutoCache then
-						tinsert(cache, _NSInfo[IF].AutoCache)
+				if info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						if _NSInfo[IF].AutoCache == true then
+							tinsert(cache, _NSInfo[IF].Method)
+						elseif _NSInfo[IF].AutoCache then
+							tinsert(cache, _NSInfo[IF].AutoCache)
+						end
 					end
 				end
 
@@ -1211,9 +1209,7 @@ do
 
 					for _, sCache in ipairs(cache) do
 						for name in pairs(sCache) do
-							if not name:match("^_") then
-								autoCache[name] = true
-							end
+							if not name:match("^[%d_]") then autoCache[name] = true end
 						end
 					end
 
@@ -1392,11 +1388,8 @@ do
 
 		if IF == cls then return true end
 
-		if _NSInfo[cls].Cache4Interface then
-			for _, pIF in ipairs(_NSInfo[cls].Cache4Interface) do
-				if pIF == IF then return true end
-			end
-		end
+		local cache = _NSInfo[cls].Cache4Interface
+		if cache then for _, pIF in ipairs(cache) do if pIF == IF then return true end end end
 
 		return false
 	end
@@ -1455,16 +1448,7 @@ do
 		SetNameSpace4Env(interfaceEnv, IF)
 
 		-- Cache
-		info.Cache4Event = info.Cache4Event or {}
-		info.Cache4Property = info.Cache4Property or {}
-		info.Cache4Method = info.Cache4Method or {}
-		info.Cache4Interface = info.Cache4Interface or {}
-
-		-- ExtendInterface
-		info.ExtendInterface = info.ExtendInterface or {}
-
-		-- Import
-		info.Import4Env = info.Import4Env or {}
+		info.Cache = info.Cache or {}
 
 		-- Set the environment to interface's environment
 		setfenv(2, interfaceEnv)
@@ -1613,7 +1597,7 @@ do
 		if info.Name == name then
 			setmetatable(env, _MetaIFEnv)
 			setfenv(2, env[BASE_ENV_FIELD])
-			RefreshCache(info.Owner, env)
+			RefreshCache(info.Owner)
 		else
 			error(("%s is not closed."):format(info.Name), 2)
 		end
@@ -1702,13 +1686,15 @@ do
 	do
 		function InitObjectWithInterface(cls, obj)
 			local ok, msg, info
+			local cache = _NSInfo[cls].Cache4Interface
+			if cache then
+				for _, IF in ipairs(cache) do
+					info = _NSInfo[IF]
+					if info.Initializer then
+						ok, msg = pcall(info.Initializer, obj)
 
-			for _, IF in ipairs(_NSInfo[cls].Cache4Interface) do
-				info = _NSInfo[IF]
-				if info.Initializer then
-					ok, msg = pcall(info.Initializer, obj)
-
-					if not ok then errorhandler(msg) end
+						if not ok then errorhandler(msg) end
+					end
 				end
 			end
 		end
@@ -1720,7 +1706,7 @@ do
 		------------------------------------
 		function DisposeObject(self)
 			local objCls = getmetatable(self)
-			local IF, info, disfunc
+			local info, disfunc
 
 			info = objCls and _NSInfo[objCls]
 
@@ -1729,11 +1715,13 @@ do
 			-- No dispose to a unique object
 			if info.UniqueObject then return end
 
-			for i = #(info.Cache4Interface), 1, -1 do
-				IF = info.Cache4Interface[i]
-				disfunc = _NSInfo[IF][DISPOSE_METHOD]
+			local cache = info.Cache4Interface
+			if cache then
+				for i = #(cache), 1, -1 do
+					disfunc = _NSInfo[cache[i]][DISPOSE_METHOD]
 
-				if disfunc then pcall(disfunc, self) end
+					if disfunc then pcall(disfunc, self) end
+				end
 			end
 
 			-- Call Class Dispose
@@ -2053,200 +2041,187 @@ do
 		if sub and pre ~= now then for cls in pairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
 	end
 
-	function TrySetProperty(self, name, value) self[name] = value end
-
-	do
-		local DISPOSE_METHOD = DISPOSE_METHOD
-		local _NSInfo = _NSInfo
-
-		local getmetatable = getmetatable
-		local DisposeObject = DisposeObject
+	function GenerateMetatable(info)
+		local pcall = pcall
 		local type = type
-		local rawget = rawget
 		local rawset = rawset
+		local rawget = rawget
+		local getmetatable = getmetatable
+		local setmetatable = setmetatable
 		local error = error
-		local tostring = tostring
-		local clone = CloneObj
+		local CloneObj = CloneObj
+		local WEAK_VALUE = WEAK_VALUE
+		local DisposeObject = DisposeObject
+		local Cache = info.Cache
 
-		function Object_Index(self, key)
-			local oper
-			local info = _NSInfo[getmetatable(self)]
-
+		local meta = {}
+		meta.__metatable = info.Owner
+		meta.__index = function (self, key)
 			-- Dispose Method
-			if key == DISPOSE_METHOD then return DisposeObject end
+			if key == "Dispose" then return DisposeObject end
 
 			-- Property Get
-			oper = info.Cache4Property[key]
+			local oper = Cache[key]
 			if oper then
-				local value
-
-				if oper.Get then
-					value = oper.Get(self)
-				elseif oper.GetMethod then
-					local func = rawget(self, oper.GetMethod)
-					if type(func) == "function" then
-						value = func(self)
+				if type(oper) == "function" then
+					-- Method
+					if info.AutoCache == true then
+						rawset(self, key, oper)
+						return oper
 					else
-						value = info.Cache4Method[oper.GetMethod](self)
+						return oper
 					end
-				elseif oper.Field then
-					if oper.SetWeak then
-						value = rawget(self, "__WeakFields")
-						if type(value) == "table" then
-							value = value[oper.Field]
+				elseif getmetatable(oper) then
+					-- Event
+					local evt = rawget(self, "__Events")
+					if type(evt) ~= "table" then
+						evt = {}
+						rawset(self, "__Events", evt)
+					end
+
+					-- No more check
+					if evt[key] then
+						return evt[key]
+					else
+						evt[key] = oper(self)
+						return evt[key]
+					end
+				else
+					-- Property
+					local value
+
+					if oper.Get then
+						value = oper.Get(self)
+					elseif oper.GetMethod then
+						local func = rawget(self, oper.GetMethod)
+						if type(func) == "function" then
+							value = func(self)
 						else
-							value = nil
+							value = Cache[oper.GetMethod](self)
 						end
-					else
-						value = rawget(self, oper.Field)
+					elseif oper.Field then
+						if oper.SetWeak then
+							value = rawget(self, "__WeakFields")
+							if type(value) == "table" then
+								value = value[oper.Field]
+							else
+								value = nil
+							end
+						else
+							value = rawget(self, oper.Field)
+						end
+					elseif oper.Default == nil then
+						error(("%s can't be read."):format(key),2)
 					end
-				elseif oper.Default == nil then
-					error(("%s can't be read."):format(tostring(key)),2)
-				end
 
-				if value == nil then value = oper.Default end
+					if value == nil then value = oper.Default end
 
-				if oper.GetClone then value = clone(value, oper.GetDeepClone) end
+					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
-				return value
-			end
-
-			-- Method Get
-			oper = info.Cache4Method[key]
-			if oper then
-				if info.AutoCache == true then
-					rawset(self, key, oper)
-					return oper
-				else
-					return oper
-				end
-			end
-
-			-- Events
-			if info.Cache4Event[key] then
-				oper = rawget(self, "__Events")
-				if type(oper) ~= "table" then
-					oper = {}
-					rawset(self, "__Events", oper)
-				end
-
-				-- No more check
-				if oper[key] then
-					return oper[key]
-				else
-					oper[key] = EventHandler(info.Cache4Event[key], self)
-					return oper[key]
+					return value
 				end
 			end
 
 			-- Custom index metametods
-			oper = info.MetaTable["___index"]
-			if oper then
-				if type(oper) == "function" or getmetatable(oper) == FixedMethod then
-					return oper(self, key)
-				elseif type(oper) == "table" then
-					return oper[key]
-				end
-			end
+			oper = meta["___index"]
+			if oper then return oper(self, key) end
 		end
 
-		function Object_NewIndex(self, key, value)
-			local oper
-			local info = _NSInfo[getmetatable(self)]
+		meta.__newindex = function (self, key, value)
+			local oper = Cache[key]
 
-			-- Property Set
-			oper = info.Cache4Property[key]
-			if oper then
-				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
-				if oper.SetClone then value = clone(value, oper.SetDeepClone) end
+			if type(oper) == "table" then
+				if getmetatable(oper) then
+					-- Event
+					local evt = rawget(self, "__Events")
+					if type(evt) ~= "table" then
+						evt = {}
+						rawset(self, "__Events", evt)
+					end
 
-				if oper.Set then
-					return oper.Set(self, value)
-				elseif oper.SetMethod then
-					oper = oper.SetMethod
-					local func = rawget(self, oper)
-					if type(func) == "function" then
-						return func(self, value)
+					if value == nil and not evt[key] then return end
+
+					if not evt[key] then evt[key] = oper(self) end
+					evt = evt[key]
+
+					if value == nil or type(value) == "function" then
+						evt.Handler = value
+						return
+					elseif type(value) == "table" then
+						return evt:Copy(value)
 					else
-						return info.Cache4Method[oper](self, value)
+						error("Can't set this value to the event handler.", 2)
 					end
-				elseif oper.Field then
-					-- Check container
-					local container = self
-					if oper.SetWeak then
-						container = rawget(self, "__WeakFields")
-						if type(container) ~= "table" then
-							container = setmetatable({}, WEAK_VALUE)
-							rawset(self, "__WeakFields", container)
+				else
+					-- Property
+					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
+
+					if oper.Set then
+						return oper.Set(self, value)
+					elseif oper.SetMethod then
+						oper = oper.SetMethod
+						local func = rawget(self, oper)
+						if type(func) == "function" then
+							return func(self, value)
+						else
+							return Cache[oper](self, value)
 						end
+					elseif oper.Field then
+						-- Check container
+						local container = self
+						if oper.SetWeak then
+							container = rawget(self, "__WeakFields")
+							if type(container) ~= "table" then
+								container = setmetatable({}, WEAK_VALUE)
+								rawset(self, "__WeakFields", container)
+							end
+						end
+
+						-- Check old value
+						local old = rawget(container, oper.Field)
+						if old == nil then old = oper.Default end
+						if old == value then return end -- ?should I compare it with fields?
+
+						-- Set the value
+						rawset(container, oper.Field, value)
+
+						-- Dispose old
+						if oper.SetRetain and old and old ~= oper.Default then
+							DisposeObject(old)
+							old = nil
+						end
+
+						-- Call handler
+						if oper.Handler then
+							local ok, err = pcall(oper.Handler, self, value, old, key)
+
+							if not ok then errorhandler(err) end
+						end
+
+						-- Fire event
+						if oper.Event then
+							-- Fire the event
+							local evt = rawget(self, "__Events")
+							evt = evt and rawget(evt, oper.Event)
+							if evt then return evt(self, value, old, key) end
+						end
+
+						return
+					else
+						error(("%s can't be written."):format(key), 2)
 					end
-
-					-- Check old value
-					local old = rawget(container, oper.Field)
-					if old == nil then old = oper.Default end
-					if old == value then return end -- ?should I compare it with fields?
-
-					-- Set the value
-					rawset(container, oper.Field, value)
-
-					-- Dispose old
-					if oper.SetRetain and old and old ~= oper.Default then
-						DisposeObject(old)
-						old = nil
-					end
-
-					-- Call handler
-					if oper.Handler then
-						local ok, err = pcall(oper.Handler, self, value, old, key)
-
-						if not ok then errorhandler(err) end
-					end
-
-					-- Fire event
-					if oper.Event then
-						-- Fire the event
-						local evt = rawget(self, "__Events")
-						evt = evt and rawget(evt, oper.Event)
-						if evt then return evt(self, value, old, key) end
-					end
-
-					return
-				else
-					error(("%s can't be written."):format(tostring(key)), 2)
-				end
-			end
-
-			-- Events
-			if info.Cache4Event[key] then
-				oper = rawget(self, "__Events")
-				if type(oper) ~= "table" then
-					oper = {}
-					rawset(self, "__Events", oper)
-				end
-
-				if value == nil and not oper[key] then return end
-
-				if not oper[key] then oper[key] = EventHandler(info.Cache4Event[key], self) end
-				oper = oper[key]
-
-				if value == nil or type(value) == "function" then
-					oper.Handler = value
-					return
-				elseif type(value) == "table" and Reflector.ObjectIsClass(value, EventHandler) then
-					return oper:Copy(value)
-				else
-					error("Can't set this value to the event handler.", 2)
 				end
 			end
 
 			-- Custom newindex metametods
-			oper = info.MetaTable["___newindex"]
-			if oper and (type(oper) == "function" or getmetatable(oper) == FixedMethod) then
-				return oper(self, key, value)
-			end
+			oper = meta["___newindex"]
+			if oper then return oper(self, key, value) end
 
-			rawset(self, key, value)			-- Other key can be set as usual
+			rawset(self, key, value)
 		end
+
+		return meta
 	end
 
 	-- Init the object with class's constructor
@@ -2303,13 +2278,7 @@ do
 
 		-- No constructor or constructor with no arguments, so try init table
 		if initTable then
-			for name, value in pairs(initTable) do
-				local ok, msg = pcall(TrySetProperty, obj, name, value)
-
-				if not ok then
-					errorhandler(strtrim(msg:match(":%d+:%s*(.-)$") or msg))
-				end
-			end
+			for name, value in pairs(initTable) do obj[name] = value end
 		end
 	end
 
@@ -2348,7 +2317,7 @@ do
 		if type(info.AutoCache) == "table" then
 			for name in pairs(info.AutoCache) do
 				if rawget(obj, name) == nil then
-					rawset(obj, name, info.Cache4Method[name])
+					rawset(obj, name, info.Cache[name])
 				end
 			end
 		end
@@ -2412,23 +2381,10 @@ do
 		SetNameSpace4Env(classEnv, cls)
 
 		-- Cache
-		info.Cache4Event = info.Cache4Event or {}
-		info.Cache4Property = info.Cache4Property or {}
-		info.Cache4Method = info.Cache4Method or {}
-		info.Cache4Interface = info.Cache4Interface or {}
-
-		-- ExtendInterface
-		info.ExtendInterface = info.ExtendInterface or {}
-
-		-- Import
-		info.Import4Env = info.Import4Env or {}
+		info.Cache = info.Cache or {}
 
 		-- MetaTable
-		info.MetaTable = info.MetaTable or {
-			__metatable = cls,
-			__index = Object_Index,
-			__newindex = Object_NewIndex,
-		}
+		info.MetaTable = info.MetaTable or GenerateMetatable(info)
 
 		if ATTRIBUTE_INSTALLED then
 			ConsumePreparedAttributes(info.Owner, AttributeTargets.Class)
@@ -2633,7 +2589,7 @@ do
 		if info.Name == name then
 			setmetatable(env, _MetaClsEnv)
 			setfenv(2, env[BASE_ENV_FIELD])
-			RefreshCache(info.Owner, env)
+			RefreshCache(info.Owner)
 		else
 			error(("%s is not closed."):format(info.Name), 2)
 		end
@@ -2652,7 +2608,7 @@ do
 
 				if sinfo.RequireMethod then
 					for name in pairs(sinfo.RequireMethod) do
-						if sinfo.Method[name] == info.Cache4Method[name] then tinsert(cacheIF, name) end
+						if sinfo.Method[name] == info.Cache[name] then tinsert(cacheIF, name) end
 					end
 
 					if #cacheIF > 0 then msg = "[Method]" .. tblconcat(cacheIF, ", ") end
@@ -2662,7 +2618,7 @@ do
 
 				if sinfo.RequireProperty then
 					for name in pairs(sinfo.RequireProperty) do
-						if sinfo.Property[name] == info.Cache4Property[name] then tinsert(cacheIF, name) end
+						if sinfo.Property[name] == info.Cache[name] then tinsert(cacheIF, name) end
 					end
 
 					if #cacheIF > 0 then
@@ -3691,9 +3647,7 @@ do
 
 			if info.Cache4Interface then
 				local ret = {}
-
 				for _, IF in ipairs(info.Cache4Interface) do tinsert(ret, IF) end
-
 				return ret
 			end
 		end
@@ -3734,8 +3688,11 @@ do
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local ret = {}
 
-				for i, v in pairs(noSuper and info.Event or info.Cache4Event) do if v then tinsert(ret, i) end end
-
+				if noSuper then
+					for i, v in pairs(info.Event) do tinsert(ret, i) end
+				else
+					for i, v in pairs(info.Cache) do if getmetatable(v) then tinsert(ret, i) end end
+				end
 				sort(ret)
 
 				return ret
@@ -3757,8 +3714,11 @@ do
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local ret = {}
 
-				for i, v in pairs(noSuper and info.Property or info.Cache4Property) do if v then tinsert(ret, i) end end
-
+				if noSuper then
+					for i, v in pairs(info.Property) do tinsert(ret, i) end
+				else
+					for i, v in pairs(info.Cache) do if type(v) == "table" and not getmetatable(v) then tinsert(ret, i) end end
+				end
 				sort(ret)
 
 				return ret
@@ -3785,8 +3745,11 @@ do
 					noSuper = true
 				end
 
-				for k, v in pairs(noSuper and info.Method or info.Cache4Method) do tinsert(ret, k) end
-
+				if noSuper then
+					for k, v in pairs(info.Method) do tinsert(ret, k) end
+				else
+					for k, v in pairs(info.Cache) do if type(v) == "function" then tinsert(ret, k) end end
+				end
 				if not noSuper then for k, v in pairs(info.Method) do if k:match("^_") then tinsert(ret, k) end end end
 
 				sort(ret)
@@ -3807,10 +3770,11 @@ do
 
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local ty = info.Cache4Property[propName].Type
-
-				return ty and ty:Clone()
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
+				local prop = info.Cache[propName]
+				if type(prop) == "table" and not getmetatable(prop) and prop.Type then
+					return prop.Type:Clone()
+				end
 			end
 		end
 
@@ -3826,7 +3790,11 @@ do
 
 			local info = _NSInfo[ns]
 
-			return info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] and true or false
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
+				local prop = info.Cache[propName]
+				if type(prop) == "table" and not getmetatable(prop) and prop.Type then return true end
+			end
+			return false
 		end
 
 		doc "IsPropertyReadable" [[
@@ -3841,9 +3809,9 @@ do
 
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local prop = info.Cache4Property[propName]
-				return (prop.Get or prop.GetMethod or prop.Field) and true or false
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local prop = info.Cache[propName]
+				return type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field) and true or false
 			end
 		end
 
@@ -3859,9 +3827,9 @@ do
 
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[propName] then
-				local prop = info.Cache4Property[propName]
-				return (prop.Set or prop.SetMethod or prop.Field) and true or false
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local prop = info.Cache[propName]
+				return type(prop) == "table" and not getmetatable(prop) and (prop.Set or prop.SetMethod or prop.Field) and true or false
 			end
 		end
 
@@ -4022,7 +3990,7 @@ do
 
 			local info = _NSInfo[cls]
 
-			return info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Event[evt] or false
+			return info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[evt]) or false
 		end
 
 		doc "GetStructType" [[
@@ -4507,8 +4475,8 @@ do
 				if info.MetaTable.__eq then return false end
 
 				-- Check properties
-				for name, prop in pairs(info.Cache4Property) do
-					if prop.Get or prop.GetMethod or prop.Field then
+				for name, prop in pairs(info.Cache) do
+					if type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field) then
 						if not checkEqual(obj1[name], obj2[name], cache) then return false end
 					end
 				end
@@ -5011,6 +4979,8 @@ do
 		-- Meta-Method
 		------------------------------------------------------
 		function __tostring(self) return ("%s( %q )"):format(tostring(Event), self.Name) end
+
+		function __call(self, owner) return EventHandler(self, owner) end
 	endclass "Event"
 
 	class "EventHandler"
@@ -5505,21 +5475,21 @@ do
 				if info.Method[name] then
 					return info.Attributes and info.Attributes[name]
 				else
-					if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
+					if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
 						return GetTargetAttributes(target, targetType, info.SuperClass, name)
 					end
 
 					if info.ExtendInterface then
 						for _, IF in ipairs(info.ExtendInterface) do
-							if _NSInfo[IF].Cache4Method[name] then
+							if type(_NSInfo[IF].Cache[name]) == "function" then
 								return GetTargetAttributes(target, targetType, IF, name)
 							end
 						end
 					end
 				end
 			elseif targetType == AttributeTargets.Property then
-				local pInfo = info.Cache4Property[name]
-				return pInfo and pInfo.Attribute
+				local pInfo = info.Cache[name]
+				return type(pInfo) == "table" and not getmetatable(pInfo) and pInfo.Attribute or nil
 			elseif targetType == AttributeTargets.Member then
 				if info.SubType == _STRUCT_TYPE_MEMBER then
 					return info.Attributes and info.Attributes[name]
@@ -5535,37 +5505,39 @@ do
 			local info = _NSInfo[owner or target]
 
 			if targetType == AttributeTargets.Event then
-				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Event[name] then
-					return _NSInfo[info.SuperClass].Cache4Event[name].Attribute
+				if info.SuperClass and getmetatable(_NSInfo[info.SuperClass].Cache[name]) then
+					return _NSInfo[info.SuperClass].Cache[name].Attribute
 				end
 
 				if info.ExtendInterface then
 					for _, IF in ipairs(info.ExtendInterface) do
-						if _NSInfo[IF].Cache4Event[name] then
-							return _NSInfo[IF].Cache4Event[name].Attribute
+						if getmetatable(_NSInfo[IF].Cache[name]) then
+							return _NSInfo[IF].Cache[name].Attribute
 						end
 					end
 				end
 			elseif targetType == AttributeTargets.Method then
-				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Method[name] then
+				if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
 					return GetTargetAttributes(nil, targetType, info.SuperClass, name)
 				end
 
 				if info.ExtendInterface then
 					for _, IF in ipairs(info.ExtendInterface) do
-						if _NSInfo[IF].Cache4Method[name] then
+						if type(_NSInfo[IF].Cache[name]) == "function" then
 							return GetTargetAttributes(nil, targetType, IF, name)
 						end
 					end
 				end
 			elseif targetType == AttributeTargets.Property then
-				if info.SuperClass and _NSInfo[info.SuperClass].Cache4Property[name] then
-					return GetTargetAttributes(nil, targetType, info.SuperClass, name)
+				if info.SuperClass then
+					local tar = _NSInfo[info.SuperClass].Cache[name]
+					return type(tar) == "table" and not getmetatable(tar) and GetTargetAttributes(nil, targetType, info.SuperClass, name)
 				end
 
 				if info.ExtendInterface then
 					for _, IF in ipairs(info.ExtendInterface) do
-						if _NSInfo[IF].Cache4Property[name] then
+						local tar = _NSInfo[IF].Cache[name]
+						if type(tar) == "table" and not getmetatable(tar) then
 							return GetTargetAttributes(nil, targetType, IF, name)
 						end
 					end
@@ -6028,8 +6000,8 @@ do
 		function _IsEventAttributeDefined(target, event, type)
 			local info = _NSInfo[target]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Event[event] then
-				return _IsDefined(info.Cache4Event[event], AttributeTargets.Event, target, event, type)
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
+				return _IsDefined(info.Cache[event], AttributeTargets.Event, target, event, type)
 			end
 			return false
 		end
@@ -6069,8 +6041,9 @@ do
 		function _IsPropertyAttributeDefined(target, prop, type)
 			local info = _NSInfo[target]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[prop] then
-				return _IsDefined(info.Cache4Property[prop], AttributeTargets.Property, target, prop, type)
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local tar = info.Cache[prop]
+				return type(tar) == "function" and not getmetatable(tar) and _IsDefined(tar, AttributeTargets.Property, target, prop, type)
 			end
 			return false
 		end
@@ -6187,8 +6160,8 @@ do
 		function _GetEventAttribute(target, event, type)
 			local info = _NSInfo[target]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Event[event] then
-				return _GetCustomAttribute(info.Cache4Event[event],AttributeTargets.Event, target, event, type)
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
+				return _GetCustomAttribute(info.Cache[event],AttributeTargets.Event, target, event, type)
 			end
 		end
 
@@ -6227,8 +6200,9 @@ do
 		function _GetPropertyAttribute(target, prop, type)
 			local info = _NSInfo[target]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and info.Cache4Property[prop] then
-				return _GetCustomAttribute(info.Cache4Property[prop], AttributeTargets.Property, target, prop, type)
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local tar = info.Cache[prop]
+				return type(tar) == "function" and not getmetatable(tar) and _GetCustomAttribute(tar, AttributeTargets.Property, target, prop, type)
 			end
 		end
 
@@ -6285,8 +6259,8 @@ do
 			-- Defualt behavior
 			local cache = CACHE_TABLE()
 
-			for name, prop in pairs(_NSInfo[getmetatable(self)].Cache4Property) do
-				if (prop.Get or prop.GetMethod or prop.Field) and (prop.Set or prop.SetMethod or prop.Field) then
+			for name, prop in pairs(_NSInfo[getmetatable(self)].Cache) do
+				if type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field) and (prop.Set or prop.SetMethod or prop.Field) then
 					cache[name] = self[name]
 				end
 			end
@@ -6836,13 +6810,7 @@ do
 
 		__Arguments__{ RawTable }
 		function InitWithTable(self, initTable)
-			for name, value in pairs(initTable) do
-				local ok, msg = pcall(TrySetProperty, self, name, value)
-
-				if not ok then
-					errorhandler(strtrim(msg:match(":%d+:%s*(.-)$") or msg))
-				end
-			end
+			for name, value in pairs(initTable) do self[name] = value end
 
 			return self
 		end
