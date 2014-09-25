@@ -81,18 +81,13 @@ do
 	wrap = coroutine.wrap
 	yield = coroutine.yield
 
-	local _ErrorHandler = print
-
-	seterrorhandler = seterrorhandler or function(handler) if type(handler) == "function" then _ErrorHandler = handler end end
-	geterrorhandler = geterrorhandler or function() return _ErrorHandler end
+	geterrorhandler = geterrorhandler or function() return print end
 	errorhandler = errorhandler or function(err) return pcall(geterrorhandler(), err) end
 
-	newproxy = newproxy
-
-	if not newproxy then
+	newproxy = newproxy or (function ()
 		local _METATABLE_MAP = setmetatable({}, {__mode = "k"})
 
-		function newproxy(prototype)
+		return function (prototype)
 			-- mean no userdata can be created in lua, use the table instead
 			if type(prototype) == "table" and _METATABLE_MAP[prototype] then
 				return setmetatable({}, _METATABLE_MAP[prototype])
@@ -105,7 +100,7 @@ do
 				return setmetatable({}, {__metatable = false})
 			end
 		end
-	end
+	end)()
 end
 
 ------------------------------------------------------
@@ -113,7 +108,7 @@ end
 ------------------------------------------------------
 do
 	-- Used to enable/disable document system, not started with '_', so can be disabled outsider
-	DOCUMENT_ENABLED = DOCUMENT_ENABLED == nil and true or false
+	DOCUMENT_ENABLED = DOCUMENT_ENABLED == nil and true or DOCUMENT_ENABLED
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -2083,38 +2078,53 @@ do
 					if evt[key] then
 						return evt[key]
 					else
-						evt[key] = oper(self)
-						return evt[key]
+						local ret = oper(self)
+						evt[key] = ret
+						return ret
 					end
 				else
 					-- Property
 					local value
+					local default = oper.Default
 
-					if oper.Get then
-						value = oper.Get(self)
-					elseif oper.GetMethod then
-						local func = rawget(self, oper.GetMethod)
-						if type(func) == "function" then
-							value = func(self)
-						else
-							value = Cache[oper.GetMethod](self)
-						end
-					elseif oper.Field then
-						if oper.SetWeak then
-							value = rawget(self, "__WeakFields")
-							if type(value) == "table" then
-								value = value[oper.Field]
+					-- Get Getter
+					local operTar = oper.Get
+					if not operTar then
+						operTar = oper.GetMethod
+
+						if operTar then
+							local func = rawget(self, operTar)
+							if type(func) == "function" then
+								operTar = func
 							else
-								value = nil
+								operTar = Cache[operTar]
 							end
-						else
-							value = rawget(self, oper.Field)
 						end
-					elseif oper.Default == nil then
-						error(("%s can't be read."):format(key),2)
 					end
 
-					if value == nil then value = oper.Default end
+					-- Get Value
+					if operTar then
+						value = operTar(self)
+					else
+						operTar = oper.Field
+
+						if operTar then
+							if oper.SetWeak then
+								value = rawget(self, "__WeakFields")
+								if type(value) == "table" then
+									value = value[operTar]
+								else
+									value = nil
+								end
+							else
+								value = rawget(self, operTar)
+							end
+						elseif default == nil then
+							error(("%s can't be read."):format(key),2)
+						end
+					end
+
+					if value == nil then value = default end
 
 					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
@@ -2157,59 +2167,71 @@ do
 					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
-					if oper.Set then
-						return oper.Set(self, value)
-					elseif oper.SetMethod then
-						oper = oper.SetMethod
-						local func = rawget(self, oper)
-						if type(func) == "function" then
-							return func(self, value)
-						else
-							return Cache[oper](self, value)
-						end
-					elseif oper.Field then
-						-- Check container
-						local container = self
-						if oper.SetWeak then
-							container = rawget(self, "__WeakFields")
-							if type(container) ~= "table" then
-								container = setmetatable({}, WEAK_VALUE)
-								rawset(self, "__WeakFields", container)
+					-- Get Setter
+					local operTar = oper.Set
+					if not operTar then
+						operTar = oper.SetMethod
+
+						if operTar then
+							local func = rawget(self, operTar)
+							if type(func) == "function" then
+								operTar = func
+							else
+								operTar = Cache[operTar]
 							end
 						end
+					end
 
-						-- Check old value
-						local old = rawget(container, oper.Field)
-						if old == nil then old = oper.Default end
-						if old == value then return end -- ?should I compare it with fields?
-
-						-- Set the value
-						rawset(container, oper.Field, value)
-
-						-- Dispose old
-						if oper.SetRetain and old and old ~= oper.Default then
-							DisposeObject(old)
-							old = nil
-						end
-
-						-- Call handler
-						if oper.Handler then
-							local ok, err = pcall(oper.Handler, self, value, old, key)
-
-							if not ok then errorhandler(err) end
-						end
-
-						-- Fire event
-						if oper.Event then
-							-- Fire the event
-							local evt = rawget(self, "__Events")
-							evt = evt and rawget(evt, oper.Event)
-							if evt then return evt(self, value, old, key) end
-						end
-
-						return
+					-- Set Value
+					if operTar then
+						return operTar(self, value)
 					else
-						error(("%s can't be written."):format(key), 2)
+						operTar = oper.Field
+
+						if operTar then
+							-- Check container
+							local container = self
+							local default = oper.Default
+
+							if oper.SetWeak then
+								container = rawget(self, "__WeakFields")
+								if type(container) ~= "table" then
+									container = setmetatable({}, WEAK_VALUE)
+									rawset(self, "__WeakFields", container)
+								end
+							end
+
+							-- Check old value
+							local old = rawget(container, operTar)
+							if old == nil then old = default end
+							if old == value then return end
+
+							-- Set the value
+							rawset(container, operTar, value)
+
+							-- Dispose old
+							if oper.SetRetain and old and old ~= default then
+								DisposeObject(old)
+								old = nil
+							end
+
+							-- Call handler
+							operTar = oper.Handler
+							if operTar then operTar(self, value, old, key) end
+
+							-- Fire event
+							operTar = oper.Event
+							if operTar then
+								-- Fire the event
+								local evt = rawget(self, "__Events")
+								evt = evt and rawget(evt, operTar)
+								if evt then return evt(self, value, old, key) end
+							end
+
+							return
+						else
+							error(("%s can't be written."):format(key), 2)
+						end
 					end
 				end
 			end
