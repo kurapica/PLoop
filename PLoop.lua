@@ -2037,16 +2037,6 @@ do
 	end
 
 	function GenerateMetatable(info)
-		local pcall = pcall
-		local type = type
-		local rawset = rawset
-		local rawget = rawget
-		local getmetatable = getmetatable
-		local setmetatable = setmetatable
-		local error = error
-		local CloneObj = CloneObj
-		local WEAK_VALUE = WEAK_VALUE
-		local DisposeObject = DisposeObject
 		local Cache = info.Cache
 
 		local meta = {}
