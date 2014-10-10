@@ -2,7 +2,7 @@
 -- Create Date : 2012/08/31
 -- ChangeLog   :
 
-Module "System.Recycle" "1.0.0"
+_ENV = Module "System.Recycle" "1.0.0"
 
 namespace "System"
 
@@ -12,7 +12,7 @@ __Doc__[[
 	The other arugments for the constructor is passed to the class's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
 	After the recycle object is created as recycleObject, can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
 ]]
-class "Recycle"
+class "Recycle" (function(_ENV)
 	inherit "Object"
 
 	------------------------------------------------------
@@ -133,4 +133,4 @@ class "Recycle"
 			return Pop(self)
 		end
 	end
-endclass "Recycle"
+end)

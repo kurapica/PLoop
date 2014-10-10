@@ -2,12 +2,12 @@
 -- Create Date : 2012/06/03
 -- ChangeLog   :
 
-Module "System.Error" "0.1.0"
+_ENV = Module "System.Error" "0.1.0"
 
 namespace "System"
 
 __Doc__[[Error object is used to contain the error messages and debug informations]]
-class "Error"
+class "Error" (function(_ENV)
 
 	--------------------------------------
 	--- Method
@@ -43,4 +43,4 @@ class "Error"
 	function __tostring(self)
 		return self.Message or self.Name
 	end
-endclass "Error"
+end)

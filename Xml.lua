@@ -2,7 +2,7 @@
 -- Create Date : 2014/03/10
 -- ChangeLog   :
 
-Module "System.Xml" "1.0.0"
+_ENV = Module "System.Xml" "1.0.0"
 
 import "System"
 
@@ -23,7 +23,7 @@ do
 	cache = setmetatable({}, {__call = function(self, tbl) if tbl then wipe(tbl) tinsert(self, tbl) else return tremove(self) or {} end end,})
 	newIndex = function(flag) _M.AutoIndex = type(flag) == "number" and flag or flag and _M.AutoIndex or (_M.AutoIndex + 1); return _M.AutoIndex end
 
-	__Local__() struct "Stack"
+	__Local__() struct "Stack" (function(_ENV)
 		------------------------
 		-- Member
 		------------------------
@@ -195,7 +195,7 @@ do
 			self.Line = {}
 			self.StackLen = 0
 		end
-	endstruct "Stack"
+	end)
 
 	_Token = {
 		NAME_START	= newIndex(1),
@@ -768,14 +768,14 @@ do
 	end
 end
 
-struct "XmlAttribute"
-	Prefix = String + nil
-	Key = String
-	Value = String
-endstruct "XmlAttribute"
+struct "XmlAttribute" {
+	Prefix = String + nil,
+	Key = String,
+	Value = String,
+}
 
 __Doc__[[Represents a single node in the XML document.]]
-class "XmlNode"
+class "XmlNode" (function(_ENV)
 	------------------------------------------------------
 	-- Event
 	------------------------------------------------------
@@ -895,10 +895,10 @@ class "XmlNode"
 	__Arguments__{}
     function XmlNode(self)
     end
-endclass "XmlNode"
+end)
 
 __Doc__[[Represents the text content of an element or attribute.]]
-class "XmlText"
+class "XmlText" (function(_ENV)
 	inherit "XmlNode"
 
 	------------------------------------------------------
@@ -919,10 +919,10 @@ class "XmlText"
     function XmlText(self, ...)
 
     end
-endclass "XmlText"
+end)
 
 __Doc__[[Represents an XML document.]]
-class "XmlDocument"
+class "XmlDocument" (function(_ENV)
 	inherit "XmlNode"
 
 	------------------------------------------------------
@@ -964,4 +964,4 @@ class "XmlDocument"
     function XmlDocument(self, ...)
 
     end
-endclass "XmlDocument"
+end)

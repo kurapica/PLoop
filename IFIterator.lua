@@ -2,12 +2,12 @@
 -- Create Date : 2012/08/10
 -- ChangeLog   :
 
-Module "System.IFIterator" "1.0.1"
+_ENV = Module "System.IFIterator" "1.0.1"
 
 namespace "System"
 
 __Doc__[[The IFIterator interface provide Each, EachK method to help itertor object's element]]
-interface "IFIterator"
+interface "IFIterator" (function(_ENV)
 
 	local function SetObjectProperty(self, prop, value)
 		self[prop] = value
@@ -98,4 +98,4 @@ interface "IFIterator"
 	function Each(self, oper, ...)
 		return EachK(self, nil, oper, ...)
 	end
-endinterface "IFIterator"
+end)

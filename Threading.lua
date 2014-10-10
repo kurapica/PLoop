@@ -2,13 +2,13 @@
 -- Create Date : 2013/08/13
 -- ChangeLog   :
 
-Module "System.Threading" "1.0.2"
+_ENV = Module "System.Threading" "1.0.2"
 
 namespace "System"
 
 __Doc__[[Used for threading control]]
 __NonInheritable__()
-interface "Threading"
+interface "Threading" (function(_ENV)
 
 	enum "ThreadStatus" {
 		"running",
@@ -77,7 +77,7 @@ interface "Threading"
 		Thread object can use 'Resume' method to resume coroutine like 'obj:Resume(arg1, arg2, arg3)'. Also can use 'obj(arg1, arg2, arg3)' for short.
 		In the Thread object's controling function, can use the System.Threading's method to control the coroutine.
 	]]
-	class "Thread"
+	class "Thread" (function(_ENV)
 
 		local function chkValue(self, flag, ...)
 			if flag then
@@ -214,8 +214,8 @@ interface "Threading"
 		function __call(self, ...)
 			return Resume(self, ...)
 		end
-	endclass "Thread"
-endinterface "Threading"
+	end)
+end)
 
 ------------------------------------------------------
 -- Global settings

@@ -5,12 +5,12 @@
 --               2012/07/31 Struct supported
 --               2012/09/18 Contain method added
 
-Module "System.Array" "1.0.0"
+_ENV = Module "System.Array" "1.0.0"
 
 namespace "System"
 
 __Doc__[[Array object is used to control a group objects with same class, event handlers can be assign to all objects with one definition]]
-class "Array"
+class "Array" (function(_ENV)
 	extend "IFIterator"
 
 	------------------------------------------------------
@@ -576,4 +576,4 @@ class "Array"
 
 		return rawset(self, key, value)
 	end
-endclass "Array"
+end)

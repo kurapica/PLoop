@@ -4,7 +4,7 @@
 --				2011/03/17 the msg can be formatted string.
 --				2014/03/01 improve the log method
 
-Module "System.Logger" "1.0.1"
+_ENV = Module "System.Logger" "1.0.1"
 
 namespace "System"
 
@@ -13,7 +13,7 @@ __Doc__[[
 	Logger object can use 'logObject(logLevel, logMessage, ...)' for short to send out log messages.
 	Logger object also cache the log messages, like use 'logObject[1]' to get the lateset message, 'logObject[2]' to get the previous message, Logger object will cache messages for a count equal to it's MaxLog property value, the MaxLog default value is 1, always can be change.
 ]]
-class "Logger"
+class "Logger" (function(_ENV)
 	inherit "Object"
 
 	_Logger = {}
@@ -298,4 +298,4 @@ class "Logger"
 	function __call(self, loglvl, msg, ...)
 		return self:Log(loglvl, msg, ...)
 	end
-endclass "Logger"
+end)

@@ -1,7 +1,7 @@
 -- Author      : Kurapica
 -- Create Date : 2014/09/11
 -- ChangeLog   :
-Module "System.Helper" "0.1.0"
+_ENV = Module "System.Helper" "0.1.0"
 
 namespace "System"
 
@@ -18,7 +18,7 @@ CACHE_TABLE = setmetatable({}, {
 __Doc__[[Used to show help for other features]]
 __Final__()
 __NonInheritable__()
-interface "Helper"
+interface "Helper" (function(_ENV)
 	import "System.Reflector"
 	import "System.XML"
 
@@ -788,6 +788,4 @@ interface "Helper"
 			end
 		end
 	end
-
-
-interface "Helper"
+end)
