@@ -34,7 +34,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/10/10
+-- Last Update Date 2014/10/13
 -- Version			r108
 ------------------------------------------------------------------------
 
@@ -1568,12 +1568,16 @@ do
 
 		_MetaIFDefEnv.__call = function(self, definition)
 			local ok, msg = pcall(ParseDefinition, self, definition)
+			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
 			setmetatable(self, _MetaIFEnv)
-			RefreshCache(self[OWNER_FIELD])
+			RefreshCache(owner)
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self[OWNER_FIELD]
+			local info = _NSInfo[owner]
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
+
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 	end
 
@@ -1594,42 +1598,58 @@ do
 	function interface(env, name, depth)
 		depth = tonumber(depth) or 1
 		name = name or env
-		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: interface "interfacename"]], depth + 1) end
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
 		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create interface or get it
-		local IF
+		local IF, info
 
-		if ns then
-			IF = BuildNameSpace(ns, name)
+		if getmetatable(name) == TYPE_NAMESPACE then
+			IF = name
+			info = _NSInfo[IF]
 
-			if _NSInfo[IF] then
-				if _NSInfo[IF].Type and _NSInfo[IF].Type ~= TYPE_INTERFACE then
-					error(("%s is existed as %s, not interface."):format(name, tostring(_NSInfo[IF].Type)), depth + 1)
-				end
+			if info and info.Type and info.Type ~= TYPE_INTERFACE then
+				error(("%s is existed as %s, not interface."):format(name, tostring(info.Type)), depth + 1)
 			end
-		else
-			IF = fenv[name]
 
-			if not (IF and _NSInfo[IF] and _NSInfo[IF].NameSpace == nil and _NSInfo[IF].Type == TYPE_INTERFACE ) then
-				IF = BuildNameSpace(nil, name)
+			name = info.Name
+		else
+			if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: interface "interfacename"]], depth + 1) end
+
+			if ns then
+				IF = BuildNameSpace(ns, name)
+				info = _NSInfo[IF]
+
+				if info and info.Type and info.Type ~= TYPE_INTERFACE then
+					error(("%s is existed as %s, not interface."):format(name, tostring(info.Type)), depth + 1)
+				end
+			else
+				IF = fenv[name]
+				info = IF and _NSInfo[IF]
+
+				if not (info and info.NameSpace == nil and info.Type == TYPE_INTERFACE ) then
+					IF = BuildNameSpace(nil, name)
+					info = nil
+				end
 			end
 		end
 
 		if not IF then error("No interface is created.", depth + 1) end
 
 		-- Build interface
-		info = _NSInfo[IF]
+		info = info or _NSInfo[IF]
 
 		-- Check if the class is final
 		if info.IsFinal then error("The interface is final, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_INTERFACE
-		info.NameSpace = ns
+		info.NameSpace = info.NameSpace or ns
 		info.Event = info.Event or {}
 		info.Property = info.Property or {}
 		info.Method = info.Method or {}
+
+		-- Cache
+		info.Cache = info.Cache or {}
 
 		-- save interface to the environment
 		rawset(fenv, name, IF)
@@ -1642,9 +1662,6 @@ do
 
 		-- Set namespace
 		SetNameSpace4Env(interfaceEnv, IF)
-
-		-- Cache
-		info.Cache = info.Cache or {}
 
 		-- No super target for interface
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface) end
@@ -1806,14 +1823,13 @@ do
 	function endinterface(env, name)
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
-		if type(name) ~= "string" or name:find("%.") then error([[Usage: endinterface "interfacename"]], 3) end
-
 		local info = _NSInfo[env[OWNER_FIELD]]
 
-		if info.Name == name then
+		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaIFEnv)
 			setfenv(3, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
 			return env[BASE_ENV_FIELD]
 		else
 			error(("%s is not closed."):format(info.Name), 3)
@@ -2284,12 +2300,15 @@ do
 
 		_MetaClsDefEnv.__call = function(self, definition)
 			local ok, msg = pcall(ParseDefinition, self, definition)
+			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
 			setmetatable(self, _MetaClsEnv)
-			RefreshCache(self[OWNER_FIELD])
+			RefreshCache(owner)
+			local info = _NSInfo[owner]
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self[OWNER_FIELD]
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 	end
 
@@ -2653,43 +2672,58 @@ do
 	function class(env, name, depth)
 		depth = tonumber(depth) or 1
 		name = name or  env
-		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: class "classname"]], depth + 1) end
-
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
 		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
-		local cls
+		local cls, info
 
-		if ns then
-			cls = BuildNameSpace(ns, name)
+		if getmetatable(name) == TYPE_NAMESPACE then
+			cls = name
+			info = _NSInfo[cls]
 
-			if _NSInfo[cls] then
-				if _NSInfo[cls].Type and _NSInfo[cls].Type ~= TYPE_CLASS then
-					error(("%s is existed as %s, not class."):format(name, tostring(_NSInfo[cls].Type)), depth + 1)
-				end
+			if info and info.Type and info.Type ~= TYPE_CLASS then
+				error(("%s is existed as %s, not class."):format(name, tostring(info.Type)), depth + 1)
 			end
-		else
-			cls = fenv[name]
 
-			if not ( cls and _NSInfo[cls] and _NSInfo[cls].NameSpace == nil and _NSInfo[cls].Type == TYPE_CLASS ) then
-				cls = BuildNameSpace(nil, name)
+			name = info.Name
+		else
+			if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: class "classname"]], depth + 1) end
+
+			if ns then
+				cls = BuildNameSpace(ns, name)
+				info = _NSInfo[cls]
+
+				if info and info.Type and info.Type ~= TYPE_CLASS then
+					error(("%s is existed as %s, not class."):format(name, tostring(info.Type)), depth + 1)
+				end
+			else
+				cls = fenv[name]
+				info = cls and _NSInfo[cls]
+
+				if not ( info and info.NameSpace == nil and info.Type == TYPE_CLASS ) then
+					cls = BuildNameSpace(nil, name)
+					info = nil
+				end
 			end
 		end
 
 		if not cls then error("No class is created.", depth + 1) end
 
 		-- Build class
-		info = _NSInfo[cls]
+		info = info or _NSInfo[cls]
 
 		-- Check if the class is final
 		if info.IsFinal then error("The class is final, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_CLASS
-		info.NameSpace = ns
+		info.NameSpace = info.NameSpace or ns
 		info.Event = info.Event or {}
 		info.Property = info.Property or {}
 		info.Method = info.Method or {}
+
+		-- Cache
+		info.Cache = info.Cache or {}
 
 		-- save class to the environment
 		rawset(fenv, name, cls)
@@ -2701,9 +2735,6 @@ do
 
 		-- Set namespace
 		SetNameSpace4Env(classEnv, cls)
-
-		-- Cache
-		info.Cache = info.Cache or {}
 
 		-- MetaTable
 		info.MetaTable = info.MetaTable or GenerateMetatable(info)
@@ -2859,14 +2890,13 @@ do
 	function endclass(env, name)
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
-		if type(name) ~= "string" or name:find("%.") then error([[Usage: endclass "classname"]], 3) end
-
 		local info = _NSInfo[env[OWNER_FIELD]]
 
-		if info.Name == name then
+		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaClsEnv)
 			setfenv(3, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
 		else
 			error(("%s is not closed."):format(info.Name), 3)
 		end
@@ -2995,29 +3025,45 @@ do
 	function enum(env, name, depth)
 		depth = tonumber(depth) or 1
 		name = name or env
-		if type(name) ~= "string" or not name:match("^[_%w]+$") then
-			error([[Usage: enum "enumName" {
-				"enumValue1",
-				"enumValue2",
-			}]], depth + 1)
-		end
+
 
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
 		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
-		local enm
+		local enm, info
 
-		if ns then
-			enm = BuildNameSpace(ns, name)
+		if getmetatable(name) == TYPE_NAMESPACE then
+			enm = name
+			info = _NSInfo[enm]
 
-			if _NSInfo[cls] then
-				if _NSInfo[cls].Type and _NSInfo[cls].Type ~= TYPE_ENUM then error(("%s is existed as %s, not enumeration."):format(name, tostring(_NSInfo[cls].Type)), depth + 1) end
+			if info and info.Type and info.Type ~= TYPE_ENUM then
+				error(("%s is existed as %s, not enumeration."):format(name, tostring(info.Type)), depth + 1)
 			end
 		else
-			enm = fenv[name]
+			if type(name) ~= "string" or not name:match("^[_%w]+$") then
+				error([[Usage: enum "enumName" {
+					"enumValue1",
+					"enumValue2",
+				}]], depth + 1)
+			end
 
-			if not(_NSInfo[enm] and _NSInfo[enm].Type == TYPE_ENUM) then enm = BuildNameSpace(nil, name) end
+			if ns then
+				enm = BuildNameSpace(ns, name)
+				info = _NSInfo[enm]
+
+				if info and info.Type and info.Type ~= TYPE_ENUM then
+					error(("%s is existed as %s, not enumeration."):format(name, tostring(info.Type)), depth + 1)
+				end
+			else
+				enm = fenv[name]
+				info = enm and _NSInfo[enm]
+
+				if not ( info and info.NameSpace == nil and info.Type == TYPE_ENUM ) then
+					enm = BuildNameSpace(nil, name)
+					info = nil
+				end
+			end
 		end
 
 		if not enm then error("No enumeration is created.", depth + 1) end
@@ -3026,13 +3072,13 @@ do
 		rawset(fenv, name, enm)
 
 		-- Build enm
-		local info = _NSInfo[enm]
+		info = info or _NSInfo[enm]
 
 		-- Check if the enum is final
 		if info.IsFinal then error("The enum is final, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_ENUM
-		info.NameSpace = ns
+		info.NameSpace = info.NameSpace or ns
 
 		-- Clear Attributes
 		if ATTRIBUTE_INSTALLED then
@@ -3206,12 +3252,15 @@ do
 
 		_MetaStrtDefEnv.__call = function(self, definition)
 			local ok, msg = pcall(ParseStructDefinition, self, definition)
+			local owner = self[OWNER_FIELD]
 
 			setmetatable(self, _MetaStrtEnv)
 			setfenv(2, self[BASE_ENV_FIELD])
-			RefreshStruct(self[OWNER_FIELD])
+			RefreshStruct(owner)
+			local info = _NSInfo[owner]
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self[OWNER_FIELD]
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 	end
 
@@ -3352,24 +3401,36 @@ do
 	function struct(env, name, depth)
 		depth = tonumber(depth) or 1
 		name = name or env
-		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: struct "structname"]], depth + 1) end
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
 		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
 
 		-- Create class or get it
-		local strt
+		local strt, info
 
-		if ns then
-			strt = BuildNameSpace(ns, name)
+		if getmetatable(name) == TYPE_NAMESPACE then
+			strt = name
+			info = _NSInfo[strt]
 
-			if _NSInfo[strt] and _NSInfo[strt].Type and _NSInfo[strt].Type ~= TYPE_STRUCT then
-				error(("%s is existed as %s, not struct."):format(name, tostring(_NSInfo[strt].Type)), depth + 1)
+			if info and info.Type and info.Type ~= TYPE_STRUCT then
+				error(("%s is existed as %s, not struct."):format(name, tostring(info.Type)), depth + 1)
 			end
 		else
-			strt = fenv[name]
+			if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: struct "structname"]], depth + 1) end
+			if ns then
+				strt = BuildNameSpace(ns, name)
+				info = _NSInfo[strt]
 
-			if not ( strt and _NSInfo[strt] and _NSInfo[strt].NameSpace == nil and _NSInfo[strt].Type == TYPE_STRUCT ) then
-				strt = BuildNameSpace(nil, name)
+				if info and info.Type and info.Type ~= TYPE_STRUCT then
+					error(("%s is existed as %s, not struct."):format(name, tostring(info.Type)), depth + 1)
+				end
+			else
+				strt = fenv[name]
+				info = strt and _NSInfo[strt]
+
+				if not ( info and info.NameSpace == nil and info.Type == TYPE_STRUCT ) then
+					strt = BuildNameSpace(nil, name)
+					info = nil
+				end
 			end
 		end
 
@@ -3379,14 +3440,14 @@ do
 		rawset(fenv, name, strt)
 
 		-- Build class
-		info = _NSInfo[strt]
+		info = info or _NSInfo[strt]
 
 		-- Check if the struct is final
 		if info.IsFinal then error("The struct is final, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_STRUCT
 		info.SubType = _STRUCT_TYPE_MEMBER
-		info.NameSpace = ns
+		info.NameSpace = info.NameSpace or ns
 		info.Members = nil
 		info.Default = nil
 		info.DefaultField = nil
@@ -3451,14 +3512,13 @@ do
 	function endstruct(env, name)
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
-		if type(name) ~= "string" or name:find("%.") then error([[Usage: endstruct "structname"]], 3) end
-
 		local info = _NSInfo[env[OWNER_FIELD]]
 
-		if info.Name == name then
+		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaStrtEnv)
 			setfenv(3, env[BASE_ENV_FIELD])
 			RefreshStruct(info.Owner)
+			if info.ApplyAttributes then resume(info.ApplyAttributes) end
 			return env[BASE_ENV_FIELD]
 		else
 			error(("%s is not closed."):format(info.Name), 3)
@@ -5119,6 +5179,10 @@ do
 		------------------------------------------------------
 		-- MetaMethod
 		------------------------------------------------------
+		function __exist(ns)
+			if getmetatable(ns) == Type then return ns end
+		end
+
 		function __add(v1, v2)
 			local ok, _type1, _type2
 
@@ -5716,7 +5780,7 @@ do
 			if targetType == AttributeTargets.Event then
 				return target.Attribute
 			elseif targetType == AttributeTargets.Method then
-				if info.Method[name] then
+				if info.Method and info.Method[name] then
 					return info.Attributes and info.Attributes[name]
 				else
 					if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
@@ -5799,7 +5863,7 @@ do
 			if targetType == AttributeTargets.Event then
 				target.Attribute = config
 			elseif targetType == AttributeTargets.Method then
-				if info.Method[name] then
+				if info.Method and info.Method[name] then
 					if config then
 						info.Attributes = info.Attributes or {}
 						info.Attributes[name] = config
@@ -5892,7 +5956,7 @@ do
 			return true
 		end
 
-		function ApplyAttributes(target, targetType, owner, name, start, config)
+		function ApplyAttributes(target, targetType, owner, name, start, config, halt)
 			-- Check config
 			config = config or GetTargetAttributes(target, targetType, owner, name)
 
@@ -5933,78 +5997,90 @@ do
 					arg2 = targetType
 				end
 
-				if getmetatable(config) then
-					ok, ret = pcall(config.ApplyAttribute, config, arg1, arg2, arg3, arg4)
-
-					if not ok then
-						errorhandler(ret)
-
-						config:Dispose()
-						config = nil
-					else
+				for time = 1, halt and 2 or 1 do
+					if getmetatable(config) then
 						local usage = GetAttributeUsage(getmetatable(config))
+						if not halt or time == 2 or (usage and usage.BeforeDefinition) then
+							ok, ret = pcall(config.ApplyAttribute, config, arg1, arg2, arg3, arg4)
 
-						if usage and not usage.Inherited and usage.RunOnce then
-							config:Dispose()
-							config = nil
-						end
+							if not ok then
+								errorhandler(ret)
 
-						if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
-							-- The method may be wrapped in the apply operation
-							if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
-								if getmetatable(target) then
-									if getmetatable(ret) then
-										target = ret
-									else
-										target.Method = ret
+								config:Dispose()
+								config = nil
+							else
+								if usage and not usage.Inherited and usage.RunOnce then
+									config:Dispose()
+									config = nil
+								end
+
+								if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
+									-- The method may be wrapped in the apply operation
+									if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
+										if getmetatable(target) then
+											if getmetatable(ret) then
+												target = ret
+											else
+												target.Method = ret
+											end
+										else
+											target = ret
+										end
 									end
-								else
-									target = ret
 								end
 							end
+							break
 						end
-					end
-				else
-					start = start or 1
+					else
+						start = start or 1
 
-					for i = #config, start, -1 do
-						ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3, arg4)
-
-						if not ok then
-							tremove(config, i):Dispose()
-							errorhandler(ret)
-						else
+						for i = #config, start, -1 do
 							local usage = GetAttributeUsage(getmetatable(config[i]))
 
-							if usage and not usage.Inherited and usage.RunOnce then
-								tremove(config, i):Dispose()
-							end
+							if not halt or (time == 1 and usage and usage.BeforeDefinition) or (time == 2 and (not usage or not usage.BeforeDefinition)) then
+								ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3, arg4)
 
-							if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
-								-- The method may be wrapped in the apply operation
-								if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
-									if getmetatable(target) then
-										if getmetatable(ret) then
-											target = ret
-											arg1 = target.Method
-										else
-											target.Method = ret
+								if not ok then
+									tremove(config, i):Dispose()
+									errorhandler(ret)
+								else
+									if usage and not usage.Inherited and usage.RunOnce then
+										tremove(config, i):Dispose()
+									end
+
+									if targetType == AttributeTargets.Method or targetType == AttributeTargets.Constructor then
+										-- The method may be wrapped in the apply operation
+										if ret and ret ~= target and (type(ret) == "function" or getmetatable(ret) == FixedMethod) then
+											if getmetatable(target) then
+												if getmetatable(ret) then
+													target = ret
+													arg1 = target.Method
+												else
+													target.Method = ret
+												end
+											else
+												target = ret
+											end
 										end
-									else
-										target = ret
 									end
 								end
 							end
 						end
 					end
 
-					if #config == 0 or #config == 1 then
-						config = config[1] or nil
+					local thread = running()
+					if halt and time == 1 and thread then
+						_NSInfo[target].ApplyAttributes = thread
+						yield()
 					end
 				end
+
+				if config and not getmetatable(config) and (#config == 0 or #config == 1) then config = config[1] or nil end
 			end
 
 			SaveTargetAttributes(target, targetType, owner, name, config)
+
+			if halt then _NSInfo[target].ApplyAttributes = nil end
 
 			return target
 		end
@@ -6152,7 +6228,11 @@ do
 
 				wipe(prepared)
 
-				target = ApplyAttributes(target, targetType, owner, name, start, config) or target
+				if targetType == AttributeTargets.Interface or targetType == AttributeTargets.Struct or targetType == AttributeTargets.Class then
+					CallThread(ApplyAttributes, target, targetType, owner, name, start, config, true)
+				else
+					target = ApplyAttributes(target, targetType, owner, name, start, config) or target
+				end
 			end
 
 			ClearPreparedAttributes()
@@ -6615,6 +6695,9 @@ do
 
 		doc "RunOnce" [[Whether the property only apply once, when the Inherited is false, and the RunOnce is true, the attribute will be removed after apply operation]]
 		property "RunOnce" { Type = Boolean }
+
+		doc "BeforeDefinition" [[Whether the ApplyAttribute method is running before the feature's definition, only works on class, interface and struct.]]
+		property "BeforeDefinition" { Type = Boolean }
 	end)
 
 	class "__Final__" (function(_ENV)
@@ -6969,7 +7052,7 @@ do
 		"Custom"
 	}
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Final__() __Unique__()
 	class "__StructType__" (function(_ENV)
 		inherit "__Attribute__"
@@ -7356,7 +7439,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{Inherited = false, RunOnce = true}
+	__AttributeUsage__{Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Final__() __Unique__()
 	class "__Doc__" (function(_ENV)
 		inherit "__Attribute__"
@@ -7398,7 +7481,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Interface + AttributeTargets.Method, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Interface + AttributeTargets.Method, Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Final__() __Unique__()
 	class "__Local__" (function(_ENV)
 		inherit "__Attribute__"
