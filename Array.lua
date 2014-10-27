@@ -426,7 +426,7 @@ class "Array" (function(_ENV)
 	]]
 	function Push(self, ...)
 		for i = 1, select('#', ...) do
-			self:Insert(select(i, ...))
+			self:Insert((select(i, ...)))
 		end
 	end
 

@@ -79,6 +79,8 @@ interface "Threading" (function(_ENV)
 	]]
 	class "Thread" (function(_ENV)
 
+		_MainThread = running()
+
 		local function chkValue(self, flag, ...)
 			if flag then
 				if ITER_CACHE[self] and select('#', ...) == 0 then
@@ -115,7 +117,7 @@ interface "Threading" (function(_ENV)
 			<return name="..."> any return values from the thread</return>
 		]]
 		function Resume(self, ...)
-			if running() then
+			if running() ~= _MainThread then
 				self.Thread = running()
 				return ...
 			elseif self.Thread then
@@ -130,7 +132,7 @@ interface "Threading" (function(_ENV)
 		function Yield(self, ...)
 			local co = running()
 
-			if co then
+			if co ~= _MainThread then
 				self.Thread = co
 
 				return yield(...)

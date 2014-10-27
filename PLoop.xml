@@ -7,4 +7,5 @@
     <Script file="Threading.lua"/>
     <Script file="Logger.lua"/>
     <Script file="Recycle.lua"/>
+    <Script file="Data.lua"/>
 </Ui>
