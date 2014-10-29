@@ -34,8 +34,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/10/14
--- Version			r110
+-- Last Update Date 2014/10/29
+-- Version			r111
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2644,6 +2644,8 @@ do
 	function Class2Obj(cls, ...)
 		local info = _NSInfo[cls]
 
+		if info.AbstractClass then error("The class is abstract, can't be used to create objects.", 2) end
+
 		-- Check if the class is unique and already created one object to be return
 		if getmetatable(info.UniqueObject) then
 			-- Init the obj with new arguments
@@ -4493,6 +4495,19 @@ do
 			if type(IF) == "string" then IF = GetNameSpaceForName(IF) end
 
 			return IsExtend(IF, cls)
+		end
+
+		doc "IsAbstractClass" [[
+			<desc>Whether the class is an abstract class</desc>
+			<param name="class" type="class">the class</param>
+			<return type="boolean">true if the class is an abstract class</return>
+		]]
+		function IsAbstractClass(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			return info and info.AbstractClass or false
 		end
 
 		doc "GetObjectClass" [[
@@ -7197,6 +7212,17 @@ do
 			if _NSInfo[target] then _NSInfo[target].NonExpandable = true end
 		end
 	end)
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__Final__() __Unique__()
+	class "__Abstract__"
+		inherit "__Attribute__"
+		doc "__Abstract__" [[Mark the class as abstract class, can't be used to create objects.]]
+
+		function ApplyAttribute(self, target, targetType)
+			if _NSInfo[target] then _NSInfo[target].AbstractClass = true end
+		end
+	endclass "__Abstract__"
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()

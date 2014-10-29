@@ -1,3 +1,6 @@
+2014/10/29
+    __Abstract__ attribute added to create abstract classes.
+
 2014/09/11
     Re-build the Attribute system.
 
