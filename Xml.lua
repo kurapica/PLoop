@@ -2,6 +2,8 @@
 -- Create Date : 2014/03/10
 -- ChangeLog   :
 
+if require then require "System" end
+
 _ENV = Module "System.Xml" "1.0.0"
 
 import "System"

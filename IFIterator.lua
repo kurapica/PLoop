@@ -2,6 +2,8 @@
 -- Create Date : 2012/08/10
 -- ChangeLog   :
 
+if require then require "System" end
+
 _ENV = Module "System.IFIterator" "1.0.1"
 
 namespace "System"

@@ -2,6 +2,8 @@
 -- Create Date : 2012/08/31
 -- ChangeLog   :
 
+if require then require "System" end
+
 _ENV = Module "System.Recycle" "1.0.0"
 
 namespace "System"

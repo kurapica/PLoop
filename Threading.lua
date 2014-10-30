@@ -2,6 +2,8 @@
 -- Create Date : 2013/08/13
 -- ChangeLog   :
 
+if require then require "System" end
+
 _ENV = Module "System.Threading" "1.0.2"
 
 namespace "System"

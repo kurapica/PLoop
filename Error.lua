@@ -2,6 +2,8 @@
 -- Create Date : 2012/06/03
 -- ChangeLog   :
 
+if require then require "System" end
+
 _ENV = Module "System.Error" "0.1.0"
 
 namespace "System"

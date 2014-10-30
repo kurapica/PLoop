@@ -5,6 +5,8 @@
 --               2012/07/31 Struct supported
 --               2012/09/18 Contain method added
 
+if require then require "IFIterator" end
+
 _ENV = Module "System.Array" "1.0.0"
 
 namespace "System"
