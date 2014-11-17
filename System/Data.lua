@@ -2,8 +2,6 @@
 -- Create Date : 2014/10/13
 -- ChangeLog   :
 
-if require then require "System" end
-
 _ENV = Module "System.Data" "1.0.0"
 
 import "System"

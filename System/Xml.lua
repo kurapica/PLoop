@@ -2,8 +2,6 @@
 -- Create Date : 2014/03/10
 -- ChangeLog   :
 
-if require then require "System" end
-
 _ENV = Module "System.Xml" "1.0.0"
 
 import "System"
@@ -15,13 +13,6 @@ namespace "System.Xml"
 	XML Parser
 --================]]
 do
-	tinsert = table.insert
-	tremove = table.remove
-	strsub = string.gsub
-	strbyte = string.byte
-	strchar = string.char
-	strtrim = strtrim or function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
-	wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 	cache = setmetatable({}, {__call = function(self, tbl) if tbl then wipe(tbl) tinsert(self, tbl) else return tremove(self) or {} end end,})
 	newIndex = function(flag) _M.AutoIndex = type(flag) == "number" and flag or flag and _M.AutoIndex or (_M.AutoIndex + 1); return _M.AutoIndex end
 

@@ -1,7 +1,6 @@
 -- Author      : Kurapica
 -- Create Date : 2014/09/11
 -- ChangeLog   :
-if require then require "System" end
 
 _ENV = Module "System.Helper" "0.1.0"
 

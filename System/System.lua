@@ -2,8 +2,6 @@
 -- Create Date : 2013/08/13
 -- ChangeLog   :
 
-if require then require "PLoop" end
-
 _ENV = Module "System" "1.0.0"
 
 namespace "System"

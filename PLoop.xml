@@ -1,11 +1,11 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
-    <Script file="PLoop.lua"/>
-    <Script file="System.lua"/>
+    <Script file="Core.lua"/>
+    <Script file="System\System.lua"/>
     <!--Script file="Error.lua"/-->
-    <Script file="IFIterator.lua"/>
-	<Script file="Array.lua"/>
-    <Script file="Threading.lua"/>
-    <Script file="Logger.lua"/>
-    <Script file="Recycle.lua"/>
-    <Script file="Data.lua"/>
+    <Script file="System\IFIterator.lua"/>
+	<Script file="System\Array.lua"/>
+    <Script file="System\Threading.lua"/>
+    <Script file="System\Logger.lua"/>
+    <Script file="System\Recycle.lua"/>
+    <Script file="System\Data.lua"/>
 </Ui>

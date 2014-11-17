@@ -4,8 +4,6 @@
 --				2011/03/17 the msg can be formatted string.
 --				2014/03/01 improve the log method
 
-if require then require "System" end
-
 _ENV = Module "System.Logger" "1.0.1"
 
 namespace "System"
