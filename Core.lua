@@ -29,13 +29,14 @@ OTHER DEALINGS IN THE SOFTWARE.
 --
 -- Config :
 --    PLOOP_DOCUMENT_ENABLED - Whether enable/disable document system, default true
+--    PLOOP_SAME_CLASS_METAMETHOD - Whether using same meta-methods for classes, default true
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/10/29
--- Version			r111
+-- Last Update Date 2014/11/16
+-- Version			r112
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -165,6 +166,7 @@ end
 do
 	-- Used to enable/disable document system, not started with '_', so can be disabled outsider
 	DOCUMENT_ENABLED = PLOOP_DOCUMENT_ENABLED == nil and true or PLOOP_DOCUMENT_ENABLED
+	SAME_CLASS_METAMETHOD = PLOOP_SAME_CLASS_METAMETHOD == nil and true or PLOOP_SAME_CLASS_METAMETHOD
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -2382,12 +2384,210 @@ do
 		if sub and pre ~= now then for cls in pairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
 	end
 
+	function Class_Index(self, key)
+		local info = _NSInfo[getmetatable(self)]
+
+		-- Dispose Method
+		if key == "Dispose" then return DisposeObject end
+
+		local Cache = info.Cache
+
+		-- Property Get
+		local oper = Cache[key]
+		if oper then
+			if type(oper) == "function" then
+				-- Method
+				if info.AutoCache == true then
+					rawset(self, key, oper)
+					return oper
+				else
+					return oper
+				end
+			elseif getmetatable(oper) then
+				-- Event
+				local evt = rawget(self, "__Events")
+				if type(evt) ~= "table" then
+					evt = {}
+					rawset(self, "__Events", evt)
+				end
+
+				-- No more check
+				if evt[key] then
+					return evt[key]
+				else
+					local ret = oper(self)
+					evt[key] = ret
+					return ret
+				end
+			else
+				-- Property
+				local value
+				local default = oper.Default
+
+				-- Get Getter
+				local operTar = oper.Get
+				if not operTar then
+					operTar = oper.GetMethod
+
+					if operTar then
+						local func = rawget(self, operTar)
+						if type(func) == "function" then
+							operTar = func
+						else
+							operTar = Cache[operTar]
+						end
+					end
+				end
+
+				-- Get Value
+				if operTar then
+					value = operTar(self)
+				else
+					operTar = oper.Field
+
+					if operTar then
+						if oper.SetWeak then
+							value = rawget(self, "__WeakFields")
+							if type(value) == "table" then
+								value = value[operTar]
+							else
+								value = nil
+							end
+						else
+							value = rawget(self, operTar)
+						end
+					elseif default == nil then
+						error(("%s can't be read."):format(key),2)
+					end
+				end
+
+				if value == nil then value = default end
+
+				if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
+
+				return value
+			end
+		end
+
+		-- Custom index metametods
+		oper = info.MetaTable.___index
+		if oper then return oper(self, key) end
+	end
+
+	function Class_NewIndex(self, key, value)
+		local info = _NSInfo[getmetatable(self)]
+		local Cache = info.Cache
+		local oper = Cache[key]
+
+		if type(oper) == "table" then
+			if getmetatable(oper) then
+				-- Event
+				local evt = rawget(self, "__Events")
+				if type(evt) ~= "table" then
+					evt = {}
+					rawset(self, "__Events", evt)
+				end
+
+				if value == nil and not evt[key] then return end
+
+				if not evt[key] then evt[key] = oper(self) end
+				evt = evt[key]
+
+				if value == nil or type(value) == "function" then
+					evt.Handler = value
+					return
+				elseif type(value) == "table" then
+					return evt:Copy(value)
+				else
+					error("Can't set this value to the event handler.", 2)
+				end
+			else
+				-- Property
+				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
+
+				-- Get Setter
+				local operTar = oper.Set
+				if not operTar then
+					operTar = oper.SetMethod
+
+					if operTar then
+						local func = rawget(self, operTar)
+						if type(func) == "function" then
+							operTar = func
+						else
+							operTar = Cache[operTar]
+						end
+					end
+				end
+
+				-- Set Value
+				if operTar then
+					return operTar(self, value)
+				else
+					operTar = oper.Field
+
+					if operTar then
+						-- Check container
+						local container = self
+						local default = oper.Default
+
+						if oper.SetWeak then
+							container = rawget(self, "__WeakFields")
+							if type(container) ~= "table" then
+								container = setmetatable({}, WEAK_VALUE)
+								rawset(self, "__WeakFields", container)
+							end
+						end
+
+						-- Check old value
+						local old = rawget(container, operTar)
+						if old == nil then old = default end
+						if old == value then return end
+
+						-- Set the value
+						rawset(container, operTar, value)
+
+						-- Dispose old
+						if oper.SetRetain and old and old ~= default then
+							DisposeObject(old)
+							old = nil
+						end
+
+						-- Call handler
+						operTar = oper.Handler
+						if operTar then operTar(self, value, old, key) end
+
+						-- Fire event
+						operTar = oper.Event
+						if operTar then
+							-- Fire the event
+							local evt = rawget(self, "__Events")
+							evt = evt and rawget(evt, operTar)
+							if evt then return evt(self, value, old, key) end
+						end
+
+						return
+					else
+						error(("%s can't be written."):format(key), 2)
+					end
+				end
+			end
+		end
+
+		-- Custom newindex metametods
+		oper = info.MetaTable.___newindex
+		if oper then return oper(self, key, value) end
+
+		rawset(self, key, value)
+	end
+
 	function GenerateMetatable(info)
 		local Cache = info.Cache
 
 		local meta = {}
 		meta.__metatable = info.Owner
-		meta.__index = function (self, key)
+		meta.__index = SAME_CLASS_METAMETHOD and Class_Index or function (self, key)
 			-- Dispose Method
 			if key == "Dispose" then return DisposeObject end
 
@@ -2473,7 +2673,7 @@ do
 			if oper then return oper(self, key) end
 		end
 
-		meta.__newindex = function (self, key, value)
+		meta.__newindex = SAME_CLASS_METAMETHOD and Class_NewIndex or function (self, key, value)
 			local oper = Cache[key]
 
 			if type(oper) == "table" then
