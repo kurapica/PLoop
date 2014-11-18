@@ -384,19 +384,6 @@ do
 	function SetLocal(flag) LOCAL_CACHE[running() or 0] = flag or nil end
 	function IsLocal() return LOCAL_CACHE[running() or 0] end
 
-	-- Public marker
-	PUBLIC_CACHE = setmetatable({}, WEAK_KEY)
-
-	function SetPublic() PUBLIC_CACHE[running() or 0] = true end
-	function IsPublic()
-		local key = running() or 0
-		local ret = PUBLIC_CACHE[key]
-		if ret then
-			PUBLIC_CACHE[key] = nil
-			return ret
-		end
-	end
-
 	-- Equal Check
 	local function checkEqual(obj1, obj2, cache)
 		if obj1 == obj2 then return true end
@@ -559,13 +546,6 @@ do
 			elseif iType == TYPE_ENUM then
 				return type(key) == "string" and info.Enum[strupper(key)] or error(("%s is not an enumeration value of %s."):format(tostring(key), tostring(self)), 2)
 			end
-
-			-- Public last
-			ret = info.Public
-			if ret then
-				ret = ret and ret[key]
-				return ret and ret[key]
-			end
 		end
 
 		_MetaNS.__newindex = function(self, key, value)
@@ -687,12 +667,6 @@ do
 			else
 				ret = info.Method[key] or info.Cache[key]
 				if type(ret) == "function" then return ret end
-
-				ret = info.Public
-				if ret then
-					ret = ret and ret[key]
-					return ret and ret[key]
-				end
 			end
 		end
 
@@ -1054,21 +1028,13 @@ do
 			-- Cache for Method
 			-- Validate fixedMethods, remove link to parent
 			for name, method in pairs(info.Method) do
-				if getmetatable(method) then
-					while method.Next do
-						if getmetatable(method.Next) then
-							if method.Next.Owner ~= info.Owner then
-								method.Next = nil
-								break
-							else
-								method = method.Next
-							end
-						else
-							-- Remove header 0
-							if iCache[name:match("^%d*(.-)$")] == method.Next then method.Next = nil end
-
-							break
-						end
+				while getmetatable(method) and method.Next do
+					if method.IsLast then
+						method.Next = nil
+						method.IsLast = nil
+						break
+					else
+						method = method.Next
 					end
 				end
 			end
@@ -1538,7 +1504,6 @@ do
 
 		_MetaIFDefEnv.__newindex = function(self, key, value)
 			local info = _NSInfo[self[OWNER_FIELD]]
-			local isPublic = IsPublic()
 
 			if _KeyWord4IFEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
@@ -1568,11 +1533,6 @@ do
 				else
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				end
-			end
-
-			if isPublic then
-				info.Public = info.Public or {}
-				info.Public[key] = self
 			end
 
 			rawset(self, key, value)
@@ -2268,7 +2228,6 @@ do
 
 		_MetaClsDefEnv.__newindex = function(self, key, value)
 			local info = _NSInfo[self[OWNER_FIELD]]
-			local isPublic = IsPublic()
 
 			if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
@@ -2309,11 +2268,6 @@ do
 				else
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				end
-			end
-
-			if isPublic then
-				info.Public = info.Public or {}
-				info.Public[key] = self
 			end
 
 			rawset(self, key, value)
@@ -3440,7 +3394,6 @@ do
 
 		_MetaStrtDefEnv.__newindex = function(self, key, value)
 			local info = _NSInfo[self[OWNER_FIELD]]
-			local isPublic = IsPublic()
 
 			if _KeyWord4StrtEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
@@ -3468,11 +3421,6 @@ do
 					SaveStructField(self, info, key, value)
 					return
 				end
-			end
-
-			if isPublic then
-				info.Public = info.Public or {}
-				info.Public[key] = self
 			end
 
 			rawset(self, key, value)
@@ -5868,6 +5816,7 @@ do
 				if self.__Next == nil and self.HasSelf then
 					if self.TargetType == AttributeTargets.Method then
 						self.__Next = getNextMethod(self.Owner, self.Name) or false
+						self.IsLast = true
 					elseif self.TargetType == AttributeTargets.Constructor then
 						local info = _NSInfo[self.Owner]
 
@@ -7801,14 +7750,10 @@ do
 		function __Local__(self) SetLocal(true) return Super(self) end
 	end)
 
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property + AttributeTargets.Method, Inherited = false }
 	__Final__() __Unique__()
-	class "__Public__" (function(_ENV)
-		doc "__Public__" [[Used to mark the features as public.]]
-
-		------------------------------------------------------
-		-- Constructor
-		------------------------------------------------------
-		__Public__ = SetPublic
+	class "__Static__" (function(_ENV)
+		doc "__Static__" [[Used to mark the features as static.]]
 	end)
 end
 
