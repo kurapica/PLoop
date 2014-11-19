@@ -29,14 +29,14 @@ OTHER DEALINGS IN THE SOFTWARE.
 --
 -- Config :
 --    PLOOP_DOCUMENT_ENABLED - Whether enable/disable document system, default true
---    PLOOP_SAME_CLASS_METAMETHOD - Whether using same meta-methods for classes, default true
+--    PLOOP_SAME_CLASS_METAMETHOD - Whether using same meta-methods for classes, default false
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/11/16
--- Version			r112
+-- Last Update Date 2014/11/19
+-- Version			r113
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -166,7 +166,7 @@ end
 do
 	-- Used to enable/disable document system, not started with '_', so can be disabled outsider
 	DOCUMENT_ENABLED = PLOOP_DOCUMENT_ENABLED == nil and true or PLOOP_DOCUMENT_ENABLED
-	SAME_CLASS_METAMETHOD = PLOOP_SAME_CLASS_METAMETHOD == nil and true or PLOOP_SAME_CLASS_METAMETHOD
+	SAME_CLASS_METAMETHOD = PLOOP_SAME_CLASS_METAMETHOD and true or false
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -541,8 +541,36 @@ do
 				ret = info.Method and info.Method[key]
 				if ret then return ret end
 			elseif iType == TYPE_CLASS or iType == TYPE_INTERFACE then
+				-- Method
 				ret = info.Method[key] or info.Cache[key]
 				if type(ret) == "function" then return ret end
+				-- Property
+				ret = info.Property[key]
+				if ret and ret.IsStatic then
+					local value
+					local default = ret.Default
+
+					-- Get Getter
+					local operTar = ret.Get
+					if not operTar then
+						operTar = ret.GetMethod
+
+						operTar = operTar and info.Method[operTar]
+					end
+
+					-- Get Value
+					if operTar then
+						value = operTar()
+					elseif default == nil then
+						error(("%s can't be read."):format(key), 2)
+					end
+
+					if value == nil then value = default end
+
+					if ret.GetClone then value = CloneObj(value, ret.GetDeepClone) end
+
+					return value
+				end
 			elseif iType == TYPE_ENUM then
 				return type(key) == "string" and info.Enum[strupper(key)] or error(("%s is not an enumeration value of %s."):format(tostring(key), tostring(self)), 2)
 			end
@@ -565,25 +593,49 @@ do
 				else
 					error("Can't override the existed feature.", 2)
 				end
-			elseif (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and not info.NonExpandable and type(key) == "string" then
-				if not info.Cache[key] then
-					if type(value) == "function" then
-						-- Method
-						SaveFixedMethod(info.Method, key, value, info.Owner)
-					elseif type(value) == "table" then
-						-- Property
-						SetPropertyWithSet(info, key, value)
-					elseif not tonumber(key) then
-						-- Event
-						info.Event[key] = info.Event[key] or Event(key)
+			elseif (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and type(key) == "string" then
+				-- Static Property
+				local oper = info.Property[key]
 
-						if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
-					else
-						error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
+				if oper and oper.IsStatic then
+					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
+
+					-- Get Setter
+					local operTar = oper.Set
+					if not operTar then
+						operTar = oper.SetMethod
+
+						operTar = operTar and info.Method[operTar]
 					end
 
-					return not info.BeginDefinition and RefreshCache(self)
-				else
+					-- Set Value
+					if operTar then
+						return operTar(value)
+					else
+						error(("%s can't be written."):format(key), 2)
+					end
+				elseif not info.NonExpandable then
+					-- new feature
+					if not info.Cache[key] then
+						if type(value) == "function" then
+							-- Method
+							SaveFixedMethod(info.Method, key, value, info.Owner)
+						elseif type(value) == "table" then
+							-- Property
+							SetPropertyWithSet(info, key, value)
+						elseif not tonumber(key) then
+							-- Event
+							info.Event[key] = info.Event[key] or Event(key)
+
+							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
+						else
+							error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
+						end
+
+						return not info.BeginDefinition and RefreshCache(self)
+					end
+
 					error("Can't override the existed feature.", 2)
 				end
 			end
@@ -978,16 +1030,12 @@ do
 			end
 		end
 
-		function CloneWithOverride(dest, src)
-			for key, value in pairs(src) do dest[key] = value end
+		function CloneWithOverride(dest, src, chkStatic)
+			for key, value in pairs(src) do if not (chkStatic and value.IsStatic) then dest[key] = value end end
 		end
 
 		function CloneWithoutOverride(dest, src)
 			for key, value in pairs(src) do if dest[key] == nil then dest[key] = value end end
-		end
-
-		function CloneObjectMethod(dest, src)
-			for key, value in pairs(src) do if not key:match("^[%d_]") then dest[key] = src[key] end end
 		end
 
 		function CloneInterfaceCache(dest, src, cache)
@@ -1038,7 +1086,12 @@ do
 					end
 				end
 			end
-			CloneObjectMethod(iCache, info.Method)
+			local staticMethod = info.StaticMethod
+			if staticMethod then
+				for key, value in pairs(info.Method) do if not staticMethod[key] then iCache[key] = value end end
+			else
+				for key, value in pairs(info.Method) do iCache[key] = value end
+			end
 
 			-- Cache for Property
 			-- Validate the properties
@@ -1047,6 +1100,9 @@ do
 					local set = prop.Predefined
 
 					prop.Predefined = nil
+
+					-- Static Property
+					prop.IsStatic = set.IsStatic and true or false
 
 					for k, v in pairs(set) do
 						if type(k) == "string" then
@@ -1104,8 +1160,13 @@ do
 
 					local uname = name:gsub("^%a", strupper)
 
-					if prop.GetMethod and type(iCache[prop.GetMethod]) ~= "function" then prop.GetMethod = nil end
-					if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
+					if prop.IsStatic then
+						if prop.GetMethod and not info.Method[prop.GetMethod] then prop.GetMethod = nil end
+						if prop.SetMethod and not info.Method[prop.SetMethod] then prop.SetMethod = nil end
+					else
+						if prop.GetMethod and type(iCache[prop.GetMethod]) ~= "function" then prop.GetMethod = nil end
+						if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
+					end
 
 					-- Auto generate GetMethod
 					if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
@@ -1328,7 +1389,7 @@ do
 				end
 			end
 			--- self property
-			CloneWithOverride(iCache, info.Property)
+			CloneWithOverride(iCache, info.Property, true)
 
 			-- Requires
 			if info.Type == TYPE_INTERFACE then
@@ -1367,7 +1428,7 @@ do
 
 					for _, sCache in ipairs(cache) do
 						for name in pairs(sCache) do
-							if not name:match("^[%d_]") then autoCache[name] = true end
+							if not (staticMethod and staticMethod[name]) then autoCache[name] = true end
 						end
 					end
 
@@ -2346,7 +2407,6 @@ do
 
 		local Cache = info.Cache
 
-		-- Property Get
 		local oper = Cache[key]
 		if oper then
 			if type(oper) == "function" then
@@ -2545,7 +2605,6 @@ do
 			-- Dispose Method
 			if key == "Dispose" then return DisposeObject end
 
-			-- Property Get
 			local oper = Cache[key]
 			if oper then
 				if type(oper) == "function" then
@@ -4288,6 +4347,7 @@ do
 					for i, v in pairs(info.Property) do tinsert(ret, i) end
 				else
 					for i, v in pairs(info.Cache) do if type(v) == "table" and not getmetatable(v) then tinsert(ret, i) end end
+					for i, v in pairs(info.Property) do if v.IsStatic then tinsert(ret, i) end end
 				end
 				sort(ret)
 
@@ -4341,7 +4401,7 @@ do
 			local info = _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
-				local prop = info.Cache[propName]
+				local prop = info.Cache[propName] or info.Property[propName]
 				if type(prop) == "table" and not getmetatable(prop) and prop.Type then
 					return prop.Type:Clone()
 				end
@@ -4361,7 +4421,7 @@ do
 			local info = _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
-				local prop = info.Cache[propName]
+				local prop = info.Cache[propName] or info.Property[propName]
 				if type(prop) == "table" and not getmetatable(prop) and prop.Type then return true end
 			end
 			return false
@@ -4381,7 +4441,9 @@ do
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local prop = info.Cache[propName]
-				return type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field) and true or false
+				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
+				prop = info.Property[propName]
+				if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
 			end
 		end
 
@@ -4399,7 +4461,9 @@ do
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local prop = info.Cache[propName]
-				return type(prop) == "table" and not getmetatable(prop) and (prop.Set or prop.SetMethod or prop.Field) and true or false
+				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Set or prop.SetMethod or prop.Field) and true or false end
+				prop = info.Property[propName]
+				if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
 			end
 		end
 
@@ -4457,6 +4521,37 @@ do
 			local info = _NSInfo[ns]
 
 			return info and info.Type == TYPE_INTERFACE and info.OptionalProperty and info.OptionalProperty[name] or false
+		end
+
+		doc "IsStaticProperty" [[
+			<desc>Whether the property is static</desc>
+			<param name="owner" type="interface">the property's owner</param>
+			<param name="name" type="string">the property's name</param>
+			<return type="boolean">true if the property is static</return>
+		]]
+		function IsStaticProperty(ns, name)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
+
+			local info = _NSInfo[ns]
+
+			info = info and info.Property
+			info = info and info[name]
+
+			return info and info.IsStatic or false
+		end
+
+		doc "IsStaticMethod" [[
+			<desc>Whether the method is static</desc>
+			<param name="owner" type="interface">the method's owner</param>
+			<param name="name" type="string">the method's name</param>
+			<return type="boolean">true if the method is static</return>
+		]]
+		function IsStaticMethod(ns, name)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
+
+			local info = _NSInfo[ns]
+
+			return info and info.StaticMethod and info.StaticMethod[name] or false
 		end
 
 		doc "IsFlagsEnum" [[
@@ -5667,6 +5762,15 @@ do
 		------------------------------------------------------
 		doc "MatchArgs" [[Whether the fixed method can handler the arguments]]
 		function MatchArgs(self, ...)
+			-- Check if this is a static method
+			if self.HasSelf == nil then
+				self.HasSelf = true
+				if self.TargetType == AttributeTargets.Method then
+					if Reflector.IsInterface(self.Owner) and Reflector.IsNonInheritable(self.Owner) then self.HasSelf = false end
+					if Reflector.IsStaticMethod(self.Owner, self.Name) then self.HasSelf = false end
+				end
+			end
+
 			local base = self.HasSelf and 1 or 0
 			local count = select('#', ...) - base
 			local argsCount = #self
@@ -5763,6 +5867,15 @@ do
 
 		doc "RaiseError" [[Fire the error to show the usage of the fixedMethod link list]]
 		function RaiseError(self, obj)
+			-- Check if this is a static method
+			if self.HasSelf == nil then
+				self.HasSelf = true
+				if self.TargetType == AttributeTargets.Method then
+					if Reflector.IsInterface(self.Owner) and Reflector.IsNonInheritable(self.Owner) then self.HasSelf = false end
+					if Reflector.IsStaticMethod(self.Owner, self.Name) then self.HasSelf = false end
+				end
+			end
+
 			-- Get the root call fixmethod
 			if self.TargetType == AttributeTargets.Method then
 				if self.HasSelf then
@@ -5839,14 +5952,22 @@ do
 			Get = function (self)
 				if self.__Usage then return self.__Usage end
 
+				-- Check if this is a static method
+				if self.HasSelf == nil then
+					self.HasSelf = true
+					if self.TargetType == AttributeTargets.Method then
+						if Reflector.IsInterface(self.Owner) and Reflector.IsNonInheritable(self.Owner) then self.HasSelf = false end
+						if Reflector.IsStaticMethod(self.Owner, self.Name) then self.HasSelf = false end
+					end
+				end
+
 				-- Generate usage message
 				local usage = CACHE_TABLE()
 				local name = self.Name
 				local owner = self.Owner
 
 				if self.TargetType == AttributeTargets.Method then
-					if (name:match("^_") and not (Reflector.IsClass(owner) and (_KeyMeta[name] or _KeyMeta[name:sub(2)] == false))) or
-						( Reflector.IsInterface(owner) and Reflector.IsNonInheritable(owner) ) then
+					if not self.HasSelf then
 						tinsert(usage, "Usage : " .. tostring(owner) .. "." .. name .. "( ")
 					else
 						tinsert(usage, "Usage : " .. tostring(owner) .. ":" .. name .. "( ")
@@ -7042,18 +7163,6 @@ do
 			self.TargetType = targetType
 			self.Name = name
 
-			if targetType == AttributeTargets.Method then
-				if (name:match("^_") and not (Reflector.IsClass(owner) and name ~= "__exist" and (_KeyMeta[name] or _KeyMeta[name:sub(2)] == false))) or
-					( Reflector.IsInterface(owner) and Reflector.IsNonInheritable(owner) ) then
-					self.HasSelf = false
-				else
-					self.HasSelf = true
-				end
-			else
-				-- No self for struct constructor
-				self.HasSelf = Reflector.IsClass(owner)
-			end
-
 			-- Quick match
 			if not self.MinArgs then self.MinArgs = #self end
 			if not self.MaxArgs then self.MaxArgs = #self end
@@ -7750,10 +7859,25 @@ do
 		function __Local__(self) SetLocal(true) return Super(self) end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property + AttributeTargets.Method, Inherited = false }
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property + AttributeTargets.Method, Inherited = false, RunOnce = true }
 	__Final__() __Unique__()
 	class "__Static__" (function(_ENV)
+		inherit "__Attribute__"
 		doc "__Static__" [[Used to mark the features as static.]]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self, target, targetType, owner, name)
+			if targetType == AttributeTargets.Property then
+				target.IsStatic = true
+			elseif targetType == AttributeTargets.Method then
+				local info = _NSInfo[owner]
+
+				info.StaticMethod = info.StaticMethod or {}
+				info.StaticMethod[name] = true
+			end
+		end
 	end)
 end
 
