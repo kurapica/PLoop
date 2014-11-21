@@ -7432,7 +7432,7 @@ do
 		SaveFixedMethod(_NSInfo[__Attribute__], "Constructor", _NSInfo[__Attribute__].Constructor, __Attribute__, AttributeTargets.Constructor)
 
 		-- System.__Unique__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true, BeforeDefinition = true}
 		ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Unique__)
 		__Final__:ApplyAttribute(__Unique__)
@@ -7456,7 +7456,7 @@ do
 		__Final__:ApplyAttribute(__Final__)
 
 		-- System.__NonInheritable__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true, BeforeDefinition = true}
 		ConsumePreparedAttributes(__NonInheritable__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__NonInheritable__)
 		__Final__:ApplyAttribute(__NonInheritable__)
