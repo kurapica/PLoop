@@ -687,10 +687,10 @@ do
 		_MetaNS.__add = function(v1, v2)
 			local ok, _type1, _type2
 
-			ok, _type1 = pcall(BuildType, v1)
+			ok, _type1 = pcall(BuildValidatedType, v1)
 			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
 
-			ok, _type2 = pcall(BuildType, v2)
+			ok, _type2 = pcall(BuildValidatedType, v2)
 			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
 
 			return _type1 + _type2
@@ -699,10 +699,10 @@ do
 		_MetaNS.__sub = function(v1, v2)
 			local ok, _type1, _type2
 
-			ok, _type1 = pcall(BuildType, v1)
+			ok, _type1 = pcall(BuildValidatedType, v1)
 			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
 
-			ok, _type2 = pcall(BuildType, v2, true)
+			ok, _type2 = pcall(BuildValidatedType, v2, true)
 			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
 
 			return _type1 + _type2
@@ -711,7 +711,7 @@ do
 		_MetaNS.__unm = function(v1)
 			local ok, _type1
 
-			ok, _type1 = pcall(BuildType, v1, true)
+			ok, _type1 = pcall(BuildValidatedType, v1, true)
 			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
 
 			return _type1
@@ -861,22 +861,22 @@ do
 end
 
 ------------------------------------------------------
--- Type
+-- ValidatedType
 ------------------------------------------------------
 do
-	function IsType(self) return getmetatable(self) == Type end
+	function IsValidatedType(self) return getmetatable(self) == ValidatedType end
 
-	function BuildType(ns, onlyClass)
+	function BuildValidatedType(ns, onlyClass)
 		local allowNil = false
 
 		if ns == nil then
 			allowNil = true
-		elseif IsType(ns) then
+		elseif IsValidatedType(ns) then
 			return ns
 		end
 
 		if ns == nil or IsNameSpace(ns) then
-			local _type = Type()
+			local _type = ValidatedType()
 
 			_type.AllowNil = allowNil or nil
 			if ns then if onlyClass then _type[-1] = ns else _type[1] = ns end end
@@ -887,21 +887,21 @@ do
 		end
 	end
 
-	_UniqueType = setmetatable({}, WEAK_KEY)
-	_UniqueWithNilType = setmetatable({}, WEAK_VALUE)
+	_UniqueValidatedType = setmetatable({}, WEAK_KEY)
+	_UniqueWithNilValidatedType = setmetatable({}, WEAK_VALUE)
 
-	function GetUniqueType(self)
-		if IsType(self) then
+	function GetUniqueValidatedType(self)
+		if IsValidatedType(self) then
 			-- No unique for complex type
 			if self[-1] or #self ~= 1 then return self end
 
 			if self.AllowNil then
-				if _UniqueWithNilType[self[1]] then return _UniqueWithNilType[self[1]] end
-				_UniqueWithNilType[self[1]] = self
+				if _UniqueWithNilValidatedType[self[1]] then return _UniqueWithNilValidatedType[self[1]] end
+				_UniqueWithNilValidatedType[self[1]] = self
 				return self
 			else
-				if _UniqueType[self[1]] then return _UniqueType[self[1]] end
-				_UniqueType[self[1]] = self
+				if _UniqueValidatedType[self[1]] then return _UniqueValidatedType[self[1]] end
+				_UniqueValidatedType[self[1]] = self
 				return self
 			end
 		else
@@ -1168,9 +1168,9 @@ do
 							elseif k == "field" then
 								if v ~= name then prop.Field = v end
 							elseif k == "type" then
-								local ok, ret = pcall(BuildType, v)
+								local ok, ret = pcall(BuildValidatedType, v)
 								if ok then
-									prop.Type = GetUniqueType(ret)
+									prop.Type = GetUniqueValidatedType(ret)
 								else
 									errorhandler(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
 								end
@@ -2152,7 +2152,7 @@ do
 					local vType = getmetatable(v)
 
 					if vType and type(v) ~= "string" then
-						if vType == TYPE_NAMESPACE or vType == Type then
+						if vType == TYPE_NAMESPACE or vType == ValidatedType then
 							SetPropertyWithSet(info, k, { Type = v })
 						end
 					elseif type(v) == "table" then
@@ -3687,7 +3687,7 @@ do
 						-- Don't save to environment until need it
 						return SaveFixedMethod(info.Method, key, value, info.Owner)
 					end
-				elseif (value == nil or IsType(value) or IsNameSpace(value)) then
+				elseif (value == nil or IsValidatedType(value) or IsNameSpace(value)) then
 					SaveStructField(self, info, key, value)
 					return
 				end
@@ -3975,7 +3975,7 @@ do
 	end
 
 	function SaveStructField(self, info, key, value)
-		local ok, ret = pcall(BuildType, value)
+		local ok, ret = pcall(BuildValidatedType, value)
 
 		if ok then
 			rawset(self, key, ret)
@@ -4025,7 +4025,7 @@ do
 			local chkNIL = false
 			local hasNIL = false
 			for _, n in ipairs(info.Members) do
-				info.StructEnv[n] = GetUniqueType(info.StructEnv[n])
+				info.StructEnv[n] = GetUniqueValidatedType(info.StructEnv[n])
 				if info.StructEnv[n] and not info.StructEnv[n].AllowNil then
 					if hasNIL then chkNIL = true end
 				else
@@ -4048,7 +4048,7 @@ do
 				end
 			end
 		elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-			info.ArrayElement = GetUniqueType(info.ArrayElement)
+			info.ArrayElement = GetUniqueValidatedType(info.ArrayElement)
 		end
 	end
 
@@ -4060,7 +4060,7 @@ do
 				local vType = getmetatable(v)
 
 				if vType and type(v) ~= "string" then
-					if (vType == TYPE_NAMESPACE or vType == Type) and type(k) == "string" and not tonumber(k) then
+					if (vType == TYPE_NAMESPACE or vType == ValidatedType) and type(k) == "string" and not tonumber(k) then
 						SaveStructField(self, info, k, v)
 					end
 				elseif type(v) == "function" then
@@ -4889,7 +4889,7 @@ do
 				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
 					local tmp = {}
 
-					for key, value in pairs(info.StructEnv) do if type(key) == "string" and IsType(value) then tinsert(tmp, key) end end
+					for key, value in pairs(info.StructEnv) do if type(key) == "string" and IsValidatedType(value) then tinsert(tmp, key) end end
 
 					sort(tmp)
 
@@ -4913,12 +4913,12 @@ do
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
 					for _, p in ipairs(info.Members) do
-						if p == part and IsType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
+						if p == part and IsValidatedType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
 					end
 				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
 					return info.ArrayElement:Clone()
 				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					if IsType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
+					if IsValidatedType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
 				end
 			end
 		end
@@ -5073,7 +5073,7 @@ do
 
 					tinsert(self, key)
 				else
-					if next(self) then return tremove(self) else return BuildType(nil) end
+					if next(self) then return tremove(self) else return BuildValidatedType(nil) end
 				end
 			end,
 		})
@@ -5107,7 +5107,7 @@ do
 				types = vtype
 			end
 
-			local ok, _type = pcall(BuildType, types)
+			local ok, _type = pcall(BuildValidatedType, types)
 
 			if ok then
 				if _type then
@@ -5193,7 +5193,7 @@ do
 
 		function Serialize(data, ns)
 			if ns then
-				if ObjectIsClass(ns, Type) then
+				if ObjectIsClass(ns, ValidatedType) then
 					ns = ns:GetObjectType(data)
 
 					if ns == false then return nil elseif ns == nil then return "nil" end
@@ -5353,8 +5353,8 @@ end
 -- Local Namespace (Inner classes)
 ------------------------------------------------------
 do
-	class "Type" (function(_ENV)
-		doc "Type" [[The type object used to handle the value's validation]]
+	class "ValidatedType" (function(_ENV)
+		doc "ValidatedType" [[The type object used to handle the value's validation]]
 
 		------------------------------------------------------
 		-- Property
@@ -5504,7 +5504,7 @@ do
 			<return>the clone</return>
 		]]
 		function Clone(self)
-			local _type = Type()
+			local _type = ValidatedType()
 
 			for i, v in pairs(self) do _type[i] = v end
 
@@ -5672,7 +5672,7 @@ do
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
-		function Type(self, ns)
+		function ValidatedType(self, ns)
 			if IsNameSpace(ns) then self[1] = ns end
 		end
 
@@ -5680,20 +5680,20 @@ do
 		-- MetaMethod
 		------------------------------------------------------
 		function __exist(ns)
-			if getmetatable(ns) == Type then return ns end
+			if getmetatable(ns) == ValidatedType then return ns end
 		end
 
 		function __add(v1, v2)
 			local ok, _type1, _type2
 
-			ok, _type1 = pcall(BuildType, v1)
+			ok, _type1 = pcall(BuildValidatedType, v1)
 			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
 
-			ok, _type2 = pcall(BuildType, v2)
+			ok, _type2 = pcall(BuildValidatedType, v2)
 			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
 
 			if _type1 and _type2 then
-				local _type = Type()
+				local _type = ValidatedType()
 
 				_type.AllowNil = _type1.AllowNil or _type2.AllowNil
 
@@ -5739,7 +5739,7 @@ do
 			if IsNameSpace(v2) then
 				local ok, _type2
 
-				ok, _type2 = pcall(BuildType, v2, true)
+				ok, _type2 = pcall(BuildValidatedType, v2, true)
 				if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
 
 				return v1 + _type2
@@ -5750,10 +5750,10 @@ do
 			end
 		end
 
-		function __unm(v1) error("Can't use unary '-' before a Type", 2) end
+		function __unm(v1) error("Can't use unary '-' before a ValidatedType", 2) end
 
 		function __eq(v1, v2)
-			if getmetatable(v1) == Type and getmetatable(v2) == Type and v1.AllowNil == v2.AllowNil and #v1 == #v2 then
+			if getmetatable(v1) == ValidatedType and getmetatable(v2) == ValidatedType and v1.AllowNil == v2.AllowNil and #v1 == #v2 then
 				local index = -1
 				while rawget(v1, index) do
 					if v1[index] == v2[index] then
@@ -7256,7 +7256,7 @@ do
 		IsList = Boolean + nil
 
 		local function isCloneNeeded(self)
-			if getmetatable(self) ~= Type then return end
+			if getmetatable(self) ~= ValidatedType then return end
 
 			for _, ns in ipairs(self) do
 				local info = _NSInfo[ns]
@@ -7280,7 +7280,7 @@ do
 		end
 
 		function Argument(value)
-			value.Type = GetUniqueType(value.Type and BuildType(value.Type) or nil)
+			value.Type = GetUniqueValidatedType(value.Type and BuildValidatedType(value.Type) or nil)
 
 			if value.Type and value.Default ~= nil then
 				value.Default = value.Type:GetValidatedValue(value.Default)
@@ -7306,10 +7306,10 @@ do
 
 			if getmetatable(arg) ~= nil then
 				-- Convert to type
-				if getmetatable(arg) == TYPE_NAMESPACE then arg = Type(arg) end
+				if getmetatable(arg) == TYPE_NAMESPACE then arg = ValidatedType(arg) end
 
 				-- Convert type to Argument
-				if getmetatable(arg) == Type then
+				if getmetatable(arg) == ValidatedType then
 					arg = Argument { Type = arg }
 
 					-- Check optional args
@@ -7474,9 +7474,9 @@ do
 		__Final__:ApplyAttribute(Reflector)
 		__NonInheritable__:ApplyAttribute(Reflector)
 
-		-- Type
-		__Final__:ApplyAttribute(Type)
-		__NonInheritable__:ApplyAttribute(Type)
+		-- ValidatedType
+		__Final__:ApplyAttribute(ValidatedType)
+		__NonInheritable__:ApplyAttribute(ValidatedType)
 
 		-- Event
 		__Final__:ApplyAttribute(Event)
@@ -7558,9 +7558,9 @@ do
 		end
 	end)
 
-	-- Apply Attribute to Type class
+	-- Apply Attribute to ValidatedType class
 	do
-		__Cache__:ApplyAttribute(Type, AttributeTargets.Class)
+		__Cache__:ApplyAttribute(ValidatedType, AttributeTargets.Class)
 	end
 
 	enum "StructType" {
@@ -7892,7 +7892,7 @@ do
 				local info = _NSInfo[owner]
 				if not info or info.SubType ~= _STRUCT_TYPE_MEMBER then return end
 				local ty = rawget(info.StructEnv, target)
-				if not IsType(ty) or not ty:GetObjectType(self.Default) then return end
+				if not IsValidatedType(ty) or not ty:GetObjectType(self.Default) then return end
 
 				info.DefaultField = info.DefaultField or {}
 				info.DefaultField[target] = self.Default
