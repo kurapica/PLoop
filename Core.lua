@@ -3714,12 +3714,12 @@ do
 	_ValidatedCache = setmetatable({}, WEAK_ALL)
 
 	function ValidateStruct(strt, value)
-		if _ValidatedCache[value] then return value end
-
 		local info = _NSInfo[strt]
 
 		if info.SubType ~= _STRUCT_TYPE_CUSTOM then
 			if type(value) ~= "table" then wipe(_ValidatedCache) error(("%s must be a table, got %s."):format("%s", type(value))) end
+
+			if _ValidatedCache[value] then return value end
 
 			if not _ValidatedCache[1] then _ValidatedCache[1] = value end
 			_ValidatedCache[value] = true
