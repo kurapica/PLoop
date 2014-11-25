@@ -1815,14 +1815,16 @@ do
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
-			setmetatable(self, _MetaIFEnv)
+			pcall(setmetatable, self, _MetaIFEnv)
 			RefreshCache(owner)
 
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
 		end
+
+		_MetaIFEnv.__call = _MetaIFDefEnv.__call
 	end
 
 	function IsExtend(IF, cls)
@@ -2550,13 +2552,15 @@ do
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
-			setmetatable(self, _MetaClsEnv)
+			pcall(setmetatable, self, _MetaClsEnv)
 			RefreshCache(owner)
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
 		end
+
+		_MetaClsEnv.__call = _MetaClsDefEnv.__call
 	end
 
 	function IsChildClass(cls, child)
@@ -3700,14 +3704,16 @@ do
 			local ok, msg = pcall(ParseStructDefinition, self, definition)
 			local owner = self[OWNER_FIELD]
 
-			setmetatable(self, _MetaStrtEnv)
 			setfenv(2, self[BASE_ENV_FIELD])
+			pcall(setmetatable, self, _MetaStrtEnv)
 			RefreshStruct(owner)
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
 		end
+
+		_MetaStrtEnv.__call = _MetaStrtDefEnv.__call
 	end
 
 	-- Some struct object may ref to each others, that would crash the validation
