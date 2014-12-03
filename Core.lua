@@ -1309,7 +1309,13 @@ do
 
 
 					-- Validate the Event
-					if prop.Event and not getmetatable(iCache[prop.Event]) then prop.Event = nil end
+					if prop.Event and not getmetatable(iCache[prop.Event]) then
+						if iCache[prop.Event] == nil then
+							-- Auto create
+							info.Event[prop.Event] = Event(prop.Event)
+							iCache[prop.Event] = info.Event[prop.Event]
+						end
+					end
 
 					-- Validate the Handler
 					if prop.HandlerName then
