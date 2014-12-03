@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/11/19
--- Version			r113
+-- Last Update Date 2014/12/03
+-- Version			r114
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -3774,8 +3774,14 @@ do
 
 	function CopyStructMethods(info, obj)
 		if info.Method and type(obj) == "table" then
-			for k, v in pairs(info.Method) do
-				if obj[k] == nil then obj[k] = v end
+			if info.StaticMethod then
+				for k, v in pairs(info.Method) do
+					if not info.StaticMethod[k] and obj[k] == nil then obj[k] = v end
+				end
+			else
+				for k, v in pairs(info.Method) do
+					if obj[k] == nil then obj[k] = v end
+				end
 			end
 		end
 
