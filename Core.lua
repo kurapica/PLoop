@@ -557,6 +557,7 @@ do
 
 					-- Get Value
 					if operTar then
+						if default == nil and not oper.GetClone then return operTar() end
 						value = operTar()
 					else
 						operTar = oper.Field
@@ -570,7 +571,6 @@ do
 					end
 
 					if value == nil then value = default end
-
 					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 					return value
@@ -2660,22 +2660,11 @@ do
 				local default = oper.Default
 
 				-- Get Getter
-				local operTar = oper.Get
-				if not operTar then
-					operTar = oper.GetMethod
-
-					if operTar then
-						local func = rawget(self, operTar)
-						if type(func) == "function" then
-							operTar = func
-						else
-							operTar = Cache[operTar]
-						end
-					end
-				end
+				local operTar = oper.Get or Cache[oper.GetMethod]
 
 				-- Get Value
 				if operTar then
+					if default == nil and not oper.GetClone then return operTar(self) end
 					value = operTar(self)
 				else
 					operTar = oper.Field
@@ -2697,7 +2686,6 @@ do
 				end
 
 				if value == nil then value = default end
-
 				if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 				return value
@@ -2742,19 +2730,7 @@ do
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 				-- Get Setter
-				local operTar = oper.Set
-				if not operTar then
-					operTar = oper.SetMethod
-
-					if operTar then
-						local func = rawget(self, operTar)
-						if type(func) == "function" then
-							operTar = func
-						else
-							operTar = Cache[operTar]
-						end
-					end
-				end
+				local operTar = oper.Set or Cache[oper.SetMethod]
 
 				-- Set Value
 				if operTar then
@@ -2858,22 +2834,11 @@ do
 					local default = oper.Default
 
 					-- Get Getter
-					local operTar = oper.Get
-					if not operTar then
-						operTar = oper.GetMethod
-
-						if operTar then
-							local func = rawget(self, operTar)
-							if type(func) == "function" then
-								operTar = func
-							else
-								operTar = Cache[operTar]
-							end
-						end
-					end
+					local operTar = oper.Get or Cache[oper.GetMethod]
 
 					-- Get Value
 					if operTar then
+						if default == nil and not oper.GetClone then return operTar(self) end
 						value = operTar(self)
 					else
 						operTar = oper.Field
@@ -2895,7 +2860,6 @@ do
 					end
 
 					if value == nil then value = default end
-
 					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 					return value
@@ -2938,19 +2902,7 @@ do
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 					-- Get Setter
-					local operTar = oper.Set
-					if not operTar then
-						operTar = oper.SetMethod
-
-						if operTar then
-							local func = rawget(self, operTar)
-							if type(func) == "function" then
-								operTar = func
-							else
-								operTar = Cache[operTar]
-							end
-						end
-					end
+					local operTar = oper.Set or Cache[oper.SetMethod]
 
 					-- Set Value
 					if operTar then
@@ -7702,14 +7654,14 @@ do
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Final__() __Unique__()
-	class "__Abstract__"
+	class "__Abstract__" (function(_ENV)
 		inherit "__Attribute__"
 		doc "__Abstract__" [[Mark the class as abstract class, can't be used to create objects.]]
 
 		function ApplyAttribute(self, target, targetType)
 			if _NSInfo[target] then _NSInfo[target].AbstractClass = true end
 		end
-	endclass "__Abstract__"
+	end)
 
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Final__() __Unique__()
