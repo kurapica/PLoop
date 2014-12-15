@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/12/03
--- Version			r114
+-- Last Update Date 2014/12/15
+-- Version			r115
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -3638,9 +3638,12 @@ do
 				end
 			end
 
-			if type(key) == "string"  then
+			if type(key) == "string" or tonumber(key) then
 				if type(value) == "function" then
-					if IsLocal() then
+					if tonumber(key) then
+						info.Validator = value
+						return
+					elseif IsLocal() then
 						return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
 					else
 						-- Cache the method for the struct data
@@ -3950,6 +3953,11 @@ do
 		if ok then
 			rawset(self, key, ret)
 
+			if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
+				info.SubType = _STRUCT_TYPE_ARRAY
+				info.Members = nil
+			end
+
 			if info.SubType == _STRUCT_TYPE_MEMBER then
 				info.Members = info.Members or {}
 				tinsert(info.Members, key)
@@ -3966,7 +3974,7 @@ do
 				end
 			elseif info.SubType == _STRUCT_TYPE_ARRAY then
 				info.ArrayElement = ret
-				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, key) end
+				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, "ArrayElement") end
 			end
 		else
 			error(strtrim(ret:match(":%d+:%s*(.-)$") or ret), 3)
@@ -4030,11 +4038,11 @@ do
 				local vType = getmetatable(v)
 
 				if vType and type(v) ~= "string" then
-					if (vType == TYPE_NAMESPACE or vType == ValidatedType) and type(k) == "string" and not tonumber(k) then
+					if (vType == TYPE_NAMESPACE or vType == ValidatedType) and (type(k) == "string" or tonumber(k)) then
 						SaveStructField(self, info, k, v)
 					end
 				elseif type(v) == "function" then
-					if k == info.Name or type(k) == "number" then
+					if k == info.Name or tonumber(k) then
 						info.Validator = v
 					else
 						info.Method = info.Method or {}
