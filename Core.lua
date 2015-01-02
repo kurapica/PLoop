@@ -1715,6 +1715,10 @@ do
 			value = info.Method[key]
 			if value then rawset(self, key, value) return value end
 
+			-- Check event
+			value = info.Event[key]
+			if value then rawset(self, key, value) return value end
+
 			-- Check Local
 			if rawget(self, LOCAL_ENV_FIELD) then
 				value = self[LOCAL_ENV_FIELD][key]
@@ -1768,6 +1772,10 @@ do
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same interface
 			value = info.Method[key]
+			if value then return value end
+
+			-- Check event
+			value = info.Event[key]
 			if value then return value end
 
 			-- Check Local
@@ -2393,6 +2401,10 @@ do
 			value = info.Method[key]
 			if value then rawset(self, key, value) return value end
 
+			-- Check event
+			value = info.Event[key]
+			if value then rawset(self, key, value) return value end
+
 			-- Check Local
 			if rawget(self, LOCAL_ENV_FIELD) then
 				value = self[LOCAL_ENV_FIELD][key]
@@ -2487,6 +2499,10 @@ do
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same class
 			value = info.Method[key]
+			if value then return value end
+
+			-- Check event
+			value = info.Event[key]
 			if value then return value end
 
 			-- Check Local
@@ -2650,7 +2666,7 @@ do
 				if evt[key] then
 					return evt[key]
 				else
-					local ret = oper(self)
+					local ret = EventHandler(oper, self)
 					evt[key] = ret
 					return ret
 				end
@@ -2713,7 +2729,7 @@ do
 
 				if value == nil and not evt[key] then return end
 
-				if not evt[key] then evt[key] = oper(self) end
+				if not evt[key] then evt[key] = EventHandler(oper, self) end
 				evt = evt[key]
 
 				if value == nil or type(value) == "function" then
@@ -2824,7 +2840,7 @@ do
 					if evt[key] then
 						return evt[key]
 					else
-						local ret = oper(self)
+						local ret = EventHandler(oper, self)
 						evt[key] = ret
 						return ret
 					end
@@ -2885,7 +2901,7 @@ do
 
 					if value == nil and not evt[key] then return end
 
-					if not evt[key] then evt[key] = oper(self) end
+					if not evt[key] then evt[key] = EventHandler(oper, self) end
 					evt = evt[key]
 
 					if value == nil or type(value) == "function" then
@@ -5795,7 +5811,11 @@ do
 		------------------------------------------------------
 		function __tostring(self) return ("%s( %q )"):format(tostring(Event), self.Name) end
 
-		function __call(self, owner) return EventHandler(self, owner) end
+		function __call(self, owner, ...)
+			local handler = rawget(owner, "__Events")
+			handler = handler and rawget(handler, self.Name)
+			if handler then return handler(owner, ...) end
+		end
 	end)
 
 	class "EventHandler" (function(_ENV)
@@ -5855,9 +5875,6 @@ do
 		-- Constructor
 		------------------------------------------------------
 		function EventHandler(self, evt, owner)
-			if not Reflector.ObjectIsClass(evt, Event) then error("Usage : EventHandler(event, owner) - 'event' must be an object of 'System.Event'.") end
-			if not Reflector.GetObjectClass(owner) then error("Usage : EventHandler(event, owner) - 'owner' must be an object.") end
-
 			self.Event = evt.Name
 			self.Owner = owner
 			self.Delegate = evt.Delegate
@@ -8364,7 +8381,7 @@ do
 				end
 
 				-- Fire the event
-				self:Fire("OnDispose")
+				OnDispose(self)
 
 				-- Clear from parent
 				if info.Name then

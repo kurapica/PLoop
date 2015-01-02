@@ -14,8 +14,6 @@ __Doc__[[
 	Logger object also cache the log messages, like use 'logObject[1]' to get the lateset message, 'logObject[2]' to get the previous message, Logger object will cache messages for a count equal to it's MaxLog property value, the MaxLog default value is 1, always can be change.
 ]]
 class "Logger" (function(_ENV)
-	inherit "Object"
-
 	_Logger = {}
 	_Info = setmetatable({}, {__mode = "k"})
 

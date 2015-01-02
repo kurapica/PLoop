@@ -13,8 +13,6 @@ __Doc__[[
 	After the recycle object is created as recycleObject, can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
 ]]
 class "Recycle" (function(_ENV)
-	inherit "Object"
-
 	------------------------------------------------------
 	-- Event
 	------------------------------------------------------
@@ -67,7 +65,7 @@ class "Recycle" (function(_ENV)
 			-- Won't check obj because using cache means want quick-using.
 			tinsert(self, obj)
 
-			return self:Fire("OnPush", obj)
+			return OnPush(self, obj)
 		end
 	end
 
@@ -80,7 +78,7 @@ class "Recycle" (function(_ENV)
 		if #self > 0 then
 			local ret = tremove(self, #self)
 
-			self:Fire("OnPop", ret)
+			OnPop(self, ret)
 
 			return ret
 		end
@@ -89,15 +87,15 @@ class "Recycle" (function(_ENV)
 		if not self.Type then
 			local ret = {}
 
-			self:Fire("OnPop", ret)
+			OnPop(self, ret)
 
 			return ret
 		else
 			local obj = self.Type(parseArgs(self))
 
-			self:Fire("OnInit", obj)
+			OnInit(self, obj)
 
-			self:Fire("OnPop", obj)
+			OnPop(self, obj)
 
 			return obj
 		end
