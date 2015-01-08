@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2014/12/15
--- Version			r115
+-- Last Update Date 2015/01/08
+-- Version			r116
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1176,7 +1176,7 @@ do
 								end
 							elseif k == "default" then
 								prop.Default = v
-							elseif k == "event" and type(v) == "string" then
+							elseif k == "event" and (type(v) == "string" or getmetatable(v) == Event) then
 								prop.Event = v
 							elseif k == "handler" then
 								if type(v) == "string" then
@@ -1307,13 +1307,20 @@ do
 						end
 					end
 
-
 					-- Validate the Event
-					if prop.Event and not getmetatable(iCache[prop.Event]) then
-						if iCache[prop.Event] == nil then
+					if type(prop.Event) == "string" then
+						local evt = iCache[prop.Event]
+						if getmetatable(evt) then
+							prop.Event = evt
+						elseif evt == nil then
 							-- Auto create
-							info.Event[prop.Event] = Event(prop.Event)
-							iCache[prop.Event] = info.Event[prop.Event]
+							local ename = prop.Event
+							evt = Event(ename)
+							info.Event[ename] = evt
+							iCache[ename] = evt
+							prop.Event = evt
+						else
+							prop.Event = nil
 						end
 					end
 
@@ -1536,6 +1543,7 @@ do
 								tinsert(upValues, field) tinsert(gbody, "field")
 								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
 								if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
+								if prop.Event then tinsert(upValues, prop.Event) tinsert(gbody, "evt") end
 
 								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
 								wipe(gbody)
@@ -1573,11 +1581,7 @@ do
 									tinsert(gbody, [[end]])
 								end
 								if prop.Handler then tinsert(gbody, ([[handler(self, value, old, "%s")]]):format(name)) end
-								if prop.Event then
-									tinsert(gbody, [[local evt = rawget(self, "__Events")]])
-									tinsert(gbody, ([[evt = evt and rawget(evt, "%s")]]):format(prop.Event))
-									tinsert(gbody, ([[if evt then return evt(self, value, old, "%s") end]]):format(name))
-								end
+								if prop.Event then tinsert(gbody, ([[return evt(self, value, old, "%s")]]):format(name)) end
 								tinsert(gbody, [[end]])
 
 								info.Method[setName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
@@ -2787,12 +2791,7 @@ do
 
 						-- Fire event
 						operTar = oper.Event
-						if operTar then
-							-- Fire the event
-							local evt = rawget(self, "__Events")
-							evt = evt and rawget(evt, operTar)
-							if evt then return evt(self, value, old, key) end
-						end
+						if operTar then return operTar(self, value, old, key) end
 
 						return
 					else
@@ -2959,12 +2958,7 @@ do
 
 							-- Fire event
 							operTar = oper.Event
-							if operTar then
-								-- Fire the event
-								local evt = rawget(self, "__Events")
-								evt = evt and rawget(evt, operTar)
-								if evt then return evt(self, value, old, key) end
-							end
+							if operTar then return operTar(self, value, old, key) end
 
 							return
 						else
