@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/01/08
--- Version			r116
+-- Last Update Date 2015/01/23
+-- Version			r117
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1166,7 +1166,7 @@ do
 							elseif k == "setmethod" then
 								if type(v) == "string" then prop.SetMethod = v end
 							elseif k == "field" then
-								if v ~= name then prop.Field = v end
+								prop.Field = type(v) == "string" and v ~= name and v or v and true or nil
 							elseif k == "type" then
 								local ok, ret = pcall(BuildValidatedType, v)
 								if ok then
@@ -1365,6 +1365,7 @@ do
 
 					-- Auto generate Field or methods
 					if prop.Set == nil and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
+						if prop.Field == true then prop.Field = nil end
 						local field = prop.Field or "_" .. info.Name:match("^_*(.-)$") .. "_" .. uname
 
 						if set.Synthesize then
@@ -1595,7 +1596,6 @@ do
 								prop.GetMethod = getName
 								prop.SetMethod = setName
 							end
-
 						else
 							prop.Field = field
 						end
