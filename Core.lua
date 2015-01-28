@@ -1166,7 +1166,7 @@ do
 							elseif k == "setmethod" then
 								if type(v) == "string" then prop.SetMethod = v end
 							elseif k == "field" then
-								prop.Field = type(v) == "string" and v ~= name and v or v and true or nil
+								prop.Field = v ~= name and v or nil
 							elseif k == "type" then
 								local ok, ret = pcall(BuildValidatedType, v)
 								if ok then
