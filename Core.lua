@@ -1,5 +1,5 @@
 --[[
-Copyright (c) 2011-2014 WangXH <kurapica.igas@gmail.com>
+Copyright (c) 2011-2015 WangXH <kurapica.igas@gmail.com>
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/01/23
--- Version			r117
+-- Last Update Date 2015/02/02
+-- Version			r118
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1647,10 +1647,12 @@ do
 				if #cache > 0 then
 					local autoCache = info.AutoCache or {}
 
-					for _, sCache in ipairs(cache) do
-						for name in pairs(sCache) do
-							if not (staticMethod and staticMethod[name]) then autoCache[name] = true end
-						end
+					-- Clear if static
+					if staticMethod then
+						for name in pairs(autoCache) do if staticMethod[name] then autoCache[name] = nil end end
+						for _, sCache in ipairs(cache) do for name in pairs(sCache) do if not staticMethod[name] then autoCache[name] = true end end end
+					else
+						for _, sCache in ipairs(cache) do for name in pairs(sCache) do autoCache[name] = true end end
 					end
 
 					if next(autoCache) then info.AutoCache = autoCache end
@@ -4578,8 +4580,8 @@ do
 					for k, v in pairs(info.Method) do tinsert(ret, k) end
 				else
 					for k, v in pairs(info.Cache) do if type(v) == "function" then tinsert(ret, k) end end
+					for k, v in pairs(info.Method) do if info.Cache[k] == nil then tinsert(ret, k) end end
 				end
-				if not noSuper then for k, v in pairs(info.Method) do if k:match("^_") then tinsert(ret, k) end end end
 
 				sort(ret)
 
@@ -4666,13 +4668,13 @@ do
 			end
 		end
 
-		doc "IsRequireMethod" [[
+		doc "IsRequiredMethod" [[
 			<desc>Whether the method is required to be overridden</desc>
 			<param name="owner" type="interface">the method's owner</param>
 			<param name="name" type="string">the method's name</param>
 			<return type="boolean">true if the method must be overridden</return>
 		]]
-		function IsRequireMethod(ns, name)
+		function IsRequiredMethod(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
@@ -4680,13 +4682,13 @@ do
 			return info and info.Type == TYPE_INTERFACE and info.RequireMethod and info.RequireMethod[name] or false
 		end
 
-		doc "IsRequireProperty" [[
+		doc "IsRequiredProperty" [[
 			<desc>Whether the property is required to be overridden</desc>
 			<param name="owner" type="interface">the property's owner</param>
 			<param name="name" type="string">the property's name</param>
 			<return type="boolean">true if the property must be overridden</return>
 		]]
-		function IsRequireProperty(ns, name)
+		function IsRequiredProperty(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
@@ -7537,7 +7539,7 @@ do
 		function ApplyAttribute(self, target, targetType, owner, name)
 			if targetType == AttributeTargets.Class or targetType == AttributeTargets.Interface then
 				_NSInfo[target].AutoCache = true
-			elseif Reflector.IsClass(owner) or Reflector.IsInterface(owner) and not name:match("^_") then
+			elseif Reflector.IsClass(owner) or Reflector.IsInterface(owner) then
 				local info = _NSInfo[owner]
 				if info.AutoCache == true then return end
 
@@ -7717,7 +7719,7 @@ do
 			local info = _NSInfo[owner]
 
 			if info and info.Type == TYPE_INTERFACE and type(name) == "string" then
-				if targetType == AttributeTargets.Method and not name:match("^_") then
+				if targetType == AttributeTargets.Method then
 					info.RequireMethod = info.RequireMethod or {}
 					info.RequireMethod[name] = true
 				elseif targetType == AttributeTargets.Property then
@@ -7742,11 +7744,11 @@ do
 			local info = _NSInfo[owner]
 
 			if info and info.Type == TYPE_INTERFACE and type(name) == "string" then
-				if targetType == AttributeTargets.Method and not name:match("^_") then
-					info.OptionalMethod = info.RequireMethod or {}
+				if targetType == AttributeTargets.Method then
+					info.OptionalMethod = info.OptionalMethod or {}
 					info.OptionalMethod[name] = true
 				elseif targetType == AttributeTargets.Property then
-					info.OptionalProperty = info.RequireProperty or {}
+					info.OptionalProperty = info.OptionalProperty or {}
 					info.OptionalProperty[name] = true
 				end
 			end

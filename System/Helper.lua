@@ -262,7 +262,7 @@ interface "Helper" (function(_ENV)
 				for _, name in ipairs(methods) do
 					local desc = getDescription(ns, name, AttributeTargets.Method)
 					local isOptional = IsOptionalMethod(ns, name)
-					local isRequire = IsRequireMethod(ns, name)
+					local isRequire = IsRequiredMethod(ns, name)
 
 					if opts[name] then isOptional = true; desc = desc or opts[name].desc end
 					if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
@@ -318,7 +318,7 @@ interface "Helper" (function(_ENV)
 				for _, name in ipairs(props) do
 					local desc = getDescription(ns, name, AttributeTargets.Property)
 					local isOptional = IsOptionalMethod(ns, name)
-					local isRequire = IsRequireMethod(ns, name)
+					local isRequire = IsRequiredMethod(ns, name)
 
 					if opts[name] then isOptional = true; desc = desc or opts[name].desc end
 					if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
