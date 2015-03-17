@@ -95,11 +95,9 @@ interface "Threading" (function(_ENV)
 				local value = ...
 
 				if value then
-					value = value:match(":%d+:%s*(.-)$") or value
-
-					error(value, 3)
+					error(value, 2)
 				else
-					error(..., 3)
+					error(..., 2)
 				end
 			end
 		end
