@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica.igas@gmail.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/02/02
--- Version			r118
+-- Last Update Date 2015/04/03
+-- Version			r119
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -658,26 +658,22 @@ do
 					end
 				elseif not info.NonExpandable then
 					-- new feature
-					if not info.Cache[key] then
-						if type(value) == "function" then
-							-- Method
-							SaveFixedMethod(info.Method, key, value, info.Owner)
-						elseif type(value) == "table" then
-							-- Property
-							SetPropertyWithSet(info, key, value)
-						elseif not tonumber(key) then
-							-- Event
-							info.Event[key] = info.Event[key] or Event(key)
+					if type(value) == "function" and not info.Method[key] then
+						-- Method
+						SaveFixedMethod(info.Method, key, value, info.Owner)
+					elseif type(value) == "table" and not info.Property[key] then
+						-- Property
+						SetPropertyWithSet(info, key, value)
+					elseif not tonumber(key) then
+						-- Event
+						info.Event[key] = info.Event[key] or Event(key)
 
-							if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
-						else
-							error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
-						end
-
-						return not info.BeginDefinition and RefreshCache(self)
+						if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
+					else
+						error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
 					end
 
-					error("Can't override the existed feature.", 2)
+					return not info.BeginDefinition and RefreshCache(self)
 				end
 			end
 
@@ -2584,6 +2580,53 @@ do
 			RefreshCache(owner)
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
+
+			-- Validate the interface
+			if info.ExtendInterface then
+				local cache = CACHE_TABLE()
+				local cacheIF = CACHE_TABLE()
+				local ret
+
+				for _, IF in ipairs(info.ExtendInterface) do
+					local sinfo = _NSInfo[IF]
+					local msg
+
+					wipe(cacheIF)
+
+					if sinfo.RequireMethod then
+						for name in pairs(sinfo.RequireMethod) do
+							if sinfo.Method[name] == info.Cache[name] then tinsert(cacheIF, name) end
+						end
+
+						if #cacheIF > 0 then msg = "[Method]" .. tblconcat(cacheIF, ", ") end
+					end
+
+					wipe(cacheIF)
+
+					if sinfo.RequireProperty then
+						for name in pairs(sinfo.RequireProperty) do
+							if sinfo.Property[name] == info.Cache[name] then tinsert(cacheIF, name) end
+						end
+
+						if #cacheIF > 0 then
+							msg = msg and (msg .. " ") or ""
+							msg = msg .. "[Property]" .. tblconcat(cacheIF, ", ")
+						end
+					end
+
+					if msg then tinsert(cache, tostring(IF) .. " - " .. msg) end
+				end
+
+				if #cache > 0 then
+					tinsert(cache, 1, tostring(info.Owner) .. " lack declaration of :")
+					ret = tblconcat(cache, "\n")
+				end
+
+				CACHE_TABLE(cacheIF)
+				CACHE_TABLE(cache)
+
+				if ret then error(ret, 3) end
+			end
 
 			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
 		end
@@ -5151,19 +5194,21 @@ do
 				return strformat("%q", data)
 			elseif type(data) == "number" or type(data) == "boolean" then
 				return tostring(data)
-			elseif type(data) == "table" then
+			elseif type(data) == "table" and not Reflector.IsNameSpace(data) then
 				local cache = CACHE_TABLE()
 
 				tinsert(cache, "{")
 
 				for k, v in pairs(data) do
-					if ( type(k) == "number" or type(k) == "string" ) and
-						( type(v) == "string" or type(v) == "number" or type(v) == "boolean" or type(v) == "table" ) then
+					if type(k) == "number" or type(k) == "string" then
+						local vs = SerializeData(v)
 
-						if type(k) == "number" then
-							tinsert(cache, ("[%s] = %s,"):format(tostring(k), SerializeData(v)))
-						else
-							tinsert(cache, ("%s = %s,"):format(k, SerializeData(v)))
+						if vs then
+							if type(k) == "number" then
+								tinsert(cache, ("[%s] = %s,"):format(tostring(k), vs))
+							else
+								tinsert(cache, ("%s = %s,"):format(k, vs))
+							end
 						end
 					end
 				end
@@ -5175,6 +5220,8 @@ do
 				CACHE_TABLE(cache)
 
 				return ret
+			elseif Reflector.IsNameSpace(data) then
+				return Reflector.GetNameSpaceFullName(data)
 			else
 				-- Don't support any point values
 				return nil
@@ -6292,15 +6339,15 @@ do
 			end
 		end
 
-		function GetTargetAttributes(target, targetType, owner, name)
+		function GetTargetAttributes(target, targetType, owner, name, noSuper)
 			local info = _NSInfo[owner or target]
 
 			if targetType == AttributeTargets.Event then
 				return target.Attribute
 			elseif targetType == AttributeTargets.Method then
-				if info.Method and info.Method[name] then
-					return info.Attributes and info.Attributes[name]
-				else
+				if info.Attributes and info.Attributes[name] then
+					return info.Attributes[name]
+				elseif not noSuper then
 					if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
 						return GetTargetAttributes(target, targetType, info.SuperClass, name)
 					end
@@ -6381,13 +6428,11 @@ do
 			if targetType == AttributeTargets.Event then
 				target.Attribute = config
 			elseif targetType == AttributeTargets.Method then
-				if info.Method and info.Method[name] then
-					if config then
-						info.Attributes = info.Attributes or {}
-						info.Attributes[name] = config
-					elseif info.Attributes then
-						info.Attributes[name] = nil
-					end
+				if config then
+					info.Attributes = info.Attributes or {}
+					info.Attributes[name] = config
+				elseif info.Attributes then
+					info.Attributes[name] = nil
 				end
 			elseif targetType == AttributeTargets.Property then
 				local pInfo = info.Property[name]
@@ -6669,7 +6714,7 @@ do
 			end
 
 			-- Check if already existed
-			local pconfig = GetTargetAttributes(target, targetType, owner, name)
+			local pconfig = GetTargetAttributes(target, targetType, owner, name, true)
 			local sconfig = GetSuperAttributes(target, targetType, owner, name)
 
 			if pconfig then
@@ -6796,286 +6841,6 @@ do
 	class "__Attribute__" (function(_ENV)
 
 		doc "__Attribute__" [[The __Attribute__ class associates predefined system information or user-defined custom information with a target element.]]
-
-		local function _IsDefined(target, targetType, owner, name, type)
-			local config = GetTargetAttributes(target, targetType, owner, name)
-
-			if not config then
-				return false
-			elseif not type then
-				return true
-			elseif getmetatable(config) then
-				return getmetatable(config) == type
-			else
-				for _, attr in ipairs(config) do if getmetatable(attr) == type then return true end end
-			end
-			return false
-		end
-
-		doc "_IsClassAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsClassAttributeDefined(target, type)
-			if Reflector.IsClass(target) then return _IsDefined(target, AttributeTargets.Class, nil, nil, type) end
-			return false
-		end
-
-		doc "_IsEnumAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">enum</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsEnumAttributeDefined(target, type)
-			if Reflector.IsEnum(target) then return _IsDefined(target, AttributeTargets.Enum, nil, nil, type) end
-			return false
-		end
-
-		doc "_IsEventAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class | interface</param>
-			<param name="event">the event's name</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsEventAttributeDefined(target, event, type)
-			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
-				return _IsDefined(info.Cache[event], AttributeTargets.Event, target, event, type)
-			end
-			return false
-		end
-
-		doc "_IsInterfaceAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">interface</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsInterfaceAttributeDefined(target, type)
-			if Reflector.IsInterface(target) then return _IsDefined(target, AttributeTargets.Interface, nil, nil, type) end
-			return false
-		end
-
-		doc "_IsMethodAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class | interface | struct</param>
-			<param name="method">the method's name</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsMethodAttributeDefined(target, method, ty)
-			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return _IsDefined(nil, AttributeTargets.Method, target, method, ty)
-			end
-			return false
-		end
-
-		doc "_IsPropertyAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">class | interface</param>
-			<param name="property">the property's name</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsPropertyAttributeDefined(target, prop, ty)
-			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local tar = info.Cache[prop]
-				return type(tar) == "function" and not getmetatable(tar) and _IsDefined(tar, AttributeTargets.Property, target, prop, ty)
-			end
-			return false
-		end
-
-		doc "_IsStructAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">struct</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsStructAttributeDefined(target, type)
-			if Reflector.IsStruct(target) then return _IsDefined(target, AttributeTargets.Struct, nil, nil, type) end
-			return false
-		end
-
-		doc "_IsMemberAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">struct</param>
-			<param name="field">the field's name</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsMemberAttributeDefined(target, field, ty)
-			if Reflector.IsStruct(target) and type(field) == "string" then
-				return _IsDefined(nil, AttributeTargets.Member, target, field, ty)
-			end
-
-			return false
-		end
-
-		doc "_IsNameSpaceAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">the name space</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		function _IsNameSpaceAttributeDefined(target, type)
-			if Reflector.GetNameSpaceName(target) then return _IsDefined(target, AttributeTargets.NameSpace, nil, nil, type) end
-			return false
-		end
-
-		local function _GetCustomAttribute(target, targetType, owner, name, type)
-			local config = GetTargetAttributes(target, targetType, owner, name)
-
-			if not config then
-				return
-			elseif getmetatable(config) then
-				return (not type or getmetatable(config) == type) and config or nil
-			elseif type then
-				local cache = CACHE_TABLE()
-
-				for _, attr in ipairs(config) do if getmetatable(attr) == type then tinsert(cache, attr) end end
-
-				local count = #cache
-
-				if count == 0 then
-					CACHE_TABLE(cache)
-					return
-				elseif count == 1 then
-					local r1 = cache[1]
-					CACHE_TABLE(cache)
-					return r1
-				elseif count == 2 then
-					local r1, r2 = cache[1], cache[2]
-					CACHE_TABLE(cache)
-					return r1, r2
-				elseif count == 3 then
-					local r1, r2, r3 = cache[1], cache[2], cache[3]
-					CACHE_TABLE(cache)
-					return r1, r2, r3
-				else
-					local thread = KeepArgs(unpack(cache))
-					CACHE_TABLE(cache)
-					return select(2, resume(thread))
-				end
-			else
-				return unpack(config)
-			end
-		end
-
-		doc "_GetClassAttribute" [[
-			<desc>Return the attributes of the given type for the class</desc>
-			<param name="target">class</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetClassAttribute(target, type)
-			if Reflector.IsClass(target) then return _GetCustomAttribute(target, AttributeTargets.Class, nil, nil, type) end
-		end
-
-		doc "_GetEnumAttribute" [[
-			<desc>Return the attributes of the given type for the enum</desc>
-			<param name="target">enum</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetEnumAttribute(target, type)
-			if Reflector.IsEnum(target) then return _GetCustomAttribute(target, AttributeTargets.Enum, nil, nil, type) end
-		end
-
-		doc "_GetEventAttribute" [[
-			<desc>Return the attributes of the given type for the class|interface's event</desc>
-			<param name="target">class|interface</param>
-			<param name="event">the event's name</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetEventAttribute(target, event, type)
-			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
-				return _GetCustomAttribute(info.Cache[event], AttributeTargets.Event, target, event, type)
-			end
-		end
-
-		doc "_GetInterfaceAttribute" [[
-			<desc>Return the attributes of the given type for the interface</desc>
-			<param name="target">interface</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetInterfaceAttribute(target, type)
-			if Reflector.IsInterface(target) then return _GetCustomAttribute(target, AttributeTargets.Interface, nil, nil, type) end
-		end
-
-		doc "_GetMethodAttribute" [[
-			<desc>Return the attributes of the given type for the class|interface's method</desc>
-			<format>target, method, type</format>
-			<format>method, type</format>
-			<param name="target">class|interface</param>
-			<param name="method">the method's name(with target) or the method itself(without target)</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetMethodAttribute(target, method, ty)
-			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return _GetCustomAttribute(nil, AttributeTargets.Method, target, method, ty)
-			end
-		end
-
-		doc "_GetPropertyAttribute" [[
-			<desc>Return the attributes of the given type for the class|interface's property</desc>
-			<param name="target">class|interface</param>
-			<param name="prop">the property's name</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetPropertyAttribute(target, prop, ty)
-			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local tar = info.Cache[prop]
-				return type(tar) == "table" and not getmetatable(tar) and _GetCustomAttribute(tar, AttributeTargets.Property, target, prop, ty)
-			end
-		end
-
-		doc "_GetStructAttribute" [[
-			<desc>Return the attributes of the given type for the struct</desc>
-			<param name="target">struct</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetStructAttribute(target, type)
-			if Reflector.IsStruct(target) then return _GetCustomAttribute(target, AttributeTargets.Struct, nil, nil, type) end
-		end
-
-		doc "_GetMemberAttribute" [[
-			<desc>Return the attributes of the given type for the struct's field</desc>
-			<param name="target">struct</param>
-			<param name="field">the field's name</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetMemberAttribute(target, field, ty)
-			if Reflector.IsStruct(target) and type(field) == "string" then
-				return _GetCustomAttribute(nil, AttributeTargets.Member, target, field, ty)
-			end
-		end
-
-		doc "_GetNameSpaceAttribute" [[
-			<desc>Return the attributes of the given type for the NameSpace</desc>
-			<param name="target">NameSpace</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		function _GetNameSpaceAttribute(target, type)
-			if Reflector.GetNameSpaceName(target) then return _GetCustomAttribute(target, AttributeTargets.NameSpace, nil, nil, type) end
-		end
 
 		doc "ApplyAttribute" [[
 			<desc>Apply the attribute to the target, overridable</desc>
@@ -7413,12 +7178,7 @@ do
 		__Flags__:ApplyAttribute(AttributeTargets)
 		__Final__:ApplyAttribute(AttributeTargets)
 
-		-- System.__Arguments__
-		__Unique__:ApplyAttribute(__Arguments__)
-		__Final__:ApplyAttribute(__Arguments__)
-
 		-- System.__Attribute__
-		__Final__:ApplyAttribute(__Attribute__)
 		__Arguments__()
 		SaveFixedMethod(_NSInfo[__Attribute__], "Constructor", _NSInfo[__Attribute__].Constructor, __Attribute__, AttributeTargets.Constructor)
 
@@ -7453,6 +7213,8 @@ do
 		__Final__:ApplyAttribute(__NonInheritable__)
 
 		-- System.__Arguments__
+		__Final__:ApplyAttribute(__Arguments__)
+		__Unique__:ApplyAttribute(__Arguments__)
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor, Inherited = false, RunOnce = true }
 		ConsumePreparedAttributes(__Arguments__, AttributeTargets.Class)
 		__Arguments__()
@@ -7811,7 +7573,7 @@ do
 			return Super(self)
 		end
 
-		__Arguments__{ String }
+		__Arguments__{ String + Event }
 		function __Event__(self, value)
 			self.Event = value
 
@@ -8079,6 +7841,316 @@ do
 				info.StaticMethod = info.StaticMethod or {}
 				info.StaticMethod[name] = true
 			end
+		end
+	end)
+
+	--[=[__AttributeUsage__{AttributeTarget = AttributeTargets.Method, Inherited = true, RunOnce = true }
+	__Final__()
+	class "__ArgumentsDemand__" (function (_ENV)
+		inherit "__Attribute__"
+		doc "__ArgumentsDemand__" [[The argument definitions of the interface's method]]
+
+		function ApplyAttribute(self, target, targetType, owner, name)
+			assert(Reflector.IsInterface(owner), "__ArgumentsDemand__ can only be used on the interface's method.")
+		end
+
+		function Clone(self)
+			-- Defualt behavior
+			local cache = CACHE_TABLE()
+
+			for _, v in ipairs(self) do tinsert(cache, v) end
+
+			self:RemoveSelf()
+
+			-- Use __Arguments__ instead
+			local obj = __Arguments__(cache)
+
+			CACHE_TABLE(cache)
+
+			return obj
+		end
+	end)--]=]
+
+	-- Static method for __Attribute__
+	__Final__() class "__Attribute__" (function(_ENV)
+		local function IsDefined(target, targetType, owner, name, type)
+			local config = GetTargetAttributes(target, targetType, owner, name)
+
+			if not config then
+				return false
+			elseif not type then
+				return true
+			elseif getmetatable(config) then
+				return getmetatable(config) == type
+			else
+				for _, attr in ipairs(config) do if getmetatable(attr) == type then return true end end
+			end
+			return false
+		end
+
+		doc "IsClassAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsClassAttributeDefined(target, type)
+			if Reflector.IsClass(target) then return IsDefined(target, AttributeTargets.Class, nil, nil, type) end
+			return false
+		end
+
+		doc "IsEnumAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">enum</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsEnumAttributeDefined(target, type)
+			if Reflector.IsEnum(target) then return IsDefined(target, AttributeTargets.Enum, nil, nil, type) end
+			return false
+		end
+
+		doc "IsEventAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface</param>
+			<param name="event">the event's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsEventAttributeDefined(target, event, type)
+			local info = _NSInfo[target]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
+				return IsDefined(info.Cache[event], AttributeTargets.Event, target, event, type)
+			end
+			return false
+		end
+
+		doc "IsInterfaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsInterfaceAttributeDefined(target, type)
+			if Reflector.IsInterface(target) then return IsDefined(target, AttributeTargets.Interface, nil, nil, type) end
+			return false
+		end
+
+		doc "IsMethodAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface | struct</param>
+			<param name="method">the method's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsMethodAttributeDefined(target, method, ty)
+			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return IsDefined(nil, AttributeTargets.Method, target, method, ty)
+			end
+			return false
+		end
+
+		doc "IsPropertyAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">class | interface</param>
+			<param name="property">the property's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsPropertyAttributeDefined(target, prop, ty)
+			local info = _NSInfo[target]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local tar = info.Cache[prop]
+				return type(tar) == "function" and not getmetatable(tar) and IsDefined(tar, AttributeTargets.Property, target, prop, ty)
+			end
+			return false
+		end
+
+		doc "IsStructAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsStructAttributeDefined(target, type)
+			if Reflector.IsStruct(target) then return IsDefined(target, AttributeTargets.Struct, nil, nil, type) end
+			return false
+		end
+
+		doc "IsMemberAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">struct</param>
+			<param name="field">the field's name</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsMemberAttributeDefined(target, field, ty)
+			if Reflector.IsStruct(target) and type(field) == "string" then
+				return IsDefined(nil, AttributeTargets.Member, target, field, ty)
+			end
+
+			return false
+		end
+
+		doc "IsNameSpaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">the name space</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsNameSpaceAttributeDefined(target, type)
+			if Reflector.GetNameSpaceName(target) then return IsDefined(target, AttributeTargets.NameSpace, nil, nil, type) end
+			return false
+		end
+
+		local function GetCustomAttribute(target, targetType, owner, name, type)
+			local config = GetTargetAttributes(target, targetType, owner, name)
+
+			if not config then
+				return
+			elseif getmetatable(config) then
+				return (not type or getmetatable(config) == type) and config or nil
+			elseif type then
+				local cache = CACHE_TABLE()
+
+				for _, attr in ipairs(config) do if getmetatable(attr) == type then tinsert(cache, attr) end end
+
+				local count = #cache
+
+				if count == 0 then
+					CACHE_TABLE(cache)
+					return
+				elseif count == 1 then
+					local r1 = cache[1]
+					CACHE_TABLE(cache)
+					return r1
+				elseif count == 2 then
+					local r1, r2 = cache[1], cache[2]
+					CACHE_TABLE(cache)
+					return r1, r2
+				elseif count == 3 then
+					local r1, r2, r3 = cache[1], cache[2], cache[3]
+					CACHE_TABLE(cache)
+					return r1, r2, r3
+				else
+					local thread = KeepArgs(unpack(cache))
+					CACHE_TABLE(cache)
+					return select(2, resume(thread))
+				end
+			else
+				return unpack(config)
+			end
+		end
+
+		doc "GetClassAttribute" [[
+			<desc>Return the attributes of the given type for the class</desc>
+			<param name="target">class</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetClassAttribute(target, type)
+			if Reflector.IsClass(target) then return GetCustomAttribute(target, AttributeTargets.Class, nil, nil, type) end
+		end
+
+		doc "GetEnumAttribute" [[
+			<desc>Return the attributes of the given type for the enum</desc>
+			<param name="target">enum</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetEnumAttribute(target, type)
+			if Reflector.IsEnum(target) then return GetCustomAttribute(target, AttributeTargets.Enum, nil, nil, type) end
+		end
+
+		doc "GetEventAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's event</desc>
+			<param name="target">class|interface</param>
+			<param name="event">the event's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetEventAttribute(target, event, type)
+			local info = _NSInfo[target]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
+				return GetCustomAttribute(info.Cache[event], AttributeTargets.Event, target, event, type)
+			end
+		end
+
+		doc "GetInterfaceAttribute" [[
+			<desc>Return the attributes of the given type for the interface</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetInterfaceAttribute(target, type)
+			if Reflector.IsInterface(target) then return GetCustomAttribute(target, AttributeTargets.Interface, nil, nil, type) end
+		end
+
+		doc "GetMethodAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's method</desc>
+			<format>target, method, type</format>
+			<format>method, type</format>
+			<param name="target">class|interface</param>
+			<param name="method">the method's name(with target) or the method itself(without target)</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetMethodAttribute(target, method, ty)
+			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
+				return GetCustomAttribute(nil, AttributeTargets.Method, target, method, ty)
+			end
+		end
+
+		doc "GetPropertyAttribute" [[
+			<desc>Return the attributes of the given type for the class|interface's property</desc>
+			<param name="target">class|interface</param>
+			<param name="prop">the property's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetPropertyAttribute(target, prop, ty)
+			local info = _NSInfo[target]
+
+			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				local tar = info.Cache[prop]
+				return type(tar) == "table" and not getmetatable(tar) and GetCustomAttribute(tar, AttributeTargets.Property, target, prop, ty)
+			end
+		end
+
+		doc "GetStructAttribute" [[
+			<desc>Return the attributes of the given type for the struct</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetStructAttribute(target, type)
+			if Reflector.IsStruct(target) then return GetCustomAttribute(target, AttributeTargets.Struct, nil, nil, type) end
+		end
+
+		doc "GetMemberAttribute" [[
+			<desc>Return the attributes of the given type for the struct's field</desc>
+			<param name="target">struct</param>
+			<param name="field">the field's name</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetMemberAttribute(target, field, ty)
+			if Reflector.IsStruct(target) and type(field) == "string" then
+				return GetCustomAttribute(nil, AttributeTargets.Member, target, field, ty)
+			end
+		end
+
+		doc "GetNameSpaceAttribute" [[
+			<desc>Return the attributes of the given type for the NameSpace</desc>
+			<param name="target">NameSpace</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetNameSpaceAttribute(target, type)
+			if Reflector.GetNameSpaceName(target) then return GetCustomAttribute(target, AttributeTargets.NameSpace, nil, nil, type) end
 		end
 	end)
 end
