@@ -557,7 +557,6 @@ do
 
 					-- Get Value
 					if operTar then
-						if default == nil and not oper.GetClone then return operTar() end
 						value = operTar()
 					else
 						operTar = oper.Field
@@ -570,7 +569,15 @@ do
 						end
 					end
 
-					if value == nil then value = default end
+					if value == nil then
+						operTar = oper.DefaultFunc
+						if operTar then
+							value = operTar(self)
+							if value ~= nil then self[key] = value end
+						else
+							value = default
+						end
+					end
 					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 					return value
@@ -1189,7 +1196,17 @@ do
 					end
 
 					-- Validate the default
-					if prop.Type and prop.Default ~= nil and prop.Type:GetObjectType(prop.Default) == false then prop.Default = nil end
+					if prop.Default ~= nil then
+						if prop.Type then
+							if prop.Type:GetObjectType(prop.Default) == false then
+								if type(prop.Default) == "function" then prop.DefaultFunc = prop.Default end
+								prop.Default = nil
+							end
+						elseif type(prop.Default) == "function" then
+							prop.DefaultFunc = prop.Default
+							prop.Default = nil
+						end
+					end
 
 					-- Clear
 					if prop.Get ~= nil then prop.GetMethod = nil end
@@ -1376,19 +1393,19 @@ do
 							if prop.IsStatic then
 								-- Generate getMethod
 								local gbody = CACHE_TABLE()
-								if prop.GetClone then
-									if prop.Default ~= nil then
-										tinsert(gbody, [[local info, CloneObj, field, default = ...]])
-									else
-										tinsert(gbody, [[local info, CloneObj, field = ...]])
-									end
-								else
-									if prop.Default ~= nil then
-										tinsert(gbody, [[local info, field, default = ...]])
-									else
-										tinsert(gbody, [[local info, field = ...]])
-									end
-								end
+								local upValues = CACHE_TABLE()
+
+								tinsert(upValues, info) tinsert(gbody, "info")
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
+
+								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
 								tinsert(gbody, [[return function ()]])
 								tinsert(gbody, [[local value]])
 								if prop.SetWeak then
@@ -1398,7 +1415,14 @@ do
 									tinsert(gbody, [[value = info.StaticFields]])
 									tinsert(gbody, [[value = value and value[field] ]])
 								end
-								if prop.Default ~= nil then tinsert(gbody, [[if value == nil then value = default end]]) end
+								if prop.DefaultFunc then
+									tinsert(gbody, [[if value == nil then]])
+									tinsert(gbody, [[	value = defaultFunc(info.Owner)]])
+									tinsert(gbody, [[	if value ~= nil then info.Owner[propName] = value end]])
+									tinsert(gbody, [[end]])
+								elseif prop.Default ~= nil then
+									tinsert(gbody, [[if value == nil then value = default end]])
+								end
 								if prop.GetClone then
 									if prop.GetDeepClone then
 										tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -1409,15 +1433,11 @@ do
 								tinsert(gbody, [[return value]])
 								tinsert(gbody, [[end]])
 
-								if prop.GetClone then
-									info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(info, CloneObj, field, prop.Default)
-								else
-									info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(info, field, prop.Default)
-								end
+								info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
 
 								-- Generate setMethod
 								wipe(gbody)
-								local upValues = CACHE_TABLE()
+								wipe(upValues)
 
 								tinsert(upValues, info) tinsert(gbody, "info")
 								if prop.Type then tinsert(upValues, prop.Type) tinsert(gbody, "pType") end
@@ -1428,7 +1448,7 @@ do
 								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
 								if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
 
-								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
 								wipe(gbody)
 								tinsert(gbody, gHeader)
 
@@ -1487,19 +1507,18 @@ do
 							else
 								-- Generate getMethod
 								local gbody = CACHE_TABLE()
-								if prop.GetClone then
-									if prop.Default ~= nil then
-										tinsert(gbody, [[local CloneObj, field, default = ...]])
-									else
-										tinsert(gbody, [[local CloneObj, field = ...]])
-									end
-								else
-									if prop.Default ~= nil then
-										tinsert(gbody, [[local field, default = ...]])
-									else
-										tinsert(gbody, [[local field = ...]])
-									end
-								end
+								local upValues = CACHE_TABLE()
+
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
+
+								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
 								tinsert(gbody, [[return function (self)]])
 								tinsert(gbody, [[local value]])
 								if prop.SetWeak then
@@ -1512,7 +1531,14 @@ do
 								else
 									tinsert(gbody, [[value = rawget(self, field)]])
 								end
-								if prop.Default ~= nil then tinsert(gbody, [[if value == nil then value = default end]]) end
+								if prop.DefaultFunc then
+									tinsert(gbody, [[if value == nil then]])
+									tinsert(gbody, [[	value = defaultFunc(self)]])
+									tinsert(gbody, [[	if value ~= nil then self[propName] = value end]])
+									tinsert(gbody, [[end]])
+								elseif prop.Default ~= nil then
+									tinsert(gbody, [[if value == nil then value = default end]])
+								end
 								if prop.GetClone then
 									if prop.GetDeepClone then
 										tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -1523,15 +1549,11 @@ do
 								tinsert(gbody, [[return value]])
 								tinsert(gbody, [[end]])
 
-								if prop.GetClone then
-									info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(CloneObj, field, prop.Default)
-								else
-									info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(field, prop.Default)
-								end
+								info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
 
 								-- Generate setMethod
 								wipe(gbody)
-								local upValues = CACHE_TABLE()
+								wipe(upValues)
 
 								if prop.Type then tinsert(upValues, prop.Type) tinsert(gbody, "pType") end
 								if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
@@ -1542,7 +1564,7 @@ do
 								if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
 								if prop.Event then tinsert(upValues, prop.Event) tinsert(gbody, "evt") end
 
-								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
 								wipe(gbody)
 								tinsert(gbody, gHeader)
 
@@ -1595,6 +1617,8 @@ do
 						else
 							prop.Field = field
 						end
+					else
+						prop.DefaultFunc = nil
 					end
 
 					-- Auto generate Default
@@ -2750,7 +2774,15 @@ do
 					end
 				end
 
-				if value == nil then value = default end
+				if value == nil then
+					operTar = oper.DefaultFunc
+					if operTar then
+						value = operTar(self)
+						if value ~= nil then self[key] = value end
+					else
+						value = default
+					end
+				end
 				if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 				return value
@@ -2919,7 +2951,15 @@ do
 						end
 					end
 
-					if value == nil then value = default end
+					if value == nil then
+						operTar = oper.DefaultFunc
+						if operTar then
+							value = operTar(self)
+							if value ~= nil then self[key] = value end
+						else
+							value = default
+						end
+					end
 					if oper.GetClone then value = CloneObj(value, oper.GetDeepClone) end
 
 					return value
