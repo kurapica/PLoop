@@ -7,7 +7,7 @@ _ENV = Module "System.Threading" "1.0.2"
 namespace "System"
 
 __Doc__[[Used for threading control]]
-__NonInheritable__()
+__Final__()
 interface "Threading" (function(_ENV)
 
 	enum "ThreadStatus" {

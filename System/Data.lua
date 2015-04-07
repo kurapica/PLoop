@@ -31,8 +31,8 @@ interface "IFDataProvider"
 	------------------------------------------------------
 	-- Method
 	------------------------------------------------------
-	__Require__() function Save(self, obj) end
-	__Require__() function Load(self, obj) end
+	__Optional__() function Save(self, obj) end
+	__Optional__() function Load(self, obj) end
 endinterface "IFDataProvider"
 
 __Doc__[[The interface of the data table.]]

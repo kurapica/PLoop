@@ -468,14 +468,19 @@ do
 	function IsFeatureSealed(ns, name, isSuper)
 		ns = _NSInfo[ns]
 
-		if ns.IsSealed and not isSuper then
-			return true
-		elseif name then
-			-- Check self
+		if not name then
+			return ns.IsSealed
+		else
 			if isSuper and not ns.Cache[name] then return nil end
+
+			-- Check self
 			if ns.Sealed and ns.Sealed[name] then return true end
-			if ns.Method and ns.Method[name] then return ns.IsSealed or false end
-			if ns.Property and ns.Property[name] then return ns.IsSealed or false end
+			if ns.Method and ns.Method[name] then
+				return ns.IsSealed and not (ns.RequireMethod and ns.RequireMethod[name]) and not (ns.OptionalMethod and ns.OptionalMethod[name]) or false
+			end
+			if ns.Property and ns.Property[name] then
+				return ns.IsSealed and not (ns.RequireProperty and ns.RequireProperty[name]) and not (ns.OptionalProperty and ns.OptionalProperty[name]) or false
+			end
 
 			-- Check Super class
 			if ns.SuperClass then
@@ -485,13 +490,14 @@ do
 
 			-- Check Extened interfaces
 			if ns.ExtendInterface then
-				for _, IF in ipairs(info.ExtendInterface) do
+				for _, IF in ipairs(ns.ExtendInterface) do
 					local ret = IsFeatureSealed(IF, name, true)
 					if ret ~= nil then return ret end
 				end
 			end
+
+			return isSuper
 		end
-		return false
 	end
 end
 
@@ -622,13 +628,13 @@ do
 
 			if info.Type == TYPE_STRUCT and type(key) == "string" and type(value) == "function" then
 				if key == info.Name then
-					if not info.Validator then
+					if not IsFeatureSealed(self) then
 						info.Validator = value
 						return
 					else
 						error("Can't override the existed validator.", 2)
 					end
-				elseif not info.Method or not info.Method[key] then
+				elseif not IsFeatureSealed(self, key) then
 					info.Method = info.Method or {}
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				else
@@ -693,7 +699,7 @@ do
 							error(("%s can't be written."):format(key), 2)
 						end
 					end
-				elseif not info.NonExpandable then
+				elseif not IsFeatureSealed(self, key) then
 					-- new feature
 					if type(value) == "function" and not info.Method[key] then
 						-- Method
@@ -1872,8 +1878,10 @@ do
 				-- Don't save to environment until need it
 				if IsLocal() then
 					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				else
+				elseif not IsFeatureSealed(info.Owner, key) then
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
+				else
+					error(("'%s' is sealed, can't be re-defined."):format(key), 2)
 				end
 			end
 
@@ -2197,6 +2205,8 @@ do
 				local v = definition[i]
 
 				if getmetatable(v) == TYPE_NAMESPACE then
+					if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
+
 					local vType = _NSInfo[v].Type
 
 					if vType == TYPE_CLASS then
@@ -2211,6 +2221,8 @@ do
 				elseif type(v) == "string" and not tonumber(v) then
 					info.Event[v] = info.Event[v] or Event(v)
 				elseif type(v) == "function" then
+					if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
+
 					if info.Type == TYPE_CLASS then
 						SaveFixedMethod(info, "Constructor", v, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 					elseif info.Type == TYPE_INTERFACE then
@@ -2225,20 +2237,25 @@ do
 
 					if vType and type(v) ~= "string" then
 						if vType == TYPE_NAMESPACE or vType == ValidatedType then
+							if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 							SetPropertyWithSet(info, k, { Type = v })
 						end
 					elseif type(v) == "table" then
+						if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 						SetPropertyWithSet(info, k, v)
 					elseif type(v) == "function" then
 						if k == info.Name then
+							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
 							if info.Type == TYPE_CLASS then
 								SaveFixedMethod(info, "Constructor", v, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 							elseif info.Type == TYPE_INTERFACE then
 								info.Initializer = v
 							end
 						elseif k == DISPOSE_METHOD then
+							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
 							info[DISPOSE_METHOD] = v
 						elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
+							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
 							local rMeta = _KeyMeta[key] and key or "_"..key
 							local oldValue = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
 
@@ -2246,6 +2263,7 @@ do
 
 							UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta])
 						else
+							if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 							SaveFixedMethod(info.Method, k, v, info.Owner)
 						end
 					else
@@ -2617,8 +2635,10 @@ do
 				-- Don't save to environment until need it
 				if IsLocal() then
 					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				else
+				elseif not IsFeatureSealed(info.Owner, key) then
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
+				else
+					error(("'%s' is sealed, can't be re-defined."):format(key), 2)
 				end
 			end
 
@@ -4001,6 +4021,7 @@ do
 		info.ArrayElement = nil
 		info.Validator = nil
 		info.Method = nil
+		info.StaticMethod = nil
 		info.Import4Env = nil
 
 		-- Clear Attribute
@@ -4782,7 +4803,7 @@ do
 
 			local info = _NSInfo[ns]
 
-			return info and info.Type == TYPE_INTERFACE and info.RequireMethod and info.RequireMethod[name] or false
+			return info and info.RequireMethod and info.RequireMethod[name] or false
 		end
 
 		doc "IsRequiredProperty" [[
@@ -4796,7 +4817,7 @@ do
 
 			local info = _NSInfo[ns]
 
-			return info and info.Type == TYPE_INTERFACE and info.RequireProperty and info.RequireProperty[name] or false
+			return info and info.RequireProperty and info.RequireProperty[name] or false
 		end
 
 		doc "IsOptionalMethod" [[
@@ -4810,7 +4831,7 @@ do
 
 			local info = _NSInfo[ns]
 
-			return info and info.Type == TYPE_INTERFACE and info.OptionalMethod and info.OptionalMethod[name] or false
+			return info and info.OptionalMethod and info.OptionalMethod[name] or false
 		end
 
 		doc "IsOptionalProperty" [[
@@ -4824,7 +4845,7 @@ do
 
 			local info = _NSInfo[ns]
 
-			return info and info.Type == TYPE_INTERFACE and info.OptionalProperty and info.OptionalProperty[name] or false
+			return info and info.OptionalProperty and info.OptionalProperty[name] or false
 		end
 
 		doc "IsStaticProperty" [[
@@ -7266,7 +7287,7 @@ do
 		__Final__:ApplyAttribute(__AttributeUsage__)
 
 		-- System.__Sealed__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
 		ConsumePreparedAttributes(__Sealed__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Sealed__)
 		__Sealed__:ApplyAttribute(__Sealed__)
@@ -7522,7 +7543,7 @@ do
 	class "__Require__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Require__" [[Whether the method or property of the interface is required to be override]]
+		doc "__Require__" [[Whether the method or property is required to be override]]
 
 		------------------------------------------------------
 		-- Method
@@ -7530,7 +7551,7 @@ do
 		function ApplyAttribute(self, target, targetType, owner, name)
 			local info = _NSInfo[owner]
 
-			if info and info.Type == TYPE_INTERFACE and type(name) == "string" then
+			if info and type(name) == "string" then
 				if targetType == AttributeTargets.Method then
 					info.RequireMethod = info.RequireMethod or {}
 					info.RequireMethod[name] = true
@@ -7547,7 +7568,7 @@ do
 	class "__Optional__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Optional__" [[Whether the method or property of the interface is optional to be override]]
+		doc "__Optional__" [[Whether the method or property is optional to be override]]
 
 		------------------------------------------------------
 		-- Method
@@ -7555,7 +7576,7 @@ do
 		function ApplyAttribute(self, target, targetType, owner, name)
 			local info = _NSInfo[owner]
 
-			if info and info.Type == TYPE_INTERFACE and type(name) == "string" then
+			if info and type(name) == "string" then
 				if targetType == AttributeTargets.Method then
 					info.OptionalMethod = info.OptionalMethod or {}
 					info.OptionalMethod[name] = true
@@ -7922,6 +7943,8 @@ do
 	end)--]=]
 
 	-- Static method for __Attribute__
+	__Optional__:ApplyAttribute(nil, AttributeTargets.Method, __Attribute__, "ApplyAttribute")
+
 	__Sealed__() class "__Attribute__" (function(_ENV)
 		local function IsDefined(target, targetType, owner, name, type)
 			local config = GetTargetAttributes(target, targetType, owner, name)
