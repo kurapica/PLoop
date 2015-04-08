@@ -464,39 +464,35 @@ do
 		end
 	end
 
-	-- Sealed Check
-	function IsFeatureSealed(ns, name, isSuper)
+	-- Final Check
+	function IsFinalFeature(ns, name, isSuper)
 		ns = _NSInfo[ns]
 
 		if not name then
-			return ns.IsSealed
+			return ns.IsFinal
 		else
 			if isSuper and not ns.Cache[name] then return nil end
 
 			-- Check self
-			if ns.Sealed and ns.Sealed[name] then return true end
-			if ns.Method and ns.Method[name] then
-				return ns.IsSealed and not (ns.RequireMethod and ns.RequireMethod[name]) and not (ns.OptionalMethod and ns.OptionalMethod[name]) or false
-			end
-			if ns.Property and ns.Property[name] then
-				return ns.IsSealed and not (ns.RequireProperty and ns.RequireProperty[name]) and not (ns.OptionalProperty and ns.OptionalProperty[name]) or false
-			end
+			if ns.FinalFeatures and ns.FinalFeatures[name] then return true end
+			if ns.Method and ns.Method[name] then return ns.IsFinal or false end
+			if ns.Property and ns.Property[name] then return ns.IsFinal or false end
 
 			-- Check Super class
 			if ns.SuperClass then
-				local ret = IsFeatureSealed(ns.SuperClass, name, true)
+				local ret = IsFinalFeature(ns.SuperClass, name, true)
 				if ret ~= nil then return ret end
 			end
 
 			-- Check Extened interfaces
 			if ns.ExtendInterface then
 				for _, IF in ipairs(ns.ExtendInterface) do
-					local ret = IsFeatureSealed(IF, name, true)
+					local ret = IsFinalFeature(IF, name, true)
 					if ret ~= nil then return ret end
 				end
 			end
 
-			return isSuper
+			return false
 		end
 	end
 end
@@ -628,17 +624,13 @@ do
 
 			if info.Type == TYPE_STRUCT and type(key) == "string" and type(value) == "function" then
 				if key == info.Name then
-					if not IsFeatureSealed(self) then
-						info.Validator = value
-						return
-					else
-						error("Can't override the existed validator.", 2)
-					end
-				elseif not IsFeatureSealed(self, key) then
+					if info.IsSealed then error(("%s is sealed, can't be overridden."):format(tostring(self)), 2) end
+					info.Validator = value
+					return
+				else
+					if info.IsSealed and ((info.Method and info.Method[key]) or (info.StructEnv[key])) then error(("%s.%s is sealed, can't be overridden."):format(tostring(self), key), 2) end
 					info.Method = info.Method or {}
 					return SaveFixedMethod(info.Method, key, value, info.Owner)
-				else
-					error("Can't override the existed feature.", 2)
 				end
 			elseif (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and type(key) == "string" then
 				-- Static Property
@@ -699,12 +691,14 @@ do
 							error(("%s can't be written."):format(key), 2)
 						end
 					end
-				elseif not IsFeatureSealed(self, key) then
+				else
+					if IsFinalFeature(self, key) then error(("%s.%s is final, can't be overridden."):format(tostring(self), key), 2) end
+					if info.IsSealed and info.Cache[key] then error(("%s.%s is sealed, can't be overridden."):format(tostring(self), key), 2) end
 					-- new feature
-					if type(value) == "function" and not info.Method[key] then
+					if type(value) == "function" then
 						-- Method
 						SaveFixedMethod(info.Method, key, value, info.Owner)
-					elseif type(value) == "table" and not info.Property[key] then
+					elseif type(value) == "table" then
 						-- Property
 						SetPropertyWithSet(info, key, value)
 					elseif not tonumber(key) then
@@ -713,7 +707,7 @@ do
 
 						if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
 					else
-						error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
+						return
 					end
 
 					return not info.BeginDefinition and RefreshCache(self)
@@ -1878,10 +1872,9 @@ do
 				-- Don't save to environment until need it
 				if IsLocal() then
 					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				elseif not IsFeatureSealed(info.Owner, key) then
-					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				else
-					error(("'%s' is sealed, can't be re-defined."):format(key), 2)
+					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), key), 2) end
+					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				end
 			end
 
@@ -2205,7 +2198,7 @@ do
 				local v = definition[i]
 
 				if getmetatable(v) == TYPE_NAMESPACE then
-					if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
+					if info.IsSealed then error(("%s is sealed, can't use inherit or extend."):format(tostring(info.Owner)), 2) end
 
 					local vType = _NSInfo[v].Type
 
@@ -2219,10 +2212,10 @@ do
 						extend_Inner(info, v)
 					end
 				elseif type(v) == "string" and not tonumber(v) then
+					if info.IsSealed and info.Cache[v] then error(("%s.%s is sealed, can't be overridden."):format(tostring(info.Owner), v), 2) end
 					info.Event[v] = info.Event[v] or Event(v)
 				elseif type(v) == "function" then
-					if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
-
+					if info.IsSealed then error(("%s is sealed, can't set the constructor or initializer."):format(tostring(info.Owner)), 2) end
 					if info.Type == TYPE_CLASS then
 						SaveFixedMethod(info, "Constructor", v, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 					elseif info.Type == TYPE_INTERFACE then
@@ -2233,37 +2226,34 @@ do
 
 			for k, v in pairs(definition) do
 				if type(k) == "string" and not tonumber(k) then
+					if IsFinalFeature(info.Owner, k) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), k), 2) end
+					if info.IsSealed and (info.Cache[k] or k == info.Name or k == DISPOSE_METHOD or (_KeyMeta[k] ~= nil and info.Type == TYPE_CLASS)) then error(("%s.%s is sealed, can't be overridden."):format(tostring(info.Owner), k), 2) end
+
 					local vType = getmetatable(v)
 
 					if vType and type(v) ~= "string" then
 						if vType == TYPE_NAMESPACE or vType == ValidatedType then
-							if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 							SetPropertyWithSet(info, k, { Type = v })
 						end
 					elseif type(v) == "table" then
-						if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 						SetPropertyWithSet(info, k, v)
 					elseif type(v) == "function" then
 						if k == info.Name then
-							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
 							if info.Type == TYPE_CLASS then
 								SaveFixedMethod(info, "Constructor", v, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
 							elseif info.Type == TYPE_INTERFACE then
 								info.Initializer = v
 							end
 						elseif k == DISPOSE_METHOD then
-							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
 							info[DISPOSE_METHOD] = v
-						elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
-							if info.IsSealed then error(("%s is sealed."):format(info.Owner), 2) end
-							local rMeta = _KeyMeta[key] and key or "_"..key
+						elseif _KeyMeta[k] ~= nil and info.Type == TYPE_CLASS then
+							local rMeta = _KeyMeta[k] and k or "_"..k
 							local oldValue = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
 
 							SaveFixedMethod(info.MetaTable, rMeta, value, info.Owner)
 
 							UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta])
 						else
-							if IsFeatureSealed(info.Owner, k) then error(("%s.%s is sealed."):format(info.Owner, k), 2) end
 							SaveFixedMethod(info.Method, k, v, info.Owner)
 						end
 					else
@@ -2635,10 +2625,9 @@ do
 				-- Don't save to environment until need it
 				if IsLocal() then
 					return SaveFixedMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				elseif not IsFeatureSealed(info.Owner, key) then
-					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				else
-					error(("'%s' is sealed, can't be re-defined."):format(key), 2)
+					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), key), 2) end
+					return SaveFixedMethod(info.Method, key, value, info.Owner)
 				end
 			end
 
@@ -4496,27 +4485,27 @@ do
 		doc "IsSealed" [[
 			<desc>Check if the feature is sealed, can't be re-defined</desc>
 			<param name="object">the object to query</param>
-			<param name="name" optional="true">the method or property's name</param>
 			<return type="boolean">true if the feature is sealed</return>
 			<usage>System.Reflector.IsSealed(System.Object)</usage>
 		]]
-		function IsSealed(ns, name)
+		function IsSealed(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			if type(name) ~= "string" then name = nil end
 
-			return ns and IsFeatureSealed(ns, name) or false
+			return ns and _NSInfo[ns] and _NSInfo[ns].IsSealed or false
 		end
 
 		doc "IsFinal" [[
-			<desc>Check if the class|interface is non-inheritable</desc>
+			<desc>Check if the class|interface is final</desc>
 			<param name="object">the object to query</param>
-			<return type="boolean">true if the class|interface is non-inheritable</return>
+			<param name="name" optional="true">the method or property's name</param>
+			<return type="boolean">true if the feature is final</return>
 			<usage>System.Reflector.IsFinal(System.Object)</usage>
 		]]
-		function IsFinal(ns)
+		function IsFinal(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
+			if type(name) ~= "string" then name = nil end
 
-			return ns and _NSInfo[ns] and _NSInfo[ns].IsFinal or false
+			return ns and IsFinalFeature(ns, name) or false
 		end
 
 		doc "IsUniqueClass" [[
@@ -7071,23 +7060,23 @@ do
 
 		doc "__Sealed__" [[Mark the feature to be sealed, and can't be re-defined again]]
 
-		function ApplyAttribute(self, target, targetType, owner, name)
-			if owner and owner ~= target then
-				_NSInfo[owner].Sealed = _NSInfo[owner].Sealed or {}
-				_NSInfo[owner].Sealed[name] = true
-			else
-				_NSInfo[target].IsSealed = true
-			end
+		function ApplyAttribute(self, target, targetType)
+			_NSInfo[target].IsSealed = true
 		end
 	end)
 
 	class "__Final__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Final__" [[Mark the class|interface can't be inherited]]
+		doc "__Final__" [[Mark the class|interface can't be inherited, or method|property can't be overridden by child-classes]]
 
-		function ApplyAttribute(self, target, targetType)
-			_NSInfo[target].IsFinal = true
+		function ApplyAttribute(self, target, targetType, owner, name)
+			if targetType == AttributeTargets.Interface or targetType == AttributeTargets.Class then
+				_NSInfo[target].IsFinal = true
+			elseif _NSInfo[owner].Type == TYPE_INTERFACE or _NSInfo[owner].Type == TYPE_CLASS then
+				_NSInfo[owner].FinalFeatures = _NSInfo[owner].FinalFeatures or {}
+				_NSInfo[owner].FinalFeatures[name] = true
+			end
 		end
 	end)
 
@@ -7284,16 +7273,16 @@ do
 		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
 		ConsumePreparedAttributes(__AttributeUsage__, AttributeTargets.Class)
 		__Sealed__:ApplyAttribute(__AttributeUsage__)
-		__Final__:ApplyAttribute(__AttributeUsage__)
+		__Final__:ApplyAttribute(__AttributeUsage__, AttributeTargets.Class)
 
 		-- System.__Sealed__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
 		ConsumePreparedAttributes(__Sealed__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Sealed__)
 		__Sealed__:ApplyAttribute(__Sealed__)
 
 		-- System.__Final__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, Inherited = false, RunOnce = true, BeforeDefinition = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true, BeforeDefinition = true}
 		ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Final__)
 		__Sealed__:ApplyAttribute(__Final__)
@@ -7311,23 +7300,23 @@ do
 		------------------------------------------------------
 		-- System.Reflector
 		__Sealed__:ApplyAttribute(Reflector)
-		__Final__:ApplyAttribute(Reflector)
+		__Final__:ApplyAttribute(Reflector, AttributeTargets.Interface)
 
 		-- ValidatedType
 		__Sealed__:ApplyAttribute(ValidatedType)
-		__Final__:ApplyAttribute(ValidatedType)
+		__Final__:ApplyAttribute(ValidatedType, AttributeTargets.Class)
 
 		-- Event
 		__Sealed__:ApplyAttribute(Event)
-		__Final__:ApplyAttribute(Event)
+		__Final__:ApplyAttribute(Event, AttributeTargets.Class)
 
 		-- EventHandler
 		__Sealed__:ApplyAttribute(EventHandler)
-		__Final__:ApplyAttribute(EventHandler)
+		__Final__:ApplyAttribute(EventHandler, AttributeTargets.Class)
 
 		-- FixedMethod
 		__Sealed__:ApplyAttribute(FixedMethod)
-		__Final__:ApplyAttribute(FixedMethod)
+		__Final__:ApplyAttribute(FixedMethod, AttributeTargets.Class)
 	end
 
 	-- More usable attributes
@@ -7915,36 +7904,7 @@ do
 		end
 	end)
 
-	--[=[__AttributeUsage__{AttributeTarget = AttributeTargets.Method, Inherited = true, RunOnce = true }
-	__Sealed__()
-	class "__ArgumentsDemand__" (function (_ENV)
-		inherit "__Attribute__"
-		doc "__ArgumentsDemand__" [[The argument definitions of the interface's method]]
-
-		function ApplyAttribute(self, target, targetType, owner, name)
-			assert(Reflector.IsInterface(owner), "__ArgumentsDemand__ can only be used on the interface's method.")
-		end
-
-		function Clone(self)
-			-- Defualt behavior
-			local cache = CACHE_TABLE()
-
-			for _, v in ipairs(self) do tinsert(cache, v) end
-
-			self:RemoveSelf()
-
-			-- Use __Arguments__ instead
-			local obj = __Arguments__(cache)
-
-			CACHE_TABLE(cache)
-
-			return obj
-		end
-	end)--]=]
-
 	-- Static method for __Attribute__
-	__Optional__:ApplyAttribute(nil, AttributeTargets.Method, __Attribute__, "ApplyAttribute")
-
 	__Sealed__() class "__Attribute__" (function(_ENV)
 		local function IsDefined(target, targetType, owner, name, type)
 			local config = GetTargetAttributes(target, targetType, owner, name)
