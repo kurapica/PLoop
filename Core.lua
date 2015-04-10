@@ -1,5 +1,5 @@
 --[[
-Copyright (c) 2011-2015 WangXH <kurapica.igas@gmail.com>
+Copyright (c) 2011-2015 WangXH <kurapica125@outlook.com>
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
@@ -33,10 +33,10 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
--- Author			kurapica.igas@gmail.com
+-- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
 -- Last Update Date 2015/04/03
--- Version			r119
+-- Version			r120
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
