@@ -1,3 +1,6 @@
+2015/04/16
+    __NameSpace__ attribute added to set namespace directly.
+
 2014/10/29
     __Abstract__ attribute added to create abstract classes.
 

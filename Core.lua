@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/04/03
--- Version			r120
+-- Last Update Date 2015/04/16
+-- Version			r121
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -380,9 +380,13 @@ do
 
 	-- Local marker
 	LOCAL_CACHE = setmetatable({}, WEAK_KEY)
+	PrepareNameSpace_CACHE = setmetatable({}, WEAK_KEY)
 
 	function SetLocal(flag) LOCAL_CACHE[running() or 0] = flag or nil end
 	function IsLocal() return LOCAL_CACHE[running() or 0] end
+
+	function PrepareNameSpace(target) PrepareNameSpace_CACHE[running() or 0] = target or nil end
+	function GetPrepareNameSpace() return PrepareNameSpace_CACHE[running() or 0] end
 
 	-- Equal Check
 	local function checkEqual(obj1, obj2, cache)
@@ -1916,7 +1920,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
 
 		-- Create interface or get it
 		local IF, info
@@ -3214,7 +3218,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or  env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
 
 		-- Create class or get it
 		local cls, info
@@ -3569,7 +3573,7 @@ do
 		name = name or env
 
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
 
 		-- Create class or get it
 		local enm, info
@@ -3955,7 +3959,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and GetNameSpace4Env(fenv) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
 
 		-- Create class or get it
 		local strt, info
@@ -7901,6 +7905,33 @@ do
 				info.StaticMethod = info.StaticMethod or {}
 				info.StaticMethod[name] = true
 			end
+		end
+	end)
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
+	__Sealed__() __Unique__()
+	class "__NameSpace__" (function(_ENV)
+		inherit "__Attribute__"
+		doc "__NameSpace__" [[Used to set the namespace directly.]]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self) return PrepareNameSpace(false) end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		function __NameSpace__(self, ns)
+			if getmetatable(ns) == TYPE_NAMESPACE then
+				PrepareNameSpace(ns)
+			elseif type(ns) == "string" then
+				PrepareNameSpace(BuildNameSpace(nil, ns))
+			else
+				error([[Usage: __NameSpace__("System.Data")]], 2)
+			end
+
+			return Super(self)
 		end
 	end)
 
