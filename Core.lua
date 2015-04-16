@@ -7908,7 +7908,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__NameSpace__" (function(_ENV)
 		inherit "__Attribute__"
