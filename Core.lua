@@ -385,7 +385,7 @@ do
 	function SetLocal(flag) LOCAL_CACHE[running() or 0] = flag or nil end
 	function IsLocal() return LOCAL_CACHE[running() or 0] end
 
-	function PrepareNameSpace(target) PrepareNameSpace_CACHE[running() or 0] = target or nil end
+	function PrepareNameSpace(target) PrepareNameSpace_CACHE[running() or 0] = target end
 	function GetPrepareNameSpace() return PrepareNameSpace_CACHE[running() or 0] end
 
 	-- Equal Check
@@ -1920,7 +1920,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(fenv) or GetPrepareNameSpace()) or nil
 
 		-- Create interface or get it
 		local IF, info
@@ -3218,7 +3218,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or  env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(fenv) or GetPrepareNameSpace()) or nil
 
 		-- Create class or get it
 		local cls, info
@@ -3573,7 +3573,7 @@ do
 		name = name or env
 
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(fenv) or GetPrepareNameSpace()) or nil
 
 		-- Create class or get it
 		local enm, info
@@ -3959,7 +3959,7 @@ do
 		depth = tonumber(depth) or 1
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
-		local ns = not IsLocal() and (GetPrepareNameSpace() or GetNameSpace4Env(fenv)) or nil
+		local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(fenv) or GetPrepareNameSpace()) or nil
 
 		-- Create class or get it
 		local strt, info
@@ -7917,7 +7917,7 @@ do
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		function ApplyAttribute(self) return PrepareNameSpace(false) end
+		function ApplyAttribute(self) return PrepareNameSpace(nil) end
 
 		------------------------------------------------------
 		-- Constructor
@@ -7927,8 +7927,10 @@ do
 				PrepareNameSpace(ns)
 			elseif type(ns) == "string" then
 				PrepareNameSpace(BuildNameSpace(nil, ns))
+			elseif ns == nil or ns == false then
+				PrepareNameSpace(false)
 			else
-				error([[Usage: __NameSpace__("System.Data")]], 2)
+				error([[Usage: __NameSpace__(name|nil|false)]], 2)
 			end
 
 			return Super(self)
