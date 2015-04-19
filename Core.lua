@@ -7146,18 +7146,7 @@ do
 				-- Convert type to Argument
 				if getmetatable(arg) == ValidatedType then
 					arg = Argument { Type = arg }
-
-					-- Check optional args
-					if arg.Type:Is(nil) then
-						if not self.MinArgs then self.MinArgs = i - 1 end
-					elseif self.MinArgs then
-						-- Only optional args can be defined after optional args
-						error(_Error_Header .. _Error_NotOptional:format(i))
-					end
-
 					self[i] = arg
-
-					return
 				else
 					error(_Error_Header .. _Error_NotArgument:format(i))
 				end
@@ -7190,6 +7179,12 @@ do
 				elseif self.MinArgs then
 					-- Only optional args can be defined after optional args
 					error(_Error_Header .. _Error_NotOptional:format(i))
+				end
+
+				-- Auto generate Default
+				if arg.Default == nil and arg.Type and arg.Type:Is(nil) and #(arg.Type) == 1 then
+					local info = _NSInfo[arg.Type[1]]
+					if info and (info.Type == TYPE_STRUCT or info.Type == TYPE_ENUM) then arg.Default = info.Default end
 				end
 
 				return
