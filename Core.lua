@@ -5457,6 +5457,15 @@ do
 				end
 			end
 		end
+
+		doc "GetDefinitionEnvironmentOwner" [[
+			<desc>Get the owner from a definition environment</desc>
+			<param name="env">The environment like the return of (class "MyCls")</param>
+			<return>the owner</return>
+		]]
+		function GetDefinitionEnvironmentOwner(env)
+			if type(env) == "table" then return env[OWNER_FIELD] end
+		end
 	end)
 end
 
