@@ -7921,7 +7921,7 @@ do
 			if getmetatable(ns) == TYPE_NAMESPACE then
 				PrepareNameSpace(ns)
 			elseif type(ns) == "string" then
-				PrepareNameSpace(BuildNameSpace(nil, ns))
+				PrepareNameSpace(BuildNameSpace(GetDefaultNameSpace(), ns))
 			elseif ns == nil or ns == false then
 				PrepareNameSpace(false)
 			else
