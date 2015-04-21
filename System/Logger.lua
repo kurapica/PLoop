@@ -114,15 +114,15 @@ class "Logger" (function(_ENV)
 		<desc>Set a prefix for a log level, thre prefix will be added to the message when the message is with the same log level</desc>
 		<param name="logLevel" type="number">the log level</param>
 		<param name="prefix" type="string">the prefix string</param>
-		<param name="methodname" optional="true" type="string">if not nil, will place a function with the methodname to be called as Log function</param>
+		<param name="createMethod" optional="true" type="boolean">if true, will return a function to be called as Log function</param>
 		<usage>
-			object:SetPrefix(2, "[Info]", "Info")
+			Info = object:SetPrefix(2, "[Info]", true)
 
 			-- Then you can use Info function to output log message with 2 log level
 			Info("This is a test message") -- log out '[Info]This is a test message'
 		</usage>
 	]]
-	function SetPrefix(self, loglvl, prefix, method)
+	function SetPrefix(self, loglvl, prefix, createMethod)
 		if type(prefix) == "string" then
 			if not prefix:match("%W+$") then
 				prefix = prefix.." "
@@ -133,14 +133,10 @@ class "Logger" (function(_ENV)
 		_Info[self].Prefix[loglvl] = prefix
 
 		-- Register
-		if type(method) == "string" then
-			local fenv = getfenv(2)
-
-			if not fenv[method] then
-				fenv[method] = function(msg, ...)
-					if loglvl >= self.LogLevel then
-						return self:Log(loglvl, msg, ...)
-					end
+		if createMethod then
+			return function(msg, ...)
+				if loglvl >= self.LogLevel then
+					return self:Log(loglvl, msg, ...)
 				end
 			end
 		end
