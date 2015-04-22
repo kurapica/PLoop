@@ -1930,7 +1930,7 @@ do
 			info = _NSInfo[IF]
 
 			if info and info.Type and info.Type ~= TYPE_INTERFACE then
-				error(("%s is existed as %s, not interface."):format(name, tostring(info.Type)), depth + 1)
+				error(("%s is existed as %s, not interface."):format(tostring(name), tostring(info.Type)), depth + 1)
 			end
 
 			name = info.Name
@@ -3228,7 +3228,7 @@ do
 			info = _NSInfo[cls]
 
 			if info and info.Type and info.Type ~= TYPE_CLASS then
-				error(("%s is existed as %s, not class."):format(name, tostring(info.Type)), depth + 1)
+				error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), depth + 1)
 			end
 
 			name = info.Name
@@ -3583,7 +3583,7 @@ do
 			info = _NSInfo[enm]
 
 			if info and info.Type and info.Type ~= TYPE_ENUM then
-				error(("%s is existed as %s, not enumeration."):format(name, tostring(info.Type)), depth + 1)
+				error(("%s is existed as %s, not enumeration."):format(tostring(name), tostring(info.Type)), depth + 1)
 			end
 
 			name = info.Name
@@ -3969,7 +3969,7 @@ do
 			info = _NSInfo[strt]
 
 			if info and info.Type and info.Type ~= TYPE_STRUCT then
-				error(("%s is existed as %s, not struct."):format(name, tostring(info.Type)), depth + 1)
+				error(("%s is existed as %s, not struct."):format(tostring(name), tostring(info.Type)), depth + 1)
 			end
 
 			name = info.Name
