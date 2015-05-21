@@ -479,8 +479,8 @@ do
 
 			-- Check self
 			if ns.FinalFeatures and ns.FinalFeatures[name] then return true end
-			if ns.Method and ns.Method[name] then return ns.IsFinal or false end
-			if ns.Property and ns.Property[name] then return ns.IsFinal or false end
+			if ns.Method and ns.Method[name] then return isSuper and ns.IsFinal or false end
+			if ns.Property and ns.Property[name] then return isSuper and ns.IsFinal or false end
 
 			-- Check Super class
 			if ns.SuperClass then
