@@ -609,7 +609,33 @@ do
 						operTar = oper.DefaultFunc
 						if operTar then
 							value = operTar(self)
-							if value ~= nil then self[key] = value end
+							if value ~= nil then
+								if oper.Set == false then
+									operTar = oper.Field
+
+									-- Check container
+									local container
+
+									if oper.SetWeak then
+										container = info.WeakStaticFields
+										if not container then
+											container = setmetatable({}, WEAK_VALUE)
+											info.WeakStaticFields = container
+										end
+									else
+										container = info.StaticFields
+										if not container then
+											container = {}
+											info.StaticFields = container
+										end
+									end
+
+									-- Set the value
+									container[operTar] = value
+								else
+									self[key] = value
+								end
+							end
 						else
 							value = default
 						end
@@ -641,6 +667,8 @@ do
 				local oper = info.Property[key]
 
 				if oper and oper.IsStatic then
+					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
+
 					-- Property
 					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
@@ -1411,11 +1439,11 @@ do
 					end
 
 					-- Auto generate Field or methods
-					if prop.Set == nil and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
+					if (prop.Set == nil or (prop.Set == false and prop.DefaultFunc)) and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
 						if prop.Field == true then prop.Field = nil end
 						local field = prop.Field or "_" .. info.Name:match("^_*(.-)$") .. "_" .. uname
 
-						if set.Synthesize then
+						if set.Synthesize and prop.Set == nil then
 							local getName, setName
 
 							if set.Synthesize == __Synthesize__.NameCase.Pascal then
@@ -1651,8 +1679,6 @@ do
 						else
 							prop.Field = field
 						end
-					else
-						prop.DefaultFunc = nil
 					end
 
 					-- Auto generate Default
@@ -2254,7 +2280,7 @@ do
 							local rMeta = _KeyMeta[k] and k or "_"..k
 							local oldValue = info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta]
 
-							SaveFixedMethod(info.MetaTable, rMeta, value, info.Owner)
+							SaveFixedMethod(info.MetaTable, rMeta, v, info.Owner)
 
 							UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable["0" .. rMeta] or info.MetaTable[rMeta])
 						else
@@ -2821,7 +2847,27 @@ do
 					operTar = oper.DefaultFunc
 					if operTar then
 						value = operTar(self)
-						if value ~= nil then self[key] = value end
+						if value ~= nil then
+							if oper.Set == false then
+								operTar = oper.Field
+
+								-- Check container
+								local container = self
+
+								if oper.SetWeak then
+									container = rawget(self, "__WeakFields")
+									if type(container) ~= "table" then
+										container = setmetatable({}, WEAK_VALUE)
+										rawset(self, "__WeakFields", container)
+									end
+								end
+
+								-- Set the value
+								rawset(container, operTar, value)
+							else
+								self[key] = value
+							end
+						end
 					else
 						value = default
 					end
@@ -2866,6 +2912,7 @@ do
 				end
 			else
 				-- Property
+				if oper.Set == false then error(("%s can't be written."):format(key), 2) end
 				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -2998,7 +3045,28 @@ do
 						operTar = oper.DefaultFunc
 						if operTar then
 							value = operTar(self)
-							if value ~= nil then self[key] = value end
+							if value ~= nil then
+								if oper.Set == false then
+									operTar = oper.Field
+
+									-- Check container
+									local container = self
+									local default = oper.Default
+
+									if oper.SetWeak then
+										container = rawget(self, "__WeakFields")
+										if type(container) ~= "table" then
+											container = setmetatable({}, WEAK_VALUE)
+											rawset(self, "__WeakFields", container)
+										end
+									end
+
+									-- Set the value
+									rawset(container, operTar, value)
+								else
+									self[key] = value
+								end
+							end
 						else
 							value = default
 						end
@@ -3041,6 +3109,7 @@ do
 					end
 				else
 					-- Property
+					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
 					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -3216,7 +3285,7 @@ do
 	------------------------------------
 	function class(env, name, depth)
 		depth = tonumber(depth) or 1
-		name = name or  env
+		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
 		local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(fenv) or GetPrepareNameSpace()) or nil
 
