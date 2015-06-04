@@ -1760,6 +1760,7 @@ do
 			-- Check namespace
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
+					value = info.NameSpace
 					rawset(self, key, value)
 					return value
 				elseif info.NameSpace[key] then
