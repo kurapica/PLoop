@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/04/16
--- Version			r121
+-- Last Update Date 2015/06/04
+-- Version			r122
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -434,10 +434,6 @@ do
 		return result
 	end
 
-	-- Reduce cache table cost
-	local function keepArgsInner(...) yield( running() ) return ... end
-	function KeepArgs(...) return CallThread(keepArgsInner, ...) end
-
 	-- Keyword access system
 	local _KeywordAccessorInfo = {
 		GetKeyword = function(self, owner, key)
@@ -550,11 +546,7 @@ do
 							ckv = ckv * 2
 						end
 
-						local thread = KeepArgs(unpack(rCache))
-
-						CACHE_TABLE(rCache)
-
-						return select(2, resume(thread))
+						return unpack(rCache)
 					end
 				else
 					return info.Cache[value]
@@ -6245,22 +6237,10 @@ do
 
 				-- Keep arguments in thread, so cache can be recycled
 				if argsChanged then
-					count = #cache
-
-					if count == 1 then
-						self.Thread = KeepArgs(cache[1])
-					elseif count == 2 then
-						self.Thread = KeepArgs(cache[1], cache[2])
-					elseif count == 3 then
-						self.Thread = KeepArgs(cache[1], cache[2], cache[3])
-					elseif count == 4 then
-						self.Thread = KeepArgs(cache[1], cache[2], cache[3], cache[4])
-					else
-						self.Thread = KeepArgs(unpack(cache, 1, count))
-					end
+					self.ArgCache = cache
+				else
+					CACHE_TABLE(cache)
 				end
-
-				CACHE_TABLE(cache)
 
 				return true
 			end
@@ -6425,21 +6405,24 @@ do
 
 			-- FixedMethod
 			while getmetatable(matchFunc) do
-				matchFunc.Thread = nil
+				if matchFunc.ArgCache then
+					CACHE_TABLE(matchFunc.ArgCache)
+				end
+				matchFunc.ArgCache = nil
 
 				if MatchArgs(matchFunc, ...) then
-					if matchFunc.Thread then
-						return matchFunc.Method( select(2, resume(matchFunc.Thread)) )
+					if matchFunc.ArgCache then
+						return matchFunc.Method( unpack(matchFunc.ArgCache) )
 					else
 						return matchFunc.Method( ... )
 					end
 				end
 
 				-- Remove argument container
-				if matchFunc.Thread then
-					resume(matchFunc.Thread)
-					matchFunc.Thread = nil
+				if matchFunc.ArgCache then
+					CACHE_TABLE(matchFunc.ArgCache)
 				end
+				matchFunc.ArgCache = nil
 
 				matchFunc = matchFunc.Next
 			end
@@ -8174,9 +8157,7 @@ do
 					CACHE_TABLE(cache)
 					return r1, r2, r3
 				else
-					local thread = KeepArgs(unpack(cache))
-					CACHE_TABLE(cache)
-					return select(2, resume(thread))
+					return unpack(cache)
 				end
 			else
 				return unpack(config)

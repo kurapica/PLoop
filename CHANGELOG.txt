@@ -1,3 +1,6 @@
+2015/06/04
+    Remove thread using in arguments validation.
+
 2015/04/16
     __NameSpace__ attribute added to set namespace directly.
 
