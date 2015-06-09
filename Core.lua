@@ -3186,20 +3186,23 @@ do
 				local noArgMethod = nil
 
 				while getmetatable(fixedMethod) do
-					fixedMethod.Thread = nil
+					if fixedMethod.ArgCache then
+						CACHE_TABLE(fixedMethod.ArgCache)
+					end
+					fixedMethod.ArgCache = nil
 
 					if #fixedMethod == 0 and initTable then
 						noArgMethod = noArgMethod or fixedMethod
 					elseif fixedMethod:MatchArgs(obj, ...) then
-						if fixedMethod.Thread then
-							return fixedMethod.Method(select(2, resume(fixedMethod.Thread)))
+						if fixedMethod.ArgCache then
+							return fixedMethod.Method(unpack(fixedMethod.ArgCache))
 						else
 							return fixedMethod.Method(obj, ...)
 						end
-					elseif fixedMethod.Thread then
+					elseif fixedMethod.ArgCache then
 						-- Remove argument container
-						resume(fixedMethod.Thread)
-						fixedMethod.Thread = nil
+						CACHE_TABLE(fixedMethod.ArgCache)
+						fixedMethod.ArgCache = nil
 					end
 
 					fixedMethod = fixedMethod.Next
