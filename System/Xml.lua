@@ -602,7 +602,7 @@ do
 
 	function loadXML(data, fileEncode, isBigEndian)
 		-- Checking byte order mark
-		local bom = data:byte(1, 4)
+		local bom = { data:byte(1, 4) }
 		local encode = "UTF-8"
 		local startp = 1
 		local bigEndian
