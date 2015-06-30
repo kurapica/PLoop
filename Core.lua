@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/06/04
--- Version			r122
+-- Last Update Date 2015/06/30
+-- Version			r123
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -158,6 +158,9 @@ do
 			setfenv = function (lvl, env) _FENV_Cache(env) end
 		end
 	end
+
+	-- In lua 5.2, the loadstring is deprecated
+	loadstring = loadstring or load
 end
 
 ------------------------------------------------------
@@ -2340,6 +2343,13 @@ do
 		__gc = true,		-- dispose a
 		__tostring = true,	-- tostring(a)
 		__exist = true,		-- ClassName(...)	-- return object if existed
+		__idiv = true,		-- // floor division
+		__band = true,		-- & bitwise and
+		__bor = true,		-- | bitwise or
+		__bxor = true,		-- ~ bitwise exclusive or
+		__bnot = true,		-- ~ bitwise unary not
+		__shl = true,		-- << bitwise left shift
+		__shr = true,		-- >> bitwise right shift
 	}
 
 	--------------------------------------------------
