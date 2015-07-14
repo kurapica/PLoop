@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/06/30
--- Version			r123
+-- Last Update Date 2015/07/13
+-- Version			r124
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -4364,6 +4364,12 @@ do
 		end
 	}
 
+	struct "Callable" {
+		function (value)
+			assert(Reflector.IsCallable(value), "%s isn't callable.")
+		end
+	}
+
 	------------------------------------------------------
 	-- System.AttributeTargets
 	------------------------------------------------------
@@ -5541,6 +5547,19 @@ do
 		function GetDefinitionEnvironmentOwner(env)
 			if type(env) == "table" then return env[OWNER_FIELD] end
 		end
+
+		doc "IsCallable" [[
+			<desc>Whether the object is callable(function or table with __call meta-method)</desc>
+			<param name="obj">The object need to check</param>
+			<return>boolean, true if the object is callable</return>
+		]]
+		function IsCallable(obj)
+			if type(obj) == "function" then return true end
+			local cls = GetObjectClass(obj)
+			local info = cls and rawget(_NSInfo, cls)
+
+			return info and info.Type == TYPE_CLASS and info.MetaTable.__call and true or false
+		end
 	end)
 end
 
@@ -6652,17 +6671,17 @@ do
 			end
 		end
 
-		function ValidateAttributeUsable(config, attr, skipMulti)
-			if getmetatable(config) then
-				if IsEqual(config, attr) then return false end
-
-				if not skipMulti and getmetatable(config) == getmetatable(attr) then
-					local usage = GetAttributeUsage(getmetatable(config))
-
-					if not usage or not usage.AllowMultiple then return false end
+		function ValidateAttributeUsable(config, attr, skipMulti, chkOverride)
+			local cls = getmetatable(config)
+			if cls then
+				if cls == getmetatable(attr) then
+					local usage = GetAttributeUsage(cls)
+					if chkOverride and usage and usage.Overridable then return true end
+					if IsEqual(config, attr) then return false end
+					if not skipMulti and (not usage or not usage.AllowMultiple) then return false end
 				end
 			else
-				for _, v in ipairs(config) do if not ValidateAttributeUsable(v, attr, skipMulti) then return false end end
+				for _, v in ipairs(config) do if not ValidateAttributeUsable(v, attr, skipMulti, chkOverride) then return false end end
 			end
 
 			return true
@@ -6864,7 +6883,6 @@ do
 
 			-- Check if already existed
 			local pconfig = GetTargetAttributes(target, targetType, owner, name, true)
-			local sconfig = GetSuperAttributes(target, targetType, owner, name)
 
 			if pconfig then
 				if #prepared > 0 then
@@ -6872,7 +6890,7 @@ do
 
 					-- remove equal attributes
 					for i = #prepared, 1, -1 do
-						if not ValidateAttributeUsable(pconfig, prepared[i], true) then
+						if not ValidateAttributeUsable(pconfig, prepared[i], true, true) then
 							noUseAttr[tremove(prepared, i)] = true
 						end
 					end
@@ -6897,22 +6915,25 @@ do
 						end
 					end
 				end
-			elseif sconfig then
-				-- get inheritable attributes from superTarget
-				local usage
+			else
+				local sconfig = GetSuperAttributes(target, targetType, owner, name)
+				if sconfig then
+					-- get inheritable attributes from superTarget
+					local usage
 
-				if getmetatable(sconfig) then
-					usage = GetAttributeUsage(getmetatable(sconfig))
-
-					if not usage or usage.Inherited then
-						if ValidateAttributeUsable(prepared, sconfig) then sconfig:Clone() end
-					end
-				else
-					for _, attr in ipairs(sconfig) do
-						usage = GetAttributeUsage(getmetatable(attr))
+					if getmetatable(sconfig) then
+						usage = GetAttributeUsage(getmetatable(sconfig))
 
 						if not usage or usage.Inherited then
-							if ValidateAttributeUsable(prepared, attr) then attr:Clone() end
+							if ValidateAttributeUsable(prepared, sconfig) then sconfig:Clone() end
+						end
+					else
+						for _, attr in ipairs(sconfig) do
+							usage = GetAttributeUsage(getmetatable(attr))
+
+							if not usage or usage.Inherited then
+								if ValidateAttributeUsable(prepared, attr) then attr:Clone() end
+							end
 						end
 					end
 				end
@@ -7132,6 +7153,9 @@ do
 
 		doc "BeforeDefinition" [[Whether the ApplyAttribute method is running before the feature's definition, only works on class, interface and struct.]]
 		property "BeforeDefinition" { Type = Boolean }
+
+		doc "" [[Whether the attribute can be override, default false.]]
+		property "Overridable" { Type = Boolean }
 	end)
 
 	class "__Sealed__" (function(_ENV)
