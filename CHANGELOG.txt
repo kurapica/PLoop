@@ -1,3 +1,6 @@
+2015/07/16
+    struct for class, interface, struct and enum is added.
+
 2015/06/30
     Add metamethods for bitwise oper in lua 5.3.
 

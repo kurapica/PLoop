@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/07/13
--- Version			r124
+-- Last Update Date 2015/07/16
+-- Version			r125
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -4367,6 +4367,30 @@ do
 	struct "Callable" {
 		function (value)
 			assert(Reflector.IsCallable(value), "%s isn't callable.")
+		end
+	}
+
+	struct "Class" {
+		function (value)
+			assert(Reflector.IsClass(value), "%s must be a class.")
+		end
+	}
+
+	struct "Interface" {
+		function (value)
+			assert(Reflector.IsInterface(value), "%s must be an interface.")
+		end
+	}
+
+	struct "Struct" {
+		function (value)
+			assert(Reflector.IsStruct(value), "%s must be a struct.")
+		end
+	}
+
+	struct "Enum" {
+		function (value)
+			assert(Reflector.IsEnum(value), "%s must be an enum.")
 		end
 	}
 
