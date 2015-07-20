@@ -5078,6 +5078,24 @@ do
 			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement:Clone() or nil
 		end
 
+		doc "HasStructMember" [[
+			<desc>Whether the struct has the query member</desc>
+			<param name="struct" type="struct">the struct type</param>
+			<param name="member" type="string">the query member</param>
+			<return type="boolean">true if the struct has the member</return>
+		]]
+		function HasStructMember(ns, member)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
+
+			local info = ns and _NSInfo[ns]
+
+			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+				for _, part in ipairs(info.Members) do if part == member then return true end end
+			end
+
+			return false
+		end
+
 		doc "GetStructMembers" [[
 			<desc>Get the parts of the struct type</desc>
 			<param name="struct" type="struct">the struct type</param>
