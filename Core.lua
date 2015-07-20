@@ -4425,9 +4425,7 @@ do
 			<return type="namespace">the namespace of the environment</return>
 		]]
 		function GetCurrentNameSpace(env, rawOnly)
-			env = type(env) == "table" and env or getfenv(2) or _G
-
-			return GetNameSpace4Env(env, rawOnly)
+			return GetNameSpace4Env(type(env) == "table" and env or getfenv(2) or _G, rawOnly)
 		end
 
 		doc "SetCurrentNameSpace" [[
@@ -4436,9 +4434,7 @@ do
 			<param name="env" type="table" optional="true">the environment, default the current environment</param>
 		]]
 		function SetCurrentNameSpace(ns, env)
-			env = type(env) == "table" and env or getfenv(2) or _G
-
-			return SetNameSpace4Env(env, ns)
+			return SetNameSpace4Env(type(env) == "table" and env or getfenv(2) or _G, ns)
 		end
 
 		doc "GetNameSpaceForName" [[
@@ -4459,8 +4455,8 @@ do
 		]]
 		function GetNameSpaceType(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].Type
+			ns = _NSInfo[ns]
+			return ns and ns.Type
 		end
 
 		doc "GetNameSpaceName" [[
@@ -4470,7 +4466,8 @@ do
 			<usage>System.Reflector.GetNameSpaceName(System.Object)</usage>
 		]]
 		function GetNameSpaceName(ns)
-			return ns and _NSInfo[ns] and _NSInfo[ns].Name
+			ns = _NSInfo[ns]
+			return ns and ns.Name
 		end
 
 		doc "GetNameSpaceFullName" [[
@@ -4479,11 +4476,7 @@ do
 			<return type="string">the full path of the namespace</return>
 			<usage>path = System.Reflector.GetNameSpaceFullName(System.Object)</usage>
 		]]
-		function GetNameSpaceFullName(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return tostring(ns)
-		end
+		function GetNameSpaceFullName(ns) return tostring(ns) end
 
 		doc "BeginDefinition" [[
 			<desc>Begin the definition of target namespace, stop cache refresh</desc>
@@ -4527,8 +4520,8 @@ do
 		]]
 		function GetSuperClass(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].SuperClass
+			ns = _NSInfo[ns]
+			return ns and ns.SuperClass
 		end
 
 		doc "IsNameSpace" [[
@@ -4539,8 +4532,7 @@ do
 		]]
 		function IsNameSpace(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and true or false
+			return _NSInfo[ns] and true or false
 		end
 
 		doc "IsClass" [[
@@ -4551,8 +4543,8 @@ do
 		]]
 		function IsClass(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_CLASS or false
+			ns = _NSInfo[ns]
+			return ns and ns.Type == TYPE_CLASS or false
 		end
 
 		doc "IsStruct" [[
@@ -4563,8 +4555,8 @@ do
 		]]
 		function IsStruct(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_STRUCT or false
+			ns = _NSInfo[ns]
+			return ns and ns.Type == TYPE_STRUCT or false
 		end
 
 		doc "IsEnum" [[
@@ -4575,8 +4567,8 @@ do
 		]]
 		function IsEnum(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_ENUM or false
+			ns = _NSInfo[ns]
+			return ns and ns.Type == TYPE_ENUM or false
 		end
 
 		doc "IsInterface" [[
@@ -4587,8 +4579,8 @@ do
 		]]
 		function IsInterface(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].Type == TYPE_INTERFACE or false
+			ns = _NSInfo[ns]
+			return ns and ns.Type == TYPE_INTERFACE or false
 		end
 
 		doc "IsSealed" [[
@@ -4599,8 +4591,8 @@ do
 		]]
 		function IsSealed(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].IsSealed or false
+			ns = _NSInfo[ns]
+			return ns and ns.IsSealed or false
 		end
 
 		doc "IsFinal" [[
@@ -4613,7 +4605,6 @@ do
 		function IsFinal(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 			if type(name) ~= "string" then name = nil end
-
 			return ns and IsFinalFeature(ns, name) or false
 		end
 
@@ -4625,8 +4616,8 @@ do
 		]]
 		function IsUniqueClass(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].UniqueObject and true or false
+			ns = _NSInfo[ns]
+			return ns and ns.UniqueObject and true or false
 		end
 
 		doc "IsAutoCache" [[
@@ -4638,9 +4629,8 @@ do
 		]]
 		function IsAutoCache(ns, name)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local autoCache = ns and _NSInfo[ns] and _NSInfo[ns].AutoCache
-
+			ns = _NSInfo[ns]
+			local autoCache = ns and ns.AutoCache
 			return autoCache == true or (name and autoCache and autoCache[name]) or false
 		end
 
@@ -4657,11 +4647,8 @@ do
 
 			if info and info.SubNS then
 				local ret = {}
-
 				for key in pairs(info.SubNS) do tinsert(ret, key) end
-
 				sort(ret)
-
 				return ret
 			end
 		end
@@ -4672,16 +4659,14 @@ do
 			<return type="table">the extend interface list</return>
 			<usage>System.Reflector.GetExtendInterfaces(System.Object)</usage>
 		]]
-		function GetExtendInterfaces(cls)
-			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
+		function GetExtendInterfaces(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = _NSInfo[cls]
+			local info = _NSInfo[ns]
 
 			if info.ExtendInterface then
 				local ret = {}
-
 				for _, IF in ipairs(info.ExtendInterface) do tinsert(ret, IF) end
-
 				return ret
 			end
 		end
@@ -4692,10 +4677,10 @@ do
 			<return type="table">the full extend interface list in the inheritance tree</return>
 			<usage>System.Reflector.GetAllExtendInterfaces(System.Object)</usage>
 		]]
-		function GetAllExtendInterfaces(cls)
-			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
+		function GetAllExtendInterfaces(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = _NSInfo[cls]
+			local info = _NSInfo[ns]
 
 			if info.Cache4Interface then
 				local ret = {}
@@ -4710,16 +4695,14 @@ do
 			<return type="table">the child class list</return>
 			<usage>System.Reflector.GetChildClasses(System.Object)</usage>
 		]]
-		function GetChildClasses(cls)
-			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
+		function GetChildClasses(ns)
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = _NSInfo[cls]
+			local info = _NSInfo[ns]
 
 			if info.Type == TYPE_CLASS and info.ChildClass then
 				local ret = {}
-
 				for subCls in pairs(info.ChildClass) do tinsert(ret, subCls) end
-
 				return ret
 			end
 		end
@@ -4900,7 +4883,6 @@ do
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
-
 			return info and info.RequireMethod and info.RequireMethod[name] or false
 		end
 
@@ -4914,7 +4896,6 @@ do
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
-
 			return info and info.RequireProperty and info.RequireProperty[name] or false
 		end
 
@@ -4928,7 +4909,6 @@ do
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
-
 			return info and info.OptionalMethod and info.OptionalMethod[name] or false
 		end
 
@@ -4942,7 +4922,6 @@ do
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
-
 			return info and info.OptionalProperty and info.OptionalProperty[name] or false
 		end
 
@@ -4973,7 +4952,6 @@ do
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			local info = _NSInfo[ns]
-
 			return info and info.StaticMethod and info.StaticMethod[name] or false
 		end
 
@@ -4985,8 +4963,8 @@ do
 		]]
 		function IsFlagsEnum(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			return ns and _NSInfo[ns] and _NSInfo[ns].IsFlags or false
+			ns = _NSInfo[ns]
+			return ns and ns.IsFlags or false
 		end
 
 		doc "GetEnums" [[
@@ -5016,9 +4994,7 @@ do
 					return tmp
 				else
 					local tmp = {}
-
 					for i in pairs(info.Enum) do tinsert(tmp, i) end
-
 					sort(tmp)
 
 					return tmp
@@ -5060,7 +5036,7 @@ do
 		function GetStructType(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			return info and info.Type == TYPE_STRUCT and info.SubType or nil
 		end
@@ -5073,7 +5049,7 @@ do
 		function GetStructArrayElement(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement:Clone() or nil
 		end
@@ -5087,7 +5063,7 @@ do
 		function HasStructMember(ns, member)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
 				for _, part in ipairs(info.Members) do if part == member then return true end end
@@ -5105,7 +5081,7 @@ do
 		function GetStructMembers(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
@@ -5138,7 +5114,7 @@ do
 		function GetStructMember(ns, part)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
@@ -5189,7 +5165,7 @@ do
 		function IsAbstractClass(ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
-			local info = ns and _NSInfo[ns]
+			local info = _NSInfo[ns]
 
 			return info and info.AbstractClass or false
 		end
@@ -5436,7 +5412,7 @@ do
 				end
 			end
 
-			if ns and _NSInfo[ns] then
+			if _NSInfo[ns] then
 				if Reflector.IsEnum(ns) then
 					if _NSInfo[ns].IsFlags and type(data) == "number" then
 						local ret = {ns(data)}
