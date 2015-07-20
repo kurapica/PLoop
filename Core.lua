@@ -5083,24 +5083,12 @@ do
 
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
-					local tmp = {}
-
+			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER then
+				local tmp = {}
+				if info.Members then
 					for _, part in ipairs(info.Members) do tinsert(tmp, part) end
-
-					return tmp
-				elseif info.SubType == _STRUCT_TYPE_ARRAY then
-					return { "element" }
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					local tmp = {}
-
-					for key, value in pairs(info.StructEnv) do if type(key) == "string" and IsValidatedType(value) then tinsert(tmp, key) end end
-
-					sort(tmp)
-
-					return tmp
 				end
+				return tmp
 			end
 		end
 
@@ -5123,8 +5111,6 @@ do
 					end
 				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
 					return info.ArrayElement:Clone()
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM then
-					if IsValidatedType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
 				end
 			end
 		end
