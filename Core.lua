@@ -5584,6 +5584,37 @@ do
 
 			return info and info.Type == TYPE_CLASS and info.MetaTable.__call and true or false
 		end
+
+		doc "IsInitTableSupported" [[
+			<desc>Whether the class support init-table mechanism</desc>
+			<param name="obj">The class need to check</param>
+			<return>boolean, true if the class support init-table mechanism</return>
+		]]
+		function IsInitTableSupported(cls)
+			local info = rawget(_NSInfo, cls)
+
+			assert(info and info.Type == TYPE_CLASS, "System.Reflector.IsInitTableSupported(cls) - cls must be a class.")
+
+			while info do
+				if not info.Constructor then
+					info = info.SuperClass and _NSInfo[info.SuperClass]
+				elseif type(info.Constructor) == "function" then
+					return false
+				elseif getmetatable(info.Constructor) == FixedMethod then
+					local fixedMethod = info.Constructor
+
+					while getmetatable(fixedMethod) do
+						if #fixedMethod == 0 then return true end
+
+						fixedMethod = fixedMethod.Next
+					end
+
+					return false
+				end
+			end
+
+			return true
+		end
 	end)
 end
 
