@@ -16,3 +16,4 @@ require "PLoop.System.Xml"
 -- System.Text
 require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
+require "PLoop.System.Text.FileWriter"
