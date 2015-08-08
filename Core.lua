@@ -471,6 +471,8 @@ do
 	function IsFinalFeature(ns, name, isSuper)
 		ns = _NSInfo[ns]
 
+		if not ns then return false end
+
 		if not name then
 			return ns.IsFinal
 		else
@@ -4305,94 +4307,20 @@ end
 do
 	namespace "System"
 
-	struct "Boolean" {
-		Default = false,
-		function (value) return value and true or false end
-	}
-
-	struct "String" {
-		Default = "",
-		function (value)
-			if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "Number" {
-		Default = 0,
-		function (value)
-			if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "Function" {
-		function (value)
-			if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "Table" {
-		function (value)
-			if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "RawTable" {
-		function (value)
-			if type(value) ~= "table" then
-				error(("%s must be a table, got %s."):format("%s", type(value)))
-			elseif getmetatable(value) ~= nil then
-				error("%s must be a table without metatable.")
-			end
-		end
-	}
-
-	struct "Userdata" {
-		function (value)
-			if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "Thread" {
-		function (value)
-			if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end
-		end
-	}
-
-	struct "Any" {
-		function (value)
-			assert(value ~= nil, "%s can't be nil.")
-		end
-	}
-
-	struct "Callable" {
-		function (value)
-			assert(Reflector.IsCallable(value), "%s isn't callable.")
-		end
-	}
-
-	struct "Class" {
-		function (value)
-			assert(Reflector.IsClass(value), "%s must be a class.")
-		end
-	}
-
-	struct "Interface" {
-		function (value)
-			assert(Reflector.IsInterface(value), "%s must be an interface.")
-		end
-	}
-
-	struct "Struct" {
-		function (value)
-			assert(Reflector.IsStruct(value), "%s must be a struct.")
-		end
-	}
-
-	struct "Enum" {
-		function (value)
-			assert(Reflector.IsEnum(value), "%s must be an enum.")
-		end
-	}
+	struct "Boolean" { Default = false, function (value) return value and true or false end }
+	struct "String" { Default = "", function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
+	struct "Number" { Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
+	struct "Function" { function (value) if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end end }
+	struct "Table" { function (value) if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end end }
+	struct "RawTable" { function (value) assert(type(value) == "table" and getmetatable(value) == nil, "%s must be a table without metatable.") end }
+	struct "Userdata" { function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
+	struct "Thread" { function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
+	struct "Any" { function (value) assert(value ~= nil, "%s can't be nil.") end }
+	struct "Callable" { function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
+	struct "Class" { function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
+	struct "Interface" { function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
+	struct "Struct" { function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
+	struct "Enum" { function (value) assert(Reflector.IsEnum(value), "%s must be an enum.") end }
 
 	------------------------------------------------------
 	-- System.AttributeTargets
@@ -4454,9 +4382,8 @@ do
 			<usage>type = System.Reflector.GetNameSpaceType("System.Object")</usage>
 		]]
 		function GetNameSpaceType(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.Type
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.Type
 		end
 
 		doc "GetNameSpaceName" [[
@@ -4466,13 +4393,13 @@ do
 			<usage>System.Reflector.GetNameSpaceName(System.Object)</usage>
 		]]
 		function GetNameSpaceName(ns)
-			ns = _NSInfo[ns]
-			return ns and ns.Name
+			local info = _NSInfo[ns]
+			return info and info.Name
 		end
 
 		doc "GetNameSpaceFullName" [[
 			<desc>Get the full name of the namespace</desc>
-			<param name="namespace|string">the namespace to query</param>
+			<param name="namespace">the namespace to query</param>
 			<return type="string">the full path of the namespace</return>
 			<usage>path = System.Reflector.GetNameSpaceFullName(System.Object)</usage>
 		]]
@@ -4483,15 +4410,9 @@ do
 			<param name="namespace|string">the namespace</param>
 		]]
 		function BeginDefinition(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			if ns then
-				local info = _NSInfo[ns]
-
-				if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
-					info.BeginDefinition = true
-				end
-			end
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			assert(info and info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE, "System.Reflector.BeginDefinition(ns) - ns must be a class or interface.")
+			info.BeginDefinition = true
 		end
 
 		doc "EndDefinition" [[
@@ -4499,17 +4420,10 @@ do
 			<param name="namespace|string">the namespace</param>
 		]]
 		function EndDefinition(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			if ns then
-				local info = _NSInfo[ns]
-
-				if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
-					info.BeginDefinition = nil
-
-					return RefreshCache(ns)
-				end
-			end
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			assert(info and info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE, "System.Reflector.BeginDefinition(ns) - ns must be a class or interface.")
+			info.BeginDefinition = nil
+			return RefreshCache(ns)
 		end
 
 		doc "GetSuperClass" [[
@@ -4519,9 +4433,8 @@ do
 			<usage>System.Reflector.GetSuperClass(System.Object)</usage>
 		]]
 		function GetSuperClass(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.SuperClass
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.SuperClass
 		end
 
 		doc "IsNameSpace" [[
@@ -4531,8 +4444,7 @@ do
 			<usage>System.Reflector.IsNameSpace(System.Object)</usage>
 		]]
 		function IsNameSpace(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			return _NSInfo[ns] and true or false
+			return _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns] and true or false
 		end
 
 		doc "IsClass" [[
@@ -4542,9 +4454,8 @@ do
 			<usage>System.Reflector.IsClass(System.Object)</usage>
 		]]
 		function IsClass(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.Type == TYPE_CLASS or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.Type == TYPE_CLASS or false
 		end
 
 		doc "IsStruct" [[
@@ -4554,9 +4465,8 @@ do
 			<usage>System.Reflector.IsStruct(System.Object)</usage>
 		]]
 		function IsStruct(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.Type == TYPE_STRUCT or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.Type == TYPE_STRUCT or false
 		end
 
 		doc "IsEnum" [[
@@ -4566,9 +4476,8 @@ do
 			<usage>System.Reflector.IsEnum(System.Object)</usage>
 		]]
 		function IsEnum(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.Type == TYPE_ENUM or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.Type == TYPE_ENUM or false
 		end
 
 		doc "IsInterface" [[
@@ -4578,9 +4487,8 @@ do
 			<usage>System.Reflector.IsInterface(System.IFSocket)</usage>
 		]]
 		function IsInterface(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.Type == TYPE_INTERFACE or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.Type == TYPE_INTERFACE or false
 		end
 
 		doc "IsSealed" [[
@@ -4590,9 +4498,8 @@ do
 			<usage>System.Reflector.IsSealed(System.Object)</usage>
 		]]
 		function IsSealed(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.IsSealed or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.IsSealed or false
 		end
 
 		doc "IsFinal" [[
@@ -4603,9 +4510,7 @@ do
 			<usage>System.Reflector.IsFinal(System.Object)</usage>
 		]]
 		function IsFinal(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			if type(name) ~= "string" then name = nil end
-			return ns and IsFinalFeature(ns, name) or false
+			return IsFinalFeature(type(ns) == "string" and GetNameSpaceForName(ns) or ns, type(name) == "string" and name or nil) or false
 		end
 
 		doc "IsUniqueClass" [[
@@ -4615,9 +4520,8 @@ do
 			<usage>System.Reflector.IsUniqueClass(System.Object)</usage>
 		]]
 		function IsUniqueClass(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.UniqueObject and true or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.UniqueObject and true or false
 		end
 
 		doc "IsAutoCache" [[
@@ -4628,9 +4532,8 @@ do
 			<usage>System.Reflector.IsAutoCache(System.Object)</usage>
 		]]
 		function IsAutoCache(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			local autoCache = ns and ns.AutoCache
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			local autoCache = info and info.AutoCache
 			return autoCache == true or (name and autoCache and autoCache[name]) or false
 		end
 
@@ -4641,9 +4544,7 @@ do
 			<usage>System.Reflector.GetSubNamespace(System)</usage>
 		]]
 		function GetSubNamespace(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and info.SubNS then
 				local ret = {}
@@ -4660,9 +4561,7 @@ do
 			<usage>System.Reflector.GetExtendInterfaces(System.Object)</usage>
 		]]
 		function GetExtendInterfaces(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info.ExtendInterface then
 				local ret = {}
@@ -4678,9 +4577,7 @@ do
 			<usage>System.Reflector.GetAllExtendInterfaces(System.Object)</usage>
 		]]
 		function GetAllExtendInterfaces(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info.Cache4Interface then
 				local ret = {}
@@ -4696,9 +4593,7 @@ do
 			<usage>System.Reflector.GetChildClasses(System.Object)</usage>
 		]]
 		function GetChildClasses(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info.Type == TYPE_CLASS and info.ChildClass then
 				local ret = {}
@@ -4716,9 +4611,7 @@ do
 			<usage>System.Reflector.GetEvents(System.Object)</usage>
 		]]
 		function GetEvents(ns, noSuper)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local ret = {}
@@ -4742,9 +4635,7 @@ do
 			<usage>System.Reflector.GetProperties(System.Object)</usage>
 		]]
 		function GetProperties(ns, noSuper)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local ret = {}
@@ -4769,9 +4660,7 @@ do
 			<usage>System.Reflector.GetMethods(System.Object)</usage>
 		]]
 		function GetMethods(ns, noSuper)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE or info.Type == TYPE_STRUCT) then
 				local ret = {}
@@ -4802,9 +4691,7 @@ do
 			<usage>System.Reflector.GetPropertyType(System.Object, "Name")</usage>
 		]]
 		function GetPropertyType(ns, propName)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
 				local prop = info.Cache[propName] or info.Property[propName]
@@ -4822,9 +4709,7 @@ do
 			<usage>System.Reflector.HasProperty(System.Object, "Name")</usage>
 		]]
 		function HasProperty(ns, propName)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
 				local prop = info.Cache[propName] or info.Property[propName]
@@ -4841,9 +4726,7 @@ do
 			<usage>System.Reflector.IsPropertyReadable(System.Object, "Name")</usage>
 		]]
 		function IsPropertyReadable(ns, propName)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local prop = info.Cache[propName]
@@ -4861,9 +4744,7 @@ do
 			<usage>System.Reflector.IsPropertyWritable(System.Object, "Name")</usage>
 		]]
 		function IsPropertyWritable(ns, propName)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 				local prop = info.Cache[propName]
@@ -4880,9 +4761,7 @@ do
 			<return type="boolean">true if the method must be overridden</return>
 		]]
 		function IsRequiredMethod(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.RequireMethod and info.RequireMethod[name] or false
 		end
 
@@ -4893,9 +4772,7 @@ do
 			<return type="boolean">true if the property must be overridden</return>
 		]]
 		function IsRequiredProperty(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.RequireProperty and info.RequireProperty[name] or false
 		end
 
@@ -4906,9 +4783,7 @@ do
 			<return type="boolean">true if the method should be overridden</return>
 		]]
 		function IsOptionalMethod(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.OptionalMethod and info.OptionalMethod[name] or false
 		end
 
@@ -4919,9 +4794,7 @@ do
 			<return type="boolean">true if the property should be overridden</return>
 		]]
 		function IsOptionalProperty(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.OptionalProperty and info.OptionalProperty[name] or false
 		end
 
@@ -4932,9 +4805,7 @@ do
 			<return type="boolean">true if the property is static</return>
 		]]
 		function IsStaticProperty(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			info = info and info.Property
 			info = info and info[name]
@@ -4949,9 +4820,7 @@ do
 			<return type="boolean">true if the method is static</return>
 		]]
 		function IsStaticMethod(ns, name)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.StaticMethod and info.StaticMethod[name] or false
 		end
 
@@ -4962,9 +4831,8 @@ do
 			<usage>System.Reflector.IsFlagsEnum(System.AttributeTargets)</usage>
 		]]
 		function IsFlagsEnum(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			ns = _NSInfo[ns]
-			return ns and ns.IsFlags or false
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
+			return info and info.IsFlags or false
 		end
 
 		doc "GetEnums" [[
@@ -4974,9 +4842,7 @@ do
 			<usage>System.Reflector.GetEnums(System.AttributeTargets)</usage>
 		]]
 		function GetEnums(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and info.Type == TYPE_ENUM then
 				if info.IsFlags then
@@ -5020,11 +4886,8 @@ do
 			<return type="boolean">if the owner has the event</return>
 			<usage>System.Reflector.HasEvent(Addon, "OnEvent")</usage>
 		]]
-		function HasEvent(cls, evt)
-			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
-
-			local info = _NSInfo[cls]
-
+		function HasEvent(ns, evt)
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[evt]) or false
 		end
 
@@ -5034,10 +4897,7 @@ do
 			<return type="string">the type of the struct type</return>
 		]]
 		function GetStructType(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
-
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.Type == TYPE_STRUCT and info.SubType or nil
 		end
 
@@ -5047,10 +4907,7 @@ do
 			<return type="System.Type">the array element's type</return>
 		]]
 		function GetStructArrayElement(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
-
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement:Clone() or nil
 		end
 
@@ -5061,9 +4918,7 @@ do
 			<return type="boolean">true if the struct has the member</return>
 		]]
 		function HasStructMember(ns, member)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
 				for _, part in ipairs(info.Members) do if part == member then return true end end
@@ -5079,9 +4934,7 @@ do
 			<usage>System.Reflector.GetStructMembers(Position)</usage>
 		]]
 		function GetStructMembers(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER then
 				local tmp = {}
@@ -5100,9 +4953,7 @@ do
 			<usage>System.Reflector.GetStructMember(Position, "x")</usage>
 		]]
 		function GetStructMember(ns, part)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
@@ -5149,10 +5000,7 @@ do
 			<return type="boolean">true if the class is an abstract class</return>
 		]]
 		function IsAbstractClass(ns)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-
-			local info = _NSInfo[ns]
-
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			return info and info.AbstractClass or false
 		end
 
@@ -5171,9 +5019,8 @@ do
 			<return type="boolean">true if the object is an instance of the class or it's child class</return>
 			<usage>System.Reflector.ObjectIsClass(obj, Object)</usage>
 		]]
-		function ObjectIsClass(obj, cls)
-			if type(cls) == "string" then cls = GetNameSpaceForName(cls) end
-			return (obj and cls and IsChildClass(cls, GetObjectClass(obj))) or false
+		function ObjectIsClass(obj, ns)
+			return IsChildClass(type(ns) == "string" and GetNameSpaceForName(ns) or ns, GetObjectClass(obj)) or false
 		end
 
 		doc "ObjectIsInterface" [[
@@ -5183,9 +5030,8 @@ do
 			<return type="boolean">true if the object's class is extended from the interface</return>
 			<usage>System.Reflector.ObjectIsInterface(obj, IFSocket)</usage>
 		]]
-		function ObjectIsInterface(obj, IF)
-			if type(IF) == "string" then IF = GetNameSpaceForName(IF) end
-			return (obj and IF and IsExtend(IF, GetObjectClass(obj))) or false
+		function ObjectIsInterface(obj, ns)
+			return IsExtend(type(ns) == "string" and GetNameSpaceForName(ns) or ns, GetObjectClass(obj)) or false
 		end
 
 		doc "FireObjectEvent" [[
@@ -5523,8 +5369,7 @@ do
 			<return type="object">the default value if existed</return>
 		]]
 		function GetDefaultValue(ns, part)
-			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
-			local info = _NSInfo[ns]
+			local info = _NSInfo[type(ns) == "string" and GetNameSpaceForName(ns) or ns]
 			if info then
 				if (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and part then
 					part = info.Cache[part]
