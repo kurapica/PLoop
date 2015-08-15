@@ -182,9 +182,7 @@ class "__DataTable__" (function(_ENV)
 
 		if targetType == AttributeTargets.Class then
 			-- Scan fields
-			local props = Reflector.GetProperties(target)
-
-			for _, prop in ipairs(props) do
+			for prop in Reflector.GetAllProperties(target) do
 				local ty = Reflector.GetPropertyType(target, prop)
 				if ty and #ty == 1 and Reflector.GetStructType(ty[1]) == "CUSTOM" and Reflector.IsPropertyReadable(target, prop) and Reflector.IsPropertyWritable(target, prop) then
 					local field = __Attribute__._GetPropertyAttribute(target, prop, __DataField__)

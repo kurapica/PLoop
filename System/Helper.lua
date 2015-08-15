@@ -225,12 +225,10 @@ interface "Helper" (function(_ENV)
 			buildSubNamespace(ns, rs)
 
 			-- Scan events
-			local evts = GetEvents(ns)
-
-			if evts and next(evts) then
+			if IsClass(ns) or IsInterface(ns) then
 				tinsert(rs, "  Event :")
 
-				for _, name in ipairs(evts) do
+				for name in GetAllEvents(ns) do
 					local desc = getDescription(ns, name, AttributeTargets.Event)
 
 					if desc then
@@ -252,38 +250,27 @@ interface "Helper" (function(_ENV)
 			if req then local v = parseOptions(req()) while v do reqs[v.name] = v; v = parseOptions(req()) end end
 
 			-- Scan methods
-			local methods = GetMethods(ns)
-			local hasMethodHeader = false
+			tinsert(rs, "  Method :")
 
-			if methods and next(methods) then
-				tinsert(rs, "  Method :")
-				hasMethodHeader = true
+			for name in GetMethods(ns) do
+				local desc = getDescription(ns, name, AttributeTargets.Method)
+				local isOptional = IsOptionalMethod(ns, name)
+				local isRequire = IsRequiredMethod(ns, name)
 
-				for _, name in ipairs(methods) do
-					local desc = getDescription(ns, name, AttributeTargets.Method)
-					local isOptional = IsOptionalMethod(ns, name)
-					local isRequire = IsRequiredMethod(ns, name)
+				if opts[name] then isOptional = true; desc = desc or opts[name].desc end
+				if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
 
-					if opts[name] then isOptional = true; desc = desc or opts[name].desc end
-					if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
+				tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
+										(isRequire and "[__Require__]" or "") ..
+										name ..
+										(desc and (" - " .. desc) or ""))
 
-					tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
-											(isRequire and "[__Require__]" or "") ..
-											name ..
-											(desc and (" - " .. desc) or ""))
-
-					if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
-					if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
-				end
+				if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
+				if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
 			end
 
 			for name, req in pairs(reqs) do
 				if req.type == "method" then
-					if not hasMethodHeader then
-						tinsert(rs, "  Method :")
-						hasMethodHeader = true
-					end
-
 					tinsert(rs, "    [__Require__]" .. name .. (req.desc and (" - " .. req.desc) or ""))
 
 					reqs[name] = nil
@@ -294,11 +281,6 @@ interface "Helper" (function(_ENV)
 
 			for name, opt in pairs(opts) do
 				if opt.type == "method" then
-					if not hasMethodHeader then
-						tinsert(rs, "  Method :")
-						hasMethodHeader = true
-					end
-
 					tinsert(rs, "    [__Optional__]" .. name .. (opt.desc and (" - " .. opt.desc) or ""))
 
 					opts[name] = nil
@@ -308,38 +290,27 @@ interface "Helper" (function(_ENV)
 			end
 
 			-- Scan properties
-			local props = GetProperties(ns)
-			local hasPropertyHeader = false
+			tinsert(rs, "  Property :")
 
-			if props and next(props) then
-				tinsert(rs, "  Property :")
-				hasPropertyHeader = true
+			for name in GetProperties(ns) do
+				local desc = getDescription(ns, name, AttributeTargets.Property)
+				local isOptional = IsOptionalMethod(ns, name)
+				local isRequire = IsRequiredMethod(ns, name)
 
-				for _, name in ipairs(props) do
-					local desc = getDescription(ns, name, AttributeTargets.Property)
-					local isOptional = IsOptionalMethod(ns, name)
-					local isRequire = IsRequiredMethod(ns, name)
+				if opts[name] then isOptional = true; desc = desc or opts[name].desc end
+				if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
 
-					if opts[name] then isOptional = true; desc = desc or opts[name].desc end
-					if reqs[name] then isRequire = true; desc = desc or reqs[name].desc end
+				tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
+										(isRequire and "[__Require__]" or "") ..
+										name ..
+										(desc and (" - " .. desc) or ""))
 
-					tinsert(rs, "    " .. (isOptional and "[__Optional__]" or "") ..
-											(isRequire and "[__Require__]" or "") ..
-											name ..
-											(desc and (" - " .. desc) or ""))
-
-					if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
-					if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
-				end
+				if opts[name] then CACHE_TABLE(opts[name]); opts[name] = nil end
+				if reqs[name] then CACHE_TABLE(reqs[name]); reqs[name] = nil end
 			end
 
 			for name, req in pairs(reqs) do
 				if req.type == "property" then
-					if not hasPropertyHeader then
-						tinsert(rs, "  Property :")
-						hasPropertyHeader = true
-					end
-
 					tinsert(rs, "    [__Require__]" .. name .. (req.desc and (" - " .. req.desc) or ""))
 
 					reqs[name] = nil
@@ -350,11 +321,6 @@ interface "Helper" (function(_ENV)
 
 			for name, opt in pairs(opts) do
 				if opt.type == "method" then
-					if not hasPropertyHeader then
-						tinsert(rs, "  Property :")
-						hasPropertyHeader = true
-					end
-
 					tinsert(rs, "    [__Optional__]" .. name .. (opt.desc and (" - " .. opt.desc) or ""))
 
 					opts[name] = nil

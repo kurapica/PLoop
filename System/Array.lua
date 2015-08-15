@@ -189,7 +189,7 @@ class "Array" (function(_ENV)
 
 			if _ArrayInfo[self] and _ArrayInfo[self].IsClass and _ArrayInfo[self].Type then
 				if Reflector.ObjectIsClass(value, _ArrayInfo[self].Type) then
-					for _, sc in ipairs(Reflector.GetEvents(_ArrayInfo[self].Type)) do
+					for sc in Reflector.GetAllEvents(_ArrayInfo[self].Type) do
 						if _ArrayInfo[self]["_ArrayActive_" .. sc] then
 							Reflector.ActiveThread(value, sc)
 						end
@@ -216,7 +216,7 @@ class "Array" (function(_ENV)
 
 			if _ArrayInfo[self] and _ArrayInfo[self].IsClass and _ArrayInfo[self].Type then
 				if Reflector.ObjectIsClass(value, _ArrayInfo[self].Type) then
-					for _, sc in ipairs(Reflector.GetEvents(_ArrayInfo[self].Type)) do
+					for sc in Reflector.GetAllEvents(_ArrayInfo[self].Type) do
 						if _ArrayInfo[self]["_ArrayActive_" .. sc] then
 							Reflector.ActiveThread(value, sc)
 						end
@@ -268,7 +268,7 @@ class "Array" (function(_ENV)
 		local value = self[index]
 
 		if _ArrayInfo[self] and _ArrayInfo[self].IsClass and _ArrayInfo[self].Type and Reflector.ObjectIsClass(value, _ArrayInfo[self].Type) then
-			for _, sc in ipairs(Reflector.GetEvents(_ArrayInfo[self].Type)) do
+			for sc in Reflector.GetAllEvents(_ArrayInfo[self].Type) do
 				if _ArrayInfo[self]["_ArrayActive_" .. sc] then
 					Reflector.InactiveThread(value, sc)
 				end

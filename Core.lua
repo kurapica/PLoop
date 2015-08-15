@@ -29,7 +29,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --
 -- Config :
 --    PLOOP_DOCUMENT_ENABLED - Whether enable/disable document system, default true
---    PLOOP_SAME_CLASS_METAMETHOD - Whether using same meta-methods for classes, default false
+--    PLOOP_SAVE_MEMORY - Whether save the memory, default false
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
@@ -169,7 +169,7 @@ end
 do
 	-- Used to enable/disable document system, not started with '_', so can be disabled outsider
 	DOCUMENT_ENABLED = PLOOP_DOCUMENT_ENABLED == nil and true or PLOOP_DOCUMENT_ENABLED
-	SAME_CLASS_METAMETHOD = PLOOP_SAME_CLASS_METAMETHOD and true or false
+	SAVE_MEMORY = PLOOP_SAVE_MEMORY and true or false
 
 	TYPE_CLASS = "Class"
 	TYPE_ENUM = "Enum"
@@ -1748,9 +1748,9 @@ do
 
 			-- Refresh branch
 			if info.ChildClass then
-				for subcls in pairs(info.ChildClass) do RefreshCache(subcls) end
+				for _, subcls in ipairs(info.ChildClass) do RefreshCache(subcls) end
 			elseif info.ExtendClass then
-				for subcls in pairs(info.ExtendClass) do RefreshCache(subcls) end
+				for _, subcls in ipairs(info.ExtendClass) do RefreshCache(subcls) end
 			end
 		end
 	end
@@ -2066,14 +2066,29 @@ do
 			error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)), 3)
 		end
 
-		IFInfo.ExtendClass = IFInfo.ExtendClass or {}
-		IFInfo.ExtendClass[info.Owner] = true
 
 		info.ExtendInterface = info.ExtendInterface or {}
 
 		-- Check if IF is already extend by extend tree
 		for _, pIF in ipairs(info.ExtendInterface) do if IsExtend(IF, pIF) then return end end
-		for i = #(info.ExtendInterface), 1, -1 do if IsExtend(info.ExtendInterface[i], IF) then tremove(info.ExtendInterface, i) end end
+
+		local owner = info.Owner
+		for i = #(info.ExtendInterface), 1, -1 do
+			local pIF = info.ExtendInterface[i]
+			if IsExtend(pIF, IF) then
+				local pExtend = _NSInfo[pIF].ExtendClass
+				for j, v in ipairs(pExtend) do
+					if v == owner then
+						tremove(pExtend, j)
+						break
+					end
+				end
+				tremove(info.ExtendInterface, i)
+			end
+		end
+
+		IFInfo.ExtendClass = IFInfo.ExtendClass or {}
+		tinsert(IFInfo.ExtendClass, owner)
 
 		tinsert(info.ExtendInterface, IF)
 	end
@@ -2788,7 +2803,7 @@ do
 	end
 
 	function UpdateMeta4Children(meta, sub, pre, now)
-		if sub and pre ~= now then for cls in pairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
+		if sub and pre ~= now then for _, cls in ipairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
 	end
 
 	function Class_Index(self, key)
@@ -2993,7 +3008,7 @@ do
 
 		local meta = {}
 		meta.__metatable = info.Owner
-		meta.__index = SAME_CLASS_METAMETHOD and Class_Index or function (self, key)
+		meta.__index = SAVE_MEMORY and Class_Index or function (self, key)
 			-- Dispose Method
 			if key == "Dispose" then return DisposeObject end
 
@@ -3095,7 +3110,7 @@ do
 			if oper then return oper(self, key) end
 		end
 
-		meta.__newindex = SAME_CLASS_METAMETHOD and Class_NewIndex or function (self, key, value)
+		meta.__newindex = SAVE_MEMORY and Class_NewIndex or function (self, key, value)
 			local oper = Cache[key]
 
 			if type(oper) == "table" then
@@ -3390,7 +3405,7 @@ do
 		if info.SuperClass then error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass)), 2) end
 
 		superInfo.ChildClass = superInfo.ChildClass or {}
-		superInfo.ChildClass[info.Owner] = true
+		tinsert(superInfo.ChildClass, info.Owner)
 
 		info.SuperClass = superCls
 
@@ -4315,20 +4330,20 @@ end
 do
 	namespace "System"
 
-	struct "Boolean" { Default = false, function (value) return value and true or false end }
-	struct "String" { Default = "", function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
-	struct "Number" { Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
-	struct "Function" { function (value) if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end end }
-	struct "Table" { function (value) if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end end }
-	struct "RawTable" { function (value) assert(type(value) == "table" and getmetatable(value) == nil, "%s must be a table without metatable.") end }
-	struct "Userdata" { function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
-	struct "Thread" { function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
-	struct "Any" { function (value) assert(value ~= nil, "%s can't be nil.") end }
-	struct "Callable" { function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
-	struct "Class" { function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
-	struct "Interface" { function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
-	struct "Struct" { function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
-	struct "Enum" { function (value) assert(Reflector.IsEnum(value), "%s must be an enum.") end }
+	struct "Boolean"	{ Default = false, function (value) return value and true or false end }
+	struct "String"		{ Default = "", function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
+	struct "Number"		{ Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
+	struct "Function"	{ function (value) if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end end }
+	struct "Table"		{ function (value) if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end end }
+	struct "RawTable"	{ function (value) assert(type(value) == "table" and getmetatable(value) == nil, "%s must be a table without metatable.") end }
+	struct "Userdata"	{ function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
+	struct "Thread"		{ function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
+	struct "Any"		{ function (value) assert(value ~= nil, "%s can't be nil.") end }
+	struct "Callable"	{ function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
+	struct "Class"		{ function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
+	struct "Interface"	{ function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
+	struct "Struct"		{ function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
+	struct "Enum"		{ function (value) assert(Reflector.IsEnum(value), "%s must be an enum.") end }
 
 	------------------------------------------------------
 	-- System.AttributeTargets
@@ -4351,6 +4366,8 @@ do
 	-- System.Reflector
 	------------------------------------------------------
 	interface "Reflector" (function(_ENV)
+
+		local iterForEmpty = function() end
 
 		doc "Reflector" [[This interface contains many apis used to get the running object-oriented system's informations.]]
 
@@ -4431,7 +4448,7 @@ do
 			local info = _NSInfo[ns]
 			assert(info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE), "System.Reflector.BeginDefinition(ns) - ns must be a class or interface.")
 			info.BeginDefinition = nil
-			return RefreshCache(ns)
+			return RefreshCache(info.Owner)
 		end
 
 		doc "GetSuperClass" [[
@@ -4546,161 +4563,438 @@ do
 		doc "GetSubNamespace" [[
 			<desc>Get the sub namespace of the namespace</desc>
 			<param name="namespace">the object to query</param>
-			<return type="table">the sub-namespace list</return>
-			<usage>System.Reflector.GetSubNamespace(System)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the sub-namespace iterator|the result table</return>
+			<usage>for name, ns in System.Reflector.GetSubNamespace(System) do print(name) end</usage>
 		]]
-		function GetSubNamespace(ns)
+		local _GetSubNamespaceCache, _GetSubNamespaceIter
+		if not SAVE_MEMORY then
+			_GetSubNamespaceCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetSubNamespaceIter = function (ns, key) return next(_NSInfo[ns].SubNS, key) end
+		end
+		function GetSubNamespace(ns, result)
 			local info = _NSInfo[ns]
 
 			if info and info.SubNS then
-				local ret = {}
-				for key in pairs(info.SubNS) do tinsert(ret, key) end
-				sort(ret)
-				return ret
+				if type(result) == "table" then
+					for k, v in pairs(info.SubNS) do result[k] = v end
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetSubNamespaceIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetSubNamespaceCache[ns]
+						if not iter then
+							local subNS = info.SubNS
+							iter = function (ns, key) return next(subNS, key) end
+							_GetSubNamespaceCache[ns] = iter
+						end
+						return iter, ns
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
 		doc "GetExtendInterfaces" [[
 			<desc>Get the extend interfaces of the class|interface</desc>
 			<param name="object">the object to query</param>
-			<return type="table">the extend interface list</return>
-			<usage>System.Reflector.GetExtendInterfaces(System.Object)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the extend interface iterator|the result table</return>
+			<usage>for i, interface in System.Reflector.GetExtendInterfaces(System.Object) do print(interface) end</usage>
 		]]
-		function GetExtendInterfaces(ns)
+		local _GetExtendInterfacesCache, _GetExtendInterfacesIter
+		if not SAVE_MEMORY then
+			_GetExtendInterfacesCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetExtendInterfacesIter = function (ns, index)
+				index = index + 1
+				local IF = _NSInfo[ns].ExtendInterface[index]
+				if IF then return index, IF end
+			end
+		end
+		function GetExtendInterfaces(ns, result)
 			local info = _NSInfo[ns]
 
-			if info.ExtendInterface then
-				local ret = {}
-				for _, IF in ipairs(info.ExtendInterface) do tinsert(ret, IF) end
-				return ret
+			if info and info.ExtendInterface then
+				if type(result) == "table" then
+					for _, IF in ipairs(info.ExtendInterface) do tinsert(result, IF) end
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetExtendInterfacesIter, info.Owner, 0
+					else
+						ns = info.Owner
+						local iter = _GetExtendInterfacesCache[ns]
+						if not iter then
+							local eIF = info.ExtendInterface
+							iter = function (ns, index)
+								index = index + 1
+								local IF = eIF[index]
+								if IF then return index, IF end
+							end
+							_GetExtendInterfacesCache[ns] = iter
+						end
+						return iter, ns, 0
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner, 0
 			end
 		end
 
 		doc "GetAllExtendInterfaces" [[
 			<desc>Get all the extend interfaces of the class|interface</desc>
 			<param name="object">the object to query</param>
-			<return type="table">the full extend interface list in the inheritance tree</return>
-			<usage>System.Reflector.GetAllExtendInterfaces(System.Object)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the all extend interface iterator|the result table</return>
+			<usage>for _, IF in System.Reflector.GetAllExtendInterfaces(System.Object) do print(IF) end</usage>
 		]]
-		function GetAllExtendInterfaces(ns)
-			local info = _NSInfo[ns]
-
-			if info.Cache4Interface then
-				local ret = {}
-				for _, IF in ipairs(info.Cache4Interface) do tinsert(ret, IF) end
-				return ret
+		local _GetAllExtendInterfacesCache, _GetAllExtendInterfacesIter
+		if not SAVE_MEMORY then
+			_GetAllExtendInterfacesCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetAllExtendInterfacesIter = function (ns, index)
+				index = index + 1
+				local IF = _NSInfo[ns].Cache4Interface[index]
+				if IF then return index, IF end
 			end
 		end
-
-		doc "GetChildClasses" [[
-			<desc>Get the classes that inherited from the class</desc>
-			<param name="object">the object to query</param>
-			<return type="table">the child class list</return>
-			<usage>System.Reflector.GetChildClasses(System.Object)</usage>
-		]]
-		function GetChildClasses(ns)
+		function GetAllExtendInterfaces(ns, result)
 			local info = _NSInfo[ns]
 
-			if info.Type == TYPE_CLASS and info.ChildClass then
-				local ret = {}
-				for subCls in pairs(info.ChildClass) do tinsert(ret, subCls) end
-				return ret
+			if info and info.Cache4Interface then
+				if type(result) == "table" then
+					for _, IF in ipairs(info.Cache4Interface) do tinsert(result, IF) end
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetAllExtendInterfacesIter, info.Owner, 0
+					else
+						ns = info.Owner
+						local iter = _GetAllExtendInterfacesCache[ns]
+						if not iter then
+							local eIF = info.Cache4Interface
+							iter = function (ns, index)
+								index = index + 1
+								local IF = eIF[index]
+								if IF then return index, IF end
+							end
+							_GetAllExtendInterfacesCache[ns] = iter
+						end
+						return iter, ns, 0
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner, 0
 			end
 		end
 
 		doc "GetEvents" [[
-			<desc>Get the events of the class</desc>
-			<format>class|interface[, noSuper]</format>
-			<param name="class"></param>|interface the class or interface to query
-			<param name="noSuper">no super event handlers</param>
-			<return name="table">the event handler list</return>
-			<usage>System.Reflector.GetEvents(System.Object)</usage>
+			<desc>Get the events of the class|interface</desc>
+			<param name="class|interface">the class or interface to query</param>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the event iterator|the result table</return>
+			<usage>for name in System.Reflector.GetEvents(System.Object) do print(name) end</usage>
 		]]
-		function GetEvents(ns, noSuper)
+		local _GetEventsCache, _GetEventsIter
+		if not SAVE_MEMORY then
+			_GetEventsCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetEventsIter = function (ns, key) return (next(_NSInfo[ns].Event, key)) end
+		end
+		function GetEvents(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local ret = {}
-
-				if noSuper then
-					for i, v in pairs(info.Event) do tinsert(ret, i) end
+			if info and info.Event then
+				if type(result) == "table" then
+					for k in pairs(info.Event) do tinsert(result, k) end
+					sort(result)
+					return result
 				else
-					for i, v in pairs(info.Cache) do if getmetatable(v) then tinsert(ret, i) end end
+					if SAVE_MEMORY then
+						return _GetEventsIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetEventsCache[ns]
+						if not iter then
+							local evts = info.Event
+							iter = function (ns, key) return (next(evts, key)) end
+							_GetEventsCache[ns] = iter
+						end
+						return iter, ns
+					end
 				end
-				sort(ret)
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
+			end
+		end
 
-				return ret
+		doc "GetAllEvents" [[
+			<desc>Get all the events of the class</desc>
+			<param name="class|interface">the class or interface to query</param>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the event iterator|the result table</return>
+			<usage>for name in System.Reflector.GetAllEvents(System.Object) do print(name) end</usage>
+		]]
+		local _GetAllEventsCache, _GetAllEventsIter
+		if not SAVE_MEMORY then
+			_GetAllEventsCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetAllEventsIter = function (ns, key) for k, v in next, _NSInfo[ns].Cache, key do if getmetatable(v) then return k end end end
+		end
+		function GetAllEvents(ns, result)
+			local info = _NSInfo[ns]
+
+			if info and info.Event then
+				if type(result) == "table" then
+					for k, v in pairs(info.Cache) do if getmetatable(v) then tinsert(result, k) end end
+					sort(result)
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetAllEventsIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetAllEventsCache[ns]
+						if not iter then
+							local cache = info.Cache
+							iter = function (ns, key) for k, v in next, cache, key do if getmetatable(v) then return k end end end
+							_GetAllEventsCache[ns] = iter
+						end
+						return iter, ns
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
 		doc "GetProperties" [[
 			<desc>Get the properties of the class|interface</desc>
 			<param name="object">the class or interface to query</param>|
-			<param name="noSuper" optional="true" type="boolean">no super properties</param>
-			<return type="table">the property list</return>
-			<usage>System.Reflector.GetProperties(System.Object)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the property iterator|the result table</return>
+			<usage>for name in System.Reflector.GetProperties(System.Object) do print(name) end</usage>
 		]]
-		function GetProperties(ns, noSuper)
+		local _GetPropertiesCache, _GetPropertiesIter
+		if not SAVE_MEMORY then
+			_GetPropertiesCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetPropertiesIter = function (ns, key) return (next(_NSInfo[ns].Property, key)) end
+		end
+		function GetProperties(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local ret = {}
-
-				if noSuper then
-					for i, v in pairs(info.Property) do tinsert(ret, i) end
+			if info and info.Property then
+				if type(result) == "table" then
+					for k in pairs(info.Property) do tinsert(result, k) end
+					sort(result)
+					return result
 				else
-					for i, v in pairs(info.Cache) do if type(v) == "table" and not getmetatable(v) then tinsert(ret, i) end end
-					for i, v in pairs(info.Property) do if v.IsStatic then tinsert(ret, i) end end
+					if SAVE_MEMORY then
+						return _GetPropertiesIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetPropertiesCache[ns]
+						if not iter then
+							local props = info.Property
+							iter = function (ns, key) return (next(props, key)) end
+							_GetPropertiesCache[ns] = iter
+						end
+						return iter, ns
+					end
 				end
-				sort(ret)
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
+			end
+		end
 
-				return ret
+		doc "GetAllProperties" [[
+			<desc>Get all the properties of the class|interface</desc>
+			<param name="object">the class or interface to query</param>|
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the property iterator|the result table</return>
+			<usage>for name in System.Reflector.GetAllProperties(System.Object) do print(name) end</usage>
+		]]
+		local _GetAllPropertiesCache, _GetAllPropertiesIter
+		if not SAVE_MEMORY then
+			_GetAllPropertiesCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetAllPropertiesIter = function (ns, key)
+				local info = _NSInfo[ns]
+				local props = info.Cache
+
+				if key == nil or props[key] then
+					for k, v in next, props, key do if type(v) == "table" and not getmetatable(v) then return k end end
+					key = nil
+				end
+
+				props = info.Property
+
+				if key == nil or props[key] then
+					for k, v in next, props, key do if v.IsStatic then return k end end
+				end
+			end
+		end
+		function GetAllProperties(ns, result)
+			local info = _NSInfo[ns]
+
+			if info and info.Property then
+				if type(result) == "table" then
+					for k, v in pairs(info.Cache) do if type(v) == "table" and not getmetatable(v) then tinsert(result, k) end end
+					for k, v in pairs(info.Property) do if v.IsStatic then tinsert(result, k) end end
+					sort(result)
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetAllPropertiesIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetAllPropertiesCache[ns]
+						if not iter then
+							local cache = info.Cache
+							local props = info.Property
+							iter = function (ns, key)
+								if key == nil or cache[key] then
+									for k, v in next, cache, key do if type(v) == "table" and not getmetatable(v) then return k end end
+									key = nil
+								end
+
+								if key == nil or props[key] then
+									for k, v in next, props, key do if v.IsStatic then return k end end
+								end
+							end
+							_GetAllPropertiesCache[ns] = iter
+						end
+						return iter, ns
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
 		doc "GetMethods" [[
 			<desc>Get the methods of the class|interface</desc>
 			<param name="object">the class or interface to query</param>
-			<param name="noSuper" optional="true" type="boolean">no super methodes</param>
-			<return type="table">the method list</return>
-			<usage>System.Reflector.GetMethods(System.Object)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the method iterator|the result table</return>
+			<usage>for name in System.Reflector.GetMethods(System.Object) do print(name) end</usage>
 		]]
-		function GetMethods(ns, noSuper)
+		local _GetMethodsCache, _GetMethodsIter
+		if not SAVE_MEMORY then
+			_GetMethodsCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetMethodsIter = function (ns, key) return (next(_NSInfo[ns].Method, key)) end
+		end
+		function GetMethods(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE or info.Type == TYPE_STRUCT) then
-				local ret = {}
-
-				if info.Type == TYPE_STRUCT then
-					if not info.Method then return end
-					noSuper = true
-				end
-
-				if noSuper then
-					for k, v in pairs(info.Method) do tinsert(ret, k) end
+			if info and info.Method then
+				if type(result) == "table" then
+					for k in pairs(info.Method) do tinsert(result, k) end
+					sort(result)
+					return result
 				else
-					for k, v in pairs(info.Cache) do if type(v) == "function" then tinsert(ret, k) end end
-					for k, v in pairs(info.Method) do if info.Cache[k] == nil then tinsert(ret, k) end end
+					if SAVE_MEMORY then
+						return _GetMethodsIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetMethodsCache[ns]
+						if not iter then
+							local methods = info.Method
+							iter = function (ns, key) return (next(methods, key)) end
+							_GetMethodsCache[ns] = iter
+						end
+						return iter, ns
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
+			end
+		end
+
+		doc "GetAllMethods" [[
+			<desc>Get all the methods of the class|interface</desc>
+			<param name="object">the class or interface to query</param>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the method iterator|the result table</return>
+			<usage>for name in System.Reflector.GetAllMethods(System.Object) do print(name) end</usage>
+		]]
+		local _GetAllMethodsCache, _GetAllMethodsIter
+		if not SAVE_MEMORY then
+			_GetAllMethodsCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetAllMethodsIter = function (ns, key)
+				local info = _NSInfo[ns]
+				local methods = info.Cache or info.Method
+
+				if key == nil or methods[key] then
+					for k, v in next, methods, key do if type(v) == "function" then return k end end
+					key = nil
 				end
 
-				sort(ret)
+				methods = info.StaticMethod
 
-				return ret
+				if methods and (key == nil or methods[key]) then
+					for k, v in next, methods, key do return k end
+				end
+			end
+		end
+		function GetAllMethods(ns, result)
+			local info = _NSInfo[ns]
+
+			if info and info.Method then
+				if type(result) == "table" then
+					for k, v in pairs(info.Cache or info.Method) do if type(v) == "function" then tinsert(result, k) end end
+					if info.StaticMethod then for k, v in pairs(info.StaticMethod) do tinsert(result, k) end end
+					sort(result)
+					return result
+				else
+					if SAVE_MEMORY then
+						return _GetAllMethodsIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetAllMethodsCache[ns]
+						if not iter then
+							local cache = info.Cache or info.Method
+							local static = info.StaticMethod
+							iter = function (ns, key)
+								if key == nil or cache[key] then
+									for k, v in next, cache, key do if type(v) == "function" then return k end end
+									key = nil
+								end
+
+								if static and (key == nil or static[key]) then
+									for k, v in next, static, key do return k end
+								end
+							end
+							_GetAllMethodsCache[ns] = iter
+						end
+						return iter, ns
+					end
+				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
 		doc "GetPropertyType" [[
 			<desc>Get the property type of the property</desc>
 			<param name="owner" type="class|interface">the property's owner</param>
-			<param name="propName" type="string">the property name</param>
+			<param name="name" type="string">the property name</param>
 			<return type="System.Type">the property type</return>
 			<usage>System.Reflector.GetPropertyType(System.Object, "Name")</usage>
 		]]
-		function GetPropertyType(ns, propName)
+		function GetPropertyType(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
-				local prop = info.Cache[propName] or info.Property[propName]
+			if info and info.Property then
+				local prop = info.Cache[name] or info.Property[name]
 				if type(prop) == "table" and not getmetatable(prop) and prop.Type then
 					return prop.Type:Clone()
 				end
@@ -4710,15 +5004,15 @@ do
 		doc "HasProperty" [[
 			<desc>whether the property is existed</desc>
 			<param name="owner" type="class|interface">The owner of the property</param>
-			<param name="propName" type="string">The property's name</param>
+			<param name="name" type="string">The property's name</param>
 			<return type="boolean">true if the class|interface has the property</return>
 			<usage>System.Reflector.HasProperty(System.Object, "Name")</usage>
 		]]
-		function HasProperty(ns, propName)
+		function HasProperty(ns, name)
 			local info = _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
-				local prop = info.Cache[propName] or info.Property[propName]
+				local prop = info.Cache[name] or info.Property[name]
 				if type(prop) == "table" and not getmetatable(prop) and prop.Type then return true end
 			end
 			return false
@@ -4727,17 +5021,17 @@ do
 		doc "IsPropertyReadable" [[
 			<desc>whether the property is readable</desc>
 			<param name="owner" type="class|interface">the property's owner</param>
-			<param name="propName" type="string">the property's name</param>
+			<param name="name" type="string">the property's name</param>
 			<return type="boolean">true if the property is readable</return>
 			<usage>System.Reflector.IsPropertyReadable(System.Object, "Name")</usage>
 		]]
-		function IsPropertyReadable(ns, propName)
+		function IsPropertyReadable(ns, name)
 			local info = _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local prop = info.Cache[propName]
+				local prop = info.Cache[name]
 				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
-				prop = info.Property[propName]
+				prop = info.Property[name]
 				if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
 			end
 		end
@@ -4745,17 +5039,17 @@ do
 		doc "IsPropertyWritable" [[
 			<desc>whether the property is writable</desc>
 			<param name="owner" type="class|interface">the property's owner</param>
-			<param name="propName" type="string">the property's name</param>
+			<param name="name" type="string">the property's name</param>
 			<return type="boolean">true if the property is writable</return>
 			<usage>System.Reflector.IsPropertyWritable(System.Object, "Name")</usage>
 		]]
-		function IsPropertyWritable(ns, propName)
+		function IsPropertyWritable(ns, name)
 			local info = _NSInfo[ns]
 
 			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local prop = info.Cache[propName]
+				local prop = info.Cache[name]
 				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Set or prop.SetMethod or prop.Field) and true or false end
-				prop = info.Property[propName]
+				prop = info.Property[name]
 				if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
 			end
 		end
@@ -4844,9 +5138,21 @@ do
 		doc "GetEnums" [[
 			<desc>Get the enumeration keys of the enum</desc>
 			<param name="enum" type="enum">the enum tyep</param>
-			<return type="table">the enum key list</return>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the enum key iterator|the result table</return>
 			<usage>System.Reflector.GetEnums(System.AttributeTargets)</usage>
 		]]
+		local _GetEnumsCache, _GetEnumsIter
+		if not SAVE_MEMORY then
+			_GetEnumsCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetEnumsIter = function (ns, key)
+				local info = _NSInfo[ns]
+				if info.IsFlags then
+					return (next(_NSInfo[ns].Event, key))
+				end
+			end
+		end
 		function GetEnums(ns)
 			local info = _NSInfo[ns]
 
@@ -8764,12 +9070,8 @@ do
 
 			name = _NSInfo[ns].Name
 			if env[name] == nil then env[name] = ns end
-			local children = Reflector.GetSubNamespace(ns)
-			if children then
-				for _, subNs in ipairs(children) do
-					local sub = ns[subNs]
-					if _NSInfo[sub].Type and env[subNs] == nil then env[subNs] = sub end
-				end
+			for subNs, sub in Reflector.GetSubNamespace(ns) do
+				if _NSInfo[sub].Type and env[subNs] == nil then env[subNs] = sub end
 			end
 		end
 		env.Module = env.Module or Module
