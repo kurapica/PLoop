@@ -5240,11 +5240,11 @@ do
 			<return name="iterator|result">the member iterator|the result table</return>
 			<usage>for _, member in System.Reflector.GetStructMembers(Position) do print(member) end</usage>
 		]]
-		local _GetStructMembersIter = function (ns, index)
-				index = index + 1
-				local member = _NSInfo[ns].Members[index]
-				if member then return index, member end
-			end
+		local _GetStructMembersCache, _GetStructMembersIter
+		if not SAVE_MEMORY then
+			_GetStructMembersCache = setmetatable({}, WEAK_ALL)
+		else
+			_GetStructMembersIter = function (ns, key) return next(_NSInfo[ns].Members, key) end
 		end
 		function GetStructMembers(ns, result)
 			local info = _NSInfo[ns]
@@ -5254,10 +5254,20 @@ do
 					for _, member in ipairs(info.Members) do tinsert(result, member) end
 					return result
 				else
-					return _GetStructMembersIter, info.Owner, 0
+					if SAVE_MEMORY then
+						return _GetStructMembersIter, info.Owner
+					else
+						local members = info.Members
+						local iter = _GetStructMembersCache[members]
+						if not iter then
+							iter = function (ns, key) return next(members, key) end
+							_GetStructMembersCache[members] = iter
+						end
+						return iter, ns
+					end
 				end
 			else
-				return type(result) == "table" and result or iterForEmpty, info.Owner, 0
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
