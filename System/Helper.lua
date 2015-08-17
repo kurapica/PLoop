@@ -174,7 +174,7 @@ interface "Helper" (function(_ENV)
 			if IsEnum(ns) then
 				-- Scan enum values
 				tinsert("  Enumeration :")
-				for _, enums in ipairs(GetEnums(ns)) do
+				for enums in GetEnums(ns) do
 					local value = ns[enums]
 
 					if type(value) == "string" then

@@ -5146,37 +5146,31 @@ do
 		if not SAVE_MEMORY then
 			_GetEnumsCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetEnumsIter = function (ns, key)
-				local info = _NSInfo[ns]
-				if info.IsFlags then
-					return (next(_NSInfo[ns].Event, key))
-				end
-			end
+			_GetEnumsIter = function (ns, key) return next(_NSInfo[ns].Enum, key) end
 		end
-		function GetEnums(ns)
+		function GetEnums(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_ENUM then
-				if info.IsFlags then
-					local tmp = {}
-					local zero = nil
-
-					for i, v in pairs(info.Enum) do
-						if type(v) == "number" then
-							if v > 0 then tmp[floor(log(v)/log(2)) + 1] = i else zero = i end
-						end
-					end
-
-					if zero then tinsert(tmp, 1, zero) end
-
-					return tmp
+			if info and info.Enum then
+				if type(result) == "table" then
+					for k, v in pairs(info.Enum) do result[k] = v end
+					return result
 				else
-					local tmp = {}
-					for i in pairs(info.Enum) do tinsert(tmp, i) end
-					sort(tmp)
-
-					return tmp
+					if SAVE_MEMORY then
+						return _GetEnumsIter, info.Owner
+					else
+						ns = info.Owner
+						local iter = _GetEnumsCache[ns]
+						if not iter then
+							local enums = info.Enum
+							iter = function (ns, key) return next(enums, key) end
+							_GetEnumsCache[ns] = iter
+						end
+						return iter, ns
+					end
 				end
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner
 			end
 		end
 
@@ -5200,7 +5194,7 @@ do
 		]]
 		function HasEvent(ns, evt)
 			local info = _NSInfo[ns]
-			return info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[evt]) or false
+			return info and info.Cache and getmetatable(info.Cache[evt]) or false
 		end
 
 		doc "GetStructType" [[
@@ -5232,7 +5226,7 @@ do
 		function HasStructMember(ns, member)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0 then
+			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
 				for _, part in ipairs(info.Members) do if part == member then return true end end
 			end
 
@@ -5242,18 +5236,28 @@ do
 		doc "GetStructMembers" [[
 			<desc>Get the parts of the struct type</desc>
 			<param name="struct" type="struct">the struct type</param>
-			<return type="table">the struct part name list</return>
-			<usage>System.Reflector.GetStructMembers(Position)</usage>
+			<param name="result" optional="true">the result table</param>
+			<return name="iterator|result">the member iterator|the result table</return>
+			<usage>for _, member in System.Reflector.GetStructMembers(Position) do print(member) end</usage>
 		]]
-		function GetStructMembers(ns)
+		local _GetStructMembersIter = function (ns, index)
+				index = index + 1
+				local member = _NSInfo[ns].Members[index]
+				if member then return index, member end
+			end
+		end
+		function GetStructMembers(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER then
-				local tmp = {}
-				if info.Members then
-					for _, part in ipairs(info.Members) do tinsert(tmp, part) end
+			if info and info.Members then
+				if type(result) == "table" then
+					for _, member in ipairs(info.Members) do tinsert(result, member) end
+					return result
+				else
+					return _GetStructMembersIter, info.Owner, 0
 				end
-				return tmp
+			else
+				return type(result) == "table" and result or iterForEmpty, info.Owner, 0
 			end
 		end
 
@@ -5268,7 +5272,7 @@ do
 			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members and #info.Members > 0  then
+				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
 					for _, p in ipairs(info.Members) do
 						if p == part and IsValidatedType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
 					end
@@ -5720,37 +5724,6 @@ do
 			local info = cls and rawget(_NSInfo, cls)
 
 			return info and info.Type == TYPE_CLASS and info.MetaTable.__call and true or false
-		end
-
-		doc "IsInitTableSupported" [[
-			<desc>Whether the class support init-table mechanism</desc>
-			<param name="obj">The class need to check</param>
-			<return>boolean, true if the class support init-table mechanism</return>
-		]]
-		function IsInitTableSupported(cls)
-			local info = rawget(_NSInfo, cls)
-
-			assert(info and info.Type == TYPE_CLASS, "System.Reflector.IsInitTableSupported(cls) - cls must be a class.")
-
-			while info do
-				if not info.Constructor then
-					info = info.SuperClass and _NSInfo[info.SuperClass]
-				elseif type(info.Constructor) == "function" then
-					return false
-				elseif getmetatable(info.Constructor) == FixedMethod then
-					local fixedMethod = info.Constructor
-
-					while getmetatable(fixedMethod) do
-						if #fixedMethod == 0 then return true end
-
-						fixedMethod = fixedMethod.Next
-					end
-
-					return false
-				end
-			end
-
-			return true
 		end
 	end)
 end
