@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/07/16
--- Version			r125
+-- Last Update Date 2015/08/22
+-- Version			r127
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1451,9 +1451,9 @@ do
 						if set.Synthesize and prop.Set == nil then
 							local getName, setName
 
-							if set.Synthesize == __Synthesize__.NameCase.Pascal then
+							if set.Synthesize == __Synthesize__.NameCases.Pascal then
 								getName, setName = "Get" .. uname, "Set" .. uname
-							elseif set.Synthesize == __Synthesize__.NameCase.Camel then
+							elseif set.Synthesize == __Synthesize__.NameCases.Camel then
 								getName, setName = "get" .. uname, "set" .. uname
 							end
 
@@ -7857,7 +7857,7 @@ do
 
 		doc "__Synthesize__" [[Used to generate property accessors automatically]]
 
-		enum "NameCase" {
+		enum "NameCases" {
 			"Camel",	-- setName
 			"Pascal",	-- SetName
 		}
@@ -7866,13 +7866,13 @@ do
 		-- Property
 		------------------------------------------------------
 		doc "NameCase" [[The name case of the generate method, in one program, only need to be set once, default is Pascal case]]
-		property "NameCase" { Type = NameCase, Default = NameCase.Pascal }
+		property "NameCase" { Type = NameCases, Default = NameCases.Pascal, IsStatic = true }
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
-			target.Synthesize = self.NameCase
+			target.Synthesize = __Synthesize__.NameCase
 		end
 	end)
 

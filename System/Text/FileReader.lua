@@ -1,0 +1,59 @@
+-- Author      : Kurapica
+-- Create Date : 2015/08/17
+-- ChangeLog   :
+
+Module "System.Text.FileReader" "1.0.0"
+
+namespace "System.Text"
+
+fopen = io.open
+floor = floor or math.floor
+
+__Doc__ [[Represents a writer that can write a sequential series of characters to files]]
+class "FileReader" (function(_ENV)
+	inherit "TextReader"
+
+	-- Property
+	property "File" { Type = Userdata + nil }
+
+	__Doc__ [[Gets or sets the file position. negative number means start from the end of the file.]]
+	property "Position" { Type = Number,
+		Get = function(self)
+			return self.File:seek()
+		end,
+		Set = function(self, pos)
+			pos = floor(pos)
+			if pos < 0 then
+				return self.File:seek("end", pos)
+			else
+				return self.File:seek("set", pos)
+			end
+		end,
+	}
+
+	-- Method
+	function Read(self) return self.File:read(1) end
+
+	function ReadLine(self) return self.File:read("*l") end
+
+	function ReadToEnd(self) return self.File:read("*a") end
+
+	function ReadBlock(self, index, count)
+		self.File:seek("set", index)
+		return self.File:read(count)
+	end
+
+	function Close(self) return self.File:close() end
+
+	-- Constructor
+	__Arguments__{ Userdata + String }
+	function FileReader(self, file)
+		if type(file) == "userdata" and tostring(file):match("^file") then
+			self.File = file
+		elseif type(file) == "string" then
+			self.File = fopen(file, mode)
+		end
+
+		assert(self.File , "No file can be read.")
+	end
+end)
