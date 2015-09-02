@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/08/22
--- Version			r127
+-- Last Update Date 2015/09/02
+-- Version			r128
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -731,20 +731,25 @@ do
 				else
 					if IsFinalFeature(self, key) then error(("%s.%s is final, can't be overridden."):format(tostring(self), key), 2) end
 					if info.IsSealed and info.Cache[key] then error(("%s.%s is sealed, can't be overridden."):format(tostring(self), key), 2) end
+
+					local vType = getmetatable(value)
+
 					-- new feature
-					if type(value) == "function" then
+					if vType == TYPE_NAMESPACE or vType == ValidatedType then
+						SetPropertyWithSet(info, key, { Type = value })
+					elseif type(value) == "function" then
 						-- Method
 						SaveFixedMethod(info.Method, key, value, info.Owner)
 					elseif type(value) == "table" then
 						-- Property
 						SetPropertyWithSet(info, key, value)
-					elseif not tonumber(key) then
+					elseif not tonumber(key) and value == true then
 						-- Event
 						info.Event[key] = info.Event[key] or Event(key)
 
 						if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
 					else
-						return
+						error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
 					end
 
 					return not info.BeginDefinition and RefreshCache(self)
