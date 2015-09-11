@@ -6137,7 +6137,7 @@ do
 						if serialize then str = str .. " = " .. serialize end
 					end
 
-					if not arg.Type or arg.Type:Is(nil) then str = "[" .. str .. "]" end
+					if not arg.Type or arg.Nilable then str = "[" .. str .. "]" end
 
 					tinsert(usage, str)
 				end
