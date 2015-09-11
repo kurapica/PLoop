@@ -14,7 +14,7 @@ class "FileReader" (function(_ENV)
 	inherit "TextReader"
 
 	-- Property
-	property "File" { Type = Userdata + nil }
+	property "File" { Type = Userdata }
 
 	__Doc__ [[Gets or sets the file position. negative number means start from the end of the file.]]
 	property "Position" { Type = Number,
@@ -46,13 +46,18 @@ class "FileReader" (function(_ENV)
 	function Close(self) return self.File:close() end
 
 	-- Constructor
-	__Arguments__{ Userdata + String }
+	__Arguments__{ Userdata }
 	function FileReader(self, file)
-		if type(file) == "userdata" and tostring(file):match("^file") then
+		if tostring(file):match("^file") then
 			self.File = file
-		elseif type(file) == "string" then
-			self.File = fopen(file, mode)
 		end
+
+		assert(self.File , "No file can be read.")
+	end
+
+	__Arguments__{ String }
+	function FileReader(self, file)
+		self.File = fopen(file, mode)
 
 		assert(self.File , "No file can be read.")
 	end

@@ -145,19 +145,19 @@ class "__DataTable__" (function(_ENV)
 	-- Property
 	-------------------------------------------
 	__Doc__[[The data table's name]]
-	property "Name" { Type = String + nil }
+	property "Name" { Type = String }
 
 	__Doc__[[The database]]
-	property "Source" { Type = Table + nil }
+	property "Source" { Type = Table }
 
 	__Doc__[[Whether all properties will be used as data field]]
 	property "IncludeAll" { Type = Boolean, Default = true }
 
 	__Doc__[[The main keys of the data table]]
-	property "MainKeys" { Type = Table + String + nil }
+	property "MainKeys" { Type = Table }
 
 	__Doc__[[The index keys of the data table]]
-	property "IndexKeys" { Type = Table + String + nil }
+	property "IndexKeys" { Type = Table }
 
 	-------------------------------------------
 	-- Method
@@ -177,8 +177,6 @@ class "__DataTable__" (function(_ENV)
 		self.FieldMap = {}
 		self.FieldDefault = {}
 		self.MainKeys = self.MainKeys or {}
-		if type(self.MainKeys) == "string" then self.MainKeys = { self.MainKeys } end
-		if type(self.IndexKeys) == "string" then self.IndexKeys = { self.IndexKeys } end
 
 		if targetType == AttributeTargets.Class then
 			-- Scan fields
@@ -385,7 +383,7 @@ class "__DataField__" (function(_ENV)
 	-- Property
 	-------------------------------------------
 	__Doc__[[The data field]]
-	property "Name" { Type = String + nil }
+	property "Name" { Type = String }
 
 	__Doc__[[Whether the field is the main key]]
 	property "IsMainKey" { Type = Boolean }

@@ -1,3 +1,6 @@
+2015/09/11
+    Remove the whole combined types system, only one type is allowed.
+
 2015/07/16
     struct for class, interface, struct and enum is added.
 

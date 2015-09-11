@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/09/02
--- Version			r128
+-- Last Update Date 2015/09/11
+-- Version			r129
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -585,6 +585,7 @@ do
 				-- Method
 				ret = info.Method[key] or info.Cache[key]
 				if type(ret) == "function" then return ret end
+
 				-- Property
 				ret = info.Property[key]
 				if ret and ret.IsStatic then
@@ -675,7 +676,7 @@ do
 					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
 
 					-- Property
-					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 					-- Get Setter
@@ -735,7 +736,7 @@ do
 					local vType = getmetatable(value)
 
 					-- new feature
-					if vType == TYPE_NAMESPACE or vType == ValidatedType then
+					if vType == TYPE_NAMESPACE then
 						SetPropertyWithSet(info, key, { Type = value })
 					elseif type(value) == "function" then
 						-- Method
@@ -757,39 +758,6 @@ do
 			end
 
 			error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
-		end
-
-		_MetaNS.__add = function(v1, v2)
-			local ok, _type1, _type2
-
-			ok, _type1 = pcall(BuildValidatedType, v1)
-			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
-
-			ok, _type2 = pcall(BuildValidatedType, v2)
-			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
-
-			return _type1 + _type2
-		end
-
-		_MetaNS.__sub = function(v1, v2)
-			local ok, _type1, _type2
-
-			ok, _type1 = pcall(BuildValidatedType, v1)
-			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
-
-			ok, _type2 = pcall(BuildValidatedType, v2, true)
-			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
-
-			return _type1 + _type2
-		end
-
-		_MetaNS.__unm = function(v1)
-			local ok, _type1
-
-			ok, _type1 = pcall(BuildValidatedType, v1, true)
-			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
-
-			return _type1
 		end
 
 		_MetaNS.__tostring = function(self)
@@ -936,51 +904,116 @@ do
 end
 
 ------------------------------------------------------
--- ValidatedType
+-- Type Validation
 ------------------------------------------------------
 do
-	function IsValidatedType(self) return getmetatable(self) == ValidatedType end
+	function Validate4Type(oType, value, partName, mainName, stack)
+		if value == nil or not oType then return value end
 
-	function BuildValidatedType(ns, onlyClass)
-		local allowNil = false
+		local info = _NSInfo[oType]
+		if not info then return value end
 
-		if ns == nil then
-			allowNil = true
-		elseif IsValidatedType(ns) then
-			return ns
-		end
+		local iType = info.Type
+		local flag, ret
 
-		if ns == nil or IsNameSpace(ns) then
-			local _type = ValidatedType()
+		if iType == TYPE_STRUCT then
+			flag, ret = pcall(ValidateStruct, oType, value)
 
-			_type.AllowNil = allowNil or nil
-			if ns then if onlyClass then _type[-1] = ns else _type[1] = ns end end
+			if flag then return ret end
 
-			return _type
+			ret = strtrim(ret:match(":%d+:%s*(.-)$") or ret)
+		elseif iType == TYPE_ENUM then
+			-- Check if the value is an enumeration value of this enum
+			if type(value) == "string" then
+				local val = info.Enum[strupper(value)]
+				if val ~= nil then return val end
+			end
+
+			if info.MaxValue then
+				-- Bit flag validation, use MaxValue check to reduce cost
+				value = tonumber(value)
+
+				if value then
+					value = floor(value)
+					if (value == 0 and info.Cache[0]) or (value >= 1 and value <= info.MaxValue) then
+						return value
+					end
+				end
+			else
+				if info.Cache[value] then return value end
+			end
+
+			ret = ("%s must be a value of [enum]%s ( %s )."):format("%s", tostring(oType), GetShortEnumInfo(oType))
 		else
-			error("The type must be combination of nil, struct, enum, interface or class.")
+			local cls = getmetatable(value)
+
+			if iType == TYPE_CLASS then
+				if cls and IsChildClass(oType, cls) then return value end
+
+				ret = ("%s must be an instance of [class]%s."):format("%s", tostring(oType))
+			elseif iType == TYPE_INTERFACE then
+				if cls and IsExtend(oType, cls) then return value end
+
+				ret = ("%s must be an instance extended from [interface]%s."):format("%s", tostring(oType))
+			end
 		end
+
+		if partName and partName ~= "" then
+			if ret:find("%%s([_%w]+)") then
+				ret = ret:gsub("%%s", "%%s"..partName..".")
+			else
+				ret = ret:gsub("%%s", "%%s"..partName)
+			end
+		end
+
+		--if not ret:match("%(Optional%)$") then ret = ret .. "(Optional)" end
+
+		if mainName and ret:find("%%s") then ret = ret:gsub("%%s[_%w]*", mainName) end
+
+		error(ret, (stack or 1) + 1)
 	end
 
-	_UniqueValidatedType = setmetatable({}, WEAK_KEY)
-	_UniqueWithNilValidatedType = setmetatable({}, WEAK_VALUE)
+	function GetValidatedValue(oType, value)
+		if value == nil or not oType then return value end
 
-	function GetUniqueValidatedType(self)
-		if IsValidatedType(self) then
-			-- No unique for complex type
-			if self[-1] or #self ~= 1 then return self end
+		local info = _NSInfo[oType]
+		if not info then return value end
 
-			if self.AllowNil then
-				if _UniqueWithNilValidatedType[self[1]] then return _UniqueWithNilValidatedType[self[1]] end
-				_UniqueWithNilValidatedType[self[1]] = self
-				return self
+		local iType = info.Type
+		local flag, ret
+
+		if iType == TYPE_STRUCT then
+			flag, ret = pcall(ValidateStruct, oType, value)
+
+			if flag then return ret end
+		elseif iType == TYPE_ENUM then
+			-- Check if the value is an enumeration value of this enum
+			if type(value) == "string" then
+				local val = info.Enum[strupper(value)]
+				if val ~= nil then return val end
+			end
+
+			if info.MaxValue then
+				-- Bit flag validation, use MaxValue check to reduce cost
+				value = tonumber(value)
+
+				if value then
+					value = floor(value)
+					if (value == 0 and info.Cache[0]) or (value >= 1 and value <= info.MaxValue) then
+						return value
+					end
+				end
 			else
-				if _UniqueValidatedType[self[1]] then return _UniqueValidatedType[self[1]] end
-				_UniqueValidatedType[self[1]] = self
-				return self
+				if info.Cache[value] then return value end
 			end
 		else
-			return self
+			local cls = getmetatable(value)
+
+			if iType == TYPE_CLASS then
+				if cls and IsChildClass(oType, cls) then return value end
+			elseif iType == TYPE_INTERFACE then
+				if cls and IsExtend(oType, cls) then return value end
+			end
 		end
 	end
 end
@@ -1243,11 +1276,13 @@ do
 							elseif k == "field" then
 								prop.Field = v ~= name and v or nil
 							elseif k == "type" then
-								local ok, ret = pcall(BuildValidatedType, v)
-								if ok then
-									prop.Type = GetUniqueValidatedType(ret)
-								else
-									errorhandler(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
+								local tInfo = _NSInfo[v]
+
+								if tInfo and (tInfo.Type == TYPE_ENUM or
+												tInfo.Type == TYPE_STRUCT or
+												tInfo.Type == TYPE_INTERFACE or
+												tInfo.Type == TYPE_CLASS) then
+									prop.Type = v
 								end
 							elseif k == "default" then
 								prop.Default = v
@@ -1270,10 +1305,9 @@ do
 					-- Validate the default
 					if prop.Default ~= nil then
 						if prop.Type then
-							if prop.Type:GetObjectType(prop.Default) == false then
-								if type(prop.Default) == "function" then prop.DefaultFunc = prop.Default end
-								prop.Default = nil
-							end
+							local val = GetValidatedValue(prop.Type, prop.Default)
+							if val == nil and type(prop.Default) == "function" then prop.DefaultFunc = prop.Default end
+							prop.Default = val
 						elseif type(prop.Default) == "function" then
 							prop.DefaultFunc = prop.Default
 							prop.Default = nil
@@ -1304,7 +1338,7 @@ do
 									prop.Get = info.Method["get" .. uname]
 								elseif staticMethod["Get" .. uname] then
 									prop.Get = info.Method["Get" .. uname]
-								elseif prop.Type and prop.Type:Is(Boolean) then
+								elseif prop.Type == Boolean then
 									-- FlagEnabled -> IsFlagEnabled
 									if staticMethod["is" .. uname] then
 										prop.Get = info.Method["is" .. uname]
@@ -1330,7 +1364,7 @@ do
 									prop.Set = info.Method["set" .. uname]
 								elseif staticMethod["Set" .. uname] then
 									prop.Set = info.Method["Set" .. uname]
-								elseif prop.Type and prop.Type:Is(Boolean) then
+								elseif prop.Type == Boolean then
 									-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 									local pattern = ParseAdj(uname)
 
@@ -1353,7 +1387,7 @@ do
 								prop.GetMethod = "get" .. uname
 							elseif type(iCache["Get" .. uname]) == "function" then
 								prop.GetMethod = "Get" .. uname
-							elseif prop.Type and prop.Type:Is(Boolean) then
+							elseif prop.Type == Boolean then
 								-- FlagEnabled -> IsFlagEnabled
 								if type(iCache["is" .. uname]) == "function" then
 									prop.GetMethod = "is" .. uname
@@ -1379,7 +1413,7 @@ do
 								prop.SetMethod = "set" .. uname
 							elseif type(iCache["Set" .. uname]) == "function" then
 								prop.SetMethod = "Set" .. uname
-							elseif prop.Type and prop.Type:Is(Boolean) then
+							elseif prop.Type == Boolean then
 								-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 								local pattern = ParseAdj(uname)
 
@@ -1421,14 +1455,11 @@ do
 						prop.SetClone = Reflector.ValidateFlags(Setter.Clone, prop.Setter) or prop.SetDeepClone
 
 						if prop.Set == nil and not prop.SetMethod then
-							if Reflector.ValidateFlags(Setter.Retain, prop.Setter) and prop.Type and #(prop.Type) > 0 then
-								for _, ty in ipairs(prop.Type) do
-									local tinfo = _NSInfo[ty]
+							if Reflector.ValidateFlags(Setter.Retain, prop.Setter) and prop.Type then
+								local tinfo = _NSInfo[prop.Type]
 
-									if tinfo.Type == TYPE_CLASS or tinfo.Type == TYPE_INTERFACE then
-										prop.SetRetain = true
-										break
-									end
+								if tinfo.Type == TYPE_CLASS or tinfo.Type == TYPE_INTERFACE then
+									prop.SetRetain = true
 								end
 							end
 
@@ -1512,7 +1543,10 @@ do
 								wipe(upValues)
 
 								tinsert(upValues, info) tinsert(gbody, "info")
-								if prop.Type then tinsert(upValues, prop.Type) tinsert(gbody, "pType") end
+								if prop.Type then
+									tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
+									tinsert(upValues, prop.Type) tinsert(gbody, "pType")
+								end
 								if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
 								if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
 								if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
@@ -1525,7 +1559,7 @@ do
 								tinsert(gbody, gHeader)
 
 								tinsert(gbody, [[return function (value)]])
-								if prop.Type then tinsert(gbody, ([[value = pType:Validate(value, "%s", "%s", 2)]]):format(name, name)) end
+								if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 2)]]):format(name, name)) end
 								if prop.SetClone then
 									if prop.SetDeepClone then
 										tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -1627,7 +1661,10 @@ do
 								wipe(gbody)
 								wipe(upValues)
 
-								if prop.Type then tinsert(upValues, prop.Type) tinsert(gbody, "pType") end
+								if prop.Type then
+									tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
+									tinsert(upValues, prop.Type) tinsert(gbody, "pType")
+								end
 								if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
 								if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
 								if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
@@ -1641,7 +1678,7 @@ do
 								tinsert(gbody, gHeader)
 
 								tinsert(gbody, [[return function (self, value)]])
-								if prop.Type then tinsert(gbody, ([[value = pType:Validate(value, "%s", "%s", 2)]]):format(name, name)) end
+								if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 2)]]):format(name, name)) end
 								if prop.SetClone then
 									if prop.SetDeepClone then
 										tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -1692,10 +1729,10 @@ do
 					end
 
 					-- Auto generate Default
-					if prop.Type and not prop.Type:Is(nil) and prop.Default == nil and #(prop.Type) == 1 then
-						local info = _NSInfo[prop.Type[1]]
+					if prop.Type and prop.Default == nil then
+						local pinfo = _NSInfo[prop.Type]
 
-						if info and (info.Type == TYPE_STRUCT or info.Type == TYPE_ENUM) then prop.Default = info.Default end
+						if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
 					end
 				end
 			end
@@ -2288,7 +2325,7 @@ do
 					local vType = getmetatable(v)
 
 					if vType and type(v) ~= "string" then
-						if vType == TYPE_NAMESPACE or vType == ValidatedType then
+						if vType == TYPE_NAMESPACE then
 							SetPropertyWithSet(info, k, { Type = v })
 						end
 					elseif type(v) == "table" then
@@ -2761,17 +2798,19 @@ do
 	end
 
 	function IsChildClass(cls, child)
-		if not cls or not child or not _NSInfo[cls] or _NSInfo[cls].Type ~= TYPE_CLASS or not _NSInfo[child] or _NSInfo[child].Type ~= TYPE_CLASS then return false end
+		if not cls or not child or not _NSInfo[cls] or _NSInfo[cls].Type ~= TYPE_CLASS then return false end
 
 		if cls == child then return true end
 
 		local info = _NSInfo[child]
 
-		while info and info.SuperClass and info.SuperClass ~= cls do info = _NSInfo[info.SuperClass] end
+		if not info or info.Type ~= TYPE_CLASS then return false end
 
-		if info and info.SuperClass == cls then return true end
+		local scls = info.SuperClass
 
-		return false
+		while scls and scls ~= cls do scls = _NSInfo[scls].SuperClass end
+
+		return scls == cls
 	end
 
 	function UpdateMeta4Child(meta, cls, pre, now)
@@ -2946,7 +2985,7 @@ do
 			else
 				-- Property
 				if oper.Set == false then error(("%s can't be written."):format(key), 2) end
-				if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+				if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 				-- Get Setter
@@ -3143,7 +3182,7 @@ do
 				else
 					-- Property
 					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
-					if oper.Type then value = oper.Type:Validate(value, key, key, 2) end
+					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 					-- Get Setter
@@ -3258,15 +3297,12 @@ do
 					return fixedMethod(obj, ...)
 				else
 					return info.Constructor:RaiseError(obj)
-					--error(("%s has no constructor support such arguments"):format(tostring(cls)), 2)
 				end
 			end
 		end
 
 		-- No constructor or constructor with no arguments, so try init table
-		if initTable then
-			for name, value in pairs(initTable) do obj[name] = value end
-		end
+		if initTable then for name, value in pairs(initTable) do obj[name] = value end end
 	end
 
 	-- The cache for constructor parameters
@@ -3895,13 +3931,12 @@ do
 						-- Don't save to environment until need it
 						return SaveFixedMethod(info.Method, key, value, info.Owner)
 					end
-				elseif (value == nil or IsValidatedType(value) or IsNameSpace(value)) then
-					SaveStructField(self, info, key, value)
-					return
+				elseif _NSInfo[value] and _NSInfo[value].Type then
+					return SaveStructField(self, info, key, value)
 				end
 			end
 
-			rawset(self, key, value)
+			return rawset(self, key, value)
 		end
 
 		_MetaStrtDefEnv.__call = function(self, definition)
@@ -3926,7 +3961,9 @@ do
 	function ValidateStruct(strt, value)
 		local info = _NSInfo[strt]
 
-		if info.SubType ~= _STRUCT_TYPE_CUSTOM then
+		local sType = info.SubType
+
+		if sType ~= _STRUCT_TYPE_CUSTOM then
 			if type(value) ~= "table" then wipe(_ValidatedCache) error(("%s must be a table, got %s."):format("%s", type(value))) end
 
 			if _ValidatedCache[value] then return value end
@@ -3934,21 +3971,33 @@ do
 			if not _ValidatedCache[1] then _ValidatedCache[1] = value end
 			_ValidatedCache[value] = true
 
-			if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
-				for _, n in ipairs(info.Members) do
-					if value[n] == nil and info.DefaultField and info.DefaultField[n] ~= nil then
-						-- Deep clone to make sure no change on default value
-						value[n] = CloneObj(info.DefaultField[n], true)
-					else
-						value[n] = info.StructEnv[n]:Validate(value[n], n)
+			if sType == _STRUCT_TYPE_MEMBER then
+				if info.Members then
+					local env = info.StructEnv
+					local default = info.DefaultField
+					local require = info.RequireMember
+
+					for _, n in ipairs(info.Members) do
+						local val = value[n]
+
+						if val == nil then
+							if default and default[n] ~= nil then
+								-- Deep clone to make sure no change on default value
+								value[n] = CloneObj(default[n], true)
+							elseif require and require[n] then
+								error(("%s.%s can't be nil."):format("%s", n))
+							end
+						else
+							value[n] = Validate4Type(env[n], val, n)
+						end
 					end
 				end
-			elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+			elseif sType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
 				local flag, ret
 				local ele = info.ArrayElement
 
 				for i, v in ipairs(value) do
-					flag, ret = pcall(ele.Validate, ele, v, "Element")
+					flag, ret = pcall(Validate4Type, ele, v, "Element")
 
 					if flag then
 						value[i] = ret
@@ -3968,10 +4017,10 @@ do
 				error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
 			end
 
-			if info.SubType == _STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
+			if sType == _STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
 		end
 
-		if info.SubType ~= _STRUCT_TYPE_CUSTOM and _ValidatedCache[1] == value then wipe(_ValidatedCache) end
+		if sType ~= _STRUCT_TYPE_CUSTOM and _ValidatedCache[1] == value then wipe(_ValidatedCache) end
 
 		return value
 	end
@@ -4026,10 +4075,10 @@ do
 
 				local args = ""
 				for i, n in ipairs(info.Members) do
-					if info.StructEnv[n]:Is(nil) and not args:find("%[") then n = "["..n end
+					--if info.StructEnv[n]:Is(nil) and not args:find("%[") then n = "["..n end
 					if i == 1 then args = n else args = args..", "..n end
 				end
-				if args:find("%[") then args = args.."]" end
+				--if args:find("%[") then args = args.."]" end
 				error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
 			end
 		elseif info.SubType == _STRUCT_TYPE_ARRAY then
@@ -4192,36 +4241,30 @@ do
 	end
 
 	function SaveStructField(self, info, key, value)
-		local ok, ret = pcall(BuildValidatedType, value)
+		rawset(self, key, value)
 
-		if ok then
-			rawset(self, key, ret)
+		if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
+			info.SubType = _STRUCT_TYPE_ARRAY
+			info.Members = nil
+		end
 
-			if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
-				info.SubType = _STRUCT_TYPE_ARRAY
-				info.Members = nil
-			end
+		if info.SubType == _STRUCT_TYPE_MEMBER then
+			info.Members = info.Members or {}
+			tinsert(info.Members, key)
+			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(key, AttributeTargets.Member, info.Owner, key) end
 
-			if info.SubType == _STRUCT_TYPE_MEMBER then
-				info.Members = info.Members or {}
-				tinsert(info.Members, key)
-				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, key) end
+			-- Auto generate Default
+			if not (info.RequireMember and info.RequireMember[key]) and (not info.DefaultField or info.DefaultField[key] == nil) then
+				local rinfo = _NSInfo[value]
 
-				-- Auto generate Default
-				if not ret:Is(nil) and #ret == 1 and (not info.DefaultField or info.DefaultField[key] == nil) then
-					local rinfo = _NSInfo[ret[1]]
-
-					if rinfo and (rinfo.Type == TYPE_STRUCT or rinfo.Type == TYPE_ENUM) and rinfo.Default ~= nil then
-						info.DefaultField = info.DefaultField or {}
-						info.DefaultField[key] = rinfo.Default
-					end
+				if rinfo and (rinfo.Type == TYPE_STRUCT or rinfo.Type == TYPE_ENUM) and rinfo.Default ~= nil then
+					info.DefaultField = info.DefaultField or {}
+					info.DefaultField[key] = rinfo.Default
 				end
-			elseif info.SubType == _STRUCT_TYPE_ARRAY then
-				info.ArrayElement = ret
-				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(ret, AttributeTargets.Member, info.Owner, "ArrayElement") end
 			end
-		else
-			error(strtrim(ret:match(":%d+:%s*(.-)$") or ret), 3)
+		elseif info.SubType == _STRUCT_TYPE_ARRAY then
+			info.ArrayElement = value
+			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
 		end
 	end
 
@@ -4241,37 +4284,6 @@ do
 				info.Default = nil
 			end
 		end
-
-		-- Make field type unique
-		if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
-			local chkNIL = false
-			local hasNIL = false
-			for _, n in ipairs(info.Members) do
-				info.StructEnv[n] = GetUniqueValidatedType(info.StructEnv[n])
-				if info.StructEnv[n] and not info.StructEnv[n].AllowNil then
-					if hasNIL then chkNIL = true end
-				else
-					hasNIL = true
-				end
-			end
-			while chkNIL do
-				chkNIL, hasNIL = false
-
-				for i, n in ipairs(info.Members) do
-					if info.StructEnv[n] and not info.StructEnv[n].AllowNil then
-						if hasNIL then
-							chkNIL = true
-							info.Members[i], info.Members[i-1] = info.Members[i-1], info.Members[i]
-							break
-						end
-					else
-						hasNIL = true
-					end
-				end
-			end
-		elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-			info.ArrayElement = GetUniqueValidatedType(info.ArrayElement)
-		end
 	end
 
 	function ParseStructDefinition(self, definition)
@@ -4282,7 +4294,7 @@ do
 				local vType = getmetatable(v)
 
 				if vType and type(v) ~= "string" then
-					if (vType == TYPE_NAMESPACE or vType == ValidatedType) and (type(k) == "string" or tonumber(k)) then
+					if vType == TYPE_NAMESPACE and (type(k) == "string" or tonumber(k)) then
 						SaveStructField(self, info, k, v)
 					end
 				elseif type(v) == "function" then
@@ -4336,19 +4348,20 @@ do
 	namespace "System"
 
 	struct "Boolean"	{ Default = false, function (value) return value and true or false end }
-	struct "String"		{ Default = "", function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
+	struct "String"		{ function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
 	struct "Number"		{ Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
 	struct "Function"	{ function (value) if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end end }
 	struct "Table"		{ function (value) if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end end }
 	struct "RawTable"	{ function (value) assert(type(value) == "table" and getmetatable(value) == nil, "%s must be a table without metatable.") end }
 	struct "Userdata"	{ function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
 	struct "Thread"		{ function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
-	struct "Any"		{ function (value) assert(value ~= nil, "%s can't be nil.") end }
+	struct "Any"		{ function (value) end }
 	struct "Callable"	{ function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
 	struct "Class"		{ function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
 	struct "Interface"	{ function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
 	struct "Struct"		{ function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
 	struct "Enum"		{ function (value) assert(Reflector.IsEnum(value), "%s must be an enum.") end }
+	struct "AnyType"	{ function (value) local info = _NSInfo[value] assert(info and info.Type, "%s must be a type, such as enum, struct, class or interface.") end }
 
 	------------------------------------------------------
 	-- System.AttributeTargets
@@ -5000,9 +5013,7 @@ do
 
 			if info and info.Property then
 				local prop = info.Cache[name] or info.Property[name]
-				if type(prop) == "table" and not getmetatable(prop) and prop.Type then
-					return prop.Type:Clone()
-				end
+				return type(prop) == "table" and getmetatable(prop) == nil and prop.Type or nil
 			end
 		end
 
@@ -5016,9 +5027,9 @@ do
 		function HasProperty(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE)then
+			if info and info.Property then
 				local prop = info.Cache[name] or info.Property[name]
-				if type(prop) == "table" and not getmetatable(prop) and prop.Type then return true end
+				if type(prop) == "table" and getmetatable(prop) == nil and prop.Type then return true end
 			end
 			return false
 		end
@@ -5033,9 +5044,9 @@ do
 		function IsPropertyReadable(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+			if info and info.Property then
 				local prop = info.Cache[name]
-				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
+				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
 				prop = info.Property[name]
 				if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
 			end
@@ -5051,9 +5062,9 @@ do
 		function IsPropertyWritable(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+			if info and info.Property then
 				local prop = info.Cache[name]
-				if prop then return type(prop) == "table" and not getmetatable(prop) and (prop.Set or prop.SetMethod or prop.Field) and true or false end
+				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Set or prop.SetMethod or prop.Field) and true or false end
 				prop = info.Property[name]
 				if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
 			end
@@ -5238,6 +5249,22 @@ do
 			return false
 		end
 
+		doc "IsRequiredMember" [[
+			<desc>Whether the member of the struct is required.</desc>
+			<param name="struct" type="struct">the struct type</param>
+			<param name="member" type="string">the query member</param>
+			<return type="boolean">true if the struct has the member</return>
+		]]
+		function IsRequiredMember(ns, member)
+			local info = _NSInfo[ns]
+
+			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER then
+				if info.RequireMember and info.RequireMember[member] then return true end
+			end
+
+			return false
+		end
+
 		doc "GetStructMembers" [[
 			<desc>Get the parts of the struct type</desc>
 			<param name="struct" type="struct">the struct type</param>
@@ -5288,11 +5315,10 @@ do
 
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
-					for _, p in ipairs(info.Members) do
-						if p == part and IsValidatedType(info.StructEnv[part]) then return info.StructEnv[part]:Clone() end
-					end
+					local mType = rawget(info.StructEnv, part)
+					if IsNameSpace(mType) then return mType end
 				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-					return info.ArrayElement:Clone()
+					return info.ArrayElement
 				end
 			end
 		end
@@ -5341,7 +5367,11 @@ do
 			<return type="class">the object's class</return>
 			<usage>System.Reflector.GetObjectClass(obj)</usage>
 		]]
-		GetObjectClass = getmetatable
+		function GetObjectClass(object)
+			local cls = getmetatable(object)
+			local info = _NSInfo[cls]
+			return info and info.Type == TYPE_CLASS and cls or nil
+		end
 
 		doc "ObjectIsClass" [[
 			<desc>Check if this object is an instance of the class</desc>
@@ -5432,25 +5462,10 @@ do
 			end
 		end
 
-		-- Recycle the test type object
-		_Validate_Type = setmetatable({}, {
-			__call = function(self, key)
-				if key then
-					key.AllowNil = nil
-					key[1] = nil
-					key.Name = nil
-
-					tinsert(self, key)
-				else
-					if next(self) then return tremove(self) else return BuildValidatedType(nil) end
-				end
-			end,
-		})
-
 		doc "Validate" [[
 			<desc>Validating the value to the given type.</desc>
 			<format>type, value, name[, prefix[, stacklevel] ]</format>
-			<param name="type">such like Object+String+nil</param>
+			<param name="oType">The test type</param>
 			<param name="value">the test value</param>
 			<param name="name">the parameter's name</param>
 			<param name="prefix">the prefix string</param>
@@ -5458,57 +5473,38 @@ do
 			<return>the validated value</return>
 			<usage>System.Reflector.Validate(System.String+nil, "Test")</usage>
 		]]
-		function Validate(types, value, name, prefix, stacklevel)
-			stacklevel = type(stacklevel) == "number" and stacklevel > 0 and stacklevel or 0
-
-			stacklevel = math.floor(stacklevel)
+		function Validate(oType, value, name, prefix, stacklevel)
+			stacklevel = floor(type(stacklevel) == "number" and stacklevel > 0 and stacklevel or 0)
 
 			if type(name) ~= "string" then name = "value" end
-			if types == nil then return value end
+			if oType == nil then return value end
 
-			if IsNameSpace(types) then
-				local vtype = _Validate_Type()
+			assert(_NSInfo[oType] and _NSInfo[oType].Type, "Usage : System.Reflector.Validate(oType, value[, name[, prefix]]) : oType - must be enum, struct, class or interface.")
 
-				vtype.AllowNil = nil
-				vtype[1] = types
-				vtype.Name = name
+			local ok
 
-				types = vtype
-			end
+			ok, value = pcall(Validate4Type, oType, value)
 
-			local ok, _type = pcall(BuildValidatedType, types)
+			if not ok then
+				value = strtrim(value:match(":%d+:%s*(.-)$") or value):gsub("%%s[_%w]*", name)
 
-			if ok then
-				if _type then
-					ok, value = pcall(_type.Validate, _type, value)
-
-					-- Recycle
-					_Validate_Type(types)
-
-					if not ok then
-						value = strtrim(value:match(":%d+:%s*(.-)$") or value):gsub("%%s[_%w]*", name)
-
-						if type(prefix) == "string" then
-							error(prefix .. value, 3 + stacklevel)
-						else
-							error(value, 2)
-						end
-					end
+				if type(prefix) == "string" then
+					error(prefix .. value, 3 + stacklevel)
 				else
-					-- Recycle
-					_Validate_Type(types)
+					error(value, 2)
 				end
-
-				return value
-			else
-				-- Recycle
-				_Validate_Type(types)
-
-				error("Usage : System.Reflector.Validate(type, value[, name[, prefix]]) : type - must be nil, enum, struct or class.", 2)
 			end
 
 			return value
 		end
+
+		doc "GetValidatedValue" [[
+			<desc>Get validated value for the type</desc>
+			<param name="oType">The test type</param>
+			<param name="value">the test value</param>
+			<return>the validated value, nil if the value can't pass the validation</return>
+		]]
+		GetValidatedValue = GetValidatedValue
 
 		doc "GetDocument" [[
 			<desc>Get the document</desc>
@@ -5565,15 +5561,7 @@ do
 		end
 
 		function Serialize(data, ns)
-			if ns then
-				if ObjectIsClass(ns, ValidatedType) then
-					ns = ns:GetObjectType(data)
-
-					if ns == false then return nil elseif ns == nil then return "nil" end
-				elseif type(ns) == "string" then
-					ns = GetNameSpaceForName(ns)
-				end
-			end
+			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			if _NSInfo[ns] then
 				if Reflector.IsEnum(ns) then
@@ -5704,7 +5692,7 @@ do
 			if info then
 				if (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and part then
 					part = info.Cache[part]
-					if type(part) == "table" and not getmetatable(part) then
+					if type(part) == "table" and getmetatable(part) == nil and type(part.Default) ~= "function" then
 						return part.Default
 					end
 				elseif info.Type == TYPE_ENUM then
@@ -5747,447 +5735,6 @@ end
 -- Local Namespace (Inner classes)
 ------------------------------------------------------
 do
-	class "ValidatedType" (function(_ENV)
-		doc "ValidatedType" [[The type object used to handle the value's validation]]
-
-		------------------------------------------------------
-		-- Property
-		------------------------------------------------------
-		doc [[Whether allow nil or not]]
-		property "AllowNil" { Type = Boolean }
-
-		------------------------------------------------------
-		-- Method
-		------------------------------------------------------
-		doc "Validate" [[
-			<desc>Used to validate the value</desc>
-			<param name="value"></param>
-			<param name="partName" optional="true">the name of the field</param>
-			<param name="mainName" optional="true">the name present the value</param>
-			<param name="stack" optional="true">the stack level, default 1</param>
-			<return>the validated value</return>
-			<return>the validated type</return>
-		]]
-		function Validate(self, value, partName, mainName, stack)
-			if value == nil and self.AllowNil then return value end
-
-			local flag, errorMsg, info, tmpMsg
-			local index = -1
-			local types
-
-			info = _NSInfo[rawget(self, index)]
-			if info then
-				while info do
-					tmpMsg = nil
-
-					if info.Type == TYPE_CLASS then
-						if IsChildClass(info.Owner, value) then return value end
-						tmpMsg = ("%s must be subclass of [class]%s."):format("%s", tostring(info.Owner))
-					elseif info.Type == TYPE_INTERFACE then
-						if IsExtend(info.Owner, value) then return value end
-						tmpMsg = ("%s must extended from [interface]%s."):format("%s", tostring(info.Owner))
-					elseif value == info.Owner then
-						return value
-					else
-						types = (types or "") .. tostring(info.Owner) .. ", "
-					end
-
-					if tmpMsg and not errorMsg then
-						if partName and partName ~= "" then
-							if tmpMsg:find("%%s([_%w]+)") then
-								errorMsg = tmpMsg:gsub("%%s", "%%s"..partName..".")
-							else
-								errorMsg = tmpMsg:gsub("%%s", "%%s"..partName)
-							end
-						else
-							errorMsg = tmpMsg
-						end
-					end
-
-					index = index - 1
-					info = _NSInfo[rawget(self, index)]
-				end
-
-				if types and #types >= 3 and not errorMsg then
-					tmpMsg = ("%s must be the type in ()."):format("%s", types:sub(1, -3))
-
-					if partName and partName ~= "" then
-						if tmpMsg:find("%%s([_%w]+)") then
-							errorMsg = tmpMsg:gsub("%%s", "%%s"..partName..".")
-						else
-							errorMsg = tmpMsg:gsub("%%s", "%%s"..partName)
-						end
-					else
-						errorMsg = tmpMsg
-					end
-				end
-			end
-
-			for _, ns in ipairs(self) do
-				info = _NSInfo[ns]
-
-				tmpMsg = nil
-
-				if not info then
-					-- do nothing
-				elseif info.Type == TYPE_STRUCT then
-					-- Check if the value is an enumeration value of this structure
-					flag, tmpMsg = pcall(ValidateStruct, ns, value)
-
-					if flag then return tmpMsg, ns end
-
-					tmpMsg = strtrim(tmpMsg:match(":%d+:%s*(.-)$") or tmpMsg)
-				elseif info.Type == TYPE_CLASS then
-					-- Check if the value is an instance of this class
-					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then return value, ns end
-
-					tmpMsg = ("%s must be an instance of [class]%s."):format("%s", tostring(ns))
-				elseif info.Type == TYPE_INTERFACE then
-					-- Check if the value is an instance of this interface
-					if type(value) == "table" and getmetatable(value) and IsExtend(ns, getmetatable(value)) then return value, ns end
-
-					tmpMsg = ("%s must be an instance extended from [interface]%s."):format("%s", tostring(ns))
-				elseif info.Type == TYPE_ENUM then
-					-- Check if the value is an enumeration value of this enum
-					if type(value) == "string" and info.Enum[strupper(value)] then return info.Enum[strupper(value)], ns end
-
-					if info.MaxValue then
-						-- Bit flag validation, use MaxValue check to reduce cost
-						value = tonumber(value)
-
-						if value then
-							if value >= 1 and value <= info.MaxValue then
-								return floor(value), ns
-							elseif value == 0 and info.Cache[0] then
-								return value, ns
-							end
-						end
-					else
-						if info.Cache[value] then return value, ns end
-					end
-
-					tmpMsg = ("%s must be a value of [enum]%s ( %s )."):format("%s", tostring(ns), GetShortEnumInfo(ns))
-				end
-
-				if tmpMsg and not errorMsg then
-					if partName and partName ~= "" then
-						if tmpMsg:find("%%s([_%w]+)") then
-							errorMsg = tmpMsg:gsub("%%s", "%%s"..partName..".")
-						else
-							errorMsg = tmpMsg:gsub("%%s", "%%s"..partName)
-						end
-					else
-						errorMsg = tmpMsg
-					end
-				end
-			end
-
-			if errorMsg and self.AllowNil and not errorMsg:match("%(Optional%)$") then errorMsg = errorMsg .. "(Optional)" end
-
-			if errorMsg then
-				if mainName and errorMsg:find("%%s") then errorMsg = errorMsg:gsub("%%s[_%w]*", mainName) end
-
-				error(errorMsg, (stack or 1) + 1)
-			end
-
-			return value
-		end
-
-		doc "Clone" [[
-			<desc>Clone the type object</desc>
-			<return>the clone</return>
-		]]
-		function Clone(self)
-			local _type = ValidatedType()
-
-			for i, v in pairs(self) do _type[i] = v end
-
-			return _type
-		end
-
-		doc "Is" [[
-			<desc>Check if the type object constains such type</desc>
-			<param name="type" type="struct|enum|class|interface|nil">the target type</param>
-			<param name="onlyClass" optional="true">true if the type only match class, not class' object</param>
-			<return type="boolean"></return>
-		]]
-		function Is(self, ns, onlyClass)
-			if ns == nil then return self.AllowNil or false end
-
-			if IsNameSpace(ns) then
-				if not onlyClass then
-					for _, v in ipairs(self) do if v == ns then return true end end
-				else
-					local index = -1
-
-					while self[index] do
-						if self[index] == ns then return true end
-						index = index - 1
-					end
-				end
-			end
-
-			return false
-		end
-
-		doc "GetObjectType" [[
-			<desc>Get the object type if validated, false if nothing match</desc>
-			<param name="value">the value</param>
-			<return name="type">the value's validated type</return>
-		]]
-		function GetObjectType(self, value)
-			if value == nil and self.AllowNil then return end
-
-			local info
-			local index = -1
-
-			while self[index] do
-				info = _NSInfo[self[index]]
-
-				if not info then
-					-- skip
-				elseif info.Type == TYPE_CLASS then
-					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsChildClass(info.Owner, value) then return info.Owner end
-				elseif info.Type == TYPE_INTERFACE then
-					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsExtend(info.Owner, value) then return info.Owner end
-				elseif info.Type then
-					if value == info.Owner then return info.Owner end
-				end
-
-				index = index - 1
-			end
-
-			for _, ns in ipairs(self) do
-				info = _NSInfo[ns]
-
-				if not info then
-					-- do nothing
-				elseif info.Type == TYPE_CLASS then
-					-- Check if the value is an instance of this class
-					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then return ns end
-				elseif info.Type == TYPE_INTERFACE then
-					-- Check if the value is an instance of this interface
-					if type(value) == "table" and getmetatable(value) and IsExtend(ns, getmetatable(value)) then return ns end
-				elseif info.Type == TYPE_ENUM then
-					-- Check if the value is an enumeration value of this enum
-					if type(value) == "string" and info.Enum[strupper(value)] then return ns end
-
-					if info.MaxValue then
-						-- Bit flag validation, use MaxValue check to reduce cost
-						value = tonumber(value)
-
-						if value then
-							if value >= 1 and value <= info.MaxValue then
-								return ns
-							elseif value == 0 and info.Cache[value] then
-								return ns
-							end
-						end
-					elseif info.Cache[value] then
-						return ns
-					end
-				elseif info.Type == TYPE_STRUCT then
-					-- Check if the value is an enumeration value of this structure
-					if pcall(ValidateStruct, ns, value) then return ns end
-				end
-			end
-
-			return false
-		end
-
-		doc "GetValidatedValue" [[
-			<desc>Get the validated value if validated, nil if not match</desc>
-			<param name="value">the value</param>
-			<return name="value">the validated value</return>
-		]]
-		function GetValidatedValue(self, value)
-			if value == nil and self.AllowNil then return end
-
-			local info
-			local index = -1
-
-			while self[index] do
-				info = _NSInfo[self[index]]
-
-				if not info then
-					-- skip
-				elseif info.Type == TYPE_CLASS then
-					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsChildClass(info.Owner, value) then return value end
-				elseif info.Type == TYPE_INTERFACE then
-					if value and _NSInfo[value] and _NSInfo[value].Type == TYPE_CLASS and IsExtend(info.Owner, value) then return value end
-				elseif info.Type then
-					if value == info.Owner then return value end
-				end
-
-				index = index - 1
-			end
-
-			for _, ns in ipairs(self) do
-				info = _NSInfo[ns]
-
-				if not info then
-					-- do nothing
-				elseif info.Type == TYPE_CLASS then
-					-- Check if the value is an instance of this class
-					if type(value) == "table" and getmetatable(value) and IsChildClass(ns, getmetatable(value)) then return value end
-				elseif info.Type == TYPE_INTERFACE then
-					-- Check if the value is an instance of this interface
-					if type(value) == "table" and getmetatable(value) and IsExtend(ns, getmetatable(value)) then return value end
-				elseif info.Type == TYPE_ENUM then
-					-- Check if the value is an enumeration value of this enum
-					if type(value) == "string" then
-						local uValue = info.Enum[strupper(value)]
-						if uValue ~= nil then return uValue end
-					end
-
-					if info.MaxValue then
-						-- Bit flag validation, use MaxValue check to reduce cost
-						value = tonumber(value)
-
-						if value then
-							if value >= 1 and value <= info.MaxValue then
-								return value
-							elseif value == 0 and info.Cache[value] then
-								return value
-							end
-						end
-					elseif info.Cache[value] then
-						return value
-					end
-				elseif info.Type == TYPE_STRUCT then
-					-- Check if the value is an enumeration value of this structure
-					local flag, new = pcall(ValidateStruct, ns, value)
-
-					if flag then return new end
-				end
-			end
-		end
-
-		------------------------------------------------------
-		-- Constructor
-		------------------------------------------------------
-		function ValidatedType(self, ns)
-			if IsNameSpace(ns) then self[1] = ns end
-		end
-
-		------------------------------------------------------
-		-- MetaMethod
-		------------------------------------------------------
-		function __exist(ns)
-			if getmetatable(ns) == ValidatedType then return ns end
-		end
-
-		function __add(v1, v2)
-			local ok, _type1, _type2
-
-			ok, _type1 = pcall(BuildValidatedType, v1)
-			if not ok then error(strtrim(_type1:match(":%d+:%s*(.-)$") or _type1), 2) end
-
-			ok, _type2 = pcall(BuildValidatedType, v2)
-			if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
-
-			if _type1 and _type2 then
-				local _type = ValidatedType()
-
-				_type.AllowNil = _type1.AllowNil or _type2.AllowNil
-
-				local tmp = {}
-
-				for _, ns in ipairs(_type1) do
-					tinsert(_type, ns)
-					tmp[ns] = true
-				end
-				for _, ns in ipairs(_type2) do if not tmp[ns] then tinsert(_type, ns) end end
-
-				wipe(tmp)
-
-				local index = -1
-				local pos = -1
-
-				while _type1[index] do
-					tmp[_type1[index]] = true
-					_type[pos] = _type1[index]
-					pos = pos -1
-					index = index - 1
-				end
-
-				index = -1
-
-				while _type2[index] do
-					if not tmp[_type2[index]] then
-						_type[pos] = _type2[index]
-						pos = pos -1
-					end
-					index = index - 1
-				end
-
-				tmp = nil
-
-				return _type
-			else
-				return _type1 or _type2
-			end
-		end
-
-		function __sub(v1, v2)
-			if IsNameSpace(v2) then
-				local ok, _type2
-
-				ok, _type2 = pcall(BuildValidatedType, v2, true)
-				if not ok then error(strtrim(_type2:match(":%d+:%s*(.-)$") or _type2), 2) end
-
-				return v1 + _type2
-			elseif v2 == nil then
-				return v1
-			else
-				error("The operation '-' must be used with class or interface.", 2)
-			end
-		end
-
-		function __unm(v1) error("Can't use unary '-' before a ValidatedType", 2) end
-
-		function __eq(v1, v2)
-			if getmetatable(v1) == ValidatedType and getmetatable(v2) == ValidatedType and v1.AllowNil == v2.AllowNil and #v1 == #v2 then
-				local index = -1
-				while rawget(v1, index) do
-					if v1[index] == v2[index] then
-						index = index - 1
-					else
-						return false
-					end
-				end
-
-				if rawget(v2, index) then return false end
-
-				for i = 1, #v1 do
-					if v1[i] ~= v2[i] then return false end
-				end
-
-				return true
-			else
-				return false
-			end
-		end
-
-		function __tostring(self)
-			local ret = ""
-
-			for _, tns in ipairs(self) do ret = ret .. " + " .. tostring(tns) end
-
-			local index = -1
-			while self[index] do
-				ret = ret .. " - " .. tostring(self[index])
-				index = index - 1
-			end
-
-			-- Allow nil
-			if self.AllowNil then ret = ret .. " + nil" end
-			if ret:sub(1, 2) == " +" then ret = ret:sub(4, -1) end
-
-			return ret
-		end
-	end)
-
 	namespace( nil )
 
 	class "Event" (function(_ENV)
@@ -6197,7 +5744,7 @@ do
 		property "Name" { Type = String, Default = "Anonymous" }
 
 		doc "Delegate" [[The delegate for the event handler, used to wrap the event call]]
-		property "Delegate" { Type = Function + nil }
+		property "Delegate" { Type = Function }
 
 		------------------------------------------------------
 		-- Constructor
@@ -6266,10 +5813,10 @@ do
 		property "Blocked" { Type = Boolean }
 
 		doc "Handler" [[The customer's handler]]
-		property "Handler" { Field = 0, Type = Function + nil, Handler = FireOnEventHandlerChanged }
+		property "Handler" { Field = 0, Type = Function, Handler = FireOnEventHandlerChanged }
 
 		doc "Delegate" [[The delegate for the event handler, used to wrap the event call]]
-		property "Delegate" { Type = Function + nil }
+		property "Delegate" { Type = Function }
 
 		------------------------------------------------------
 		-- Constructor
@@ -6414,7 +5961,7 @@ do
 						-- Clone if needed
 						if arg.CloneNeeded then value = CloneObj(value, true) end
 						-- Validate the value
-						value = arg.Type:GetValidatedValue(value)
+						value = GetValidatedValue(arg.Type, value)
 						if value == nil then return CACHE_TABLE(cache) end
 					end
 
@@ -6436,7 +5983,7 @@ do
 						-- Clone if needed
 						if arg.CloneNeeded then value = CloneObj(value, true) end
 						-- Validate the value
-						value = arg.Type:GetValidatedValue(value)
+						value = GetValidatedValue(arg.Type, value)
 						if value == nil then return CACHE_TABLE(cache) end
 					end
 
@@ -6448,7 +5995,7 @@ do
 
 				if base == 1 then tinsert(cache, 1, (select(1, ...))) end
 
-				-- Keep arguments in thread, so cache can be recycled
+				-- Keep arguments waiting for recycle
 				if argsChanged then
 					self.ArgCache = cache
 				else
@@ -6538,7 +6085,6 @@ do
 
 				return self.__Next or nil
 			end,
-			Type = FixedMethod + Function + nil,
 		}
 
 		doc "Usage" [[The usage of the fixed method]]
@@ -6887,6 +6433,7 @@ do
 					arg1 = target.Name
 					arg2 = targetType
 					arg3 = owner
+					arg4 = target.Name
 				elseif targetType == AttributeTargets.Method then
 					arg1 = getmetatable(target) and target.Method or target
 					arg2 = targetType
@@ -6901,6 +6448,7 @@ do
 					arg1 = name
 					arg2 = targetType
 					arg3 = owner
+					arg4 = name
 				elseif targetType == AttributeTargets.Constructor then
 					arg1 = getmetatable(target) and target.Method or target
 					arg2 = targetType
@@ -7232,7 +6780,7 @@ do
 		__Attribute__ = SendAttributeToPrepared
 	end)
 
-	-- Attribute system on
+	-- Attribute system OnLine
 	ATTRIBUTE_INSTALLED = true
 
 	class "__Unique__" (function(_ENV)
@@ -7364,40 +6912,40 @@ do
 	end)
 
 	struct "Argument" (function(_ENV)
-		Name = String + nil
-		Type = Any + nil
-		Default = Any + nil
-		IsList = Boolean + nil
+		Type = AnyType
+		Nilable = Boolean
+		Default = Any
+		Name = String
+		IsList = Boolean
+		CloneNeeded = Boolean
 
-		local function isCloneNeeded(self)
-			if getmetatable(self) ~= ValidatedType then return end
+		local function isCloneNeeded(ns)
+			if not ns then return false end
 
-			for _, ns in ipairs(self) do
-				local info = _NSInfo[ns]
+			local info = _NSInfo[ns]
 
-				if info and info.Type == TYPE_STRUCT then
-					if info.SubType == _STRUCT_TYPE_MEMBER then
-						if info.Validator then return true end
+			if info and info.Type == TYPE_STRUCT then
+				if info.SubType == _STRUCT_TYPE_MEMBER then
+					if info.Validator then return true end
 
-						if info.Members then
-							for _, n in ipairs(info.Members) do
-								if isCloneNeeded(info.StructEnv[n]) then return true end
-							end
+					if info.Members then
+						for _, n in ipairs(info.Members) do
+							if isCloneNeeded(info.StructEnv[n]) then return true end
 						end
-					elseif info.SubType == _STRUCT_TYPE_ARRAY then
-						if isCloneNeeded(info.ArrayElement) then return true end
-					elseif info.SubType == _STRUCT_TYPE_CUSTOM and info.Validator then
-						return true
 					end
+				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+					return isCloneNeeded(info.ArrayElement)
+				elseif info.SubType == _STRUCT_TYPE_CUSTOM and info.Validator then
+					return true
 				end
 			end
+
+			return false
 		end
 
 		function Argument(value)
-			value.Type = GetUniqueValidatedType(value.Type and BuildValidatedType(value.Type) or nil)
-
 			if value.Type and value.Default ~= nil then
-				value.Default = value.Type:GetValidatedValue(value.Default)
+				value.Default = GetValidatedValue(value.Type, value.Default)
 			end
 
 			-- Whether the value should be clone, argument match would change some value, Just for safe
@@ -7416,29 +6964,18 @@ do
 		_Error_NotList = [[arg%d can't be a list]]
 
 		local function ValidateArgument(self, i)
-			local arg = self[i]
+			local ok, arg = pcall(Argument, self[i])
 
-			if getmetatable(arg) ~= nil then
-				-- Convert to type
-				if getmetatable(arg) == TYPE_NAMESPACE then arg = ValidatedType(arg) end
+			if ok then
+				self[i] = arg
 
-				-- Convert type to Argument
-				if getmetatable(arg) == ValidatedType then
-					arg = Argument { Type = arg }
-					self[i] = arg
-				else
-					error(_Error_Header .. _Error_NotArgument:format(i))
-				end
-			end
-
-			if pcall( Argument, arg ) then
 				-- Check ... args
 				if arg.IsList then
 					if i == #self then
 						if self.MinArgs then
 							error(_Error_Header .. _Error_NotList:format(i))
 						else
-							if not arg.Type or arg.Type:Is(nil) then
+							if not arg.Type or arg.Nilable then
 								self.MinArgs = i - 1
 							else
 								-- Must have one parameter at least
@@ -7453,7 +6990,7 @@ do
 					else
 						error(_Error_Header .. _Error_NotList:format(i))
 					end
-				elseif not arg.Type or arg.Type:Is(nil) then
+				elseif not arg.Type or arg.Nilable then
 					if not self.MinArgs then self.MinArgs = i - 1 end
 				elseif self.MinArgs then
 					-- Only optional args can be defined after optional args
@@ -7461,8 +6998,8 @@ do
 				end
 
 				-- Auto generate Default
-				if arg.Default == nil and arg.Type and arg.Type:Is(nil) and #(arg.Type) == 1 then
-					local info = _NSInfo[arg.Type[1]]
+				if arg.Default == nil and arg.Type and arg.Nilable then
+					local info = _NSInfo[arg.Type]
 					if info and (info.Type == TYPE_STRUCT or info.Type == TYPE_ENUM) then arg.Default = info.Default end
 				end
 
@@ -7522,6 +7059,13 @@ do
 		__Sealed__:ApplyAttribute(Userdata)
 		__Sealed__:ApplyAttribute(Thread)
 		__Sealed__:ApplyAttribute(Any)
+		__Sealed__:ApplyAttribute(Callable)
+		__Sealed__:ApplyAttribute(Class)
+		__Sealed__:ApplyAttribute(Interface)
+		__Sealed__:ApplyAttribute(Struct)
+		__Sealed__:ApplyAttribute(Enum)
+		__Sealed__:ApplyAttribute(AnyType)
+
 		__Sealed__:ApplyAttribute(Argument)
 
 		------------------------------------------------------
@@ -7580,10 +7124,6 @@ do
 		__Sealed__:ApplyAttribute(Reflector)
 		__Final__:ApplyAttribute(Reflector, AttributeTargets.Interface)
 
-		-- ValidatedType
-		__Sealed__:ApplyAttribute(ValidatedType)
-		__Final__:ApplyAttribute(ValidatedType, AttributeTargets.Class)
-
 		-- Event
 		__Sealed__:ApplyAttribute(Event)
 		__Final__:ApplyAttribute(Event, AttributeTargets.Class)
@@ -7608,7 +7148,7 @@ do
 		-- Property
 		------------------------------------------------------
 		doc "Delegate" [[The delegate function]]
-		property "Delegate" { Type = Function + nil }
+		property "Delegate" { Type = Function }
 
 		------------------------------------------------------
 		-- Method
@@ -7663,11 +7203,6 @@ do
 			end
 		end
 	end)
-
-	-- Apply Attribute to ValidatedType class
-	do
-		__Cache__:ApplyAttribute(ValidatedType, AttributeTargets.Class)
-	end
 
 	enum "StructType" {
 		"MEMBER",
@@ -7805,12 +7340,12 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Require__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Require__" [[Whether the method or property is required to be override]]
+		doc "__Require__" [[Whether the method or property is required to be override, or a member of a struct is required.]]
 
 		------------------------------------------------------
 		-- Method
@@ -7825,6 +7360,9 @@ do
 				elseif targetType == AttributeTargets.Property then
 					info.RequireProperty = info.RequireProperty or {}
 					info.RequireProperty[name] = true
+				elseif targetType == AttributeTargets.Member then
+					info.RequireMember = info.RequireMember or {}
+					info.RequireMember[name] = true
 				end
 			end
 		end
@@ -7892,7 +7430,7 @@ do
 		-- Property
 		------------------------------------------------------
 		doc "Event" [[The event that bind to the property]]
-		property "Event" { Type = String + nil }
+		property "Event" { Type = String }
 
 		------------------------------------------------------
 		-- Method
@@ -7911,7 +7449,14 @@ do
 			return Super(self)
 		end
 
-		__Arguments__{ String + Event }
+		__Arguments__{ Event }
+		function __Event__(self, value)
+			self.Event = value
+
+			return Super(self)
+		end
+
+		__Arguments__{ String }
 		function __Event__(self, value)
 			self.Event = value
 
@@ -7926,11 +7471,14 @@ do
 
 		doc "__Handler__" [[Used to bind an handler(method name or function) to the property]]
 
+		__Sealed__()
+		struct "HandlerType" { function(value) assert(type(value) == "function" or type(value) == "string", "%s must be a function or method name.") end }
+
 		------------------------------------------------------
 		-- Property
 		------------------------------------------------------
 		doc "Handler" [[The handler that bind to the property]]
-		property "Handler" { Type = String + Function + nil }
+		property "Handler" { Type = HandlerType }
 
 		------------------------------------------------------
 		-- Method
@@ -7950,7 +7498,7 @@ do
 			return Super(self)
 		end
 
-		__Arguments__{ String + Function }
+		__Arguments__{ HandlerType }
 		function __Handler__(self, value)
 			self.Handler = value
 
@@ -7969,7 +7517,7 @@ do
 		-- Property
 		------------------------------------------------------
 		doc "Default" [[The default value]]
-		property "Default" { Type = Any + nil }
+		property "Default" { Type = Any }
 
 		------------------------------------------------------
 		-- Method
@@ -7982,11 +7530,11 @@ do
 			elseif targetType == AttributeTargets.Member then
 				local info = _NSInfo[owner]
 				if not info or info.SubType ~= _STRUCT_TYPE_MEMBER then return end
-				local ty = rawget(info.StructEnv, target)
-				if not IsValidatedType(ty) or not ty:GetObjectType(self.Default) then return end
+				local val = GetValidatedValue(rawget(info.StructEnv, target), self.Default)
+				if val == nil then return end
 
 				info.DefaultField = info.DefaultField or {}
-				info.DefaultField[target] = self.Default
+				info.DefaultField[target] = val
 			else
 				_NSInfo[target].Default = self.Default
 			end
@@ -8038,7 +7586,7 @@ do
 
 		------------------------------------------------------
 		doc "Setter" [[The setter settings]]
-		property "Setter" { Type = Setter + nil }
+		property "Setter" { Type = Setter }
 
 		------------------------------------------------------
 		-- Method
@@ -8074,7 +7622,7 @@ do
 
 		------------------------------------------------------
 		doc "Getter" [[The getter settings]]
-		property "Getter" { Type = Getter + nil }
+		property "Getter" { Type = Getter }
 
 		------------------------------------------------------
 		-- Method
@@ -8759,16 +8307,16 @@ do
 		-- Property
 		------------------------------------------------------
 		__Doc__[[The module itself]]
-		property "_M" { Get = function(self) return self end, }
+		property "_M" { Get = function(self) return self end }
 
 		__Doc__[[The module's name]]
-		property "_Name" { Get = function(self) return _ModuleInfo[self].Name end, }
+		property "_Name" { Get = function(self) return _ModuleInfo[self].Name end }
 
 		__Doc__[[The module's parent module]]
-		property "_Parent" { Get = function(self) return _ModuleInfo[self].Parent end, }
+		property "_Parent" { Get = function(self) return _ModuleInfo[self].Parent end }
 
 		__Doc__[[The module's version]]
-		property "_Version" { Get = function(self) return _ModuleInfo[self].Version end, }
+		property "_Version" { Get = function(self) return _ModuleInfo[self].Version end }
 
 		------------------------------------------------------
 		-- Dispose

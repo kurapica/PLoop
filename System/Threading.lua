@@ -191,7 +191,6 @@ interface "Threading" (function(_ENV)
 					self.__Thread = nil
 				end
 			end,
-			Type = System.Function + System.Thread + System.Threading.Thread + nil,
 		}
 
 		------------------------------------------------------

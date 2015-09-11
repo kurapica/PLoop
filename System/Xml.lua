@@ -762,7 +762,7 @@ do
 end
 
 struct "XmlAttribute" {
-	Prefix = String + nil,
+	Prefix = String,
 	Key = String,
 	Value = String,
 }

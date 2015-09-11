@@ -213,7 +213,7 @@ class "Logger" (function(_ENV)
 		Get = function(self)
 			return _Info[self].TimeFormat
 		end,
-		Type = String + nil,
+		Type = String,
 	}
 
 	------------------------------------------------------

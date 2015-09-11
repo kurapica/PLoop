@@ -26,7 +26,7 @@ class "Error" (function(_ENV)
 	}
 
 	__Doc__[[The error message]]
-	property "Message" { Type = System.String + nil }
+	property "Message" { Type = System.String }
 
 	--------------------------------------
 	--- Constructor

@@ -25,7 +25,7 @@ class "FileWriter" (function(_ENV)
 	}
 
 	-- Property
-	property "File" { Type = Userdata + nil }
+	property "File" { Type = Userdata }
 
 	-- Method
 	function Write(self, text)
@@ -41,13 +41,18 @@ class "FileWriter" (function(_ENV)
 	end
 
 	-- Constructor
-	__Arguments__{ Userdata + String, FileWriteMode + nil }
+	__Arguments__{ Userdata }
 	function FileWriter(self, file, mode)
-		if type(file) == "userdata" and tostring(file):match("^file") then
+		if tostring(file):match("^file") then
 			self.File = file
-		elseif type(file) == "string" then
-			self.File = fopen(file, mode)
 		end
+
+		assert(self.File , "No file can be written.")
+	end
+
+	__Arguments__{ String, Argument(FileWriteMode, true) }
+	function FileWriter(self, file, mode)
+		self.File = fopen(file, mode)
 
 		assert(self.File , "No file can be written.")
 	end
