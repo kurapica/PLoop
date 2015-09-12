@@ -4348,6 +4348,7 @@ do
 	namespace "System"
 
 	struct "Boolean"	{ Default = false, function (value) return value and true or false end }
+	struct "BooleanNil"	{ function (value) return value and true or false end }
 	struct "String"		{ function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
 	struct "Number"		{ Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
 	struct "NumberNil"	{ function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
