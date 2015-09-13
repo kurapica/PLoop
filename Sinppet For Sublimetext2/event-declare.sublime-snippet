@@ -1,9 +1,0 @@
-<snippet>
-	<content><![CDATA[
-__Doc__[[${2:description}]]
-event "${1:event_name}"
-]]></content>
-    <tabTrigger>event</tabTrigger>
-    <scope>source.lua</scope>
-    <description>event</description>
-</snippet>
