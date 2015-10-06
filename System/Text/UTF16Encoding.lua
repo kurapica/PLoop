@@ -6,12 +6,14 @@ Module "System.Text.UTF16Encoding" "1.0.0"
 
 namespace "System.Text"
 
+_Cache = setmetatable({}, {__call = function(self, key) if key then for i in ipairs(key) do key[i] = nil end tinsert(self, key) else return tremove(self) or {} end end})
+
 __Doc__[[Represents the utf-16 encoding with little-endian.]]
 __Abstract__() class "UTF16EncodingLE" (function(_ENV)
 	inherit "Encoding"
 
 	__Static__()
-	property "EncodingName" { Set = false, Default = "UTF-16" }
+	property "EncodingName" { Set = false, Default = "UTF-16LE" }
 
 	__Doc__[[Decode to the unicode code points]]
 	__Static__()
@@ -23,21 +25,25 @@ __Abstract__() class "UTF16EncodingLE" (function(_ENV)
 		if type(codes) == "number" then
 			return encodeLE(codes)
 		elseif type(codes) == "table" then
-			local cache = {}
+			local cache = _Cache()
 
 			for _, code in ipairs(codes) do
 				tinsert(cache, encodeLE(code))
 			end
 
-			return tconcat(cache)
+			local ret = tconcat(cache)
+			_Cache(cache)
+			return ret
 		elseif type(codes) == "function" then
-			local cache = {}
+			local cache = _Cache()
 
 			for _, code in codes, arg1, arg2 do
 				tinsert(cache, encodeLE(code))
 			end
 
-			return tconcat(cache)
+			local ret = tconcat(cache)
+			_Cache(cache)
+			return ret
 		end
 	end
 end)
@@ -47,7 +53,7 @@ __Abstract__() class "UTF16EncodingBE" (function(_ENV)
 	inherit "Encoding"
 
 	__Static__()
-	property "EncodingName" { Set = false, Default = "UTF-16" }
+	property "EncodingName" { Set = false, Default = "UTF-16BE" }
 
 	__Doc__[[Whether the encoding is big-endian]]
 	property "IsBigEndian" { Type = Boolean, Default = true }

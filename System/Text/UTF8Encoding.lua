@@ -6,7 +6,9 @@ Module "System.Text.UTF8Encoding" "1.0.0"
 
 namespace "System.Text"
 
- REPLACE_CHARACTER = "\0xFFFD"
+REPLACE_CHARACTER = "\0xFFFD"
+
+_Cache = setmetatable({}, {__call = function(self, key) if key then for i in ipairs(key) do key[i] = nil end tinsert(self, key) else return tremove(self) or {} end end})
 
 --[[
 7	U+0000		U+007F		1	0xxxxxxx
@@ -30,24 +32,29 @@ __Abstract__() class "UTF8Encoding" (function(_ENV)
 	__Doc__[[Encode the unicode code points]]
 	__Static__()
 	function Encode(codes, arg1, arg2)
-		if type(codes) == "number" then
+		local ty = type(codes)
+		if ty == "number" then
 			return encode(codes)
-		elseif type(codes) == "table" then
-			local cache = {}
+		elseif ty == "table" then
+			local cache = _Cache()
 
 			for _, code in ipairs(codes) do
 				tinsert(cache, encode(code))
 			end
 
-			return tconcat(cache)
-		elseif type(codes) == "function" then
-			local cache = {}
+			local ret = tconcat(cache)
+			_Cache(cache)
+			return ret
+		elseif ty == "function" then
+			local cache = _Cache()
 
 			for _, code in codes, arg1, arg2 do
 				tinsert(cache, encode(code))
 			end
 
-			return tconcat(cache)
+			local ret = tconcat(cache)
+			_Cache(cache)
+			return ret
 		end
 	end
 end)

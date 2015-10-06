@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/09/11
--- Version			r129
+-- Last Update Date 2015/09/14
+-- Version			r130
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -178,7 +178,6 @@ do
 
 	TYPE_NAMESPACE = "NameSpace"
 	TYPE_SUPERALIAS = "SuperAlias"
-	TYPE_TYPE = "TYPE"
 
 	-- Disposing method name
 	DISPOSE_METHOD = "Dispose"
@@ -246,16 +245,7 @@ do
 		return chkValue( resume(th, ...) )
 	end
 
-	CACHE_TABLE = setmetatable({}, {
-		__call = function(self, key)
-			if key then
-				wipe(key)
-				tinsert(self, key)
-			else
-				return tremove(self) or {}
-			end
-		end,
-	})
+	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end})
 
 	function SaveFixedMethod(storage, key, value, owner, targetType)
 		if ATTRIBUTE_INSTALLED then
@@ -5232,7 +5222,7 @@ do
 		]]
 		function GetStructArrayElement(ns)
 			local info = _NSInfo[ns]
-			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement:Clone() or nil
+			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement or nil
 		end
 
 		doc "HasStructMember" [[

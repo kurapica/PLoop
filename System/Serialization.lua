@@ -13,65 +13,193 @@ __Doc__ [[Serialization is the process of converting the state of an object into
 __Final__() __Sealed__()
 interface "Serialization" (function (_ENV)
 
-	local function Serialize2Info(object, oType)
-		if type(object) == "table" then
-			local info = SerializationInfo()
+	--------------------------------------
+	-- Helper
+	--------------------------------------
+	class "SerializationInfo" {}
 
-			local cls = getmetatable(object)
+	_Cache = setmetatable({}, {
+		__call = function(self, key)
+			if key then
+				wipe(key)
+				tinsert(self, key)
+			else
+				return tremove(self) or {}
+			end
+		end,
+	})
 
-			if IsClass(cls) then
-				if IsExtendedInterface(cls, ISerializable) then
-					object:Serialize(info)
-				else
-					for prop in GetAllProperties(cls) do
-						if IsPropertyReadable(cls, prop) and not GetPropertyAttribute(cls, prop, __NonSerialized__) then
-							local value = object[prop]
+	local function Serialize2Data(object, oType, cache)
+		assert(not cache[object], "Duplicated object is not supported for serialization.")
+		cache[object] = true
 
-							if IsSerializable(value) then
-								info[prop] = Serialize2Info(value)
-							end
+		local storage = {}
+
+		local cls = getmetatable(object) or oType
+		local clsType = cls and GetNameSpaceType(cls)
+
+		if clsType == "Class" then
+			if IsExtendedInterface(cls, ISerializable) then
+				local info = rycInfo()
+				_InfoStorage[info] = storage
+				_InfoCache[info] = cache
+
+				object:Serialize(info)
+
+				rycInfo(info)
+			else
+				for prop in GetProperties(cls) do
+					if IsPropertyReadable(cls, prop) and not GetPropertyAttribute(cls, prop, __NonSerialized__) then
+						local value = object[prop]
+
+						if value ~= nil and IsSerializable(value) then
+							if type(value) == "table" then value = Serialize2Data(value, GetPropertyType(cls, prop), cache) end
+							storage[prop] = value
 						end
 					end
 				end
+			end
+		elseif clsType == "Struct" then
+			local stype = GetStructType(oType)
 
-				return info
+			if stype == "ARRAY" then
+				local eleType = GetStructArrayElement(oType)
+
+				for _, value in ipairs(object) do
+					if IsSerializable(value) then
+						if type(value) == "table" then value = Serialize2Data(value, eleType, cache) end
+						tinsert(storage, value)
+					end
+				end
+			elseif stype == "MEMBER" then
+				for _, member in GetStructMembers(oType) do
+					if not GetMemberAttribute(cls, member, __NonSerialized__) then
+						local value = object[member]
+
+						if type(value) == "table" then value = Serialize2Data(value, GetStructMember(oType, member), cache) end
+						storage[member] = value
+					end
+				end
+			elseif type(object.Serialize) == "function" then
+				local info = rycInfo()
+				_InfoStorage[info] = storage
+				_InfoCache[info] = cache
+
+				object:Serialize(info)
+
+				rycInfo(info)
+			end
+		else
+			-- Default
+			for key, value in pairs(object) do
+				local ty = type(key)
+
+				if (ty == "string" or ty == "number") and IsSerializable(value) then
+					if type(value) == "table" then value = Serialize2Data(value, nil, cache) end
+					storage[key] = value
+				end
+			end
+		end
+
+		if cls and not Serialization.IgnoreObjectType then storage[Serialization.ObjectTypeField] = cls end
+
+		return storage
+	end
+
+	local function Deserialize2Object(storage, oType)
+		if type(storage) == "table" then
+			local objTypeField = Serialization.ObjectTypeField
+			local tarType = storage[objTypeField]
+			local clsType
+
+			if tarType ~= nil then
+				storage[objTypeField] = nil
+
+				if type(tarType) == "string" then
+					tarType = GetNameSpaceForName(tarType)
+				end
+
+				clsType = tarType and GetNameSpaceType(tarType)
+
+				if clsType == "Class" or clsType == "Struct" then oType = tarType end
 			end
 
-			if IsStruct(oType) then
+			clsType = oType and GetNameSpaceType(oType)
+
+			if clsType == "Class" then
+				if IsExtendedInterface(oType, ISerializable) then
+					local info = rycInfo()
+					_InfoStorage[info] = storage
+
+					local obj = oType(info)
+
+					rycInfo(info)
+
+					return obj
+				else
+					for prop in GetProperties(oType) do
+						if IsPropertyWritable(oType, prop) and not GetPropertyAttribute(oType, prop, __NonSerialized__) then
+							local value = storage[prop]
+
+							if value ~= nil then
+								storage[prop] = Deserialize2Object(value, GetPropertyType(oType, prop))
+							end
+						end
+					end
+
+					return oType(storage)
+				end
+			end
+
+			if clsType == "Struct" then
 				local stype = GetStructType(oType)
 
 				if stype == "ARRAY" then
-					for i, v in ipairs(object) do
+					local eleType = GetStructArrayElement(oType)
 
+					for i, v in ipairs(storage) do
+						storage[i] = Deserialize2Object(v, eleType)
 					end
 
-					return info
-				else
+					return oType(storage)
+				elseif stype == "MEMBER" then
 					for _, member in GetStructMembers(oType) do
+						local val = storage[member]
 
+						if val ~= nil then
+							storage[member] = Deserialize2Object(val, GetStructMember(oType, member))
+						end
 					end
 
-					return info
+					return oType(storage)
+				else
+					error("Deserialize table data to custom struct type is not supported.", 3)
 				end
 			end
-
-			-- Default
-			for k, v in pairs(object) do
-				local ty = type(k)
-
-				if (ty == "string" or ty == "number") and IsSerializable(v) then
-					info[k] = Serialize2Info(v)
-				end
-			end
-
-			return info
 		else
-			return object
+			clsType = oType and GetNameSpaceType(oType)
+
+			if clsType then
+				if clsType == "Struct" then
+					if GetStructType(oType) == "CUSTOM" then
+						return oType(storage)
+					end
+				end
+
+				error(("Deserialize non-table data to %s is not supported."):format(tostring(oType)), 3)
+			end
 		end
+
+		return storage
 	end
 
-	local function Info2Object(info, oType)
+	rycInfo = Recycle(SerializationInfo)
+	_InfoStorage = {}
+	_InfoCache = {}
 
+	function rycInfo:OnPush(info)
+		_InfoStorage[info] = nil
+		_InfoCache[info] = nil
 	end
 
 	--------------------------------------
@@ -90,38 +218,85 @@ interface "Serialization" (function (_ENV)
 	__Doc__ [[Allows an object to control its own serialization and deserialization.]]
 	interface "ISerializable" (function (_ENV)
 		__Doc__[[Use a SerializationInfo to serialize the target object.]]
-		__Require__() function Serialize(self, info) end
+		__Require__() function Serialize(dt, info) end
 	end)
 
-	__Sealed__() struct "Serializable" { function (value) assert(IsSerializable(value), "%s must be serializable.") end }
+	__Sealed__()
+	struct "Serializable" { function (value) assert(IsSerializable(value), "%s must be serializable.") end }
 
 	__Doc__ [[Stores all the data needed to serialize or deserialize an object. ]]
-	__Sealed__() __Final__() struct "SerializationInfo" (function (_ENV)
+	__Sealed__() __Final__()
+	class "SerializationInfo" (function (_ENV)
 		__Doc__[[Store the data to the SerializationInfo.]]
 		function SetValue(self, name, value, oType)
-			assert(IsSerializable(value), "SerializationInfo:SetValue(name, value[, oType]) - value must be serializable")
+			if value == nil then return end
+
+			local storage = _InfoStorage[self]
+
+			assert(storage, "SerializationInfo:SetValue(name, value[, oType]) - access denied.")
+			assert(IsSerializable(value), "SerializationInfo:SetValue(name, value[, oType]) - value must be serializable.")
 
 			if type(value) == "table" then
-				self[name] = Serialize2Info(value, oType)
+				storage[name] = Serialize2Data(value, oType, _InfoCache[self])
 			else
-				self[name] = value
+				storage[name] = value
 			end
 		end
 
 		__Doc__[[Get the data from the SerializationInfo with data type.]]
 		function GetValue(self, name, oType)
-			local val = self[name]
+			local storage = _InfoStorage[self]
+
+			assert(storage, "SerializationInfo:SetValue(name, value[, oType]) - access denied.")
+			local val = storage[name]
 
 			if type(val) == "table" then
-				return Info2Object(val, oType)
+				return Deserialize2Object(val, oType)
 			else
 				return val
 			end
 		end
-
-		-- Use Validator as constructor
-		function SerializationInfo() return {} end
 	end)
+
+	__Doc__ [[Provide a format for serialization. Used to serialize the table data to target format or convert the target format data to the table data.]]
+	__Abstract__()
+	class "FormatProvider" (function (_ENV)
+		__Doc__[[Serialize the common lua data to the target format for storage.]]
+		__Arguments__{ Any }
+		function Serialize(self, data)
+			error(("%s has no implementation for FormatProvider:Serialize(System.Any)"):format(getmetatable(self)))
+		end
+
+		__Arguments__{ Any, Function }
+		function Serialize(self, data, write)
+			error(("%s has no implementation for FormatProvider:Serialize(System.Any, write)"):format(getmetatable(self)))
+		end
+
+		__Arguments__{ Any, System.Text.TextWriter }
+		function Serialize(self, data, writer)
+			error(("%s has no implementation for FormatProvider:Serialize(System.Any, System.Text.TextWriter)"):format(getmetatable(self)))
+		end
+
+		__Doc__[[Deserialize the data to common lua data.]]
+		__Arguments__{ Any }
+		function Deserialize(self, data)
+			error(("%s has no implementation for FormatProvider:Deserialize(System.Any)"):format(getmetatable(self)))
+		end
+
+		__Arguments__{ System.Text.TextReader }
+		function Deserialize(self, reader)
+			error(("%s has no implementation for FormatProvider:Deserialize(System.Text.TextReader)"):format(getmetatable(self)))
+		end
+	end)
+
+	--------------------------------------
+	-- Static Property
+	--------------------------------------
+	__Doc__[[The field that used to store the object's type]]
+	__Static__() property "ObjectTypeField" { Type = String , Default = "__PLoop_ObjectType" }
+
+	__Doc__[[Whether ignore the object's type for serialization]]
+	__Static__() property "IgnoreObjectType" { Type = Boolean }
 
 	--------------------------------------
 	-- Static Method
@@ -131,7 +306,7 @@ interface "Serialization" (function (_ENV)
 		local otype = type(obj)
 
 		if otype == "table" then
-			local cls = getmetatable(otype)
+			local cls = getmetatable(obj)
 
 			if cls == nil then
 				return true
@@ -143,41 +318,79 @@ interface "Serialization" (function (_ENV)
 		end
 	end
 
-	__Arguments__{ String }
-	__Static__() function Deserialize(data)
-
+	__Arguments__{ FormatProvider, Any }
+	__Static__() function Deserialize(provider, data)
+		return Deserialize2Object(provider:Deserialize(data))
 	end
 
-	__Arguments__{ System.Text.TextReader }
-	__Static__() function Deserialize(reader)
-
+	__Arguments__{ FormatProvider, System.Text.TextReader }
+	__Static__() function Deserialize(provider, reader)
+		return Deserialize2Object(provider:Deserialize(reader))
 	end
 
-	__Arguments__{ Serializable }
-	__Static__() function Serialize(object)
-		if type(object) == "table" then
-			local cls = getmetatable(object)
-
-			if cls and IsExtendedInterface(cls, IsSerializable) then
-			else
-			end
-		else
-		end
+	__Arguments__{ FormatProvider, Any, AnyType }
+	__Static__() function Deserialize(provider, data, oType)
+		return Deserialize2Object(provider:Deserialize(data), oType)
 	end
 
-	__Arguments__{ Serializable, Function }
-	__Static__() function Serialize(object, write)
-		if type(object) == "table" then
-
-		else
-		end
+	__Arguments__{ FormatProvider, System.Text.TextReader, AnyType }
+	__Static__() function Deserialize(provider, reader, oType)
+		return Deserialize2Object(provider:Deserialize(reader), oType)
 	end
 
-	__Arguments__{ Serializable, System.Text.TextWriter }
-	__Static__() function Serialize(object, writer)
-		if type(object) == "table" then
+	__Arguments__{ FormatProvider, Serializable }
+	__Static__() function Serialize(provider, object)
+		if type(object) ~= "table" then return provider:Serialize(object) end
 
-		else
-		end
+		local cache = _Cache()
+		local ret = provider:Serialize(Serialize2Data(object, nil, cache))
+		_Cache(cache)
+		return ret
+	end
+
+	__Arguments__{ FormatProvider, Serializable, Function }
+	__Static__() function Serialize(provider, object, write)
+		if type(object) ~= "table" then return provider:Serialize(object, write) end
+
+		local cache = _Cache()
+		provider:Serialize(Serialize2Data(object, nil, cache), write)
+		_Cache(cache)
+	end
+
+	__Arguments__{ FormatProvider, Serializable, System.Text.TextWriter }
+	__Static__() function Serialize(provider, object, writer)
+		if type(object) ~= "table" then return provider:Serialize(object, writer) end
+
+		local cache = _Cache()
+		provider:Serialize(Serialize2Data(object, nil, cache), writer)
+		_Cache(cache)
+	end
+
+	__Arguments__{ FormatProvider, Serializable, AnyType }
+	__Static__() function Serialize(provider, object, oType)
+		if type(object) ~= "table" then return provider:Serialize(object) end
+
+		local cache = _Cache()
+		local ret = provider:Serialize(Serialize2Data(object, oType, cache))
+		_Cache(cache)
+		return ret
+	end
+
+	__Arguments__{ FormatProvider, Serializable, AnyType, Function }
+	__Static__() function Serialize(provider, object, oType, write)
+		if type(object) ~= "table" then return provider:Serialize(object, write) end
+
+		local cache = _Cache()
+		provider:Serialize(Serialize2Data(object, oType, cache), write)
+		_Cache(cache)
+	end
+
+	__Arguments__{ FormatProvider, Serializable, AnyType, System.Text.TextWriter }
+	__Static__() function Serialize(provider, object, oType, writer)
+		if type(object) ~= "table" then return provider:Serialize(object, writer) end
+
+		local cache = _Cache()
+		provider:Serialize(Serialize2Data(object, oType, cache), writer)
+		_Cache(cache)
 	end
 end)
