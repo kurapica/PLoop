@@ -85,7 +85,7 @@ function decode(str, startp)
 	elseif byte < 0xE0 then
 		-- 2-byte
 		local sbyte = strbyte(str, startp + 1)
-		if floor(sbyte / 0x40) ~= 2 then
+		if not sbyte or floor(sbyte / 0x40) ~= 2 then
 			-- Error
 			return startp + 1, byte + 0xDC00
 		end
@@ -93,7 +93,7 @@ function decode(str, startp)
 	elseif byte < 0xF0 then
 		-- 3-byte
 		local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
-		if floor(sbyte / 0x40) ~= 2 or (byte == 0xE0 and sbyte < 0xA0) or floor(tbyte / 0x40) ~= 2 then
+		if not (sbyte and tbyte) or floor(sbyte / 0x40) ~= 2 or (byte == 0xE0 and sbyte < 0xA0) or floor(tbyte / 0x40) ~= 2 then
 			-- Error
 			return startp + 1, byte + 0xDC00
 		end
@@ -101,7 +101,7 @@ function decode(str, startp)
 	elseif byte < 0xF5 then
 		-- 4-byte
 		local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
-		if floor(sbyte / 0x40) ~= 2 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or floor(tbyte / 0x40) ~= 2 or floor(fbyte / 0x40) ~= 2 then
+		if not (sbyte and tbyte and fbyte) or floor(sbyte / 0x40) ~= 2 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or floor(tbyte / 0x40) ~= 2 or floor(fbyte / 0x40) ~= 2 then
 			-- Error
 			return startp + 1, byte + 0xDC00
 		end
@@ -169,7 +169,7 @@ if LUA_VERSION >= 5.3 then
 			elseif byte < 0xE0 then
 				-- 2-byte
 				local sbyte = strbyte(str, startp + 1)
-				if (sbyte & 0xC0) ~= 0x80 then
+				if not sbyte or (sbyte & 0xC0) ~= 0x80 then
 					-- Error
 					return startp + 1, byte + 0xDC00
 				end
@@ -177,7 +177,7 @@ if LUA_VERSION >= 5.3 then
 			elseif byte < 0xF0 then
 				-- 3-byte
 				local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
-				if (sbyte & 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or (tbyte & 0xC0) ~= 0x80 then
+				if not (sbyte and tbyte) or (sbyte & 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or (tbyte & 0xC0) ~= 0x80 then
 					-- Error
 					return startp + 1, byte + 0xDC00
 				end
@@ -185,7 +185,7 @@ if LUA_VERSION >= 5.3 then
 			elseif byte < 0xF5 then
 				-- 4-byte
 				local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
-				if (sbyte & 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or (tbyte & 0xC0) ~= 0x80 or (fbyte & 0xC0) ~= 0x80 then
+				if not (sbyte and tbyte and fbyte) or (sbyte & 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or (tbyte & 0xC0) ~= 0x80 or (fbyte & 0xC0) ~= 0x80 then
 					-- Error
 					return startp + 1, byte + 0xDC00
 				end
@@ -257,7 +257,7 @@ if (LUA_VERSION == 5.2 and type(bit32) == "table") or (LUA_VERSION == 5.1 and ty
 		elseif byte < 0xE0 then
 			-- 2-byte
 			local sbyte = strbyte(str, startp + 1)
-			if band(sbyte, 0xC0) ~= 0x80 then
+			if not sbyte or band(sbyte, 0xC0) ~= 0x80 then
 				-- Error
 				return startp + 1, byte + 0xDC00
 			end
@@ -265,7 +265,7 @@ if (LUA_VERSION == 5.2 and type(bit32) == "table") or (LUA_VERSION == 5.1 and ty
 		elseif byte < 0xF0 then
 			-- 3-byte
 			local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
-			if band(sbyte, 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or band(tbyte, 0xC0) ~= 0x80 then
+			if not (sbyte and tbyte) or band(sbyte, 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or band(tbyte, 0xC0) ~= 0x80 then
 				-- Error
 				return startp + 1, byte + 0xDC00
 			end
@@ -273,7 +273,7 @@ if (LUA_VERSION == 5.2 and type(bit32) == "table") or (LUA_VERSION == 5.1 and ty
 		elseif byte < 0xF5 then
 			-- 4-byte
 			local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
-			if band(sbyte, 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or band(tbyte, 0xC0) ~= 0x80 or band(fbyte, 0xC0) ~= 0x80 then
+			if not (sbyte and tbyte and fbyte) or band(sbyte, 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or band(tbyte, 0xC0) ~= 0x80 or band(fbyte, 0xC0) ~= 0x80 then
 				-- Error
 				return startp + 1, byte + 0xDC00
 			end
