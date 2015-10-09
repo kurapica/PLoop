@@ -101,7 +101,7 @@ interface "Serialization" (function (_ENV)
 			end
 		end
 
-		if cls and not Serialization.IgnoreObjectType then storage[Serialization.ObjectTypeField] = cls end
+		if cls and not Serialization.ObjectTypeIgnored then storage[Serialization.ObjectTypeField] = cls end
 
 		return storage
 	end
@@ -296,7 +296,7 @@ interface "Serialization" (function (_ENV)
 	__Static__() property "ObjectTypeField" { Type = String , Default = "__PLoop_ObjectType" }
 
 	__Doc__[[Whether ignore the object's type for serialization]]
-	__Static__() property "IgnoreObjectType" { Type = Boolean }
+	__Static__() property "ObjectTypeIgnored" { Type = Boolean }
 
 	--------------------------------------
 	-- Static Method
