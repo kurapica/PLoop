@@ -32,6 +32,20 @@ do
 		local k, v = next(data)
 		local nk, nv
 
+		if not Serialization.ObjectTypeIgnored then
+			local field = Serialization.ObjectTypeField
+			local val = data[field]
+			if val then
+				data[field] = nil
+
+				if next(data) then
+					write(strformat("%s=%q,", field, tostring(val)))
+				else
+					write(strformat("%s=%q", field, tostring(val)))
+				end
+			end
+		end
+
 		while k do
 			nk, nv = next(data, k)
 
@@ -60,6 +74,20 @@ do
 		local k, v = next(data)
 		local nk, nv
 		local subIndentChar = preIndentChar .. indentChar
+
+		if not Serialization.ObjectTypeIgnored then
+			local field = Serialization.ObjectTypeField
+			local val = data[field]
+			if val then
+				data[field] = nil
+
+				if next(data) then
+					write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+				else
+					write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+				end
+			end
+		end
 
 		while k do
 			nk, nv = next(data, k)
@@ -93,6 +121,20 @@ do
 		local k, v = next(data)
 		local nk, nv
 
+		if not Serialization.ObjectTypeIgnored then
+			local field = Serialization.ObjectTypeField
+			local val = data[field]
+			if val then
+				data[field] = nil
+
+				if next(data) then
+					write(object, strformat("%s=%q,", field, tostring(val)))
+				else
+					write(object, strformat("%s=%q", field, tostring(val)))
+				end
+			end
+		end
+
 		while k do
 			nk, nv = next(data, k)
 
@@ -121,6 +163,20 @@ do
 		local k, v = next(data)
 		local nk, nv
 		local subIndentChar = preIndentChar .. indentChar
+
+		if not Serialization.ObjectTypeIgnored then
+			local field = Serialization.ObjectTypeField
+			local val = data[field]
+			if val then
+				data[field] = nil
+
+				if next(data) then
+					write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+				else
+					write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+				end
+			end
+		end
 
 		while k do
 			nk, nv = next(data, k)
