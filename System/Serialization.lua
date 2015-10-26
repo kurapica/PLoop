@@ -30,7 +30,7 @@ interface "Serialization" (function (_ENV)
 	})
 
 	local function Serialize2Data(object, oType, cache)
-		assert(not cache[object], "Duplicated object is not supported for serialization.")
+		assert(not cache[object], "Duplicated object is not supported by System.Serialization .")
 		cache[object] = true
 
 		local storage = {}
@@ -88,8 +88,15 @@ interface "Serialization" (function (_ENV)
 				object:Serialize(info)
 
 				rycInfo(info)
+			else
+				-- A custom table data, can't know its true type, works as default
+				clsType = nil
 			end
 		else
+			clsType = nil
+		end
+
+		if not clsType then
 			-- Default
 			for key, value in pairs(object) do
 				local ty = type(key)
@@ -99,9 +106,10 @@ interface "Serialization" (function (_ENV)
 					storage[key] = value
 				end
 			end
+		else
+			-- Save the data type
+			storage[Serialization.ObjectTypeField] = cls
 		end
-
-		if cls and not Serialization.ObjectTypeIgnored then storage[Serialization.ObjectTypeField] = cls end
 
 		return storage
 	end
@@ -172,8 +180,13 @@ interface "Serialization" (function (_ENV)
 					end
 
 					return oType(storage)
-				else
-					error("Deserialize table data to custom struct type is not supported.", 3)
+				end
+			end
+
+			-- Default for no-type data or custom table struct data
+			for k, v in pairs(storage) do
+				if type(v) == "table" then
+					storage[k] = Deserialize2Object(v)
 				end
 			end
 		else
@@ -183,6 +196,10 @@ interface "Serialization" (function (_ENV)
 				if clsType == "Struct" then
 					if GetStructType(oType) == "CUSTOM" then
 						return oType(storage)
+					end
+				elseif clsType == "Enum" then
+					if oType(storage) ~= nil then
+						return storage
 					end
 				end
 
@@ -294,9 +311,6 @@ interface "Serialization" (function (_ENV)
 	--------------------------------------
 	__Doc__[[The field that used to store the object's type]]
 	__Static__() property "ObjectTypeField" { Type = String , Default = "__PLoop_ObjectType" }
-
-	__Doc__[[Whether ignore the object's type for serialization]]
-	__Static__() property "ObjectTypeIgnored" { Type = Boolean, Default = true }
 
 	--------------------------------------
 	-- Static Method

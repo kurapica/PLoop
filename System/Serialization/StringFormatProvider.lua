@@ -29,22 +29,20 @@ do
 	function SerializeDataWithWriteNoIndent(data, write)
 		write("{")
 
-		local k, v = next(data)
-		local nk, nv
+		local field = Serialization.ObjectTypeField
+		local val = data[field]
+		if val then
+			data[field] = nil
 
-		if not Serialization.ObjectTypeIgnored then
-			local field = Serialization.ObjectTypeField
-			local val = data[field]
-			if val then
-				data[field] = nil
-
-				if next(data) then
-					write(strformat("%s=%q,", field, tostring(val)))
-				else
-					write(strformat("%s=%q", field, tostring(val)))
-				end
+			if next(data) then
+				write(strformat("%s=%q,", field, tostring(val)))
+			else
+				write(strformat("%s=%q", field, tostring(val)))
 			end
 		end
+
+		local k, v = next(data)
+		local nk, nv
 
 		while k do
 			nk, nv = next(data, k)
@@ -71,23 +69,22 @@ do
 	function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak)
 		write("{" .. lineBreak)
 
-		local k, v = next(data)
-		local nk, nv
 		local subIndentChar = preIndentChar .. indentChar
 
-		if not Serialization.ObjectTypeIgnored then
-			local field = Serialization.ObjectTypeField
-			local val = data[field]
-			if val then
-				data[field] = nil
+		local field = Serialization.ObjectTypeField
+		local val = data[field]
+		if val then
+			data[field] = nil
 
-				if next(data) then
-					write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
-				else
-					write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
-				end
+			if next(data) then
+				write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+			else
+				write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
 			end
 		end
+
+		local k, v = next(data)
+		local nk, nv
 
 		while k do
 			nk, nv = next(data, k)
@@ -118,22 +115,20 @@ do
 	function SerializeDataWithWriterNoIndent(data, write, object)
 		write(object, "{")
 
-		local k, v = next(data)
-		local nk, nv
+		local field = Serialization.ObjectTypeField
+		local val = data[field]
+		if val then
+			data[field] = nil
 
-		if not Serialization.ObjectTypeIgnored then
-			local field = Serialization.ObjectTypeField
-			local val = data[field]
-			if val then
-				data[field] = nil
-
-				if next(data) then
-					write(object, strformat("%s=%q,", field, tostring(val)))
-				else
-					write(object, strformat("%s=%q", field, tostring(val)))
-				end
+			if next(data) then
+				write(object, strformat("%s=%q,", field, tostring(val)))
+			else
+				write(object, strformat("%s=%q", field, tostring(val)))
 			end
 		end
+
+		local k, v = next(data)
+		local nk, nv
 
 		while k do
 			nk, nv = next(data, k)
@@ -160,23 +155,22 @@ do
 	function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak)
 		write(object, "{" .. lineBreak)
 
-		local k, v = next(data)
-		local nk, nv
 		local subIndentChar = preIndentChar .. indentChar
 
-		if not Serialization.ObjectTypeIgnored then
-			local field = Serialization.ObjectTypeField
-			local val = data[field]
-			if val then
-				data[field] = nil
+		local field = Serialization.ObjectTypeField
+		local val = data[field]
+		if val then
+			data[field] = nil
 
-				if next(data) then
-					write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
-				else
-					write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
-				end
+			if next(data) then
+				write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+			else
+				write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
 			end
 		end
+
+		local k, v = next(data)
+		local nk, nv
 
 		while k do
 			nk, nv = next(data, k)
