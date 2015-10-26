@@ -21,7 +21,7 @@ do
 			return strformat("%q", data)
 		elseif dtType == "number" or dtType == "boolean" then
 			return tostring(data)
-		elseif dtType == "userdata" and GetNameSpaceType(data) then
+		elseif GetNameSpaceType(data) then
 			return strformat("%q", tostring(data))
 		end
 	end
