@@ -26,7 +26,7 @@ do
 		end
 	end
 
-	function SerializeDataWithWriteNoIndent(data, write)
+	function SerializeDataWithWriteNoIndent(data, write, objectTypeIgnored)
 		write("{")
 
 		local field = Serialization.ObjectTypeField
@@ -34,10 +34,12 @@ do
 		if val then
 			data[field] = nil
 
-			if next(data) then
-				write(strformat("%s=%q,", field, tostring(val)))
-			else
-				write(strformat("%s=%q", field, tostring(val)))
+			if not objectTypeIgnored then
+				if next(data) then
+					write(strformat("%s=%q,", field, tostring(val)))
+				else
+					write(strformat("%s=%q", field, tostring(val)))
+				end
 			end
 		end
 
@@ -50,7 +52,7 @@ do
 			if type(k) == "number" then k = strformat("[%s]", k) end
 			if type(v) == "table" then
 				write(strformat("%s=", k))
-				SerializeDataWithWriteNoIndent(v, write)
+				SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
 				if nk then write(",") end
 			else
 				if nk then
@@ -66,7 +68,7 @@ do
 		write("}")
 	end
 
-	function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak)
+	function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
 		write("{" .. lineBreak)
 
 		local subIndentChar = preIndentChar .. indentChar
@@ -76,10 +78,12 @@ do
 		if val then
 			data[field] = nil
 
-			if next(data) then
-				write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
-			else
-				write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+			if not objectTypeIgnored then
+				if next(data) then
+					write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+				else
+					write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+				end
 			end
 		end
 
@@ -92,7 +96,7 @@ do
 			if type(k) == "number" then k = strformat("[%s]", k) end
 			if type(v) == "table" then
 				write(strformat("%s%s = ", subIndentChar, k))
-				SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak)
+				SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
 				if nk then
 					write("," .. lineBreak)
 				else
@@ -112,7 +116,7 @@ do
 		write(preIndentChar .. "}")
 	end
 
-	function SerializeDataWithWriterNoIndent(data, write, object)
+	function SerializeDataWithWriterNoIndent(data, write, object, objectTypeIgnored)
 		write(object, "{")
 
 		local field = Serialization.ObjectTypeField
@@ -120,10 +124,12 @@ do
 		if val then
 			data[field] = nil
 
-			if next(data) then
-				write(object, strformat("%s=%q,", field, tostring(val)))
-			else
-				write(object, strformat("%s=%q", field, tostring(val)))
+			if not objectTypeIgnored then
+				if next(data) then
+					write(object, strformat("%s=%q,", field, tostring(val)))
+				else
+					write(object, strformat("%s=%q", field, tostring(val)))
+				end
 			end
 		end
 
@@ -136,7 +142,7 @@ do
 			if type(k) == "number" then k = strformat("[%s]", k) end
 			if type(v) == "table" then
 				write(object, strformat("%s=", k))
-				SerializeDataWithWriterNoIndent(v, write, object)
+				SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
 				if nk then write(object, ",") end
 			else
 				if nk then
@@ -152,7 +158,7 @@ do
 		write(object, "}")
 	end
 
-	function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak)
+	function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
 		write(object, "{" .. lineBreak)
 
 		local subIndentChar = preIndentChar .. indentChar
@@ -162,10 +168,12 @@ do
 		if val then
 			data[field] = nil
 
-			if next(data) then
-				write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
-			else
-				write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+			if not objectTypeIgnored then
+				if next(data) then
+					write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+				else
+					write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+				end
 			end
 		end
 
@@ -178,7 +186,7 @@ do
 			if type(k) == "number" then k = strformat("[%s]", k) end
 			if type(v) == "table" then
 				write(object, strformat("%s%s = ", subIndentChar, k))
-				SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak)
+				SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
 				if nk then
 					write(object, "," .. lineBreak)
 				else
@@ -215,6 +223,9 @@ class "StringFormatProvider" (function(_ENV)
 	__Doc__[[The char used as the indented character, default '\t']]
 	property "IndentChar" { Type = String, Default = "\t" }
 
+	__Doc__[[Whether ignore the object's type for serialization]]
+	property "ObjectTypeIgnored" { Type = Boolean }
+
 	-----------------------------------
 	-- Method
 	-----------------------------------
@@ -224,9 +235,9 @@ class "StringFormatProvider" (function(_ENV)
 			local cache = _Cache()
 
 			if self.Indent then
-				SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak)
+				SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
 			else
-				SerializeDataWithWriterNoIndent(data, tinsert, cache)
+				SerializeDataWithWriterNoIndent(data, tinsert, cache, self.ObjectTypeIgnored)
 			end
 
 			local ret = tblconcat(cache)
@@ -243,9 +254,9 @@ class "StringFormatProvider" (function(_ENV)
 	function Serialize(self, data, write)
 		if type(data) == "table" then
 			if self.Indent then
-				SerializeDataWithWrite(data, write, self.IndentChar, "", self.LineBreak)
+				SerializeDataWithWrite(data, write, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
 			else
-				SerializeDataWithWriteNoIndent(data, write)
+				SerializeDataWithWriteNoIndent(data, write, self.ObjectTypeIgnored)
 			end
 		else
 			write(SerializeSimpleData(data))
@@ -256,9 +267,9 @@ class "StringFormatProvider" (function(_ENV)
 	function Serialize(self, data, writer)
 		if type(data) == "table" then
 			if self.Indent then
-				SerializeDataWithWriter(data, writer.Write, writer, self.IndentChar, "", self.LineBreak)
+				SerializeDataWithWriter(data, writer.Write, writer, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
 			else
-				SerializeDataWithWriterNoIndent(data, writer.Write, writer)
+				SerializeDataWithWriterNoIndent(data, writer.Write, writer, self.ObjectTypeIgnored)
 			end
 		else
 			writer:Write(SerializeSimpleData(data))
