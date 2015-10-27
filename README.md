@@ -158,9 +158,9 @@ Here are some details about the example :
 		-- Hi King, my name's Ann.
 		ann:Greet( Person{ Name = "King"} )
 
-	There are many other _attribute_s, and custom attributes are fully supported.
+	There are many other attributes, and custom attributes are also fully supported.
 
-* If a _property_ is given a type, the value would be validated before it's set to the property, that would take a tiny cost, but it'll stop the mistake flow to other place where we can't trace back.
+* If a __property__ is given a type, the value would be validated before it's set to the property, that would take a tiny cost, but it'll stop the mistake flow to other place where we can't trace back.
 
 
 For more features, you should go to check the [wiki](https://github.com/kurapica/PLoop/wiki).
