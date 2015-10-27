@@ -1,4 +1,4 @@
-PLoop - Pure Lua Object-Oriented Program
+Pure Lua Object-Oriented Program
 ====
 
 __PLoop__ is used to provide a full object-oriented program system for lua.
@@ -163,7 +163,7 @@ Here are some details about the example :
 * If a __property__ is given a type, the value would be validated before it's set to the property, that would take a tiny cost, but it'll stop the mistake flow to other place where we can't trace back.
 
 
-For more features, you should go to check the [wiki](https://github.com/kurapica/PLoop/wiki).
+For more features, you should go checking the [wiki](https://github.com/kurapica/PLoop/wiki).
 
 
 Install
