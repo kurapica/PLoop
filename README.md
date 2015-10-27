@@ -1,9 +1,9 @@
 PLoop - Pure Lua Object-Oriented Program
 ====
 
-_PLoop_ is used to provide a full object-oriented program system for lua.
+__PLoop__ is used to provide a full object-oriented program system for lua.
 
-Take an example to start, first let's define a _Person_ class with _Name_ and _Age_ properties, the _Name property's value should be a string, and the _Age_ property's value should be a number. Then we create an object of the _Person_ class, and after that, we give the _Person_ class a _Greet_ method, we'll see how the object call the method at last.
+Take an example to start, first let's define a __Person__ class with _Name_ and _Age_ properties, the _Name_ property's value should be a string, and the _Age_ property's value should be a number. Then we create an object of the __Person__ class, and after that, we give the __Person__ class a _Greet_ method, we'll see how the object call the method at last.
 
 	require "PLoop"
 
@@ -43,19 +43,19 @@ Take an example to start, first let's define a _Person_ class with _Name_ and _A
 
 Here are some details about the example :
 
-* _import_ and _class_ are all keywords(functions) that defined in PLoop, there are many other keywords like _interface_, _struct_, _enum_, etc.
+* __import__ and __class__ are all keywords(functions) that defined in PLoop, there are many other keywords like __interface__, __struct__, __enum__, etc.
 
-* _import_ is used to import _namespace_ to current environment for quick access, in the previous code, _System_ is imported, so we can use _Number_ instead of _System.Number_, so for _String_ and `__Arguments__` .
+* __import__ is used to import __namespace__ to current environment for quick access, in the previous code, __System__ is imported, so we can use __Number__ instead of __System.Number__, so for __String__ and `__Arguments__` .
 
-	_PLoop_ use _namespace_ to manage classes, interfaces, enums and structs, so same name features can exist at same time with different _namespace_, such like _System.Widget.Frame_ and _MyNS.Frame_.
+	__PLoop__ use __namespace__ to manage classes, interfaces, enums and structs, so same name features can exist at same time with different __namespace__, such like __System.Widget.Frame__ and __MyNS.Frame__.
 
-* _class_ is used to start the definition of a class, the declaration format is like
+* __class__ is used to start the definition of a class, the declaration format is like
 
 		class class-name declaration-body
 
-	The class-name is a string, we can use the name as a variable after we defined it.
+	The _class-name_ is a string, we can use the name as a variable after we defined it.
 
-	The declaration-body has many forms, it can be a table, a function or a string. In the previous example, we use a table as the declaration-body, it contains two key-value pairs, since the values are types(Technically, _Number_ and _String_ are struct types), the two key-value pairs would be used as property declarations.
+	The _declaration-body_ has many forms, it can be a table, a function or a string. In the previous example, we use a table as the declaration-body, it contains two key-value pairs, since the values are types(Technically, __Number__ and __String__ are struct types), the two key-value pairs would be used as property declarations.
 
 	Ploop has many different declaration formats for some history reasons.
 
@@ -77,7 +77,7 @@ Here are some details about the example :
 
 		endclass "Person"
 
-	The declaration-body must be ended with _endclass_ keyword, and _property_ keyword is used to declare properties, the property's declaration-body must be a table that contains all property informations.
+	The declaration-body must be ended with __endclass__ keyword, and __property__ keyword is used to declare properties, the property's declaration-body must be a table that contains all property informations.
 
 	When lua 5.2 is released, setfenv/getfenv is replaced by _ENV, so the declaration will be
 
@@ -99,7 +99,7 @@ Here are some details about the example :
 
 	Although the format is supported, it's not likely to be used. So many other declaration formats are added, you can select whatever you like to define features.
 
-	In lua 5.2 and above, if the _debug_ lib is used, the PLoop would try to create setfenv/getfenv api based on it, so the _class_ - _endclass_ declaration format can be used on it.
+	In lua 5.2 and above, if the _debug_ lib is used, the PLoop would try to create setfenv/getfenv api based on it, so the __class__ - __endclass__ declaration format can be used on it.
 
 	To make sure the PLoop can be used in several lua versions, the common declaration format is using function :
 
@@ -121,11 +121,11 @@ Here are some details about the example :
 
 	It's simple to use table as declaration-body, but use function would make the whole things together.
 
-* You can re-define most features(like the _Greet_ method) after define the _class_, and the object created before the re-definition will receive the new features.
+* You can re-define most features(like the _Greet_ method) after define the __class__, and the object created before the re-definition will receive the new features.
 
 	You can re-difine the class by just give it a key-value pair, if the value is a function, it woule be a method, if the value is a type, it would be a property. There are also many re-definition ways.
 
-* `__Arguments__` is an _attribute_ class, the _attribute_ system is used to associate predefined system information or user-defined custom information with a target feature.
+* `__Arguments__` is an __attribute__ class, the __attribute__ system is used to associate predefined system information or user-defined custom information with a target feature.
 
 	`__Arguments__` is used to check the arguments to make sure the method only receive the arguments that it want, it can be used to create overload methods :
 
