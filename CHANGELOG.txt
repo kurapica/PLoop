@@ -1,3 +1,6 @@
+2015/10/30
+    class "A" { Object } { Name = String } - multi-declaration-table is not supported, IsStatic=true/Static=true can be used in propety definition.
+
 2015/09/11
     Remove the whole combined types system, only one type is allowed.
 

@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/09/14
--- Version			r130
+-- Last Update Date 2015/10/30
+-- Version			r131
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1240,9 +1240,6 @@ do
 
 					prop.Predefined = nil
 
-					-- Static Property
-					prop.IsStatic = set.IsStatic and true or false
-
 					for k, v in pairs(set) do
 						if type(k) == "string" then
 							k = strlower(k)
@@ -1288,6 +1285,8 @@ do
 								prop.Setter = v
 							elseif k == "getter" and type(v) == "number" and floor(v) == v and v > 0 and v <= _NSInfo[Getter].MaxValue then
 								prop.Getter = v
+							elseif k == "isstatic" or k == "static" then
+								prop.IsStatic = v and true or false
 							end
 						end
 					end
@@ -1960,7 +1959,7 @@ do
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 
 		_MetaIFEnv.__call = _MetaIFDefEnv.__call
@@ -2781,7 +2780,7 @@ do
 				if ret then error(ret, 3) end
 			end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 
 		_MetaClsEnv.__call = _MetaClsDefEnv.__call
@@ -3939,7 +3938,7 @@ do
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or self
+			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 
 		_MetaStrtEnv.__call = _MetaStrtDefEnv.__call
@@ -5697,15 +5696,6 @@ do
 					end
 				end
 			end
-		end
-
-		doc "GetDefinitionEnvironmentOwner" [[
-			<desc>Get the owner from a definition environment</desc>
-			<param name="env">The environment like the return of (class "MyCls")</param>
-			<return>the owner</return>
-		]]
-		function GetDefinitionEnvironmentOwner(env)
-			if type(env) == "table" then return env[OWNER_FIELD] end
 		end
 
 		doc "IsCallable" [[
