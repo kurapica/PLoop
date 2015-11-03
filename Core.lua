@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author			kurapica125@outlook.com
 -- Create Date		2011/02/01
--- Last Update Date 2015/10/30
--- Version			r131
+-- Last Update Date 2015/11/02
+-- Version			r132
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1292,15 +1292,13 @@ do
 					end
 
 					-- Validate the default
-					if prop.Default ~= nil then
-						if prop.Type then
-							local val = GetValidatedValue(prop.Type, prop.Default)
-							if val == nil and type(prop.Default) == "function" then prop.DefaultFunc = prop.Default end
-							prop.Default = val
-						elseif type(prop.Default) == "function" then
-							prop.DefaultFunc = prop.Default
-							prop.Default = nil
-						end
+					if type(prop.Default) == "function" then
+						prop.DefaultFunc = prop.Default
+						prop.Default = nil
+					end
+
+					if prop.Default ~= nil and prop.Type then
+						prop.Default = GetValidatedValue(prop.Type, prop.Default)
 					end
 
 					-- Clear
