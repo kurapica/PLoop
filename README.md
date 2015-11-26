@@ -1,15 +1,32 @@
 Pure Lua Object-Oriented Program
 ====
 
-__PLoop__ is used to provide a full object-oriented program system for lua.
+__PLoop__ is used to provide a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also the luajit.
 
-Take an example to start, first let's define a __Person__ class with _Name_ and _Age_ properties, the _Name_ property's value should be a string, and the _Age_ property's value should be a number. Then we create an object of the __Person__ class, and after that, we give the __Person__ class a _Greet_ method, we'll see how the object call the method at last.
+* __namespace__ supported.
+* Four data type included : __enum__, __struct__, __class__, _interface__.
+* Property supported with several features : getter/setter, value changed handler or event, default value or default value factory, etc.
+* Constructor/dispose supported for class, initializer/dispose supported for interface, validator supported for struct.
+* Method supported for class, interface and struct.
+* Event supported, event handlers are stackable.
+* Ovload-method supported.
+* Overload-constructor supported.
+* Attribute supported to provided predefined system information or user-defined custom information.
+* Isolated definition environment for each class, interface and struct.
+* Several definition format supported for easy using.
+* System.Reflector interface contains everything to get the informations of those features.
+
+----
+
+Take an example to start, Here is a __Person__ class with _Name_ and _Age_ properties.
 
 	require "PLoop"
 
 	import "System"	-- import a namespace
 
 	-- Define a Person class with two properties
+	-- String & Number are struct types defined in System namespace,
+	-- Full path : System.String, System.Number
 	class "Person" {
 		Name = String,
 		Age = Number,
