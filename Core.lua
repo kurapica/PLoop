@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/11/02
--- Version          r132
+-- Last Update Date 2015/12/07
+-- Version          r133
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -729,8 +729,17 @@ do
 					if vType == TYPE_NAMESPACE then
 						SetPropertyWithSet(info, key, { Type = value })
 					elseif type(value) == "function" then
-						-- Method
-						SaveFixedMethod(info.Method, key, value, info.Owner)
+						if key == info.Name then
+							if info.IsSealed then error(("%s is sealed, can't set the constructor or initializer."):format(tostring(info.Owner)), 2) end
+							if info.Type == TYPE_CLASS then
+								SaveFixedMethod(info, "Constructor", value, info.Owner, AttributeTargets and AttributeTargets.Constructor or nil)
+							elseif info.Type == TYPE_INTERFACE then
+								info.Initializer = value
+							end
+						else
+							-- Method
+							SaveFixedMethod(info.Method, key, value, info.Owner)
+						end
 					elseif type(value) == "table" then
 						-- Property
 						SetPropertyWithSet(info, key, value)
