@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/12/07
--- Version          r133
+-- Last Update Date 2015/12/08
+-- Version          r134
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1194,6 +1194,9 @@ do
 		function RefreshCache(ns)
 			local info = _NSInfo[ns]
 			local iCache = info.Cache
+
+			-- Clear Ctor
+			if info.Type == TYPE_CLASS then info.Ctor = nil end
 
 			-- Cache For Interface
 			local cache = CACHE_TABLE()
@@ -3251,49 +3254,52 @@ do
 
 		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
 
-		while info do
-			if not info.Constructor then
-				info = info.SuperClass and _NSInfo[info.SuperClass]
-			elseif type(info.Constructor) == "function" then
-				return info.Constructor(obj, ...)
-			elseif getmetatable(info.Constructor) == FixedMethod then
-				local fixedMethod = info.Constructor
-				local noArgMethod = nil
+		if info.Ctor == nil then
+			local sinfo = info
 
-				while getmetatable(fixedMethod) do
+			while sinfo and not sinfo.Constructor do sinfo = _NSInfo[sinfo.SuperClass] end
+
+			info.Ctor = sinfo and sinfo.Constructor or false
+		end
+
+		if not info.Ctor then
+			-- No oper
+		elseif type(info.Ctor) == "function" then
+			return info.Ctor(obj, ...)
+		elseif getmetatable(info.Ctor) == FixedMethod then
+			local fixedMethod = info.Ctor
+			local noArgMethod = nil
+
+			while getmetatable(fixedMethod) do
+				if fixedMethod.ArgCache then
+					CACHE_TABLE(fixedMethod.ArgCache)
+				end
+				fixedMethod.ArgCache = nil
+
+				if #fixedMethod == 0 and initTable then
+					noArgMethod = noArgMethod or fixedMethod
+				elseif fixedMethod:MatchArgs(obj, ...) then
 					if fixedMethod.ArgCache then
-						CACHE_TABLE(fixedMethod.ArgCache)
+						return fixedMethod.Method(unpack(fixedMethod.ArgCache))
+					else
+						return fixedMethod.Method(obj, ...)
 					end
+				elseif fixedMethod.ArgCache then
+					-- Remove argument container
+					CACHE_TABLE(fixedMethod.ArgCache)
 					fixedMethod.ArgCache = nil
-
-					if #fixedMethod == 0 and initTable then
-						noArgMethod = noArgMethod or fixedMethod
-					elseif fixedMethod:MatchArgs(obj, ...) then
-						if fixedMethod.ArgCache then
-							return fixedMethod.Method(unpack(fixedMethod.ArgCache))
-						else
-							return fixedMethod.Method(obj, ...)
-						end
-					elseif fixedMethod.ArgCache then
-						-- Remove argument container
-						CACHE_TABLE(fixedMethod.ArgCache)
-						fixedMethod.ArgCache = nil
-					end
-
-					fixedMethod = fixedMethod.Next
 				end
 
-				if noArgMethod then
-					-- No arguments method can still using init table
-					noArgMethod.Method(obj)
-					break
-				end
+				fixedMethod = fixedMethod.Next
+			end
 
-				if type(fixedMethod) == "function" then
-					return fixedMethod(obj, ...)
-				else
-					return info.Constructor:RaiseError(obj)
-				end
+			if noArgMethod then
+				-- No arguments method can still using init table
+				noArgMethod.Method(obj)
+			elseif type(fixedMethod) == "function" then
+				return fixedMethod(obj, ...)
+			else
+				return info.Constructor:RaiseError(obj)
 			end
 		end
 
