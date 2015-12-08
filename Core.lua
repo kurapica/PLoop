@@ -2032,7 +2032,7 @@ do
 		info = info or _NSInfo[IF]
 
 		-- Check if the class is final
-		if info.IsSealed then error("The interface is final, can't be re-defined.", depth + 1) end
+		if info.IsSealed then error("The interface is sealed, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_INTERFACE
 		info.NameSpace = info.NameSpace or ns
@@ -3397,7 +3397,7 @@ do
 		info = info or _NSInfo[cls]
 
 		-- Check if the class is final
-		if info.IsSealed then error("The class is final, can't be re-defined.", depth + 1) end
+		if info.IsSealed then error("The class is sealed, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_CLASS
 		info.NameSpace = info.NameSpace or ns
@@ -3760,7 +3760,7 @@ do
 		info = info or _NSInfo[enm]
 
 		-- Check if the enum is final
-		if info.IsSealed then error("The enum is final, can't be re-defined.", depth + 1) end
+		if info.IsSealed then error("The enum is sealed, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_ENUM
 		info.NameSpace = info.NameSpace or ns
@@ -4153,7 +4153,7 @@ do
 		info = info or _NSInfo[strt]
 
 		-- Check if the struct is final
-		if info.IsSealed then error("The struct is final, can't be re-defined.", depth + 1) end
+		if info.IsSealed then error("The struct is sealed, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_STRUCT
 		info.SubType = _STRUCT_TYPE_MEMBER
