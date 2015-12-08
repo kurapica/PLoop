@@ -3251,23 +3251,25 @@ do
 		local info = _NSInfo[cls]
 		local count = select('#', ...)
 		local initTable = select(1, ...)
+		local ctor = info.Constructor or info.Ctor
 
 		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
 
-		if info.Ctor == nil then
+		if ctor == nil then
 			local sinfo = info
 
 			while sinfo and not sinfo.Constructor do sinfo = _NSInfo[sinfo.SuperClass] end
 
-			info.Ctor = sinfo and sinfo.Constructor or false
+			ctor = sinfo and sinfo.Constructor or false
+			info.Ctor = ctor
 		end
 
-		if not info.Ctor then
+		if not ctor then
 			-- No oper
-		elseif type(info.Ctor) == "function" then
-			return info.Ctor(obj, ...)
-		elseif getmetatable(info.Ctor) == FixedMethod then
-			local fixedMethod = info.Ctor
+		elseif type(ctor) == "function" then
+			return ctor(obj, ...)
+		elseif getmetatable(ctor) == FixedMethod then
+			local fixedMethod = ctor
 			local noArgMethod = nil
 
 			while getmetatable(fixedMethod) do
@@ -3299,7 +3301,7 @@ do
 			elseif type(fixedMethod) == "function" then
 				return fixedMethod(obj, ...)
 			else
-				return info.Constructor:RaiseError(obj)
+				return ctor:RaiseError(obj)
 			end
 		end
 
