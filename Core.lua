@@ -7564,7 +7564,7 @@ do
 	class "__Default__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Default__" [[Used to set a default value for custom struct or enum]]
+		doc "__Default__" [[Used to set a default value for features like custom struct, enum, struct member, property]]
 
 		------------------------------------------------------
 		-- Property
