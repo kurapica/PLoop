@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/12/08
--- Version          r134
+-- Last Update Date 2015/12/10
+-- Version          r135
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2076,7 +2076,7 @@ do
 		if not IFInfo or IFInfo.Type ~= TYPE_INTERFACE then
 			error("Usage: extend (interface) : 'interface' - interface expected", 3)
 		elseif IFInfo.IsFinal then
-			error(("%s is non-inheritable."):format(tostring(IF)), 3)
+			error(("%s is marked as final, can't be extened."):format(tostring(IF)), 3)
 		end
 
 		if info.Type == TYPE_CLASS and IFInfo.Requires and next(IFInfo.Requires) then
@@ -2273,7 +2273,7 @@ do
 		if not IFInfo or (IFInfo.Type ~= TYPE_INTERFACE and IFInfo.Type ~= TYPE_CLASS) then
 			error("Usage: require (interface|class) : interface or class expected", 2)
 		elseif IFInfo.IsFinal then
-			error(("%s is non-inheritable."):format(tostring(IF)), 2)
+			error(("%s is marked as final, can't be used as requirement."):format(tostring(IF)), 2)
 		end
 
 		info.Requires = info.Requires or {}
@@ -3444,7 +3444,7 @@ do
 		local superInfo = _NSInfo[superCls]
 
 		if not superInfo or superInfo.Type ~= TYPE_CLASS then error("Usage: inherit (class) : 'class' - class expected", 2) end
-		if superInfo.IsFinal then error(("%s is non-inheritable."):format(tostring(superCls)), 2) end
+		if superInfo.IsFinal then error(("%s is marked as final, can't be inherited."):format(tostring(superCls)), 2) end
 		if IsChildClass(info.Owner, superCls) then error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner)), 2) end
 		if info.SuperClass == superCls then return end
 		if info.SuperClass then error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass)), 2) end
@@ -7337,31 +7337,87 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Require__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Require__" [[Whether the method or property is required to be override, or a member of a struct is required.]]
+		doc "__Require__" [[Whether the method or property is required to be override, or a member of a struct is required, or set the required class|interface for an interface.]]
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
-			local info = _NSInfo[owner]
+			if targetType == AttributeTargets.Interface then
+				if self.Require then
+					local info = _NSInfo[target]
 
-			if info and type(name) == "string" then
-				if targetType == AttributeTargets.Method then
-					info.RequireMethod = info.RequireMethod or {}
-					info.RequireMethod[name] = true
-				elseif targetType == AttributeTargets.Property then
-					info.RequireProperty = info.RequireProperty or {}
-					info.RequireProperty[name] = true
-				elseif targetType == AttributeTargets.Member then
-					info.RequireMember = info.RequireMember or {}
-					info.RequireMember[name] = true
+					info.Requires = info.Requires or {}
+					info.Requires[self.Require] = true
+
+					self.Require = nil
+				end
+			else
+				local info = _NSInfo[owner]
+
+				if info and type(name) == "string" then
+					if targetType == AttributeTargets.Method then
+						info.RequireMethod = info.RequireMethod or {}
+						info.RequireMethod[name] = true
+					elseif targetType == AttributeTargets.Property then
+						info.RequireProperty = info.RequireProperty or {}
+						info.RequireProperty[name] = true
+					elseif targetType == AttributeTargets.Member then
+						info.RequireMember = info.RequireMember or {}
+						info.RequireMember[name] = true
+					end
 				end
 			end
+		end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		__Arguments__{}
+		function __Require__(self)
+			self.Require = nil
+			return Super(self)
+		end
+
+		__Arguments__{ Interface }
+		function __Require__(self, value)
+			local IFInfo = rawget(_NSInfo, value)
+			if IFInfo.IsFinal then
+				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
+			end
+			self.Require = value
+			return Super(self)
+		end
+
+		__Arguments__{ Class }
+		function __Require__(self, value)
+			local IFInfo = rawget(_NSInfo, value)
+			if IFInfo.IsFinal then
+				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
+			end
+			self.Require = value
+			return Super(self)
+		end
+
+		__Arguments__{ String }
+		function __Require__(self, value)
+			value = GetNameSpace(GetDefaultNameSpace(), value)
+
+			local IFInfo = rawget(_NSInfo, value)
+
+			if not IFInfo or (IFInfo.Type ~= TYPE_INTERFACE and IFInfo.Type ~= TYPE_CLASS) then
+				error("Usage: __Require__ (interface|class) : interface or class expected", 3)
+			elseif IFInfo.IsFinal then
+				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
+			end
+
+			self.Require = value
+			return Super(self)
 		end
 	end)
 
