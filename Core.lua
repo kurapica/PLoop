@@ -1777,27 +1777,27 @@ do
 			if key == info.Name then
 				if info.Type == TYPE_CLASS then
 					-- Constructor
-					if info.IsSealed then error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
+					if info.IsSealed then return error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
 					key = "Constructor"
 				elseif info.Type == TYPE_INTERFACE then
 					-- Initializer
-					if info.IsSealed then error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
+					if info.IsSealed then return error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
 					info.Initializer = value
 					return
 				elseif info.Type == TYPE_STRUCT then
 					-- Valiator
-					if info.IsSealed then error(("%s is sealed, can't set the validator."):format(tostring(info.Owner))) end
+					if info.IsSealed then return error(("%s is sealed, can't set the validator."):format(tostring(info.Owner))) end
 					info.Validator = value
 					return
 				end
 			elseif key == DISPOSE_METHOD then
 				-- Dispose
-				if info.IsSealed then error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
+				if info.IsSealed then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
 				info[DISPOSE_METHOD] = v
 				return
 			elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
 				-- Meta-method
-				if info.IsSealed then error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
+				if info.IsSealed then return error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
 				isMeta = true
 				rMeta = _KeyMeta[key] and key or "_"..key
 				storage = info.Metatable
@@ -1806,10 +1806,10 @@ do
 			else
 				-- Method
 				if info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
-					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overwrited."):format(tostring(info.Owner), key)) end
-					if info.IsSealed and (info.Cache[key] or info.Method[key]) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+					if IsFinalFeature(info.Owner, key) then return error(("%s.%s is final, can't be overwrited."):format(tostring(info.Owner), key)) end
+					if info.IsSealed and (info.Cache[key] or info.Method[key]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 				elseif info.Type == TYPE_STRUCT then
-					if info.IsSealed and info.Method and info.Method[key] then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+					if info.IsSealed and info.Method and info.Method[key] then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 				end
 				info.Method = info.Method or {}
 				storage = info.Method
@@ -1828,7 +1828,7 @@ do
 		end
 
 		function SaveProperty(info, name, set)
-			if type(set) ~= "table" then error([=[Usage: property "Name" { -- Property Definition }]=]) end
+			if type(set) ~= "table" then return error([=[Usage: property "Name" { -- Property Definition }]=]) end
 
 			local prop = info.Property[name] or {}
 			info.Property[name] = prop
@@ -1842,7 +1842,7 @@ do
 		end
 
 		function SaveEvent(info, name)
-			if info.IsSealed and (info.Cache[name] or info.Event[name]) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), v), 3) end
+			if info.IsSealed and (info.Cache[name] or info.Event[name]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), v)) end
 
 			info.Event[name] = info.Event[name] or Event(name)
 
@@ -1850,14 +1850,14 @@ do
 		end
 
 		function SaveExtend(info, IF)
-			if info.IsSealed then error(("%s is sealed, can't extend interface."):format(tostring(info.Owner))) end
+			if info.IsSealed then return error(("%s is sealed, can't extend interface."):format(tostring(info.Owner))) end
 
 			local IFInfo = _NSInfo[IF]
 
 			if not IFInfo or IFInfo.Type ~= TYPE_INTERFACE then
-				error("Usage: extend (interface) : 'interface' - interface expected")
+				return error("Usage: extend (interface) : 'interface' - interface expected")
 			elseif IFInfo.IsFinal then
-				error(("%s is marked as final, can't be extened."):format(tostring(IF)))
+				return error(("%s is marked as final, can't be extened."):format(tostring(IF)))
 			end
 
 			if info.Type == TYPE_CLASS and IFInfo.Requires and next(IFInfo.Requires) then
@@ -1882,12 +1882,11 @@ do
 
 					for prototype in pairs(IFInfo.Requires) do desc = desc and (desc .. "|" .. tostring(prototype)) or tostring(prototype) end
 
-					error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), desc))
+					return error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), desc))
 				end
 			elseif info.Type == TYPE_INTERFACE and IsExtend(info.Owner, IF) then
-				error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)))
+				return error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)))
 			end
-
 
 			info.ExtendInterface = info.ExtendInterface or {}
 
@@ -1916,15 +1915,15 @@ do
 		end
 
 		function SaveInherit(info, superCls)
-			if info.IsSealed then error(("%s is sealed, can't set super class."):format(tostring(info.Owner))) end
+			if info.IsSealed then return error(("%s is sealed, can't set super class."):format(tostring(info.Owner))) end
 
 			local superInfo = _NSInfo[superCls]
 
-			if not superInfo or superInfo.Type ~= TYPE_CLASS then error("Usage: inherit (class) : 'class' - class expected") end
-			if superInfo.IsFinal then error(("%s is marked as final, can't be inherited."):format(tostring(superCls))) end
-			if IsChildClass(info.Owner, superCls) then error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner))) end
+			if not superInfo or superInfo.Type ~= TYPE_CLASS then return error("Usage: inherit (class) : 'class' - class expected") end
+			if superInfo.IsFinal then return error(("%s is marked as final, can't be inherited."):format(tostring(superCls))) end
+			if IsChildClass(info.Owner, superCls) then return error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner))) end
 			if info.SuperClass == superCls then return end
-			if info.SuperClass then error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass))) end
+			if info.SuperClass then return error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass))) end
 
 			superInfo.ChildClass = superInfo.ChildClass or {}
 			tinsert(superInfo.ChildClass, info.Owner)
@@ -1948,85 +1947,142 @@ do
 		end
 
 		function SaveRequire(info, req)
-			if info.IsSealed then error(("%s is sealed, can't set requirement."):format(tostring(info.Owner))) end
+			if info.IsSealed then return error(("%s is sealed, can't set requirement."):format(tostring(info.Owner))) end
 
 			info.Requires = info.Requires or {}
 			info.Requires[req] = true
 		end
 
-		function SaveFeature(info, k, v)
+		function SaveStructMember(info, key, value)
+			local memInfo = { Name = key }
+
+			-- Validate the value
+			if getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then
+				memInfo.Type = value
+			elseif type(value) == "table" then
+				for k, v in pairs(value) do
+					if type(k) == "string" then
+						k = k:lower()
+
+						if k == "type" then
+							if getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
+								memInfo.Type = v
+							end
+						elseif k == "default" then
+							memInfo.Default = v
+						elseif k == "require" then
+							memInfo.Require = true
+						end
+					end
+				end
+
+				if memInfo.Type and memInfo.Default ~= nil then
+					memInfo.Default = GetValidatedValue(memInfo.Type, memInfo.Default)
+				end
+			else
+				return error([=[Usage: member "Name" { -- Field Definition }]=])
+			end
+
+			-- Check the struct type
+			if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
+				info.SubType = _STRUCT_TYPE_ARRAY
+				info.Members = nil
+			end
+
+			if info.SubType == _STRUCT_TYPE_MEMBER then
+				-- Insert member
+				info.Members = info.Members or {}
+				for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' is existed."):format(key)) end end
+				tinsert(info.Members, memInfo)
+
+				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(key, AttributeTargets.Member, info.Owner, key) end
+
+				-- Re-build member after attribute settings
+				if memInfo.Require then
+					-- Erase default value
+					memInfo.Default = nil
+				elseif memInfo.Type and memInfo.Default == nil then
+					-- Auto generate default value
+					local vInfo = _NSInfo[memInfo.Type]
+
+					if vInfo.Default ~= nil then memInfo.Default = vInfo.Default end
+				end
+			elseif info.SubType == _STRUCT_TYPE_ARRAY then
+				info.ArrayElement = memInfo
+
+				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
+
+				memInfo.Default = nil
+				memInfo.Require = nil
+			end
+		end
+
+		function SaveFeature(info, key, value)
 			-- Forbidden
-			if k == DISPOSE_METHOD and type(v) ~= "function" and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				error(("'%s' must be a function as the dispose method."):format(k))
-			elseif k == info.Name and type(v) ~= "function" then
-				error(("'%s' must be a function as the %s."):format(k, info.Type == TYPE_CLASS and "Constructor" or info.Type == TYPE_INTERFACE and "Initializer" or "Validator"))
-			elseif _KeyMeta[k] ~= nil and type(v) ~= "function" and info.Type == TYPE_CLASS then
-				error(("'%s' must be a function as meta-method."):format(k))
+			if key == DISPOSE_METHOD and type(value) ~= "function" and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				return error(("'%s' must be a function as the dispose method."):format(key))
+			elseif key == info.Name and type(value) ~= "function" then
+				return error(("'%s' must be a function as the %s."):format(key, info.Type == TYPE_CLASS and "Constructor" or info.Type == TYPE_INTERFACE and "Initializer" or "Validator"))
+			elseif _KeyMeta[key] ~= nil and type(value) ~= "function" and info.Type == TYPE_CLASS then
+				return error(("'%s' must be a function as meta-method."):format(key))
 			end
 
 			-- Save feature
-			if tonumber(k) then
-				if getmetatable(v) == TYPE_NAMESPACE then
-					local vType = _NSInfo[v].Type
+			if tonumber(key) then
+				if getmetatable(value) == TYPE_NAMESPACE then
+					local vType = _NSInfo[value].Type
 
 					if info.Type == TYPE_STRUCT then
-						return SaveStructField(info, k, v)
+						return SaveStructMember(info, key, value)
 					elseif vType == TYPE_CLASS then
 						if info.Type == TYPE_CLASS then
 							-- inherit
-							return SaveInherit(info, v)
+							return SaveInherit(info, value)
 						elseif info.Type == TYPE_INTERFACE then
 							-- require
-							return SaveRequire(info, v)
+							return SaveRequire(info, value)
 						end
 					elseif vType == TYPE_INTERFACE then
 						if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
 							-- extend
-							return SaveExtend(info, v)
+							return SaveExtend(info, value)
 						end
 					end
-				elseif type(v) == "string" and not tonumber(v) and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				elseif type(value) == "string" and not tonumber(value) and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 					-- event
-					return SaveEvent(info, v)
-				elseif type(v) == "function" then
-					return SaveMethod(info, info.Name, v)
+					return SaveEvent(info, value)
+				elseif type(value) == "function" then
+					return SaveMethod(info, info.Name, value)
 				else
 					-- Default for struct
-					info.Default = v
+					info.Default = value
+					return
 				end
-			elseif type(k) == "string" then
-				local vType = type(v)
+			elseif type(key) == "string" then
+				local vType = type(value)
 
-				if getmetatable(v) == TYPE_NAMESPACE then
+				if getmetatable(value) == TYPE_NAMESPACE then
 					if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
-						return SaveProperty(info, k, { Type = v })
+						return SaveProperty(info, key, { Type = value })
 					elseif info.Type == TYPE_STRUCT then
-						return SaveStructField(info, k, v)
+						return SaveStructMember(info, key, value)
 					end
 				elseif vType == "table" then
 					if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
-						return SaveProperty(info, k, v)
+						return SaveProperty(info, key, value)
 					end
 				elseif vType == "function" then
-					return SaveMethod(info, k, v)
-				elseif v == true and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-					return SaveEvent(info, k)
+					return SaveMethod(info, key, value)
+				elseif value == true and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+					return SaveEvent(info, key)
 				end
 			end
-		end
 
-		function SafeSaveFeature(info, k, v, stack)
-			local ok, msg = pcall(SaveFeature, info, k, v)
-
-			if not ok then
-				return error(msg:match("%d+:(.-)$"), stack)
-			end
+			return error(("The definition for '%s' is not supported."):format(tostring(key)))
 		end
 
 		function import_Def(env, name)
-			if type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: import "namespaceA.namespaceB"]], 2) end
-
-			if type(name) == "string" and name:find("%.%s*%.") then error("The namespace 's name can't have empty string between dots.", 2) end
+			if type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: import "namespaceA.namespaceB"]]) end
 
 			local info = _NSInfo[env[OWNER_FIELD]]
 			local ns
@@ -2037,7 +2093,7 @@ do
 				ns = name
 			end
 
-			if not ns then error(("No namespace is found with name : %s"):format(name), 2) end
+			if not ns then return error(("No namespace is found with name : %s"):format(name)) end
 
 			info.Import4Env = info.Import4Env or {}
 
@@ -2046,10 +2102,62 @@ do
 			tinsert(info.Import4Env, ns)
 		end
 
-		function property_Def(env, name)
-			if type(name) ~= "string" or strtrim(name:match("[_%w]+")) == "" then error([=[Usage: property "Name" { -- Property Definition }]=], 2) end
+		local fetchPropertyCache = setmetatable({}, WEAK_KEY)
 
-			return function(set) return SaveProperty(_NSInfo[env[OWNER_FIELD]], name:match("[_%w]+"), set) end
+		local function fetchPropertyDefine(set)
+			local cache = fetchPropertyCache[running() or 0]
+			if not cache then return end
+
+			local info, name = cache.Info, cache.Name
+
+			cache.Info = nil
+			cache.Name = nil
+
+			if info and name then return SaveProperty(info, name, set) end
+		end
+
+		function property_Def(env, name)
+			if type(name) ~= "string" or strtrim(name:match("[_%w]+")) == "" then
+				return error([=[Usage: property "Name" { -- Property Definition }]=])
+			end
+
+			local cur = running() or 0
+
+			fetchPropertyCache[cur] = fetchPropertyCache[cur] or {}
+
+			fetchPropertyCache[cur].Info = _NSInfo[env[OWNER_FIELD]]
+			fetchPropertyCache[cur].Name = name:match("[_%w]+")
+
+			return fetchPropertyDefine
+		end
+
+		local fetchMemberCache = setmetatable({}, WEAK_KEY)
+
+		local function fetchMemberDefine(set)
+			local cache = fetchMemberCache[running() or 0]
+			if not cache then return end
+
+			local info, name = cache.Info, cache.Name
+
+			cache.Info = nil
+			cache.Name = nil
+
+			if info and name then return SaveStructMember(info, name, set) end
+		end
+
+		function member_Def(env, name)
+			if type(name) ~= "string" or strtrim(name:match("[_%w]+")) == "" then
+				return error([=[Usage: member "Name" { -- Field Definition }]=])
+			end
+
+			local cur = running() or 0
+
+			fetchMemberCache[cur] = fetchMemberCache[cur] or {}
+
+			fetchMemberCache[cur].Info = _NSInfo[env[OWNER_FIELD]]
+			fetchMemberCache[cur].Name = name:match("[_%w]+")
+
+			return fetchMemberDefine
 		end
 
 		function event_Def(env, name)
@@ -2217,7 +2325,6 @@ do
 			value = info.Event[key]
 			if value then rawset(self, key, value) return value end
 
-
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 			if value ~= nil then rawset(self, key, value) return value end
@@ -2278,7 +2385,7 @@ do
 			if _KeyWord4IFEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
 			if key == info.Name or key == DISPOSE_METHOD or (type(key) == "string" and type(value) == "function") then
-				return SafeSaveFeature(info, key, value)
+				return SaveFeature(info, key, value)
 			end
 
 			rawset(self, key, value)
@@ -2731,7 +2838,7 @@ do
 			if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
 			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] ~= nil or (type(key) == "string" and type(value) == "function") then
-				return SafeSaveFeature(info, key, value)
+				return SaveFeature(info, key, value)
 			end
 
 			rawset(self, key, value)
@@ -3695,7 +3802,7 @@ do
 						return SaveMethod(info.Method, key, value, info.Owner)
 					end
 				elseif _NSInfo[value] and _NSInfo[value].Type then
-					return SaveStructField(self, info, key, value)
+					return SaveStructMember(self, info, key, value)
 				end
 			end
 
@@ -3961,30 +4068,6 @@ do
 	end
 
 	------------------------------------
-	--- import classes from the given name's namespace to the current environment
-	------------------------------------
-	function import_STRT(env, name)
-		if type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: import "namespaceA.namespaceB"]], 2) end
-
-		local info = _NSInfo[env[OWNER_FIELD]]
-		local ns
-
-		if type(name) == "string" then
-			ns = GetNameSpace(GetDefaultNameSpace(), name)
-		elseif IsNameSpace(name) then
-			ns = name
-		end
-
-		if not ns then error(("No namespace is found with name : %s"):format(name), 2) end
-
-		info.Import4Env = info.Import4Env or {}
-
-		for _, v in ipairs(info.Import4Env) do if v == ns then return end end
-
-		tinsert(info.Import4Env, ns)
-	end
-
-	------------------------------------
 	--- End the class's definition and restore the environment
 	------------------------------------
 	function endstruct(env, name)
@@ -4003,7 +4086,7 @@ do
 		end
 	end
 
-	function SaveStructField(self, info, key, value)
+	function SaveStructMember(self, info, key, value)
 		rawset(self, key, value)
 
 		if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
@@ -4058,7 +4141,7 @@ do
 
 				if vType and type(v) ~= "string" then
 					if vType == TYPE_NAMESPACE and (type(k) == "string" or tonumber(k)) then
-						SaveStructField(self, info, k, v)
+						SaveStructMember(self, info, k, v)
 					end
 				elseif type(v) == "function" then
 					if k == info.Name or tonumber(k) then
@@ -4090,8 +4173,9 @@ do
 	end
 
 	_KeyWord4StrtEnv.struct = struct
-	_KeyWord4StrtEnv.import = import_STRT
+	_KeyWord4StrtEnv.import = import_Def
 	_KeyWord4StrtEnv.endstruct = endstruct
+	_KeyWord4StrtEnv.member = member_Def
 end
 
 ------------------------------------------------------
@@ -7404,8 +7488,14 @@ do
 						info.RequireProperty = info.RequireProperty or {}
 						info.RequireProperty[name] = true
 					elseif targetType == AttributeTargets.Member then
-						info.RequireMember = info.RequireMember or {}
-						info.RequireMember[name] = true
+						if not info.Members then return end
+						for _, v in ipairs(info.Members) do
+							if v.Name == name then
+								v.Default = nil
+								v.Require = true
+								return
+							end
+						end
 					end
 				end
 			end
@@ -7605,11 +7695,17 @@ do
 			elseif targetType == AttributeTargets.Member then
 				local info = _NSInfo[owner]
 				if not info or info.SubType ~= _STRUCT_TYPE_MEMBER then return end
-				local val = GetValidatedValue(rawget(info.StructEnv, target), self.Default)
-				if val == nil then return end
+				if not info.Members then return end
 
-				info.DefaultField = info.DefaultField or {}
-				info.DefaultField[target] = val
+				for _, v in ipairs(info.Members) do
+					if v.Name == name then
+						if not v.Require then
+							v.Default = self.Default
+							if v.Type then v.Default = GetValidatedValue(v.Type, self.Default) end
+						end
+						return
+					end
+				end
 			else
 				_NSInfo[target].Default = self.Default
 			end
