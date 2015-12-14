@@ -536,11 +536,11 @@ do
 
 			if info.Type == TYPE_STRUCT and type(key) == "string" and type(value) == "function" then
 				if key == info.Name then
-					if info.IsSealed then error(("%s is sealed, can't be overridden."):format(tostring(self)), 2) end
+					if info.IsSealed then error(("%s is sealed, can't be overwrited."):format(tostring(self)), 2) end
 					info.Validator = value
 					return
 				else
-					if info.IsSealed and ((info.Method and info.Method[key]) or (info.StructEnv[key])) then error(("%s.%s is sealed, can't be overridden."):format(tostring(self), key), 2) end
+					if info.IsSealed and ((info.Method and info.Method[key]) or (info.StructEnv[key])) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(self), key), 2) end
 					info.Method = info.Method or {}
 					return SaveMethod(info.Method, key, value, info.Owner)
 				end
@@ -606,8 +606,8 @@ do
 						end
 					end
 				else
-					if IsFinalFeature(self, key) then error(("%s.%s is final, can't be overridden."):format(tostring(self), key), 2) end
-					if info.IsSealed and info.Cache[key] then error(("%s.%s is sealed, can't be overridden."):format(tostring(self), key), 2) end
+					if IsFinalFeature(self, key) then error(("%s.%s is final, can't be overwrited."):format(tostring(self), key), 2) end
+					if info.IsSealed and info.Cache[key] then error(("%s.%s is sealed, can't be overwrited."):format(tostring(self), key), 2) end
 
 					local vType = getmetatable(value)
 
@@ -1720,20 +1720,115 @@ do
 			end
 		end
 
-		function SaveMethod(storage, key, value, owner)
-			if ATTRIBUTE_INSTALLED then
-				local targetType = AttributeTargets.Method
-				if key == "Constructor" and _NSInfo[owner] == storage then
-					targetType = AttributeTargets.Constructor
-				end
-				storage[key] = ConsumePreparedAttributes(value, targetType, owner, key) or value
+		function IsExtend(IF, cls)
+			if not IF or not cls or not _NSInfo[IF] or _NSInfo[IF].Type ~= TYPE_INTERFACE or not _NSInfo[cls] then return false end
+
+			if IF == cls then return true end
+
+			local cache = _NSInfo[cls].Cache4Interface
+			if cache then for _, pIF in ipairs(cache) do if pIF == IF then return true end end end
+
+			return false
+		end
+
+		function IsChildClass(cls, child)
+			if not cls or not child or not _NSInfo[cls] or _NSInfo[cls].Type ~= TYPE_CLASS then return false end
+
+			if cls == child then return true end
+
+			local info = _NSInfo[child]
+
+			if not info or info.Type ~= TYPE_CLASS then return false end
+
+			local scls = info.SuperClass
+
+			while scls and scls ~= cls do scls = _NSInfo[scls].SuperClass end
+
+			return scls == cls
+		end
+
+		function UpdateMeta4Child(meta, cls, pre, now)
+			if pre == now then return end
+
+			local info = _NSInfo[cls]
+
+			if not info.MetaTable[meta] then
+				-- simple clone
+				SaveMethod(info.MetaTable, meta, now, cls)
+				UpdateMeta4Children(meta, info.ChildClass, pre, now)
 			else
-				storage[key] = value
+				if info.MetaTable[meta] == pre then
+					info.MetaTable[meta] = nil
+
+					SaveMethod(info.MetaTable, meta, now, cls)
+					UpdateMeta4Children(meta, info.ChildClass, pre, now)
+				end
 			end
 		end
 
+		function UpdateMeta4Children(meta, sub, pre, now)
+			if sub and pre ~= now then for _, cls in ipairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
+		end
+
+		function SaveMethod(info, key, value)
+			local storage = info
+			local isMeta, rMeta, oldValue
+
+			if key == info.Name then
+				if info.Type == TYPE_CLASS then
+					-- Constructor
+					if info.IsSealed then error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
+					key = "Constructor"
+				elseif info.Type == TYPE_INTERFACE then
+					-- Initializer
+					if info.IsSealed then error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
+					info.Initializer = value
+					return
+				elseif info.Type == TYPE_STRUCT then
+					-- Valiator
+					if info.IsSealed then error(("%s is sealed, can't set the validator."):format(tostring(info.Owner))) end
+					info.Validator = value
+					return
+				end
+			elseif key == DISPOSE_METHOD then
+				-- Dispose
+				if info.IsSealed then error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
+				info[DISPOSE_METHOD] = v
+				return
+			elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
+				-- Meta-method
+				if info.IsSealed then error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
+				isMeta = true
+				rMeta = _KeyMeta[key] and key or "_"..key
+				storage = info.Metatable
+				oldValue = storage[rMeta]
+				key = rMeta
+			else
+				-- Method
+				if info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
+					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overwrited."):format(tostring(info.Owner), key)) end
+					if info.IsSealed and (info.Cache[key] or info.Method[key]) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+				elseif info.Type == TYPE_STRUCT then
+					if info.IsSealed and info.Method and info.Method[key] then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+				end
+				info.Method = info.Method or {}
+				storage = info.Method
+			end
+
+			if ATTRIBUTE_INSTALLED then
+				local targetType = AttributeTargets.Method
+				if key == "Constructor" and _NSInfo[owner] == storage then targetType = AttributeTargets.Constructor end
+				storage[key] = ConsumePreparedAttributes(value, targetType, info.Owner, key) or value
+			else
+				storage[key] = value
+			end
+
+			-- Update child's meta-method
+			if isMeta then UpdateMeta4Children(key, info.ChildClass, oldValue, storage[key]) end
+		end
+
 		function SaveProperty(info, name, set)
-			if type(set) ~= "table" then error([=[Usage: property "Name" { -- Property Definition }]=], 2) end
+			if type(set) ~= "table" then error([=[Usage: property "Name" { -- Property Definition }]=]) end
 
 			local prop = info.Property[name] or {}
 			info.Property[name] = prop
@@ -1747,18 +1842,22 @@ do
 		end
 
 		function SaveEvent(info, name)
+			if info.IsSealed and (info.Cache[name] or info.Event[name]) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), v), 3) end
+
 			info.Event[name] = info.Event[name] or Event(name)
 
 			return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, info.Owner, name)
 		end
 
 		function SaveExtend(info, IF)
+			if info.IsSealed then error(("%s is sealed, can't extend interface."):format(tostring(info.Owner))) end
+
 			local IFInfo = _NSInfo[IF]
 
 			if not IFInfo or IFInfo.Type ~= TYPE_INTERFACE then
-				error("Usage: extend (interface) : 'interface' - interface expected", 3)
+				error("Usage: extend (interface) : 'interface' - interface expected")
 			elseif IFInfo.IsFinal then
-				error(("%s is marked as final, can't be extened."):format(tostring(IF)), 3)
+				error(("%s is marked as final, can't be extened."):format(tostring(IF)))
 			end
 
 			if info.Type == TYPE_CLASS and IFInfo.Requires and next(IFInfo.Requires) then
@@ -1783,10 +1882,10 @@ do
 
 					for prototype in pairs(IFInfo.Requires) do desc = desc and (desc .. "|" .. tostring(prototype)) or tostring(prototype) end
 
-					error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), desc), 3)
+					error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), desc))
 				end
 			elseif info.Type == TYPE_INTERFACE and IsExtend(info.Owner, IF) then
-				error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)), 3)
+				error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)))
 			end
 
 
@@ -1817,13 +1916,15 @@ do
 		end
 
 		function SaveInherit(info, superCls)
+			if info.IsSealed then error(("%s is sealed, can't set super class."):format(tostring(info.Owner))) end
+
 			local superInfo = _NSInfo[superCls]
 
-			if not superInfo or superInfo.Type ~= TYPE_CLASS then error("Usage: inherit (class) : 'class' - class expected", 2) end
-			if superInfo.IsFinal then error(("%s is marked as final, can't be inherited."):format(tostring(superCls)), 2) end
-			if IsChildClass(info.Owner, superCls) then error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner)), 2) end
+			if not superInfo or superInfo.Type ~= TYPE_CLASS then error("Usage: inherit (class) : 'class' - class expected") end
+			if superInfo.IsFinal then error(("%s is marked as final, can't be inherited."):format(tostring(superCls))) end
+			if IsChildClass(info.Owner, superCls) then error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner))) end
 			if info.SuperClass == superCls then return end
-			if info.SuperClass then error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass)), 2) end
+			if info.SuperClass then error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass))) end
 
 			superInfo.ChildClass = superInfo.ChildClass or {}
 			tinsert(superInfo.ChildClass, info.Owner)
@@ -1847,8 +1948,79 @@ do
 		end
 
 		function SaveRequire(info, req)
+			if info.IsSealed then error(("%s is sealed, can't set requirement."):format(tostring(info.Owner))) end
+
 			info.Requires = info.Requires or {}
 			info.Requires[req] = true
+		end
+
+		function SaveFeature(info, k, v)
+			-- Forbidden
+			if k == DISPOSE_METHOD and type(v) ~= "function" and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+				error(("'%s' must be a function as the dispose method."):format(k))
+			elseif k == info.Name and type(v) ~= "function" then
+				error(("'%s' must be a function as the %s."):format(k, info.Type == TYPE_CLASS and "Constructor" or info.Type == TYPE_INTERFACE and "Initializer" or "Validator"))
+			elseif _KeyMeta[k] ~= nil and type(v) ~= "function" and info.Type == TYPE_CLASS then
+				error(("'%s' must be a function as meta-method."):format(k))
+			end
+
+			-- Save feature
+			if tonumber(k) then
+				if getmetatable(v) == TYPE_NAMESPACE then
+					local vType = _NSInfo[v].Type
+
+					if info.Type == TYPE_STRUCT then
+						return SaveStructField(info, k, v)
+					elseif vType == TYPE_CLASS then
+						if info.Type == TYPE_CLASS then
+							-- inherit
+							return SaveInherit(info, v)
+						elseif info.Type == TYPE_INTERFACE then
+							-- require
+							return SaveRequire(info, v)
+						end
+					elseif vType == TYPE_INTERFACE then
+						if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
+							-- extend
+							return SaveExtend(info, v)
+						end
+					end
+				elseif type(v) == "string" and not tonumber(v) and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+					-- event
+					return SaveEvent(info, v)
+				elseif type(v) == "function" then
+					return SaveMethod(info, info.Name, v)
+				else
+					-- Default for struct
+					info.Default = v
+				end
+			elseif type(k) == "string" then
+				local vType = type(v)
+
+				if getmetatable(v) == TYPE_NAMESPACE then
+					if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
+						return SaveProperty(info, k, { Type = v })
+					elseif info.Type == TYPE_STRUCT then
+						return SaveStructField(info, k, v)
+					end
+				elseif vType == "table" then
+					if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
+						return SaveProperty(info, k, v)
+					end
+				elseif vType == "function" then
+					return SaveMethod(info, k, v)
+				elseif v == true and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
+					return SaveEvent(info, k)
+				end
+			end
+		end
+
+		function SafeSaveFeature(info, k, v, stack)
+			local ok, msg = pcall(SaveFeature, info, k, v)
+
+			if not ok then
+				return error(msg:match("%d+:(.-)$"), stack)
+			end
 		end
 
 		function import_Def(env, name)
@@ -2045,11 +2217,6 @@ do
 			value = info.Event[key]
 			if value then rawset(self, key, value) return value end
 
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then rawset(self, key, value) return value end
-			end
 
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
@@ -2063,9 +2230,6 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
-
-			-- Check local
-			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			-- Check keywords
 			value = _KeyWord4IFEnv:GetKeyword(self, key)
@@ -2104,12 +2268,6 @@ do
 			value = info.Event[key]
 			if value then return value end
 
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then return value end
-			end
-
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
 		end
@@ -2119,33 +2277,8 @@ do
 
 			if _KeyWord4IFEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
-			if key == info.Name then
-				-- No attribute for the initializer
-				if type(value) == "function" then
-					info.Initializer = value
-					return
-				else
-					error(("'%s' must be a function as the Initializer."):format(key), 2)
-				end
-			end
-
-			if key == DISPOSE_METHOD then
-				if type(value) == "function" then
-					info[DISPOSE_METHOD] = value
-					return
-				else
-					error(("'%s' must be a function as dispose method."):format(DISPOSE_METHOD), 2)
-				end
-			end
-
-			if type(key) == "string" and type(value) == "function" then
-				-- Don't save to environment until need it
-				if IsLocal() then
-					return SaveMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				else
-					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), key), 2) end
-					return SaveMethod(info.Method, key, value, info.Owner)
-				end
+			if key == info.Name or key == DISPOSE_METHOD or (type(key) == "string" and type(value) == "function") then
+				return SafeSaveFeature(info, key, value)
 			end
 
 			rawset(self, key, value)
@@ -2166,17 +2299,6 @@ do
 		end
 
 		_MetaIFEnv.__call = _MetaIFDefEnv.__call
-	end
-
-	function IsExtend(IF, cls)
-		if not IF or not cls or not _NSInfo[IF] or _NSInfo[IF].Type ~= TYPE_INTERFACE or not _NSInfo[cls] then return false end
-
-		if IF == cls then return true end
-
-		local cache = _NSInfo[cls].Cache4Interface
-		if cache then for _, pIF in ipairs(cache) do if pIF == IF then return true end end end
-
-		return false
 	end
 
 	------------------------------------
@@ -2283,72 +2405,8 @@ do
 		local info = _NSInfo[self[OWNER_FIELD]]
 
 		if type(definition) == "table" then
-			for i = 0, #definition do
-				local v = definition[i]
-
-				if getmetatable(v) == TYPE_NAMESPACE then
-					if info.IsSealed then error(("%s is sealed, can't use inherit or extend."):format(tostring(info.Owner)), 2) end
-
-					local vType = _NSInfo[v].Type
-
-					if vType == TYPE_CLASS then
-						if info.Type == TYPE_CLASS then
-							SaveInherit(info, v)
-						else
-							error(("%s can't have a super class"):format(info.Owner), 2)
-						end
-					elseif vType == TYPE_INTERFACE then
-						SaveExtend(info, v)
-					end
-				elseif type(v) == "string" and not tonumber(v) then
-					if info.IsSealed and info.Cache[v] then error(("%s.%s is sealed, can't be overridden."):format(tostring(info.Owner), v), 2) end
-					info.Event[v] = info.Event[v] or Event(v)
-				elseif type(v) == "function" then
-					if info.IsSealed then error(("%s is sealed, can't set the constructor or initializer."):format(tostring(info.Owner)), 2) end
-					if info.Type == TYPE_CLASS then
-						SaveMethod(info, "Constructor", v, info.Owner)
-					elseif info.Type == TYPE_INTERFACE then
-						info.Initializer = v
-					end
-				end
-			end
-
 			for k, v in pairs(definition) do
-				if type(k) == "string" and not tonumber(k) then
-					if IsFinalFeature(info.Owner, k) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), k), 2) end
-					if info.IsSealed and (info.Cache[k] or k == info.Name or k == DISPOSE_METHOD or (_KeyMeta[k] ~= nil and info.Type == TYPE_CLASS)) then error(("%s.%s is sealed, can't be overridden."):format(tostring(info.Owner), k), 2) end
-
-					local vType = getmetatable(v)
-
-					if vType and type(v) ~= "string" then
-						if vType == TYPE_NAMESPACE then
-							SaveProperty(info, k, { Type = v })
-						end
-					elseif type(v) == "table" then
-						SaveProperty(info, k, v)
-					elseif type(v) == "function" then
-						if k == info.Name then
-							if info.Type == TYPE_CLASS then
-								SaveMethod(info, "Constructor", v, info.Owner)
-							elseif info.Type == TYPE_INTERFACE then
-								info.Initializer = v
-							end
-						elseif k == DISPOSE_METHOD then
-							info[DISPOSE_METHOD] = v
-						elseif _KeyMeta[k] ~= nil and info.Type == TYPE_CLASS then
-							local rMeta = _KeyMeta[k] and k or "_"..k
-							local oldValue = info.MetaTable[rMeta]
-
-							SaveMethod(info.MetaTable, rMeta, v, info.Owner)
-
-							UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable[rMeta])
-						else
-							SaveMethod(info.Method, k, v, info.Owner)
-						end
-					else
-						info.Event[k] = info.Event[k] or Event(k)
-					end
-				end
+				SaveFeature(info, k, v)
 			end
 		else
 			if type(definition) == "string" then
@@ -2565,12 +2623,6 @@ do
 			value = info.Event[key]
 			if value then rawset(self, key, value) return value end
 
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then rawset(self, key, value) return value end
-			end
-
 			-- Check meta-methods
 			if _KeyMeta[key] ~= nil then
 				local rMeta = _KeyMeta[key] and key or "_"..key
@@ -2589,9 +2641,6 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
-
-			-- Check local
-			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			if key == _SuperIndex then
 				if info.SuperClass then
@@ -2665,12 +2714,6 @@ do
 			value = info.Event[key]
 			if value then return value end
 
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then return value end
-			end
-
 			-- Check meta-methods
 			if _KeyMeta[key] ~= nil then
 				local rMeta = _KeyMeta[key] and key or "_"..key
@@ -2687,44 +2730,8 @@ do
 
 			if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
-			if key == info.Name then
-				if type(value) == "function" then
-					return SaveMethod(info, "Constructor", value, info.Owner)
-				else
-					error(("'%s' must be a function as constructor."):format(key), 2)
-				end
-			end
-
-			if key == DISPOSE_METHOD then
-				if type(value) == "function" then
-					info[DISPOSE_METHOD] = value
-					return
-				else
-					error(("'%s' must be a function as dispose method."):format(DISPOSE_METHOD), 2)
-				end
-			end
-
-			if _KeyMeta[key] ~= nil then
-				if type(value) == "function" then
-					local rMeta = _KeyMeta[key] and key or "_"..key
-					local oldValue = info.MetaTable[rMeta]
-
-					SaveMethod(info.MetaTable, rMeta, value, info.Owner)
-
-					return UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable[rMeta])
-				else
-					error(("'%s' must be a function."):format(key), 2)
-				end
-			end
-
-			if type(key) == "string" and type(value) == "function" then
-				-- Don't save to environment until need it
-				if IsLocal() then
-					return SaveMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-				else
-					if IsFinalFeature(info.Owner, key) then error(("%s.%s is final, can't be overridden."):format(tostring(info.Owner), key), 2) end
-					return SaveMethod(info.Method, key, value, info.Owner)
-				end
+			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] ~= nil or (type(key) == "string" and type(value) == "function") then
+				return SafeSaveFeature(info, key, value)
 			end
 
 			rawset(self, key, value)
@@ -2791,45 +2798,6 @@ do
 		end
 
 		_MetaClsEnv.__call = _MetaClsDefEnv.__call
-	end
-
-	function IsChildClass(cls, child)
-		if not cls or not child or not _NSInfo[cls] or _NSInfo[cls].Type ~= TYPE_CLASS then return false end
-
-		if cls == child then return true end
-
-		local info = _NSInfo[child]
-
-		if not info or info.Type ~= TYPE_CLASS then return false end
-
-		local scls = info.SuperClass
-
-		while scls and scls ~= cls do scls = _NSInfo[scls].SuperClass end
-
-		return scls == cls
-	end
-
-	function UpdateMeta4Child(meta, cls, pre, now)
-		if pre == now then return end
-
-		local info = _NSInfo[cls]
-
-		if not info.MetaTable[meta] then
-			-- simple clone
-			SaveMethod(info.MetaTable, meta, now, cls)
-			UpdateMeta4Children(meta, info.ChildClass, pre, now)
-		else
-			if info.MetaTable[meta] == pre then
-				info.MetaTable[meta] = nil
-
-				SaveMethod(info.MetaTable, meta, now, cls)
-				UpdateMeta4Children(meta, info.ChildClass, pre, now)
-			end
-		end
-	end
-
-	function UpdateMeta4Children(meta, sub, pre, now)
-		if sub and pre ~= now then for _, cls in ipairs(sub) do UpdateMeta4Child(meta, cls, pre, now) end end
 	end
 
 	function Class_Index(self, key)
@@ -3650,12 +3618,6 @@ do
 			value = info.Method and info.Method[key]
 			if value then rawset(self, key, value) return value end
 
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then rawset(self, key, value) return value end
-			end
-
 			-- Check Base
 			value = self[BASE_ENV_FIELD][key]
 			if value ~= nil then rawset(self, key, value) return value end
@@ -3667,9 +3629,6 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
-
-			-- Check local
-			if key == LOCAL_ENV_FIELD then local ret = {} rawset(self, key, ret) return ret end
 
 			-- Check keywords
 			value = _KeyWord4StrtEnv:GetKeyword(self, key)
@@ -3702,12 +3661,6 @@ do
 			-- Check Method
 			value = info.Method and info.Method[key]
 			if value then return value end
-
-			-- Check Local
-			if rawget(self, LOCAL_ENV_FIELD) then
-				value = self[LOCAL_ENV_FIELD][key]
-				if value then return value end
-			end
 
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
@@ -4883,10 +4836,10 @@ do
 		end
 
 		doc "IsRequiredMethod" [[
-			<desc>Whether the method is required to be overridden</desc>
+			<desc>Whether the method is required to be overwrited</desc>
 			<param name="owner" type="interface">the method's owner</param>
 			<param name="name" type="string">the method's name</param>
-			<return type="boolean">true if the method must be overridden</return>
+			<return type="boolean">true if the method must be overwrited</return>
 		]]
 		function IsRequiredMethod(ns, name)
 			local info = _NSInfo[ns]
@@ -4894,10 +4847,10 @@ do
 		end
 
 		doc "IsRequiredProperty" [[
-			<desc>Whether the property is required to be overridden</desc>
+			<desc>Whether the property is required to be overwrited</desc>
 			<param name="owner" type="interface">the property's owner</param>
 			<param name="name" type="string">the property's name</param>
-			<return type="boolean">true if the property must be overridden</return>
+			<return type="boolean">true if the property must be overwrited</return>
 		]]
 		function IsRequiredProperty(ns, name)
 			local info = _NSInfo[ns]
@@ -4905,10 +4858,10 @@ do
 		end
 
 		doc "IsOptionalMethod" [[
-			<desc>Whether the method is optional to be overridden</desc>
+			<desc>Whether the method is optional to be overwrited</desc>
 			<param name="owner" type="interface">the method's owner</param>
 			<param name="name" type="string">the method's name</param>
-			<return type="boolean">true if the method should be overridden</return>
+			<return type="boolean">true if the method should be overwrited</return>
 		]]
 		function IsOptionalMethod(ns, name)
 			local info = _NSInfo[ns]
@@ -4916,10 +4869,10 @@ do
 		end
 
 		doc "IsOptionalProperty" [[
-			<desc>Whether the property is optional to be overridden</desc>
+			<desc>Whether the property is optional to be overwrited</desc>
 			<param name="owner" type="interface">the property's owner</param>
 			<param name="name" type="string">the property's name</param>
-			<return type="boolean">true if the property should be overridden</return>
+			<return type="boolean">true if the property should be overwrited</return>
 		]]
 		function IsOptionalProperty(ns, name)
 			local info = _NSInfo[ns]
@@ -6382,7 +6335,7 @@ do
 	class "__Final__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Final__" [[Mark the class|interface can't be inherited, or method|property can't be overridden by child-classes]]
+		doc "__Final__" [[Mark the class|interface can't be inherited, or method|property can't be overwrited by child-classes]]
 
 		function ApplyAttribute(self, target, targetType, owner, name)
 			if targetType == AttributeTargets.Interface or targetType == AttributeTargets.Class then
@@ -7799,12 +7752,12 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Interface + AttributeTargets.Method, Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Interface, Inherited = false, RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__Local__" (function(_ENV)
 		inherit "__Attribute__"
 
-		doc "__Local__" [[Used to mark the features like class, struct, interface, enum and method as local.]]
+		doc "__Local__" [[Used to mark the features like class, struct, interface, enum as local.]]
 
 		------------------------------------------------------
 		-- Method
