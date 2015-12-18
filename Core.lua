@@ -1755,7 +1755,7 @@ do
 			local info = _NSInfo[cls]
 			local key = _KeyMeta[meta]
 
-			if not info.Metatable[key] or info.Metatable[key] == pre then
+			if not info.MetaTable[key] or info.MetaTable[key] == pre then
 				return SaveMethod(info, meta, now)
 			end
 		end
@@ -1981,7 +1981,7 @@ do
 			-- Keep to the environmenet
 			-- rawset(env, _SuperIndex, superCls)
 
-			-- Copy Metatable
+			-- Copy MetaTable
 			if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 			for meta, rMeta in pairs(_KeyMeta) do
@@ -2439,6 +2439,8 @@ do
 
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
+
+			return owner
 		end
 
 		_MetaIFEnv.__call = _MetaIFDefEnv.__call
@@ -2934,6 +2936,8 @@ do
 
 				if ret then error(ret, 3) end
 			end
+
+			return owner
 		end
 
 		_MetaClsEnv.__call = _MetaClsDefEnv.__call
@@ -3136,7 +3140,7 @@ do
 		rawset(self, key, value)
 	end
 
-	function GenerateMetatable(info)
+	function GenerateMetaTable(info)
 		local Cache = info.Cache
 
 		local meta = {}
@@ -3479,7 +3483,7 @@ do
 		SetNameSpace4Env(classEnv, cls)
 
 		-- MetaTable
-		info.MetaTable = info.MetaTable or GenerateMetatable(info)
+		info.MetaTable = info.MetaTable or GenerateMetaTable(info)
 
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
 
@@ -3822,7 +3826,8 @@ do
 		end
 
 		_MetaStrtDefEnv.__call = function(self, definition)
-			local ok, msg = pcall(ParseStructDefinition, self, definition)
+			ParseStructDefinition(self, definition)
+
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
@@ -3831,7 +3836,7 @@ do
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
+			return owner
 		end
 
 		_MetaStrtEnv.__call = _MetaStrtDefEnv.__call
