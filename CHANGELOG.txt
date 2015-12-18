@@ -1,3 +1,6 @@
+2015/12/18
+    Recode the overload system, remove it from the core part. Recode the whold features assignment system. struct member keyword added.
+
 2015/10/30
     class "A" { Object } { Name = String } - multi-declaration-table is not supported, IsStatic=true/Static=true can be used in propety definition.
 

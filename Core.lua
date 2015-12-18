@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/12/13
--- Version          r136
+-- Last Update Date 2015/12/18
+-- Version          r137
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -190,9 +190,6 @@ do
 
 	-- Base env field
 	BASE_ENV_FIELD = "__PLOOP_BASE_ENV"
-
-	-- Local env field
-	LOCAL_ENV_FIELD = "__PLOOP_LOCAL"
 end
 
 ------------------------------------------------------
@@ -442,7 +439,7 @@ do
 				end
 			end
 
-			error(tostring(self) .. " is not callable.", 2)
+			return error(tostring(self) .. " is not callable.")
 		end
 
 		_MetaNS.__index = function(self, key)
@@ -483,7 +480,7 @@ do
 							value = oper.SetWeak and info.WeakStaticFields or info.StaticFields
 							value = value and value[operTar]
 						elseif default == nil then
-							error(("%s can't be read."):format(key),2)
+							return error(("%s can't be read."):format(key))
 						end
 					end
 
@@ -534,22 +531,12 @@ do
 		_MetaNS.__newindex = function(self, key, value)
 			local info = _NSInfo[self]
 
-			if info.Type == TYPE_STRUCT and type(key) == "string" and type(value) == "function" then
-				if key == info.Name then
-					if info.IsSealed then error(("%s is sealed, can't be overwrited."):format(tostring(self)), 2) end
-					info.Validator = value
-					return
-				else
-					if info.IsSealed and ((info.Method and info.Method[key]) or (info.StructEnv[key])) then error(("%s.%s is sealed, can't be overwrited."):format(tostring(self), key), 2) end
-					info.Method = info.Method or {}
-					return SaveMethod(info.Method, key, value, info.Owner)
-				end
-			elseif (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and type(key) == "string" then
+			if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
 				-- Static Property
 				local oper = info.Property[key]
 
 				if oper and oper.IsStatic then
-					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
+					if oper.Set == false then return error(("%s can't be overwrited."):format(key)) end
 
 					-- Property
 					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
@@ -602,57 +589,21 @@ do
 
 							return operTar and operTar(self, value, old, key)
 						else
-							error(("%s can't be written."):format(key), 2)
+							return error(("%s can't be overwrited."):format(key))
 						end
 					end
 				else
-					if IsFinalFeature(self, key) then error(("%s.%s is final, can't be overwrited."):format(tostring(self), key), 2) end
-					if info.IsSealed and info.Cache[key] then error(("%s.%s is sealed, can't be overwrited."):format(tostring(self), key), 2) end
-
-					local vType = getmetatable(value)
-
-					-- new feature
-					if vType == TYPE_NAMESPACE then
-						SaveProperty(info, key, { Type = value })
-					elseif type(value) == "function" then
-						if key == info.Name then
-							if info.IsSealed then error(("%s is sealed, can't set the constructor or initializer."):format(tostring(info.Owner)), 2) end
-							if info.Type == TYPE_CLASS then
-								SaveMethod(info, "Constructor", value, info.Owner)
-							elseif info.Type == TYPE_INTERFACE then
-								info.Initializer = value
-							end
-						elseif key == DISPOSE_METHOD then
-							if info.IsSealed then error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner)), 2) end
-							info[DISPOSE_METHOD] = value
-						elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
-							local rMeta = _KeyMeta[key] and key or "_"..key
-							local oldValue = info.MetaTable[rMeta]
-
-							SaveMethod(info.MetaTable, rMeta, value, info.Owner)
-
-							UpdateMeta4Children(rMeta, info.ChildClass, oldValue, info.MetaTable[rMeta])
-						else
-							-- Method
-							SaveMethod(info.Method, key, value, info.Owner)
-						end
-					elseif type(value) == "table" then
-						-- Property
-						SaveProperty(info, key, value)
-					elseif not tonumber(key) and value == true then
-						-- Event
-						info.Event[key] = info.Event[key] or Event(key)
-
-						if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Event[key], AttributeTargets.Event, info.Owner, key) end
-					else
-						error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
-					end
-
+					local ok, msg = pcall(SaveFeature, info, key, value)
+					if not ok then return error(msg:match("%d+:%s*(.-)$") or msg) end
 					return not info.BeginDefinition and RefreshCache(self)
 				end
+			elseif info.Type == TYPE_STRUCT then
+				local ok, msg = pcall(SaveFeature, info, key, value)
+				if not ok then return error(msg:match("%d+:%s*(.-)$") or msg) end
+				return not info.BeginDefinition and RefreshStruct(self)
 			end
 
-			error(("Can't set value for %s, it's readonly."):format(tostring(self)), 2)
+			return error(("Can't set data to %s, it's readonly."):format(tostring(self)))
 		end
 
 		_MetaNS.__tostring = function(self)
@@ -693,8 +644,8 @@ do
 
 			if ret then
 				return ret
-			elseif _KeyMeta[key] ~= nil then
-				return _KeyMeta[key] and info.MetaTable[key] or info.MetaTable["_"..key]
+			elseif _KeyMeta[key] then
+				return info.MetaTable[_KeyMeta[key]]
 			else
 				ret = info.Method[key] or info.Cache[key]
 				if type(ret) == "function" then return ret end
@@ -729,7 +680,7 @@ do
 
 				cls = info.SubNS[name]
 			else
-				error(("can't add item to a %s."):format(tostring(info.Type)), 2)
+				return error(("can't add item to a %s."):format(tostring(info.Type)))
 			end
 
 			info = _NSInfo[cls]
@@ -789,7 +740,7 @@ do
 	function namespace(env, name, depth)
 		depth = tonumber(depth) or 1
 		name = name or env
-		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: namespace "namespace"]], depth + 1) end
+		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: namespace "namespace"]], depth) end
 		env = type(env) == "table" and env or getfenv(depth + 1) or _G
 
 		local ns = SetNameSpace4Env(env, name)
@@ -865,7 +816,7 @@ do
 
 		if mainName and ret:find("%%s") then ret = ret:gsub("%%s[_%w]*", mainName) end
 
-		error(ret, (stack or 1) + 1)
+		return error(ret, (stack or 1))
 	end
 
 	function GetValidatedValue(oType, value)
@@ -1625,18 +1576,6 @@ do
 			--- self property
 			CloneWithOverride(iCache, info.Property, true)
 
-			-- Requires
-			if info.Type == TYPE_INTERFACE then
-				if info.ExtendInterface then
-					for _, IF in ipairs(info.ExtendInterface) do
-						if _NSInfo[IF].Requires and next(_NSInfo[IF].Requires) then
-							info.Requires = info.Requires or {}
-							CloneWithoutOverride(info.Requires, _NSInfo[IF].Requires)
-						end
-					end
-				end
-			end
-
 			-- AutoCache
 			if info.SuperClass and _NSInfo[info.SuperClass].AutoCache == true then
 				info.AutoCache = true
@@ -1679,6 +1618,69 @@ do
 				for _, subcls in ipairs(info.ChildClass) do RefreshCache(subcls) end
 			elseif info.ExtendClass then
 				for _, subcls in ipairs(info.ExtendClass) do RefreshCache(subcls) end
+			end
+		end
+
+		function RefreshStruct(strt)
+			local info = _NSInfo[strt]
+
+			if info.SubType == STRUCT_TYPE_MEMBER and (not info.Members or #(info.Members) == 0) then
+				info.SubType = STRUCT_TYPE_CUSTOM
+				info.Members = nil
+			end
+
+			-- validate default value if existed
+			if info.Default ~= nil then
+				if info.SubType ~= STRUCT_TYPE_CUSTOM then
+					info.Default = nil
+				elseif not pcall(ValidateStruct, info.Owner, info.Default) then
+					info.Default = nil
+				end
+			end
+
+			if info.SubType == STRUCT_TYPE_ARRAY then
+				local ele = info.ArrayElement
+
+				if ele and ele.Predefined then
+					for k, v in pairs(ele.Predefined) do
+						if k:lower() == "type" and getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
+							ele.Type = v
+							break
+						end
+					end
+					ele.Predefined = nil
+				end
+			elseif info.SubType == STRUCT_TYPE_MEMBER then
+				for _, mem in ipairs(info.Members) do
+					if mem.Predefined then
+						for k, v in pairs(mem.Predefined) do
+							k = k:lower()
+
+							if k == "type" then
+								if getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
+									mem.Type = v
+								end
+							elseif k == "default" then
+								mem.Default = v
+							elseif k == "require" then
+								mem.Require = true
+							end
+						end
+
+						mem.Predefined = nil
+
+						if mem.Require then
+							mem.Default = nil
+						elseif mem.Type then
+							if mem.Default ~= nil then
+								mem.Default = GetValidatedValue(mem.Type, mem.Default)
+							end
+							if mem.Default == nil and _NSInfo[mem.Type].Default ~= nil then
+								mem.Default = _NSInfo[mem.Type].Default
+							end
+						end
+					end
+				end
 			end
 		end
 	end
@@ -1751,18 +1753,10 @@ do
 			if pre == now then return end
 
 			local info = _NSInfo[cls]
+			local key = _KeyMeta[meta]
 
-			if not info.MetaTable[meta] then
-				-- simple clone
-				SaveMethod(info.MetaTable, meta, now, cls)
-				UpdateMeta4Children(meta, info.ChildClass, pre, now)
-			else
-				if info.MetaTable[meta] == pre then
-					info.MetaTable[meta] = nil
-
-					SaveMethod(info.MetaTable, meta, now, cls)
-					UpdateMeta4Children(meta, info.ChildClass, pre, now)
-				end
+			if not info.Metatable[key] or info.Metatable[key] == pre then
+				return SaveMethod(info, meta, now)
 			end
 		end
 
@@ -1772,13 +1766,15 @@ do
 
 		function SaveMethod(info, key, value)
 			local storage = info
-			local isMeta, rMeta, oldValue
+			local isMeta, rMeta, oldValue, isConstructor
+			local rkey = key
 
 			if key == info.Name then
 				if info.Type == TYPE_CLASS then
 					-- Constructor
 					if info.IsSealed then return error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
-					key = "Constructor"
+					isConstructor = true
+					rkey = "Constructor"
 				elseif info.Type == TYPE_INTERFACE then
 					-- Initializer
 					if info.IsSealed then return error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
@@ -1793,16 +1789,15 @@ do
 			elseif key == DISPOSE_METHOD then
 				-- Dispose
 				if info.IsSealed then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
-				info[DISPOSE_METHOD] = v
+				info[DISPOSE_METHOD] = value
 				return
-			elseif _KeyMeta[key] ~= nil and info.Type == TYPE_CLASS then
+			elseif _KeyMeta[key] and info.Type == TYPE_CLASS then
 				-- Meta-method
 				if info.IsSealed then return error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
 				isMeta = true
-				rMeta = _KeyMeta[key] and key or "_"..key
-				storage = info.Metatable
-				oldValue = storage[rMeta]
-				key = rMeta
+				rkey = _KeyMeta[key]
+				storage = info.MetaTable
+				oldValue = storage[rkey]
 			else
 				-- Method
 				if info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
@@ -1816,15 +1811,13 @@ do
 			end
 
 			if ATTRIBUTE_INSTALLED then
-				local targetType = AttributeTargets.Method
-				if key == "Constructor" and _NSInfo[owner] == storage then targetType = AttributeTargets.Constructor end
-				storage[key] = ConsumePreparedAttributes(value, targetType, info.Owner, key) or value
+				storage[rkey] = ConsumePreparedAttributes(value, isConstructor and AttributeTargets.Constructor or AttributeTargets.Method, info.Owner, key) or value
 			else
-				storage[key] = value
+				storage[rkey] = value
 			end
 
 			-- Update child's meta-method
-			if isMeta then UpdateMeta4Children(key, info.ChildClass, oldValue, storage[key]) end
+			if isMeta then return UpdateMeta4Children(key, info.ChildClass, oldValue, storage[rkey]) end
 		end
 
 		function SaveProperty(info, name, set)
@@ -1842,7 +1835,7 @@ do
 		end
 
 		function SaveEvent(info, name)
-			if info.IsSealed and (info.Cache[name] or info.Event[name]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), v)) end
+			if info.IsSealed and (info.Cache[name] or info.Event[name]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), name)) end
 
 			info.Event[name] = info.Event[name] or Event(name)
 
@@ -1860,32 +1853,87 @@ do
 				return error(("%s is marked as final, can't be extened."):format(tostring(IF)))
 			end
 
-			if info.Type == TYPE_CLASS and IFInfo.Requires and next(IFInfo.Requires) then
-				local pass = false
+			if info.Type == TYPE_CLASS then
+				if IFInfo.RequireClass then
+					if not IsChildClass(IFInfo.RequireClass, info.Owner) then
+						return error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), tostring(IFInfo.RequireClass)))
+					end
+				elseif IFInfo.ExtendInterface then
+					for _, sIF in ipairs(IFInfo.ExtendInterface) do
+						local req = _NSInfo[sIF].RequireClass
 
-				for prototype in pairs(IFInfo.Requires) do
-					if _NSInfo[prototype].Type == TYPE_INTERFACE then
-						if IsExtend(prototype, info.Owner) then
-							pass = true
-							break
-						end
-					elseif _NSInfo[prototype].Type == TYPE_CLASS then
-						if IsChildClass(prototype, info.Owner) then
-							pass = true
-							break
+						if req and not IsChildClass(req, info.Owner) then
+							return error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), tostring(req)))
 						end
 					end
 				end
-
-				if not pass then
-					local desc
-
-					for prototype in pairs(IFInfo.Requires) do desc = desc and (desc .. "|" .. tostring(prototype)) or tostring(prototype) end
-
-					return error(("Usage: extend (%s) : %s should be sub-class of %s."):format(tostring(IF), tostring(info.Owner), desc))
+			elseif info.Type == TYPE_INTERFACE then
+				if IsExtend(info.Owner, IF) then
+					return error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)))
 				end
-			elseif info.Type == TYPE_INTERFACE and IsExtend(info.Owner, IF) then
-				return error(("%s is extended from %s, can't be used here."):format(tostring(IF), tostring(info.Owner)))
+				if info.RequireClass then
+					if IFInfo.RequireClass then
+						if not IsChildClass(IFInfo.RequireClass, info.RequireClass) then
+							return error(("%s require class %s, it's conflicted with current settings."):format(tostring(IF), tostring(IFInfo.RequireClass)))
+						end
+					else
+						if IFInfo.ExtendInterface then
+							for _, sIF in ipairs(IFInfo.ExtendInterface) do
+								local req = _NSInfo[sIF].RequireClass
+
+								if req and not IsChildClass(req, info.RequireClass) then
+									return error(("%s require class %s, it's conflicted with current settings."):format(tostring(sIF), tostring(req)))
+								end
+							end
+						end
+					end
+				else
+					if IFInfo.RequireClass then
+						if info.ExtendInterface then
+							for _, sIF in ipairs(info.ExtendInterface) do
+								local req = _NSInfo[sIF].RequireClass
+
+								if req and not IsChildClass(req, IFInfo.RequireClass) and not IsChildClass(IFInfo.RequireClass, req) then
+									return error(("%s require class %s, it's conflicted with current settings."):format(tostring(IF), tostring(IFInfo.RequireClass)))
+								end
+							end
+						end
+					elseif info.ExtendInterface and IFInfo.ExtendInterface then
+						local cache = CACHE_TABLE()
+						local pass = true
+
+						for _, sIF in ipairs(info.ExtendInterface) do
+							local req = _NSInfo[sIF].RequireClass
+
+							if req then tinsert(cache, req) end
+						end
+
+						if #cache > 0 then
+							for _, sIF in ipairs(IFInfo.ExtendInterface) do
+								local req = _NSInfo[sIF].RequireClass
+
+								if req then
+									for _, required in ipairs(cache) do
+										if not IsChildClass(req, required) and not IsChildClass(required, req) then
+											pass = false
+											break
+										end
+									end
+								end
+
+								if not pass then break end
+							end
+
+							while tremove(cache) do end
+						end
+
+						CACHE_TABLE(cache)
+
+						if not pass then
+							return error(("%s require class %s, it's conflicted with current settings."):format(tostring(IF), tostring(IFInfo.RequireClass)))
+						end
+					end
+				end
 			end
 
 			info.ExtendInterface = info.ExtendInterface or {}
@@ -1936,84 +1984,75 @@ do
 			-- Copy Metatable
 			if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
-			for meta, flag in pairs(_KeyMeta) do
-				local rMeta = flag and meta or "_" .. meta
-
-				if superInfo.MetaTable[rMeta] then UpdateMeta4Child(rMeta, info.Owner, nil, superInfo.MetaTable[rMeta]) end
+			for meta, rMeta in pairs(_KeyMeta) do
+				if superInfo.MetaTable[rMeta] then UpdateMeta4Child(meta, info.Owner, nil, superInfo.MetaTable[rMeta]) end
 			end
 
 			-- Clone Attributes
 			return ATTRIBUTE_INSTALLED and InheritAttributes(superCls, info.Owner, AttributeTargets.Class)
 		end
 
-		function SaveRequire(info, req)
-			if info.IsSealed then return error(("%s is sealed, can't set requirement."):format(tostring(info.Owner))) end
+		local function CheckRequireConflict(info, req, child)
+			-- Only check the conflict caused by child interfaces or classes
+			if child and info.RequireClass and not IsChildClass(req, info.RequireClass) then return false, info.Owner end
 
-			info.Requires = info.Requires or {}
-			info.Requires[req] = true
+			if info.ExtendClass then
+				for _, subcls in ipairs(info.ExtendClass) do
+					local sinfo = _NSInfo[subcls]
+					if sinfo.Type == TYPE_CLASS then
+						if not IsChildClass(req, subcls) then return false, subcls end
+					elseif sinfo.Type == TYPE_INTERFACE then
+						local ok, ret = CheckRequireConflict(sinfo, req, true)
+						if not ok then return false, ret end
+					end
+				end
+			end
+
+			return true
+		end
+
+		function SaveRequire(info, req)
+			if info.IsSealed then return error(("%s is sealed, can't set the required class."):format(tostring(info.Owner))) end
+			if not rawget(_NSInfo, req) or _NSInfo[req].Type ~= TYPE_CLASS then error("Usage : require 'class'") end
+
+			local ok, ret = CheckRequireConflict(info, req)
+			if not ok then error(("The new required class is conflicted with %s that extened from the interface."):format(tostring(ret))) end
+
+			info.RequireClass = req
 		end
 
 		function SaveStructMember(info, key, value)
 			local memInfo = { Name = key }
 
 			-- Validate the value
-			if getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then
-				memInfo.Type = value
-			elseif type(value) == "table" then
-				for k, v in pairs(value) do
-					if type(k) == "string" then
-						k = k:lower()
+			if getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then value = { Type = value } end
 
-						if k == "type" then
-							if getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
-								memInfo.Type = v
-							end
-						elseif k == "default" then
-							memInfo.Default = v
-						elseif k == "require" then
-							memInfo.Require = true
-						end
-					end
-				end
+			if type(value) ~= "table" then return error([=[Usage: member "Name" { -- Field Definition }]=]) end
 
-				if memInfo.Type and memInfo.Default ~= nil then
-					memInfo.Default = GetValidatedValue(memInfo.Type, memInfo.Default)
-				end
-			else
-				return error([=[Usage: member "Name" { -- Field Definition }]=])
-			end
+			memInfo.Predefined = value
 
 			-- Check the struct type
-			if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
-				info.SubType = _STRUCT_TYPE_ARRAY
-				info.Members = nil
+			if tonumber(key) then
+				if info.SubType ~= STRUCT_TYPE_ARRAY then
+					info.SubType = STRUCT_TYPE_ARRAY
+					info.Members = nil
+				end
+			elseif info.SubType ~= STRUCT_TYPE_MEMBER then
+				info.SubType = STRUCT_TYPE_MEMBER
+				info.ArrayElement = nil
 			end
 
-			if info.SubType == _STRUCT_TYPE_MEMBER then
+			if info.SubType == STRUCT_TYPE_MEMBER then
 				-- Insert member
 				info.Members = info.Members or {}
-				for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' is existed."):format(key)) end end
+				for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' alreadu existed."):format(key)) end end
 				tinsert(info.Members, memInfo)
 
-				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(key, AttributeTargets.Member, info.Owner, key) end
-
-				-- Re-build member after attribute settings
-				if memInfo.Require then
-					-- Erase default value
-					memInfo.Default = nil
-				elseif memInfo.Type and memInfo.Default == nil then
-					-- Auto generate default value
-					local vInfo = _NSInfo[memInfo.Type]
-
-					if vInfo.Default ~= nil then memInfo.Default = vInfo.Default end
-				end
-			elseif info.SubType == _STRUCT_TYPE_ARRAY then
+				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(memInfo, AttributeTargets.Member, info.Owner, key) end
+			elseif info.SubType == STRUCT_TYPE_ARRAY then
 				info.ArrayElement = memInfo
 
 				if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
-
-				memInfo.Default = nil
-				memInfo.Require = nil
 			end
 		end
 
@@ -2023,7 +2062,7 @@ do
 				return error(("'%s' must be a function as the dispose method."):format(key))
 			elseif key == info.Name and type(value) ~= "function" then
 				return error(("'%s' must be a function as the %s."):format(key, info.Type == TYPE_CLASS and "Constructor" or info.Type == TYPE_INTERFACE and "Initializer" or "Validator"))
-			elseif _KeyMeta[key] ~= nil and type(value) ~= "function" and info.Type == TYPE_CLASS then
+			elseif _KeyMeta[key] and type(value) ~= "function" and info.Type == TYPE_CLASS then
 				return error(("'%s' must be a function as meta-method."):format(key))
 			end
 
@@ -2070,6 +2109,8 @@ do
 				elseif vType == "table" then
 					if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
 						return SaveProperty(info, key, value)
+					elseif info.Type == TYPE_STRUCT then
+						return SaveStructMember(info, key, value)
 					end
 				elseif vType == "function" then
 					return SaveMethod(info, key, value)
@@ -2078,7 +2119,7 @@ do
 				end
 			end
 
-			return error(("The definition for '%s' is not supported."):format(tostring(key)))
+			return error(("The definition '%s' for %s is not supported."):format(tostring(key), tostring(info.Owner)))
 		end
 
 		function import_Def(env, name)
@@ -2234,38 +2275,34 @@ do
 		end
 
 		function require_IF(env, name)
-			if name and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: require "namespace.interfacename|classname"]], 2) end
-
-			if type(name) == "string" and name:find("%.%s*%.") then error("The namespace's name can't have empty string between dots.", 2) end
+			if name and type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: require "namespace.classname"]]) end
 
 			local info = _NSInfo[env[OWNER_FIELD]]
-			local IF
+			local cls
 
 			if type(name) == "string" then
-				IF = GetNameSpace(info.NameSpace, name) or env[name]
+				cls = GetNameSpace(info.NameSpace, name) or env[name]
 
-				if not IF then
+				if not cls then
 					for subname in name:gmatch("[_%w]+") do
-						IF = IF and IF[subname] or env[subname]
+						cls = cls and cls[subname] or env[subname]
 
-						if not IsNameSpace(IF) then error(("No interface|class is found with the name : %s"):format(name), 2) end
+						if not IsNameSpace(cls) then return error(("No class is found with the name : %s"):format(name)) end
 					end
 				end
 			else
-				IF = name
+				cls = name
 			end
 
-			local IFInfo = _NSInfo[IF]
+			local cInfo = _NSInfo[cls]
 
-			if not IFInfo or (IFInfo.Type ~= TYPE_INTERFACE and IFInfo.Type ~= TYPE_CLASS) then
-				error("Usage: require (interface|class) : interface or class expected", 2)
-			elseif IFInfo.IsFinal then
-				error(("%s is marked as final, can't be used as requirement."):format(tostring(IF)), 2)
+			if not cInfo or cInfo.Type ~= TYPE_CLASS then
+				return error("Usage: require (class) : class expected")
+			elseif cInfo.IsFinal then
+				return error(("%s is marked as final, can't be used as the required class."):format(tostring(cls)))
 			end
 
-			SaveRequire(info, IF)
-
-			return _KeyWord4IFEnv:GetKeyword(env, "require")
+			return SaveRequire(info, cls)
 		end
 	end
 
@@ -2392,7 +2429,8 @@ do
 		end
 
 		_MetaIFDefEnv.__call = function(self, definition)
-			local ok, msg = pcall(ParseDefinition, self, definition)
+			ParseDefinition(self, definition)
+
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
@@ -2401,8 +2439,6 @@ do
 
 			local info = _NSInfo[owner]
 			if info.ApplyAttributes then info.ApplyAttributes() end
-
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 
 		_MetaIFEnv.__call = _MetaIFDefEnv.__call
@@ -2510,7 +2546,6 @@ do
 
 	function ParseDefinition(self, definition)
 		local info = _NSInfo[self[OWNER_FIELD]]
-
 		if type(definition) == "table" then
 			for k, v in pairs(definition) do
 				SaveFeature(info, k, v)
@@ -2553,31 +2588,31 @@ do
 	_KeyWord4ClsEnv = _KeywordAccessor()
 
 	_KeyMeta = {
-		__add = true,		-- a + b
-		__sub = true,		-- a - b
-		__mul = true,		-- a * b
-		__div = true,		-- a / b
-		__mod = true,		-- a % b
-		__pow = true,		-- a ^ b
-		__unm = true,		-- - a
-		__concat = true,	-- a..b
-		__len = true,		-- #a
-		__eq = true,		-- a == b
-		__lt = true,		-- a < b
-		__le = true,		-- a <= b
-		__index = false,	-- return a[b]
-		__newindex = false,	-- a[b] = v
-		__call = true,		-- a()
-		__gc = true,		-- dispose a
-		__tostring = true,	-- tostring(a)
-		__exist = true,		-- ClassName(...)	-- return object if existed
-		__idiv = true,		-- // floor division
-		__band = true,		-- & bitwise and
-		__bor = true,		-- | bitwise or
-		__bxor = true,		-- ~ bitwise exclusive or
-		__bnot = true,		-- ~ bitwise unary not
-		__shl = true,		-- << bitwise left shift
-		__shr = true,		-- >> bitwise right shift
+		__add = "__add",            -- a + b
+		__sub = "__sub",            -- a - b
+		__mul = "__mul",            -- a * b
+		__div = "__div",            -- a / b
+		__mod = "__mod",            -- a % b
+		__pow = "__pow",            -- a ^ b
+		__unm = "__unm",            -- - a
+		__concat = "__concat",      -- a..b
+		__len = "__len",            -- #a
+		__eq = "__eq",              -- a == b
+		__lt = "__lt",              -- a < b
+		__le = "__le",              -- a <= b
+		__index = "___index",       -- return a[b]
+		__newindex = "___newindex", -- a[b] = v
+		__call = "__call",          -- a()
+		__gc = "__gc",              -- dispose a
+		__tostring = "__tostring",  -- tostring(a)
+		__exist = "__exist",        -- ClassName(...)	-- return object if existed
+		__idiv = "__idiv",          -- // floor division
+		__band = "__band",          -- & bitwise and
+		__bor = "__bor",            -- | bitwise or
+		__bxor = "__bxor",          -- ~ bitwise exclusive or
+		__bnot = "__bnot",          -- ~ bitwise unary not
+		__shl = "__shl",            -- << bitwise left shift
+		__shr = "__shr",            -- >> bitwise right shift
 	}
 
 	--------------------------------------------------
@@ -2731,9 +2766,8 @@ do
 			if value then rawset(self, key, value) return value end
 
 			-- Check meta-methods
-			if _KeyMeta[key] ~= nil then
-				local rMeta = _KeyMeta[key] and key or "_"..key
-				value = info.MetaTable[rMeta]
+			if _KeyMeta[key] then
+				value = info.MetaTable[_KeyMeta[key]]
 				if value then rawset(self, key, value) return value end
 			end
 
@@ -2822,9 +2856,8 @@ do
 			if value then return value end
 
 			-- Check meta-methods
-			if _KeyMeta[key] ~= nil then
-				local rMeta = _KeyMeta[key] and key or "_"..key
-				value = info.MetaTable[rMeta]
+			if _KeyMeta[key] then
+				value = info.MetaTable[_KeyMeta[key]]
 				if value then return value end
 			end
 
@@ -2837,7 +2870,7 @@ do
 
 			if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
-			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] ~= nil or (type(key) == "string" and type(value) == "function") then
+			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] or (type(key) == "string" and type(value) == "function") then
 				return SaveFeature(info, key, value)
 			end
 
@@ -2845,7 +2878,8 @@ do
 		end
 
 		_MetaClsDefEnv.__call = function(self, definition)
-			local ok, msg = pcall(ParseDefinition, self, definition)
+			ParseDefinition(self, definition)
+
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
@@ -2900,8 +2934,6 @@ do
 
 				if ret then error(ret, 3) end
 			end
-
-			return not ok and error(strtrim(msg:match(":%d+:%s*(.-)$") or msg), 2) or owner
 		end
 
 		_MetaClsEnv.__call = _MetaClsDefEnv.__call
@@ -3041,7 +3073,7 @@ do
 				end
 			else
 				-- Property
-				if oper.Set == false then error(("%s can't be written."):format(key), 2) end
+				if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
 				if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -3091,7 +3123,7 @@ do
 
 						return
 					else
-						error(("%s can't be written."):format(key), 2)
+						error(("%s can't be overwrited."):format(key), 2)
 					end
 				end
 			end
@@ -3238,7 +3270,7 @@ do
 					end
 				else
 					-- Property
-					if oper.Set == false then error(("%s can't be written."):format(key), 2) end
+					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
 					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -3288,7 +3320,7 @@ do
 
 							return
 						else
-							error(("%s can't be written."):format(key), 2)
+							error(("%s can't be overwrited."):format(key), 2)
 						end
 					end
 				end
@@ -3670,9 +3702,9 @@ end
 do
 	_KeyWord4StrtEnv = _KeywordAccessor()
 
-	_STRUCT_TYPE_MEMBER = "MEMBER"
-	_STRUCT_TYPE_ARRAY = "ARRAY"
-	_STRUCT_TYPE_CUSTOM = "CUSTOM"
+	STRUCT_TYPE_MEMBER = "MEMBER"
+	STRUCT_TYPE_ARRAY = "ARRAY"
+	STRUCT_TYPE_CUSTOM = "CUSTOM"
 
 	-- metatable for struct's env
 	_MetaStrtEnv = { __metatable = true }
@@ -3776,34 +3808,14 @@ do
 		_MetaStrtDefEnv.__newindex = function(self, key, value)
 			local info = _NSInfo[self[OWNER_FIELD]]
 
-			if _KeyWord4StrtEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
+			if _KeyWord4StrtEnv:GetKeyword(self, key) then return error(("'%s' is a keyword."):format(key)) end
 
-			if key == info.Name then
-				if type(value) == "function" then
-					info.Validator = value
-					return
-				else
-					error(("'%s' must be a function as the Validator."):format(key), 2)
-				end
+			if key == info.Name or ((tonumber(key) or type(key) == "string") and type(value) == "function") then
+				return SaveFeature(info, key, value)
 			end
 
-			if type(key) == "string" or tonumber(key) then
-				if type(value) == "function" then
-					if tonumber(key) then
-						info.Validator = value
-						return
-					elseif IsLocal() then
-						return SaveMethod(self[LOCAL_ENV_FIELD], key, value, info.Owner)
-					else
-						-- Cache the method for the struct data
-						info.Method = info.Method or {}
-
-						-- Don't save to environment until need it
-						return SaveMethod(info.Method, key, value, info.Owner)
-					end
-				elseif _NSInfo[value] and _NSInfo[value].Type then
-					return SaveStructMember(self, info, key, value)
-				end
+			if (type(key) == "string" or tonumber(key)) and getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then
+				return SaveStructMember(info, key, value)
 			end
 
 			return rawset(self, key, value)
@@ -3833,47 +3845,47 @@ do
 
 		local sType = info.SubType
 
-		if sType ~= _STRUCT_TYPE_CUSTOM then
-			if type(value) ~= "table" then wipe(_ValidatedCache) error(("%s must be a table, got %s."):format("%s", type(value))) end
+		if sType ~= STRUCT_TYPE_CUSTOM then
+			if type(value) ~= "table" then wipe(_ValidatedCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
 
 			if _ValidatedCache[value] then return value end
 
 			if not _ValidatedCache[1] then _ValidatedCache[1] = value end
 			_ValidatedCache[value] = true
 
-			if sType == _STRUCT_TYPE_MEMBER then
+			if sType == STRUCT_TYPE_MEMBER then
 				if info.Members then
-					local env = info.StructEnv
-					local default = info.DefaultField
-					local require = info.RequireMember
-
-					for _, n in ipairs(info.Members) do
-						local val = value[n]
+					for _, mem in ipairs(info.Members) do
+						local name = mem.Name
+						local default = mem.Default
+						local val = value[name]
 
 						if val == nil then
-							if default and default[n] ~= nil then
+							if default ~= nil then
 								-- Deep clone to make sure no change on default value
-								value[n] = CloneObj(default[n], true)
-							elseif require and require[n] then
-								error(("%s.%s can't be nil."):format("%s", n))
+								value[name] = CloneObj(default, true)
+							elseif mem.Require then
+								return error(("%s.%s can't be nil."):format("%s", name))
 							end
 						else
-							value[n] = Validate4Type(env[n], val, n)
+							value[name] = Validate4Type(mem.Type, val, name)
 						end
 					end
 				end
-			elseif sType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
+			elseif sType == STRUCT_TYPE_ARRAY and info.ArrayElement then
 				local flag, ret
-				local ele = info.ArrayElement
+				local ele = info.ArrayElement.Type
 
-				for i, v in ipairs(value) do
-					flag, ret = pcall(Validate4Type, ele, v, "Element")
+				if ele then
+					for i, v in ipairs(value) do
+						flag, ret = pcall(Validate4Type, ele, v, "Element")
 
-					if flag then
-						value[i] = ret
-					else
-						wipe(_ValidatedCache)
-						error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]"))
+						if flag then
+							value[i] = ret
+						else
+							wipe(_ValidatedCache)
+							return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]"))
+						end
 					end
 				end
 			end
@@ -3887,10 +3899,10 @@ do
 				error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
 			end
 
-			if sType == _STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
+			if sType == STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
 		end
 
-		if sType ~= _STRUCT_TYPE_CUSTOM and _ValidatedCache[1] == value then wipe(_ValidatedCache) end
+		if sType ~= STRUCT_TYPE_CUSTOM and _ValidatedCache[1] == value then wipe(_ValidatedCache) end
 
 		return value
 	end
@@ -3929,10 +3941,10 @@ do
 		end
 
 		-- Default Constructor
-		if info.SubType == _STRUCT_TYPE_MEMBER then
+		if info.SubType == STRUCT_TYPE_MEMBER then
 			local ret = {}
 
-			if info.Members then for i, n in ipairs(info.Members) do ret[n] = select(i, ...) end end
+			if info.Members then for i, n in ipairs(info.Members) do ret[n.Name] = select(i, ...) end end
 
 			local ok, value = pcall(ValidateStruct, strt, ret)
 
@@ -3946,12 +3958,12 @@ do
 				local args = ""
 				for i, n in ipairs(info.Members) do
 					--if info.StructEnv[n]:Is(nil) and not args:find("%[") then n = "["..n end
-					if i == 1 then args = n else args = args..", "..n end
+					if i == 1 then args = n.Name else args = args..", "..n.Name end
 				end
 				--if args:find("%[") then args = args.."]" end
 				error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
 			end
-		elseif info.SubType == _STRUCT_TYPE_ARRAY then
+		elseif info.SubType == STRUCT_TYPE_ARRAY then
 			local ret = {}
 
 			for i = 1, select('#', ...) do ret[i] = select(i, ...) end
@@ -4030,7 +4042,7 @@ do
 		if info.IsSealed then error("The struct is sealed, can't be re-defined.", depth + 1) end
 
 		info.Type = TYPE_STRUCT
-		info.SubType = _STRUCT_TYPE_MEMBER
+		info.SubType = STRUCT_TYPE_MEMBER
 		info.NameSpace = info.NameSpace or ns
 		info.Members = nil
 		info.Default = nil
@@ -4086,73 +4098,12 @@ do
 		end
 	end
 
-	function SaveStructMember(self, info, key, value)
-		rawset(self, key, value)
-
-		if tonumber(key) and info.SubType ~= _STRUCT_TYPE_ARRAY then
-			info.SubType = _STRUCT_TYPE_ARRAY
-			info.Members = nil
-		end
-
-		if info.SubType == _STRUCT_TYPE_MEMBER then
-			info.Members = info.Members or {}
-			tinsert(info.Members, key)
-			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(key, AttributeTargets.Member, info.Owner, key) end
-
-			-- Auto generate Default
-			if not (info.RequireMember and info.RequireMember[key]) and (not info.DefaultField or info.DefaultField[key] == nil) then
-				local rinfo = _NSInfo[value]
-
-				if rinfo and (rinfo.Type == TYPE_STRUCT or rinfo.Type == TYPE_ENUM) and rinfo.Default ~= nil then
-					info.DefaultField = info.DefaultField or {}
-					info.DefaultField[key] = rinfo.Default
-				end
-			end
-		elseif info.SubType == _STRUCT_TYPE_ARRAY then
-			info.ArrayElement = value
-			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
-		end
-	end
-
-	function RefreshStruct(strt)
-		local info = _NSInfo[strt]
-
-		if info.SubType == _STRUCT_TYPE_MEMBER and (not info.Members or #(info.Members) == 0) then
-			info.SubType = _STRUCT_TYPE_CUSTOM
-			info.Members = nil
-		end
-
-		-- validate default value if existed
-		if info.Default ~= nil then
-			if info.SubType ~= _STRUCT_TYPE_CUSTOM then
-				info.Default = nil
-			elseif not pcall(ValidateStruct, info.Owner, info.Default) then
-				info.Default = nil
-			end
-		end
-	end
-
 	function ParseStructDefinition(self, definition)
 		local info = _NSInfo[self[OWNER_FIELD]]
 
 		if type(definition) == "table" then
 			for k, v in pairs(definition) do
-				local vType = getmetatable(v)
-
-				if vType and type(v) ~= "string" then
-					if vType == TYPE_NAMESPACE and (type(k) == "string" or tonumber(k)) then
-						SaveStructMember(self, info, k, v)
-					end
-				elseif type(v) == "function" then
-					if k == info.Name or tonumber(k) then
-						info.Validator = v
-					else
-						info.Method = info.Method or {}
-						SaveMethod(info.Method, k, v, info.Owner)
-					end
-				else
-					info.Default = v
-				end
+				SaveFeature(info, k, v)
 			end
 		else
 			if type(definition) == "string" then
@@ -4194,10 +4145,10 @@ end
 do
 	namespace "System"
 
-	struct "Boolean"	{ Default = false, function (value) return value and true or false end }
+	struct "Boolean"	{ false, function (value) return value and true or false end }
 	struct "BooleanNil"	{ function (value) return value and true or false end }
 	struct "String"		{ function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
-	struct "Number"		{ Default = 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
+	struct "Number"		{ 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
 	struct "NumberNil"	{ function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
 	struct "Function"	{ function (value) if type(value) ~= "function" then error(("%s must be a function, got %s."):format("%s", type(value))) end end }
 	struct "Table"		{ function (value) if type(value) ~= "table" then error(("%s must be a table, got %s."):format("%s", type(value))) end end }
@@ -4303,7 +4254,7 @@ do
 		]]
 		function BeginDefinition(ns)
 			local info = _NSInfo[ns]
-			assert(info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE), "System.Reflector.BeginDefinition(ns) - ns must be a class or interface.")
+			assert(info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE or info.Type == TYPE_STRUCT), "System.Reflector.BeginDefinition(ns) - ns must be a class, interface or struct.")
 			info.BeginDefinition = true
 		end
 
@@ -4313,9 +4264,13 @@ do
 		]]
 		function EndDefinition(ns)
 			local info = _NSInfo[ns]
-			assert(info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE), "System.Reflector.BeginDefinition(ns) - ns must be a class or interface.")
+			assert(info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE or info.Type == TYPE_STRUCT), "System.Reflector.BeginDefinition(ns) - ns must be a class, interface or struct.")
 			info.BeginDefinition = nil
-			return RefreshCache(info.Owner)
+			if info.Type == TYPE_STRUCT then
+				return RefreshStruct(info.Owner)
+			else
+				return RefreshCache(info.Owner)
+			end
 		end
 
 		doc "GetSuperClass" [[
@@ -5079,7 +5034,7 @@ do
 		]]
 		function GetStructArrayElement(ns)
 			local info = _NSInfo[ns]
-			return info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement or nil
+			return info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement or nil
 		end
 
 		doc "HasStructMember" [[
@@ -5091,8 +5046,8 @@ do
 		function HasStructMember(ns, member)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
-				for _, part in ipairs(info.Members) do if part == member then return true end end
+			if info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_MEMBER and info.Members then
+				for _, part in ipairs(info.Members) do if part.Name == member then return true end end
 			end
 
 			return false
@@ -5107,7 +5062,7 @@ do
 		function IsRequiredMember(ns, member)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT and info.SubType == _STRUCT_TYPE_MEMBER then
+			if info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_MEMBER then
 				if info.RequireMember and info.RequireMember[member] then return true end
 			end
 
@@ -5125,14 +5080,18 @@ do
 		if not SAVE_MEMORY then
 			_GetStructMembersCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetStructMembersIter = function (ns, key) return next(_NSInfo[ns].Members, key) end
+			_GetStructMembersIter = function (ns, key)
+				local mem
+				key, mem = next(_NSInfo[ns].Members, key)
+				if mem then return key, mem.Name end
+			end
 		end
 		function GetStructMembers(ns, result)
 			local info = _NSInfo[ns]
 
 			if info and info.Members then
 				if type(result) == "table" then
-					for _, member in ipairs(info.Members) do tinsert(result, member) end
+					for _, member in ipairs(info.Members) do tinsert(result, member.Name) end
 					return result
 				else
 					if SAVE_MEMORY then
@@ -5141,7 +5100,11 @@ do
 						local members = info.Members
 						local iter = _GetStructMembersCache[members]
 						if not iter then
-							iter = function (ns, key) return next(members, key) end
+							iter = function (ns, key)
+								local mem
+								key, mem = next(members, key)
+								if mem then return key, mem.Name end
+							end
 							_GetStructMembersCache[members] = iter
 						end
 						return iter, ns
@@ -5153,21 +5116,26 @@ do
 		end
 
 		doc "GetStructMember" [[
-			<desc>Get the part's type of the struct</desc>
+			<desc>Get the member's type of the struct</desc>
 			<param name="struct" type="struct">the struct type</param>
-			<param name="part" type="string">the part's name</param>
-			<return type="System.Type">the part's type</return>
+			<param name="member" type="string">the member's name</param>
+			<return type="System.Type">the member's type</return>
+			<return type="System.Any">the member's default value</return>
+			<return type="System.Boolean">whether the member is required</return>
 			<usage>System.Reflector.GetStructMember(Position, "x")</usage>
 		]]
 		function GetStructMember(ns, part)
 			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER and info.Members then
-					local mType = rawget(info.StructEnv, part)
-					if IsNameSpace(mType) then return mType end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY and info.ArrayElement then
-					return info.ArrayElement
+				if info.SubType == STRUCT_TYPE_MEMBER and info.Members then
+					for _, mem in ipairs(info.Members) do
+						if part == mem.Name then
+							return mem.Type, mem.Default, mem.Require
+						end
+					end
+				elseif info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement then
+					return info.ArrayElement.Type
 				end
 			end
 		end
@@ -5435,23 +5403,18 @@ do
 					return tostring(data)
 				elseif Reflector.IsStruct(ns) then
 					if Reflector.GetStructType(ns) == "MEMBER" and type(data) == "table" then
-						local parts = Reflector.GetStructMembers(ns)
+						local members = Reflector.GetStructMembers(ns, {})
 
-						if not parts or not next(parts) then
-							-- Well, what a no member struct can be used for?
+						if not members or not next(members) then
 							return tostring(ns) .. "( )"
 						else
 							local ret = tostring(ns) .. "( "
 
-							for i, part in ipairs(parts) do
-								local sty = Reflector.GetStructMember(ns, part)
-								local value = data[part]
+							for i, member in ipairs(members) do
+								local sty = Reflector.GetStructMember(ns, member)
+								local value = data[member]
 
-								if sty and #sty == 1 then
-									value = Serialize(value, sty[1])
-								else
-									value = SerializeData(value)
-								end
+								value = SerializeData(value, sty)
 
 								if i == 1 then
 									ret = ret .. tostring(value)
@@ -5547,9 +5510,9 @@ do
 				elseif info.Type == TYPE_ENUM then
 					return info.Default
 				elseif info.Type == TYPE_STRUCT then
-					if info.SubType == _STRUCT_TYPE_CUSTOM and not part then
+					if info.SubType == STRUCT_TYPE_CUSTOM and not part then
 						return info.Default
-					elseif info.SubType == _STRUCT_TYPE_MEMBER and part then
+					elseif info.SubType == STRUCT_TYPE_MEMBER and part then
 						return info.DefaultField and info.DefaultField[part]
 					end
 				end
@@ -5789,9 +5752,9 @@ do
 				local pInfo = info.Cache[name]
 				return type(pInfo) == "table" and not getmetatable(pInfo) and pInfo.Attribute or nil
 			elseif targetType == AttributeTargets.Member then
-				if info.SubType == _STRUCT_TYPE_MEMBER then
+				if info.SubType == STRUCT_TYPE_MEMBER then
 					return info.Attributes and info.Attributes[name]
-				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+				elseif info.SubType == STRUCT_TYPE_ARRAY then
 					return info.ElementAttribute
 				end
 			elseif targetType ~= AttributeTargets.Constructor then
@@ -5863,14 +5826,14 @@ do
 				local pInfo = info.Property[name]
 				if pInfo then pInfo.Attribute = config end
 			elseif targetType == AttributeTargets.Member then
-				if info.SubType == _STRUCT_TYPE_MEMBER then
+				if info.SubType == STRUCT_TYPE_MEMBER then
 					if config then
 						info.Attributes = info.Attributes or {}
 						info.Attributes[name] = config
 					elseif info.Attributes then
 						info.Attributes[name] = nil
 					end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY then
+				elseif info.SubType == STRUCT_TYPE_ARRAY then
 					info.ElementAttribute = config
 				end
 			elseif targetType ~= AttributeTargets.Constructor then
@@ -5976,7 +5939,7 @@ do
 					arg3 = owner
 					arg4 = name
 				elseif targetType == AttributeTargets.Member then
-					arg1 = name
+					arg1 = target.Predefined
 					arg2 = targetType
 					arg3 = owner
 					arg4 = name
@@ -6822,17 +6785,17 @@ do
 			local info = _NSInfo[ns]
 
 			if info and info.Type == TYPE_STRUCT then
-				if info.SubType == _STRUCT_TYPE_MEMBER then
+				if info.SubType == STRUCT_TYPE_MEMBER then
 					if info.Validator then return true end
 
 					if info.Members then
 						for _, n in ipairs(info.Members) do
-							if isCloneNeeded(info.StructEnv[n]) then return true end
+							if isCloneNeeded(n.Type) then return true end
 						end
 					end
-				elseif info.SubType == _STRUCT_TYPE_ARRAY then
-					return isCloneNeeded(info.ArrayElement)
-				elseif info.SubType == _STRUCT_TYPE_CUSTOM and info.Validator then
+				elseif info.SubType == STRUCT_TYPE_ARRAY then
+					return isCloneNeeded(info.ArrayElement and info.ArrayElement.Type)
+				elseif info.SubType == STRUCT_TYPE_CUSTOM and info.Validator then
 					return true
 				end
 			end
@@ -7086,7 +7049,10 @@ do
 				local argsChanged = false
 				local matched = true
 
-				if argsCount == 0 and not zeroMethod then zeroMethod = info end
+				if argsCount == 0 and not zeroMethod then
+					if count == 0 then return info.Method( ... ) end
+					zeroMethod = info
+				end
 
 				-- Check argument settings
 				if count >= info.MinArgs and count <= info.MaxArgs then
@@ -7208,7 +7174,7 @@ do
 
 			if targetType == AttributeTargets.Constructor then
 				name = Reflector.GetNameSpaceName(owner)
-			elseif _KeyMeta[name:match("__%w+$")] ~= nil then
+			elseif _KeyMeta[name] then
 				-- Meta-methods
 				isMeta = true
 			end
@@ -7348,15 +7314,15 @@ do
 
 				if self.Type == StructType.Member then
 					-- use member list, default type
-					info.SubType = _STRUCT_TYPE_MEMBER
+					info.SubType = STRUCT_TYPE_MEMBER
 					info.ArrayElement = nil
 				elseif self.Type == StructType.Array then
 					-- user array list
-					info.SubType = _STRUCT_TYPE_ARRAY
+					info.SubType = STRUCT_TYPE_ARRAY
 					info.Members = nil
 				else
 					-- else all custom
-					info.SubType = _STRUCT_TYPE_CUSTOM
+					info.SubType = STRUCT_TYPE_CUSTOM
 					info.Members = nil
 					info.ArrayElement = nil
 				end
@@ -7399,11 +7365,11 @@ do
 			if info.SubType == StructType.Member and info.Members then
 				local cache = CACHE_TABLE()
 
-				for i, mem in ipairs(info.Members) do tinsert(cache, mem) cache[mem] = i end
+				for i, mem in ipairs(info.Members) do tinsert(cache, mem.Name) cache[mem.Name] = mem end
 				wipe(info.Members)
 
-				for i, mem in ipairs(self) do if cache[mem] then tinsert(info.Members, mem) cache[mem] = nil end end
-				for i, mem in ipairs(cache) do if cache[mem] then tinsert(info.Members, mem) end end
+				for i, name in ipairs(self) do if cache[name] then tinsert(info.Members, cache[name]) cache[name] = nil end end
+				for i, name in ipairs(cache) do if cache[name] then tinsert(info.Members, cache[name]) end end
 
 				CACHE_TABLE(cache)
 			end
@@ -7452,7 +7418,7 @@ do
 
 		function ApplyAttribute(self, target, targetType)
 			if _NSInfo[target] and _NSInfo[target].Type == TYPE_CLASS then
-				SaveMethod(_NSInfo[target].MetaTable, "__call", __InitTable__["InitWithTable"], target)
+				return SaveMethod(_NSInfo[target], "__call", __InitTable__["InitWithTable"])
 			end
 		end
 	end)
@@ -7470,12 +7436,7 @@ do
 		function ApplyAttribute(self, target, targetType, owner, name)
 			if targetType == AttributeTargets.Interface then
 				if self.Require then
-					local info = _NSInfo[target]
-
-					info.Requires = info.Requires or {}
-					info.Requires[self.Require] = true
-
-					self.Require = nil
+					return SaveRequire(info, self.Require)
 				end
 			else
 				local info = _NSInfo[owner]
@@ -7488,14 +7449,7 @@ do
 						info.RequireProperty = info.RequireProperty or {}
 						info.RequireProperty[name] = true
 					elseif targetType == AttributeTargets.Member then
-						if not info.Members then return end
-						for _, v in ipairs(info.Members) do
-							if v.Name == name then
-								v.Default = nil
-								v.Require = true
-								return
-							end
-						end
+						target.Require = true
 					end
 				end
 			end
@@ -7507,15 +7461,6 @@ do
 		__Arguments__{}
 		function __Require__(self)
 			self.Require = nil
-		end
-
-		__Arguments__{ Interface }
-		function __Require__(self, value)
-			local IFInfo = rawget(_NSInfo, value)
-			if IFInfo.IsFinal then
-				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
-			end
-			self.Require = value
 		end
 
 		__Arguments__{ Class }
@@ -7533,8 +7478,8 @@ do
 
 			local IFInfo = rawget(_NSInfo, value)
 
-			if not IFInfo or (IFInfo.Type ~= TYPE_INTERFACE and IFInfo.Type ~= TYPE_CLASS) then
-				error("Usage: __Require__ (interface|class) : interface or class expected", 3)
+			if not IFInfo or IFInfo.Type ~= TYPE_CLASS then
+				error("Usage: __Require__ (class) : class expected", 3)
 			elseif IFInfo.IsFinal then
 				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
 			end
@@ -7690,22 +7635,8 @@ do
 		function ApplyAttribute(self, target, targetType, owner, name)
 			if self.Default == nil then return end
 
-			if targetType == AttributeTargets.Property then
+			if targetType == AttributeTargets.Property or targetType == AttributeTargets.Member then
 				target.Default = self.Default
-			elseif targetType == AttributeTargets.Member then
-				local info = _NSInfo[owner]
-				if not info or info.SubType ~= _STRUCT_TYPE_MEMBER then return end
-				if not info.Members then return end
-
-				for _, v in ipairs(info.Members) do
-					if v.Name == name then
-						if not v.Require then
-							v.Default = self.Default
-							if v.Type then v.Default = GetValidatedValue(v.Type, self.Default) end
-						end
-						return
-					end
-				end
 			else
 				_NSInfo[target].Default = self.Default
 			end
@@ -7906,7 +7837,8 @@ do
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
-		__Require__() __Doc__[[Creates a new object that is a copy of the current instance.]]
+		__Require__()
+		__Doc__[[Creates a new object that is a copy of the current instance.]]
 		function Clone(self) end
 	end)
 
