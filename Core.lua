@@ -452,9 +452,11 @@ do
 			local iType = info.Type
 
 			if iType == TYPE_STRUCT then
-				ret = info.Method and info.Method[key]
-				if ret then return ret end
+				return info.Method and info.Method[key] or nil
 			elseif iType == TYPE_CLASS or iType == TYPE_INTERFACE then
+				-- Meta-method
+				if iType == TYPE_CLASS and _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
+
 				-- Method
 				ret = info.Method[key] or info.Cache[key]
 				if type(ret) == "function" then return ret end
