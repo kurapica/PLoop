@@ -6423,6 +6423,12 @@ do
 				value.Default = GetValidatedValue(value.Type, value.Default)
 			end
 
+			-- Auto generate Default
+			if value.Default == nil and value.Type and value.Nilable then
+				local info = _NSInfo[value.Type]
+				if info and (info.Type == TYPE_STRUCT or info.Type == TYPE_ENUM) then value.Default = info.Default end
+			end
+
 			-- Whether the value should be clone, argument match would change some value, Just for safe
 			value.CloneNeeded = isCloneNeeded(value.Type)
 		end
@@ -6474,7 +6480,7 @@ do
 
 				return ret
 			elseif Reflector.IsNameSpace(data) then
-				return Reflector.GetNameSpaceFullName(data)
+				return tostring(data)
 			else
 				-- Don't support any point values
 				return nil
@@ -6536,25 +6542,13 @@ do
 
 						sty = Reflector.GetStructArrayElement(ns)
 
-						if sty and #sty == 1 then
-							for i, v in ipairs(data) do
-								v = serialize(v, sty[1])
+						for i, v in ipairs(data) do
+							v = serialize(v, sty)
 
-								if i == 1 then
-									ret = ret .. tostring(v)
-								else
-									ret = ret .. ", " .. tostring(v)
-								end
-							end
-						else
-							for i, v in ipairs(data) do
-								v = serializeData(v)
-
-								if i == 1 then
-									ret = ret .. tostring(v)
-								else
-									ret = ret .. ", " .. tostring(v)
-								end
+							if i == 1 then
+								ret = ret .. tostring(v)
+							else
+								ret = ret .. ", " .. tostring(v)
 							end
 						end
 
@@ -6605,12 +6599,6 @@ do
 				elseif self.MinArgs then
 					-- Only optional args can be defined after optional args
 					error(_Error_Header .. _Error_NotOptional:format(i))
-				end
-
-				-- Auto generate Default
-				if arg.Default == nil and arg.Type and arg.Nilable then
-					local info = _NSInfo[arg.Type]
-					if info and (info.Type == TYPE_STRUCT or info.Type == TYPE_ENUM) then arg.Default = info.Default end
 				end
 
 				return
@@ -6794,6 +6782,7 @@ do
 				local argsCount = #info
 				local argsChanged = false
 				local matched = true
+				local maxCnt = count
 
 				if argsCount == 0 and not zeroMethod then
 					if count == 0 then return info.Method( ... ) end
@@ -6851,6 +6840,7 @@ do
 							if cache[i] ~= value then
 								argsChanged = true
 								cache[i] = value
+								if i > maxCnt then maxCnt = i end
 							end
 						end
 					end
@@ -6863,9 +6853,9 @@ do
 
 						if cache then
 							if base == 1 then
-								return info.Method( object, unpack(cache, 1, count) )
+								return info.Method( object, unpack(cache, 1, maxCnt) )
 							else
-								return info.Method( unpack(cache, 1, count) )
+								return info.Method( unpack(cache, 1, maxCnt) )
 							end
 						else
 							return info.Method( ... )
