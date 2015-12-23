@@ -4,7 +4,7 @@ Pure Lua Object-Oriented Program
 __PLoop__ is used to provide a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also the luajit.
 
 * __namespace__ supported.
-* Four data type included : __enum__, __struct__, __class__, _interface__.
+* Four data type included : __enum__, __struct__, __class__, __interface__.
 * Property supported with several features : getter/setter, value changed handler or event, default value or default value factory, etc.
 * Constructor/dispose supported for class, initializer/dispose supported for interface, validator supported for struct.
 * Method supported for class, interface and struct.
