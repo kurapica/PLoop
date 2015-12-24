@@ -8032,7 +8032,7 @@ do
 			stack = stack or 2
 			local info = _ModuleInfo[self]
 
-			if not info then error("The module is disposed", 2) end
+			if not info then error("The module is disposed", stack) end
 
 			-- Check version
 			if type(version) == "number" then
