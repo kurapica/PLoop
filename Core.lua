@@ -6507,7 +6507,7 @@ do
 			end
 		end
 
-		function serialize(data, ns)
+		local function serialize(data, ns)
 			if type(ns) == "string" then ns = GetNameSpaceForName(ns) end
 
 			if _NSInfo[ns] then
