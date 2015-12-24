@@ -226,7 +226,7 @@ do
 		if flag then
 			return msg, ...
 		else
-			return error(type(msg) == "string" and msg:match(":%d+:%s*(.-)$") or msg, 3)
+			return error(msg, 2)
 		end
 	end
 
@@ -358,7 +358,12 @@ do
 		self = _KeywordAccessorInfo[self]
 		local keyword, owner = self.Keyword, self.Owner
 		self.Keyword, self.Owner = nil, nil
-		if keyword and owner then local ret = keyword(owner, value, 2) return ret end
+		if keyword and owner then
+			-- In 5.1, tail call for error & setfenv is not supported
+			local ok, ret = pcall(keyword, owner, value, 4)
+			if not ok then error(ret:match("%d+:%s*(.-)$") or ret, 2) end
+			return ret
+		end
 	end
 	getmetatable(_KeyAccessor).__metatable = false
 
@@ -439,7 +444,7 @@ do
 				end
 			end
 
-			return error(tostring(self) .. " is not callable.")
+			error(tostring(self) .. " is not callable.", 2)
 		end
 
 		_MetaNS.__index = function(self, key)
@@ -482,7 +487,7 @@ do
 							value = oper.SetWeak and info.WeakStaticFields or info.StaticFields
 							value = value and value[operTar]
 						elseif default == nil then
-							return error(("%s can't be read."):format(key))
+							error(("%s can't be read."):format(key), 2)
 						end
 					end
 
@@ -538,7 +543,7 @@ do
 				local oper = info.Property[key]
 
 				if oper and oper.IsStatic then
-					if oper.Set == false then return error(("%s can't be overwrited."):format(key)) end
+					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
 
 					-- Property
 					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
@@ -591,21 +596,21 @@ do
 
 							return operTar and operTar(self, value, old, key)
 						else
-							return error(("%s can't be overwrited."):format(key))
+							error(("%s can't be overwrited."):format(key), 2)
 						end
 					end
 				else
 					local ok, msg = pcall(SaveFeature, info, key, value)
-					if not ok then return error(msg:match("%d+:%s*(.-)$") or msg) end
+					if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
 					return not info.BeginDefinition and RefreshCache(self)
 				end
 			elseif info.Type == TYPE_STRUCT then
 				local ok, msg = pcall(SaveFeature, info, key, value)
-				if not ok then return error(msg:match("%d+:%s*(.-)$") or msg) end
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
 				return not info.BeginDefinition and RefreshStruct(self)
 			end
 
-			return error(("Can't set data to %s, it's readonly."):format(tostring(self)))
+			error(("Can't set data to %s, it's readonly."):format(tostring(self)), 2)
 		end
 
 		_MetaNS.__tostring = function(self)
@@ -735,11 +740,11 @@ do
 	------------------------------------
 	--- Set the default namespace for the current environment, the class defined in this environment will be stored in this namespace
 	------------------------------------
-	function namespace(env, name, depth)
-		depth = tonumber(depth) or 1
+	function namespace(env, name, stack)
+		stack = stack or 2
 		name = name or env
-		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: namespace "namespace"]], depth) end
-		env = type(env) == "table" and env or getfenv(depth + 1) or _G
+		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: namespace "namespace"]], stack) end
+		env = type(env) == "table" and env or getfenv(stack) or _G
 
 		local ns = SetNameSpace4Env(env, name)
 
@@ -837,7 +842,7 @@ do
 
 		if mainName and ret:find("%%s") then ret = ret:gsub("%%s[_%w]*", mainName) end
 
-		return error(ret, (stack or 1))
+		error(ret, stack or 2)
 	end
 
 	function GetValidatedValue(oType, value)
@@ -1836,7 +1841,7 @@ do
 	end
 
 	function SaveProperty(info, name, set)
-		if type(set) ~= "table" then return error([=[Usage: property "Name" { -- Property Definition }]=]) end
+		if type(set) ~= "table" then return error([[Usage: property "Name" { Property Definition }]]) end
 
 		local prop = info.Property[name] or {}
 		info.Property[name] = prop
@@ -2028,7 +2033,7 @@ do
 		if not rawget(_NSInfo, req) or _NSInfo[req].Type ~= TYPE_CLASS then error("Usage : require 'class'") end
 
 		local ok, ret = CheckRequireConflict(info, req)
-		if not ok then error(("The new required class is conflicted with %s that extened from the interface."):format(tostring(ret))) end
+		if not ok then return error(("The new required class is conflicted with %s that extened from the interface."):format(tostring(ret))) end
 
 		info.RequireClass = req
 	end
@@ -2039,7 +2044,7 @@ do
 		-- Validate the value
 		if getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then value = { Type = value } end
 
-		if type(value) ~= "table" then return error([=[Usage: member "Name" { -- Field Definition }]=]) end
+		if type(value) ~= "table" then return error([[Usage: member "Name" { -- Field Definition }]]) end
 
 		memInfo.Predefined = value
 
@@ -2167,12 +2172,13 @@ do
 		cache.Info = nil
 		cache.Name = nil
 
-		if info and name then return SaveProperty(info, name, set) end
+		local ok, msg = pcall(SaveProperty, info, name, set)
+		if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
 	end
 
 	function property_Def(env, name)
 		if type(name) ~= "string" or strtrim(name:match("[_%w]+")) == "" then
-			return error([=[Usage: property "Name" { -- Property Definition }]=])
+			return error([[Usage: property "Name" { Property Definition }]])
 		end
 
 		local cur = running() or 0
@@ -2196,12 +2202,13 @@ do
 		cache.Info = nil
 		cache.Name = nil
 
-		if info and name then return SaveStructMember(info, name, set) end
+		local ok, msg = pcall(SaveStructMember, info, name, set)
+		if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
 	end
 
 	function member_Def(env, name)
 		if type(name) ~= "string" or strtrim(name:match("[_%w]+")) == "" then
-			return error([=[Usage: member "Name" { -- Field Definition }]=])
+			return error([[Usage: member "Name" { -- Field Definition }]])
 		end
 
 		local cur = running() or 0
@@ -2215,17 +2222,17 @@ do
 	end
 
 	function event_Def(env, name)
-		if type(name) ~= "string" or not name:match("^[_%w]+$") then error([[Usage: event "eventName"]], 2) end
+		if type(name) ~= "string" or not name:match("^[_%w]+$") then return error([[Usage: event "eventName"]]) end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 
-		if not info then error("can't use event here.", 2) end
+		if not info then return error("can't use event here.") end
 
 		return SaveEvent(info, name)
 	end
 
 	function extend_Def(env, name)
-		if name and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: extend "namespace.interfacename"]], 3) end
+		if name and type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: extend "namespace.interfacename"]]) end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 		local IF
@@ -2238,7 +2245,7 @@ do
 					IF = IF and IF[subname] or env[subname]
 
 					if not IsNameSpace(IF) then
-						error(("No interface is found with the name : %s"):format(name), 3)
+						return error(("No interface is found with the name : %s"):format(name))
 					end
 				end
 			end
@@ -2246,7 +2253,7 @@ do
 			IF = name
 		end
 
-		SaveExtend(info, IF)
+		return SaveExtend(info, IF)
 	end
 
 	function extend_IF(env, name)
@@ -2260,7 +2267,7 @@ do
 	end
 
 	function inherit_Def(env, name)
-		if name and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: inherit "namespace.classname"]], 2) end
+		if name and type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: inherit "namespace.classname"]]) end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 
@@ -2277,7 +2284,7 @@ do
 						superCls = superCls[subname]
 					end
 
-					if not IsNameSpace(superCls) then error(("No class is found with the name : %s"):format(name), 2) end
+					if not IsNameSpace(superCls) then return error(("No class is found with the name : %s"):format(name)) end
 				end
 			end
 		else
@@ -2406,7 +2413,9 @@ do
 			if _KeyWord4IFEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
 			if key == info.Name or key == DISPOSE_METHOD or (type(key) == "string" and type(value) == "function") then
-				return SaveFeature(info, key, value)
+				local ok, msg = pcall(SaveFeature, info, key, value)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
 			end
 
 			rawset(self, key, value)
@@ -2433,24 +2442,24 @@ do
 	------------------------------------
 	--- Create interface in currect environment's namespace or default namespace
 	------------------------------------
-	function interface(env, name, depth)
-		depth = tonumber(depth) or 1
+	function interface(env, name, stack)
+		stack = stack or 2
 		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
+		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
 		local IF, ns = GetDefineNS(fenv, name)
 		local info = _NSInfo[IF]
 
 		if not info then
-			return error([[Usage: interface "name"]], depth)
+			error([[Usage: interface "name"]], stack)
 		elseif info.Type and info.Type ~= TYPE_INTERFACE then
-			return error(("%s is existed as %s, not interface."):format(tostring(name), tostring(info.Type)), depth)
+			error(("%s is existed as %s, not interface."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
 		name = info.Name
 
 		-- Check if the class is final
-		if info.IsSealed then return error("The interface is sealed, can't be re-defined.", depth) end
+		if info.IsSealed then error("The interface is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_INTERFACE
 		info.NameSpace = info.NameSpace or ns
@@ -2477,7 +2486,7 @@ do
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface) end
 
 		-- Set the environment to interface's environment
-		setfenv(depth + 1, interfaceEnv)
+		setfenv(stack, interfaceEnv)
 
 		return interfaceEnv
 	end
@@ -2485,19 +2494,20 @@ do
 	------------------------------------
 	--- End the interface's definition and restore the environment
 	------------------------------------
-	function endinterface(env, name)
+	function endinterface(env, name, stack)
+		stack = stack or 2
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaIFEnv)
-			setfenv(3, env[BASE_ENV_FIELD])
+			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
 			if info.ApplyAttributes then info.ApplyAttributes() end
 			return env[BASE_ENV_FIELD]
 		else
-			return error(("%s is not closed."):format(info.Name), 2)
+			error(("%s is not closed."):format(info.Name), stack)
 		end
 	end
 
@@ -2505,7 +2515,8 @@ do
 		local info = _NSInfo[self[OWNER_FIELD]]
 		if type(definition) == "table" then
 			for k, v in pairs(definition) do
-				SaveFeature(info, k, v)
+				local ok, msg = pcall(SaveFeature, info, k, v)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
 			end
 		else
 			if type(definition) == "string" then
@@ -2749,7 +2760,9 @@ do
 			if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
 			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] or (type(key) == "string" and type(value) == "function") then
-				return SaveFeature(info, key, value)
+				local ok, msg = pcall(SaveFeature, info, key, value)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
 			end
 
 			rawset(self, key, value)
@@ -3290,25 +3303,25 @@ do
 	------------------------------------
 	--- Create class in currect environment's namespace or default namespace
 	------------------------------------
-	function class(env, name, depth)
-		depth = tonumber(depth) or 1
+	function class(env, name, stack)
+		stack = stack or 2
 		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
+		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
 
 		local cls, ns = GetDefineNS(fenv, name)
 		local info = _NSInfo[cls]
 
 		if not info then
-			return error([[Usage: class "name"]], depth)
+			error([[Usage: class "name"]], stack)
 		elseif info.Type and info.Type ~= TYPE_CLASS then
-			return error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), depth)
+			error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
 		name = info.Name
 
 		-- Check if the class is final
-		if info.IsSealed then return error("The class is sealed, can't be re-defined.", depth) end
+		if info.IsSealed then error("The class is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_CLASS
 		info.NameSpace = info.NameSpace or ns
@@ -3335,7 +3348,7 @@ do
 
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
 
-		setfenv(depth + 1, classEnv)
+		setfenv(stack, classEnv)
 
 		return classEnv
 	end
@@ -3343,18 +3356,19 @@ do
 	------------------------------------
 	--- End the class's definition and restore the environment
 	------------------------------------
-	function endclass(env, name)
+	function endclass(env, name, stack)
+		stack = stack or 2
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaClsEnv)
-			setfenv(3, env[BASE_ENV_FIELD])
+			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
 			if info.ApplyAttributes then info.ApplyAttributes() end
 		else
-			error(("%s is not closed."):format(info.Name), 3)
+			error(("%s is not closed."):format(info.Name), stack)
 		end
 
 		-- Validate the interface
@@ -3478,24 +3492,24 @@ do
 	------------------------------------
 	--- create a enumeration
 	------------------------------------
-	function enum(env, name, depth)
-		depth = tonumber(depth) or 1
+	function enum(env, name, stack)
+		stack = stack or 2
 		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
+		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
 		local enm, ns = GetDefineNS(fenv, name)
 		local info = _NSInfo[enm]
 
 		if not info then
-			return error([[Usage: enum "name" {}]], depth)
+			error([[Usage: enum "name" {}]], stack)
 		elseif info.Type and info.Type ~= TYPE_ENUM then
-			return error(("%s is existed as %s, not enum."):format(tostring(name), tostring(info.Type)), depth)
+			error(("%s is existed as %s, not enum."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
 		name = info.Name
 
 		-- Check if the enum is final
-		if info.IsSealed then return error("The enum is sealed, can't be re-defined.", depth) end
+		if info.IsSealed then error("The enum is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_ENUM
 		info.NameSpace = info.NameSpace or ns
@@ -3597,11 +3611,15 @@ do
 			if _KeyWord4StrtEnv:GetKeyword(self, key) then return error(("'%s' is a keyword."):format(key)) end
 
 			if key == info.Name or ((tonumber(key) or type(key) == "string") and type(value) == "function") then
-				return SaveFeature(info, key, value)
+				local ok, msg = pcall(SaveFeature, info, key, value)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
 			end
 
 			if (type(key) == "string" or tonumber(key)) and getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then
-				return SaveStructMember(info, key, value)
+				local ok, msg = pcall(SaveStructMember, info, key, value)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
 			end
 
 			return rawset(self, key, value)
@@ -3778,24 +3796,24 @@ do
 	------------------------------------
 	--- create a structure
 	------------------------------------
-	function struct(env, name, depth)
-		depth = tonumber(depth) or 1
+	function struct(env, name, stack)
+		stack = stack or 2
 		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(depth + 1) or _G
+		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
 		local strt, ns = GetDefineNS(fenv, name)
 		local info = _NSInfo[strt]
 
 		if not info then
-			return error([[Usage: struct "name"]], depth)
+			error([[Usage: struct "name"]], stack)
 		elseif info.Type and info.Type ~= TYPE_STRUCT then
-			return error(("%s is existed as %s, not struct."):format(tostring(name), tostring(info.Type)), depth)
+			error(("%s is existed as %s, not struct."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
 		name = info.Name
 
 		-- Check if the struct is final
-		if info.IsSealed then return error("The struct is sealed, can't be re-defined.", depth) end
+		if info.IsSealed then error("The struct is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_STRUCT
 		info.SubType = STRUCT_TYPE_MEMBER
@@ -3830,7 +3848,7 @@ do
 		-- Set namespace
 		SetNameSpace4Env(info.StructEnv, strt)
 
-		setfenv(depth + 1, info.StructEnv)
+		setfenv(stack, info.StructEnv)
 
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct) end
 
@@ -3840,19 +3858,20 @@ do
 	------------------------------------
 	--- End the class's definition and restore the environment
 	------------------------------------
-	function endstruct(env, name)
+	function endstruct(env, name, stack)
+		stack = stack or 2
 		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
 
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
 			setmetatable(env, _MetaStrtEnv)
-			setfenv(3, env[BASE_ENV_FIELD])
+			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshStruct(info.Owner)
 			if info.ApplyAttributes then info.ApplyAttributes() end
 			return env[BASE_ENV_FIELD]
 		else
-			error(("%s is not closed."):format(info.Name), 3)
+			error(("%s is not closed."):format(info.Name), stack)
 		end
 	end
 
@@ -3861,7 +3880,8 @@ do
 
 		if type(definition) == "table" then
 			for k, v in pairs(definition) do
-				SaveFeature(info, k, v)
+				local ok, msg = pcall(SaveFeature, info, k, v)
+				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
 			end
 		else
 			if type(definition) == "string" then
@@ -8008,8 +8028,8 @@ do
 			rawset(self, key, value)
 		end
 
-		function __call(self, version, depth)
-			depth = tonumber(depth) or 1
+		function __call(self, version, stack)
+			stack = stack or 2
 			local info = _ModuleInfo[self]
 
 			if not info then error("The module is disposed", 2) end
@@ -8075,7 +8095,7 @@ do
 							if pass then
 								info.Version = version
 							else
-								error("The version must be greater than the current version of the module.", 2)
+								error("The version must be greater than the current version of the module.", stack)
 							end
 						else
 							info.Version = version
@@ -8084,13 +8104,13 @@ do
 						info.Version = version
 					end
 				else
-					error("The version string should contain version numbers like 'Ver 1.2323.13'.")
+					error("The version string should contain version numbers like 'Ver 1.2323.13'.", stack)
 				end
 			elseif info.Version then
-				error("An available version is need for the module.", 2)
+				error("An available version is need for the module.", stack)
 			end
 
-			if not FAKE_SETFENV then setfenv(depth + 1, self) end
+			if not FAKE_SETFENV then setfenv(stack, self) end
 
 			ClearPreparedAttributes()
 
