@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/12/23
--- Version          r138
+-- Last Update Date 2015/12/25
+-- Version          r139
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2039,6 +2039,18 @@ do
 	end
 
 	function SaveStructMember(info, key, value)
+		-- Check if a member setting
+		if tonumber(key) and type(value) == "table" and getmetatable(value) == nil then
+			for k, v in pairs(value) do
+				if type(k) == "string" and k:lower() == "name" then
+					key = v
+					value[k] = nil
+					break
+				end
+			end
+		end
+
+		-- Save member
 		local memInfo = { Name = key }
 
 		-- Validate the value
@@ -2111,8 +2123,12 @@ do
 			elseif type(value) == "function" then
 				return SaveMethod(info, info.Name, value)
 			elseif info.Type == TYPE_STRUCT then
-				-- Default value for struct
-				info.Default = value
+				if type(value) == "table" then
+					SaveStructMember(info, key, value)
+				else
+					-- Default value for struct
+					info.Default = value
+				end
 				return
 			end
 		elseif type(key) == "string" then
