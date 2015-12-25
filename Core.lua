@@ -2530,9 +2530,18 @@ do
 	function ParseDefinition(self, definition)
 		local info = _NSInfo[self[OWNER_FIELD]]
 		if type(definition) == "table" then
-			for k, v in pairs(definition) do
+			-- Number keys means the core of the feature
+			for k, v in ipairs(definition) do
 				local ok, msg = pcall(SaveFeature, info, k, v)
 				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+			end
+
+			-- Only string key can be accepted(number is handled)
+			for k, v in pairs(definition) do
+				if type(k) == "string" then
+					local ok, msg = pcall(SaveFeature, info, k, v)
+					if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+				end
 			end
 		else
 			if type(definition) == "string" then
@@ -3895,9 +3904,18 @@ do
 		local info = _NSInfo[self[OWNER_FIELD]]
 
 		if type(definition) == "table" then
-			for k, v in pairs(definition) do
+			-- Number keys means the core of the feature
+			for k, v in ipairs(definition) do
 				local ok, msg = pcall(SaveFeature, info, k, v)
 				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+			end
+
+			-- Only string key can be accepted(number is handled)
+			for k, v in pairs(definition) do
+				if type(k) == "string" then
+					local ok, msg = pcall(SaveFeature, info, k, v)
+					if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+				end
 			end
 		else
 			if type(definition) == "string" then
