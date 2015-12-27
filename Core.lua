@@ -2042,7 +2042,7 @@ do
 		-- Check if a member setting
 		if tonumber(key) and type(value) == "table" and getmetatable(value) == nil then
 			for k, v in pairs(value) do
-				if type(k) == "string" and k:lower() == "name" then
+				if type(k) == "string" and k:lower() == "name" and type(v) == "string" and not tonumber(v) then
 					key = v
 					value[k] = nil
 					break
