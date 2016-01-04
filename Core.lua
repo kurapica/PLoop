@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2015/12/25
--- Version          r139
+-- Last Update Date 2016/01/04
+-- Version          r140
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -679,19 +679,35 @@ do
 		for name in namelist:gmatch("[_%w]+") do
 			if not info then
 				cls = newproxy(_NameSpace)
-			elseif info.Type ~= TYPE_ENUM then
-				info.SubNS = info.SubNS or {}
-				info.SubNS[name] = info.SubNS[name] or newproxy(_NameSpace)
-
-				if cls == _NameSpace then _G[name] = _G[name] or info.SubNS[name] end
-
-				cls = info.SubNS[name]
+			elseif info.Type == TYPE_ENUM then
+				return error(("The %s is an enumeration, can't define sub-namespace in it."):format(tostring(info.Owner)))
 			else
-				return error(("can't add item to a %s."):format(tostring(info.Type)))
+				local scls = info.SubNS and info.SubNS[name]
+
+				if not scls then
+					-- No conflict
+					if info.Cache and info.Cache[name] or info.Method and info.Method[name] then
+						return error(("The [%s] %s - %s is defined, can't be used as namespace."):format(info.Type, tostring(info.Owner), name))
+					elseif info.Members then
+						for _, v in ipairs(info.Members) do
+							if v.Name == name then
+								return error(("'%s' already existed as member of [Struct] %s."):format(name, tostring(info.Owner)))
+							end
+						end
+					end
+
+					scls = newproxy(_NameSpace)
+					info.SubNS = info.SubNS or {}
+					info.SubNS[name] = scls
+
+					if cls == _NameSpace then _G[name] = _G[name] or scls end
+				end
+
+				cls = scls
 			end
 
 			info = _NSInfo[cls]
-			info.Name = name
+			info.Name = info.Name or name
 			if not info.NameSpace and parent ~= _NameSpace then info.NameSpace = parent end
 			parent = cls
 		end
@@ -706,9 +722,12 @@ do
 		if type(namelist) ~= "string" or not IsNameSpace(ns) then return end
 
 		local cls = ns
+		local info
 
 		for name in namelist:gmatch("[_%w]+") do
-			cls = cls[name]
+			info = _NSInfo[cls]
+			cls = info.SubNS and info.SubNS[name]
+
 			if not cls then return end
 		end
 
@@ -746,7 +765,9 @@ do
 		if name ~= nil and type(name) ~= "string" and not IsNameSpace(name) then error([[Usage: namespace "namespace"]], stack) end
 		env = type(env) == "table" and env or getfenv(stack) or _G
 
-		local ns = SetNameSpace4Env(env, name)
+		local ok, ns = pcall(SetNameSpace4Env, env, name)
+
+		if not ok then error(ns:match("%d+:%s*(.-)$") or ns, stack) end
 
 		return ns and ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
 	end
@@ -1806,7 +1827,7 @@ do
 				info.Validator = value
 				return
 			end
-		elseif key == DISPOSE_METHOD then
+		elseif key == DISPOSE_METHOD and (info.Type == TYPE_CLASS and info.Type == TYPE_INTERFACE) then
 			-- Dispose
 			if info.IsSealed then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
 			info[DISPOSE_METHOD] = value
@@ -1825,6 +1846,7 @@ do
 				if info.IsSealed and (info.Cache[key] or info.Method[key]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 			elseif info.Type == TYPE_STRUCT then
 				if info.IsSealed and info.Method and info.Method[key] then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+				if info.Members then for _, v in ipairs(info.Members) do if v.Name == key then return error(("'%s' already existed as struct member."):format(key)) end end end
 			end
 			info.Method = info.Method or {}
 			storage = info.Method
@@ -2074,7 +2096,7 @@ do
 		if info.SubType == STRUCT_TYPE_MEMBER then
 			-- Insert member
 			info.Members = info.Members or {}
-			for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' alreadu existed."):format(key)) end end
+			for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' already existed."):format(key)) end end
 			tinsert(info.Members, memInfo)
 
 			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(memInfo, AttributeTargets.Member, info.Owner, key) end
@@ -2463,7 +2485,9 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local IF, ns = GetDefineNS(fenv, name)
+		local ok, IF, ns = pcall(GetDefineNS, fenv, name)
+		if not ok then error(IF:match("%d+:%s*(.-)$") or IF, stack) end
+
 		local info = _NSInfo[IF]
 
 		if not info then
@@ -3333,8 +3357,9 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
+		local ok, cls, ns = pcall(GetDefineNS, fenv, name)
+		if not ok then error(cls:match("%d+:%s*(.-)$") or cls, stack) end
 
-		local cls, ns = GetDefineNS(fenv, name)
 		local info = _NSInfo[cls]
 
 		if not info then
@@ -3522,7 +3547,9 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local enm, ns = GetDefineNS(fenv, name)
+		local ok, enm, ns = pcall(GetDefineNS, fenv, name)
+		if not ok then error(enm:match("%d+:%s*(.-)$") or enm, stack) end
+
 		local info = _NSInfo[enm]
 
 		if not info then
@@ -3826,7 +3853,9 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local strt, ns = GetDefineNS(fenv, name)
+		local ok, strt, ns = pcall(GetDefineNS, fenv, name)
+		if not ok then error(strt:match("%d+:%s*(.-)$") or strt, stack) end
+
 		local info = _NSInfo[strt]
 
 		if not info then
