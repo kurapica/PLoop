@@ -1827,7 +1827,7 @@ do
 				info.Validator = value
 				return
 			end
-		elseif key == DISPOSE_METHOD and (info.Type == TYPE_CLASS and info.Type == TYPE_INTERFACE) then
+		elseif key == DISPOSE_METHOD and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 			-- Dispose
 			if info.IsSealed then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
 			info[DISPOSE_METHOD] = value
