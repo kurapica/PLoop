@@ -2643,9 +2643,7 @@ do
 				for _, IF in ipairs(cache) do
 					info = _NSInfo[IF]
 					if info.Initializer then
-						ok, msg = pcall(info.Initializer, obj)
-
-						if not ok then errorhandler(msg) end
+						info.Initializer(obj)
 					end
 				end
 			end
@@ -3313,7 +3311,6 @@ do
 			-- Init the obj with new arguments
 			Class1Obj(cls, info.UniqueObject, ...)
 
-			-- Don't think there would be interfaces for the unique class, just for safe
 			InitObjectWithInterface(cls, info.UniqueObject)
 
 			return info.UniqueObject
@@ -3333,7 +3330,9 @@ do
 
 		if not ok then DisposeObject(obj) error(ret, 2) end
 
-		InitObjectWithInterface(cls, obj)
+		ok, ret = pcall(InitObjectWithInterface, cls, obj)
+
+		if not ok then DisposeObject(obj) error(ret, 2) end
 
 		-- Auto-Cache methods
 		if type(info.AutoCache) == "table" then
