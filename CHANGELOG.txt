@@ -1,3 +1,6 @@
+2016/01/07
+    When define constructor out of the definition environment, can use class.This, class.Super to call other constructors.
+
 2015/12/25
     struct "name" { {name='field', type=AnyType, require=boolean, default=Any } } supported, so member order can be decided by index.
 

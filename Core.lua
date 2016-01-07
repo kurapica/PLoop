@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2016/01/04
--- Version          r140
+-- Last Update Date 2016/01/07
+-- Version          r141
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -459,8 +459,41 @@ do
 			if iType == TYPE_STRUCT then
 				return info.Method and info.Method[key] or nil
 			elseif iType == TYPE_CLASS or iType == TYPE_INTERFACE then
-				-- Meta-method
-				if iType == TYPE_CLASS and _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
+				if iType == TYPE_CLASS then
+					-- Meta-method
+					if _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
+
+					if key == _SuperIndex then
+						if info.SuperClass then
+							local superInfo = _NSInfo[info.SuperClass]
+							local value = superInfo.SuperAlias
+
+							if not value then
+								-- Generate super alias when need
+								value = newproxy(_SuperAlias)
+								superInfo.SuperAlias = value
+								_SuperMap[value] = superInfo
+							end
+
+							return value
+						else
+							return error("No super class for the class.", 2)
+						end
+					end
+
+					if key == _ThisIndex then
+						local value = info.SuperAlias
+
+						if not value then
+							-- Generate this alias when need
+							value = newproxy(_SuperAlias)
+							info.SuperAlias = value
+							_SuperMap[value] = info
+						end
+
+						return value
+					end
+				end
 
 				-- Method
 				ret = info.Method[key] or info.Cache[key]
