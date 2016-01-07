@@ -177,7 +177,7 @@ do
 	TYPE_INTERFACE = "Interface"
 
 	TYPE_NAMESPACE = "NameSpace"
-	TYPE_SUPERALIAS = "SuperAlias"
+	TYPE_CLASSALIAS = "ClassAlias"
 
 	-- Disposing method name
 	DISPOSE_METHOD = "Dispose"
@@ -381,11 +381,11 @@ do
 end
 
 ------------------------------------------------------
--- NameSpace & SuperAlias
+-- NameSpace & ClassAlias
 ------------------------------------------------------
 do
 	_NameSpace = newproxy(true)
-	_SuperAlias = newproxy(true)
+	_ClassAlias = newproxy(true)
 
 	_NSInfo = setmetatable({}, {
 		__index = function(self, key)
@@ -403,7 +403,7 @@ do
 		__mode = "k",
 	})
 
-	_SuperMap = setmetatable({}, WEAK_ALL)
+	_AliasMap = setmetatable({}, WEAK_ALL)
 
 	-- metatable for namespaces
 	_MetaNS = getmetatable(_NameSpace)
@@ -464,35 +464,15 @@ do
 					if _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
 
 					if key == _SuperIndex then
-						if info.SuperClass then
-							local superInfo = _NSInfo[info.SuperClass]
-							local value = superInfo.SuperAlias
-
-							if not value then
-								-- Generate super alias when need
-								value = newproxy(_SuperAlias)
-								superInfo.SuperAlias = value
-								_SuperMap[value] = superInfo
-							end
-
-							return value
+						info = _NSInfo[info.SuperClass]
+						if info then
+							return info.ClassAlias or BuildClassAlias(info)
 						else
-							return error("No super class for the class.", 2)
+							return error("The class has no super class.", 2)
 						end
 					end
 
-					if key == _ThisIndex then
-						local value = info.SuperAlias
-
-						if not value then
-							-- Generate this alias when need
-							value = newproxy(_SuperAlias)
-							info.SuperAlias = value
-							_SuperMap[value] = info
-						end
-
-						return value
-					end
+					if key == _ThisIndex then return info.ClassAlias or BuildClassAlias(info) end
 				end
 
 				-- Method
@@ -668,17 +648,17 @@ do
 	end
 
 	-- metatable for super alias
-	_MetaSA = getmetatable(_SuperAlias)
+	_MetaSA = getmetatable(_ClassAlias)
 	do
 		_MetaSA.__call = function(self, ...)
 			-- Init the class object
-			local cls = _SuperMap[self].Owner
+			local cls = _AliasMap[self].Owner
 
 			if IsChildClass(cls, getmetatable(...)) then return Class1Obj(cls, ...) end
 		end
 
 		_MetaSA.__index = function(self, key)
-			local info = _SuperMap[self]
+			local info = _AliasMap[self]
 
 			local ret = info.SubNS and info.SubNS[key]
 
@@ -692,10 +672,18 @@ do
 			end
 		end
 
-		_MetaSA.__tostring = function(self) return tostring(_SuperMap[self].Owner) end
-		_MetaSA.__metatable = TYPE_SUPERALIAS
+		_MetaSA.__tostring = function(self) return tostring(_AliasMap[self].Owner) end
+		_MetaSA.__metatable = TYPE_CLASSALIAS
 
 		_MetaSA = nil
+	end
+
+	-- BuildClassAlias
+	function BuildClassAlias(info)
+		local value = newproxy(_ClassAlias)
+		info.ClassAlias = value
+		_AliasMap[value] = info
+		return value
 	end
 
 	-- IsNameSpace
@@ -2725,41 +2713,17 @@ do
 	_MetaClsDefEnv = {}
 	do
 		local function __index(self, info, key)
-			local value
-
 			if key == _SuperIndex then
-				if info.SuperClass then
-					local superInfo = _NSInfo[info.SuperClass]
-					value = superInfo.SuperAlias
-
-					if not value then
-						-- Generate super alias when need
-						superInfo.SuperAlias = newproxy(_SuperAlias)
-						_SuperMap[superInfo.SuperAlias] = superInfo
-
-						value = superInfo.SuperAlias
-					end
-
-					rawset(self, _SuperIndex, value)
-					return value
+				info = _NSInfo[info.SuperClass]
+				if info then
+					return info.ClassAlias or BuildClassAlias(info)
 				else
-					return error("No super class for the class.", 2)
+					return error("The class has no super class.", 2)
 				end
 			end
 
 			if key == _ThisIndex then
-				value = info.SuperAlias
-
-				if not value then
-					-- Generate this alias when need
-					info.SuperAlias = newproxy(_SuperAlias)
-					_SuperMap[info.SuperAlias] = info
-
-					value = info.SuperAlias
-				end
-
-				rawset(self, _ThisIndex, value)
-				return value
+				return info.ClassAlias or BuildClassAlias(info)
 			end
 
 			-- Check namespace
@@ -2783,7 +2747,7 @@ do
 			end
 
 			-- Check base namespace
-			value = GetNameSpace(GetDefaultNameSpace(), key)
+			local value = GetNameSpace(GetDefaultNameSpace(), key)
 			if value then return value end
 
 			-- Check method, so definition environment can use existed method
