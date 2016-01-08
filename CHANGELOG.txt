@@ -1,3 +1,6 @@
+2016/01/08
+    Anonymous class|interface|struct|enum can be created, like A = class { }; ArrayA = struct { A };
+
 2016/01/07
     When define constructor out of the definition environment, can use class.This, class.Super to call other constructors.
 

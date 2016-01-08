@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2016/01/07
--- Version          r141
+-- Last Update Date 2016/01/08
+-- Version          r142
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -190,58 +190,18 @@ do
 
 	-- Base env field
 	BASE_ENV_FIELD = "__PLOOP_BASE_ENV"
+
+	-- Attribute System
+	ATTRIBUTE_INSTALLED = false
+
+	-- FIELD
+
 end
 
 ------------------------------------------------------
--- Thread Pool & Tools
+-- Tools
 ------------------------------------------------------
 do
-	ATTRIBUTE_INSTALLED = false
-
-	THREAD_POOL_SIZE = 100
-
-	-- This func means the function call is finished successful, so, we need send the running thread back to the pool
-	local function retValueAndRecycle(...) THREAD_POOL( running() ) return ... end
-
-	local function callFunc(func, ...) return retValueAndRecycle( func(...) ) end
-
-	local function newRycThread(pool, func)
-		while pool == THREAD_POOL and type(func) == "function" do pool, func = yield( callFunc ( func, yield() ) ) end
-	end
-
-	THREAD_POOL = setmetatable({}, {
-		__call = function(self, value)
-			if value then
-				-- re-use the thread or use resume to kill
-				if #self < THREAD_POOL_SIZE then tinsert(self, value) else resume(value) end
-			else
-				-- Keep safe from unexpected resume
-				while not value or status(value) == "dead" do value = tremove(self) or create(newRycThread) end
-				return value
-			end
-		end,
-	})
-
-	local function chkValue(flag, msg, ...)
-		if flag then
-			return msg, ...
-		else
-			return error(msg, 2)
-		end
-	end
-
-	function CallThread(func, ...)
-		if type(func) == "thread" and status(func) == "suspended" then return chkValue( resume(func, ...) ) end
-
-		local th = THREAD_POOL()
-
-		-- Register the function
-		resume(th, THREAD_POOL, func)
-
-		-- Call and return the result
-		return chkValue( resume(th, ...) )
-	end
-
 	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end})
 
 	-- Clone
@@ -412,11 +372,13 @@ do
 			local info = _NSInfo[self]
 
 			if info.Type == TYPE_CLASS then
-				-- Create Class object
-				return Class2Obj(self, ...)
+				-- Create Class object, using ret avoid tail call error stack
+				local ret = Class2Obj(self, ...)
+				return ret
 			elseif info.Type == TYPE_STRUCT then
 				-- Create Struct
-				return Struct2Obj(self, ...)
+				local ret = Struct2Obj(self, ...)
+				return ret
 			elseif info.Type == TYPE_ENUM then
 				-- Parse Enum
 				local value = ...
@@ -559,7 +521,7 @@ do
 					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
 
 					-- Property
-					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
+					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 					-- Get Setter
@@ -796,6 +758,9 @@ do
 	function GetDefineNS(env, name)
 		if getmetatable(name) == TYPE_NAMESPACE then
 			return name
+		elseif type(name) == "table" then
+			-- Anonymous
+			return BuildNameSpace(nil, "Anonymous")
 		elseif type(name) == "string" then
 			if not name:match("^[_%w]+$") then return end
 
@@ -1458,7 +1423,7 @@ do
 							tinsert(gbody, gHeader)
 
 							tinsert(gbody, [[return function (value)]])
-							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 2)]]):format(name, name)) end
+							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
 							if prop.SetClone then
 								if prop.SetDeepClone then
 									tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -1577,7 +1542,7 @@ do
 							tinsert(gbody, gHeader)
 
 							tinsert(gbody, [[return function (self, value)]])
-							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 2)]]):format(name, name)) end
+							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
 							if prop.SetClone then
 								if prop.SetDeepClone then
 									tinsert(gbody, [[value = CloneObj(value, true)]])
@@ -2124,7 +2089,8 @@ do
 		elseif info.SubType == STRUCT_TYPE_ARRAY then
 			info.ArrayElement = memInfo
 
-			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
+			-- No Attribute for array element
+			-- if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
 		end
 	end
 
@@ -2197,6 +2163,14 @@ do
 		end
 
 		return error(("The definition '%s' for %s is not supported."):format(tostring(key), tostring(info.Owner)))
+	end
+
+	function ParseTableDefinition(info, definition)
+		-- Number keys means the core of the feature
+		for k, v in ipairs(definition) do SaveFeature(info, k, v) end
+
+		-- Only string key can be accepted(number is handled)
+		for k, v in pairs(definition) do if type(k) == "string" then SaveFeature(info, k, v) end end
 	end
 
 	function import_Def(env, name)
@@ -2517,6 +2491,9 @@ do
 			error(("%s is existed as %s, not interface."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
+		-- For Anonymous
+		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+
 		name = info.Name
 
 		-- Check if the class is final
@@ -2531,25 +2508,35 @@ do
 		-- Cache
 		info.Cache = info.Cache or {}
 
-		-- save interface to the environment
-		rawset(fenv, name, IF)
-
-		-- Generate the interface environment
-		local interfaceEnv = setmetatable({
-			[OWNER_FIELD] = IF,
-			[BASE_ENV_FIELD] = fenv,
-		}, _MetaIFDefEnv)
-
-		-- Set namespace
-		SetNameSpace4Env(interfaceEnv, IF)
-
 		-- No super target for interface
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface) end
 
-		-- Set the environment to interface's environment
-		setfenv(stack, interfaceEnv)
+		if definition then
+			local ok, msg = pcall(ParseTableDefinition, info, definition)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
-		return interfaceEnv
+			RefreshCache(IF)
+			if info.ApplyAttributes then info.ApplyAttributes() end
+
+			return IF
+		else
+			-- save interface to the environment
+			rawset(fenv, name, IF)
+
+			-- Generate the interface environment
+			local interfaceEnv = setmetatable({
+				[OWNER_FIELD] = IF,
+				[BASE_ENV_FIELD] = fenv,
+			}, _MetaIFDefEnv)
+
+			-- Set namespace
+			SetNameSpace4Env(interfaceEnv, IF)
+
+			-- Set the environment to interface's environment
+			setfenv(stack, interfaceEnv)
+
+			return interfaceEnv
+		end
 	end
 
 	------------------------------------
@@ -2575,19 +2562,8 @@ do
 	function ParseDefinition(self, definition)
 		local info = _NSInfo[self[OWNER_FIELD]]
 		if type(definition) == "table" then
-			-- Number keys means the core of the feature
-			for k, v in ipairs(definition) do
-				local ok, msg = pcall(SaveFeature, info, k, v)
-				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
-			end
-
-			-- Only string key can be accepted(number is handled)
-			for k, v in pairs(definition) do
-				if type(k) == "string" then
-					local ok, msg = pcall(SaveFeature, info, k, v)
-					if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
-				end
-			end
+			local ok, msg = pcall(ParseTableDefinition, info, definition)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
 		else
 			if type(definition) == "string" then
 				local errorMsg
@@ -2595,7 +2571,7 @@ do
 				if definition then
 					definition = definition()
 				else
-					return error(errorMsg)
+					error(errorMsg, 3)
 				end
 			end
 
@@ -2657,15 +2633,12 @@ do
 	-- Init & Dispose System
 	--------------------------------------------------
 	do
-		function InitObjectWithInterface(cls, obj)
-			local ok, msg, info
-			local cache = _NSInfo[cls].Cache4Interface
+		function InitObjectWithInterface(info, obj)
+			local cache = info.Cache4Interface
 			if cache then
 				for _, IF in ipairs(cache) do
 					info = _NSInfo[IF]
-					if info.Initializer then
-						info.Initializer(obj)
-					end
+					if info.Initializer then info.Initializer(obj) end
 				end
 			end
 		end
@@ -2824,51 +2797,7 @@ do
 			if info.ApplyAttributes then info.ApplyAttributes() end
 
 			-- Validate the interface
-			if info.ExtendInterface then
-				local cache = CACHE_TABLE()
-				local cacheIF = CACHE_TABLE()
-				local ret
-
-				for _, IF in ipairs(info.ExtendInterface) do
-					local sinfo = _NSInfo[IF]
-					local msg
-
-					wipe(cacheIF)
-
-					if sinfo.RequireMethod then
-						for name in pairs(sinfo.RequireMethod) do
-							if sinfo.Method[name] == info.Cache[name] then tinsert(cacheIF, name) end
-						end
-
-						if #cacheIF > 0 then msg = "[Method]" .. tblconcat(cacheIF, ", ") end
-					end
-
-					wipe(cacheIF)
-
-					if sinfo.RequireProperty then
-						for name in pairs(sinfo.RequireProperty) do
-							if sinfo.Property[name] == info.Cache[name] then tinsert(cacheIF, name) end
-						end
-
-						if #cacheIF > 0 then
-							msg = msg and (msg .. " ") or ""
-							msg = msg .. "[Property]" .. tblconcat(cacheIF, ", ")
-						end
-					end
-
-					if msg then tinsert(cache, tostring(IF) .. " - " .. msg) end
-				end
-
-				if #cache > 0 then
-					tinsert(cache, 1, tostring(info.Owner) .. " lack declaration of :")
-					ret = tblconcat(cache, "\n")
-				end
-
-				CACHE_TABLE(cacheIF)
-				CACHE_TABLE(cache)
-
-				if ret then return error(ret, 2) end
-			end
+			ValidateClass(info, 3)
 
 			return owner
 		end
@@ -3011,7 +2940,7 @@ do
 			else
 				-- Property
 				if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
-				if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
+				if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 				-- Get Setter
@@ -3208,7 +3137,7 @@ do
 				else
 					-- Property
 					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
-					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 2) end
+					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
 					-- Get Setter
@@ -3273,151 +3202,7 @@ do
 		return meta
 	end
 
-	-- Init the object with class's constructor
-	function Class1Obj(cls, obj, ...)
-		local info = _NSInfo[cls]
-		local count = select('#', ...)
-		local initTable = select(1, ...)
-		local ctor = info.Constructor or info.Ctor
-
-		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
-
-		if ctor == nil then
-			local sinfo = info
-
-			while sinfo and not sinfo.Constructor do sinfo = _NSInfo[sinfo.SuperClass] end
-
-			ctor = sinfo and sinfo.Constructor or false
-			info.Ctor = ctor
-		end
-
-		if ctor then return ctor(obj, ...) end
-
-		-- No constructor
-		if initTable then for name, value in pairs(initTable) do obj[name] = value end end
-	end
-
-	-- The cache for constructor parameters
-	function Class2Obj(cls, ...)
-		local info = _NSInfo[cls]
-
-		if info.AbstractClass then error("The class is abstract, can't be used to create objects.", 2) end
-
-		-- Check if the class is unique and already created one object to be return
-		if getmetatable(info.UniqueObject) then
-			-- Init the obj with new arguments
-			Class1Obj(cls, info.UniqueObject, ...)
-
-			InitObjectWithInterface(cls, info.UniqueObject)
-
-			return info.UniqueObject
-		end
-
-		-- Check if this class has __exist so no need to create again.
-		if info.MetaTable.__exist then
-			local ok, obj = pcall(info.MetaTable.__exist, ...)
-
-			if ok and getmetatable(obj) == cls then return obj end
-		end
-
-		-- Create new object
-		local obj = setmetatable({}, info.MetaTable)
-
-		local ok, ret = pcall(Class1Obj, cls, obj, ...)
-
-		if not ok then DisposeObject(obj) error(ret, 2) end
-
-		ok, ret = pcall(InitObjectWithInterface, cls, obj)
-
-		if not ok then DisposeObject(obj) error(ret, 2) end
-
-		-- Auto-Cache methods
-		if type(info.AutoCache) == "table" then
-			for name in pairs(info.AutoCache) do
-				if rawget(obj, name) == nil then
-					rawset(obj, name, info.Cache[name])
-				end
-			end
-		end
-
-		if info.UniqueObject then info.UniqueObject = obj end
-
-		return obj
-	end
-
-	------------------------------------
-	--- Create class in currect environment's namespace or default namespace
-	------------------------------------
-	function class(env, name, stack)
-		stack = stack or 2
-		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(stack) or _G
-
-		local ok, cls, ns = pcall(GetDefineNS, fenv, name)
-		if not ok then error(cls:match("%d+:%s*(.-)$") or cls, stack) end
-
-		local info = _NSInfo[cls]
-
-		if not info then
-			error([[Usage: class "name"]], stack)
-		elseif info.Type and info.Type ~= TYPE_CLASS then
-			error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), stack)
-		end
-
-		name = info.Name
-
-		-- Check if the class is final
-		if info.IsSealed then error("The class is sealed, can't be re-defined.", stack) end
-
-		info.Type = TYPE_CLASS
-		info.NameSpace = info.NameSpace or ns
-		info.Event = info.Event or {}
-		info.Property = info.Property or {}
-		info.Method = info.Method or {}
-
-		-- Cache
-		info.Cache = info.Cache or {}
-
-		-- save class to the environment
-		rawset(fenv, name, cls)
-
-		local classEnv = setmetatable({
-			[OWNER_FIELD] = cls,
-			[BASE_ENV_FIELD] = fenv,
-		}, _MetaClsDefEnv)
-
-		-- Set namespace
-		SetNameSpace4Env(classEnv, cls)
-
-		-- MetaTable
-		info.MetaTable = info.MetaTable or GenerateMetaTable(info)
-
-		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
-
-		setfenv(stack, classEnv)
-
-		return classEnv
-	end
-
-	------------------------------------
-	--- End the class's definition and restore the environment
-	------------------------------------
-	function endclass(env, name, stack)
-		stack = stack or 2
-		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
-
-		local info = _NSInfo[env[OWNER_FIELD]]
-
-		if info.Name == name or info.Owner == name then
-			setmetatable(env, _MetaClsEnv)
-			setfenv(stack, env[BASE_ENV_FIELD])
-			RefreshCache(info.Owner)
-			if info.ApplyAttributes then info.ApplyAttributes() end
-		else
-			error(("%s is not closed."):format(info.Name), stack)
-		end
-
-		-- Validate the interface
+	function ValidateClass(info, stack)
 		if info.ExtendInterface then
 			local cache = CACHE_TABLE()
 			local cacheIF = CACHE_TABLE()
@@ -3461,8 +3246,175 @@ do
 			CACHE_TABLE(cacheIF)
 			CACHE_TABLE(cache)
 
-			if ret then error(ret, 3) end
+			if ret then error(ret, stack) end
 		end
+	end
+
+	function LoadInitTable(obj, initTable)
+		for name, value in pairs(initTable) do obj[name] = value end
+	end
+
+	-- Init the object with class's constructor
+	function Class1Obj(cls, obj, ...)
+		local info = _NSInfo[cls]
+		local count = select('#', ...)
+		local initTable = select(1, ...)
+		local ctor = info.Constructor or info.Ctor
+
+		if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
+
+		if ctor == nil then
+			local sinfo = info
+
+			while sinfo and not sinfo.Constructor do sinfo = _NSInfo[sinfo.SuperClass] end
+
+			ctor = sinfo and sinfo.Constructor or false
+			info.Ctor = ctor
+		end
+
+		if ctor then return ctor(obj, ...) end
+
+		-- No constructor
+		if initTable then
+			local ok, msg = pcall(LoadInitTable, obj, initTable)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 4) end
+		end
+	end
+
+	-- The cache for constructor parameters
+	function Class2Obj(cls, ...)
+		local info = _NSInfo[cls]
+
+		if info.AbstractClass then error("The class is abstract, can't be used to create objects.", 3) end
+
+		-- Check if the class is unique and already created one object to be return
+		if getmetatable(info.UniqueObject) then
+			-- Init the obj with new arguments
+			Class1Obj(cls, info.UniqueObject, ...)
+
+			InitObjectWithInterface(info, info.UniqueObject)
+
+			return info.UniqueObject
+		end
+
+		-- Check if this class has __exist so no need to create again.
+		if info.MetaTable.__exist then
+			local ok, obj = pcall(info.MetaTable.__exist, ...)
+
+			if ok and getmetatable(obj) == cls then return obj end
+		end
+
+		-- Create new object
+		local obj = setmetatable({}, info.MetaTable)
+
+		Class1Obj(cls, obj, ...)
+
+		InitObjectWithInterface(info, obj)
+
+		-- if not ok then DisposeObject(obj) error(ret, 3) end
+
+		-- Auto-Cache methods
+		if type(info.AutoCache) == "table" then
+			for name in pairs(info.AutoCache) do
+				if rawget(obj, name) == nil then
+					rawset(obj, name, info.Cache[name])
+				end
+			end
+		end
+
+		if info.UniqueObject then info.UniqueObject = obj end
+
+		return obj
+	end
+
+	------------------------------------
+	--- Create class in currect environment's namespace or default namespace
+	------------------------------------
+	function class(env, name, stack)
+		stack = stack or 2
+		name = name or env
+		local fenv = type(env) == "table" and env or getfenv(stack) or _G
+
+		local ok, cls, ns = pcall(GetDefineNS, fenv, name)
+		if not ok then error(cls:match("%d+:%s*(.-)$") or cls, stack) end
+
+		local info = _NSInfo[cls]
+
+		if not info then
+			error([[Usage: class "name"]], stack)
+		elseif info.Type and info.Type ~= TYPE_CLASS then
+			error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), stack)
+		end
+
+		-- For Anonymous
+		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+
+		name = info.Name
+
+		-- Check if the class is final
+		if info.IsSealed then error("The class is sealed, can't be re-defined.", stack) end
+
+		info.Type = TYPE_CLASS
+		info.NameSpace = info.NameSpace or ns
+		info.Event = info.Event or {}
+		info.Property = info.Property or {}
+		info.Method = info.Method or {}
+
+		-- Cache
+		info.Cache = info.Cache or {}
+
+		-- MetaTable
+		info.MetaTable = info.MetaTable or GenerateMetaTable(info)
+
+		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
+
+		if definition then
+			local ok, msg = pcall(ParseTableDefinition, info, definition)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
+
+			RefreshCache(cls)
+			if info.ApplyAttributes then info.ApplyAttributes() end
+			ValidateClass(info, stack + 1)
+
+			return cls
+		else
+			-- save class to the environment
+			rawset(fenv, name, cls)
+
+			local classEnv = setmetatable({
+				[OWNER_FIELD] = cls,
+				[BASE_ENV_FIELD] = fenv,
+			}, _MetaClsDefEnv)
+
+			-- Set namespace
+			SetNameSpace4Env(classEnv, cls)
+
+			setfenv(stack, classEnv)
+
+			return classEnv
+		end
+	end
+
+	------------------------------------
+	--- End the class's definition and restore the environment
+	------------------------------------
+	function endclass(env, name, stack)
+		stack = stack or 2
+		if ATTRIBUTE_INSTALLED then ClearPreparedAttributes() end
+
+		local info = _NSInfo[env[OWNER_FIELD]]
+
+		if info.Name == name or info.Owner == name then
+			setmetatable(env, _MetaClsEnv)
+			setfenv(stack, env[BASE_ENV_FIELD])
+			RefreshCache(info.Owner)
+			if info.ApplyAttributes then info.ApplyAttributes() end
+		else
+			error(("%s is not closed."):format(info.Name), stack)
+		end
+
+		-- Validate the interface
+		ValidateClass(info, stack + 1)
 
 		return env[BASE_ENV_FIELD]
 	end
@@ -3554,6 +3506,9 @@ do
 			error(("%s is existed as %s, not enum."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
+		-- For Anonymous
+		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+
 		name = info.Name
 
 		-- Check if the enum is final
@@ -3562,16 +3517,22 @@ do
 		info.Type = TYPE_ENUM
 		info.NameSpace = info.NameSpace or ns
 
-		-- save enum to the environment
-		rawset(fenv, name, enm)
+		if definition then
+			BuildEnum(info, definition)
 
-		-- Clear Attributes
-		if ATTRIBUTE_INSTALLED then
-			DisposeAttributes(info.Attribute)
-			info.Attribute = nil
+			return enm
+		else
+			-- save enum to the environment
+			rawset(fenv, name, enm)
+
+			-- Clear Attributes
+			if ATTRIBUTE_INSTALLED then
+				DisposeAttributes(info.Attribute)
+				info.Attribute = nil
+			end
+
+			return function(set) return BuildEnum(info, set) end
 		end
-
-		return function(set) return BuildEnum(info, set) end
 	end
 end
 
@@ -3860,6 +3821,9 @@ do
 			error(("%s is existed as %s, not struct."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
+		-- For Anonymous
+		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+
 		name = info.Name
 
 		-- Check if the struct is final
@@ -3876,9 +3840,6 @@ do
 		info.StaticMethod = nil
 		info.Import4Env = nil
 
-		-- save struct to the environment
-		rawset(fenv, name, strt)
-
 		-- Clear Attribute
 		if ATTRIBUTE_INSTALLED then
 			DisposeAttributes(info.Attribute)
@@ -3888,21 +3849,34 @@ do
 			info.Attribute = nil
 			info.ElementAttribute = nil
 			info.Attributes = nil
+
+			ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
 		end
 
-		info.StructEnv = setmetatable({
-			[OWNER_FIELD] = strt,
-			[BASE_ENV_FIELD] = fenv,
-		}, _MetaStrtDefEnv)
+		if definition then
+			local ok, msg = pcall(ParseTableDefinition, info, definition)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
-		-- Set namespace
-		SetNameSpace4Env(info.StructEnv, strt)
+			RefreshStruct(strt)
+			if info.ApplyAttributes then info.ApplyAttributes() end
 
-		setfenv(stack, info.StructEnv)
+			return strt
+		else
+			-- save struct to the environment
+			rawset(fenv, name, strt)
 
-		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct) end
+			info.StructEnv = setmetatable({
+				[OWNER_FIELD] = strt,
+				[BASE_ENV_FIELD] = fenv,
+			}, _MetaStrtDefEnv)
 
-		return info.StructEnv
+			-- Set namespace
+			SetNameSpace4Env(info.StructEnv, strt)
+
+			setfenv(stack, info.StructEnv)
+
+			return info.StructEnv
+		end
 	end
 
 	------------------------------------
@@ -3929,19 +3903,8 @@ do
 		local info = _NSInfo[self[OWNER_FIELD]]
 
 		if type(definition) == "table" then
-			-- Number keys means the core of the feature
-			for k, v in ipairs(definition) do
-				local ok, msg = pcall(SaveFeature, info, k, v)
-				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
-			end
-
-			-- Only string key can be accepted(number is handled)
-			for k, v in pairs(definition) do
-				if type(k) == "string" then
-					local ok, msg = pcall(SaveFeature, info, k, v)
-					if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
-				end
-			end
+			local ok, msg = pcall(ParseTableDefinition, info, definition)
+			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
 		else
 			if type(definition) == "string" then
 				local errorMsg
@@ -3949,7 +3912,7 @@ do
 				if definition then
 					definition = definition()
 				else
-					error(errorMsg, 2)
+					error(errorMsg, 3)
 				end
 			end
 
@@ -5169,14 +5132,6 @@ do
 		]]
 		GetDocument = GetDocument
 
-		doc "ThreadCall" [[
-			<desc>Call the function in a thread from the thread pool of the system</desc>
-			<param name="func">the function</param>
-			<param name="...">the parameters</param>
-			<return>the return value of the func</return>
-		]]
-		ThreadCall = CallThread
-
 		doc "IsEqual" [[
 			<desc>Whether the two objects are objects with same settings</desc>
 			<param name="obj1">the object used to compare</param>
@@ -5405,6 +5360,8 @@ do
 	------------------------------------------------------
 	do
 		_PreparedAttributes = {}
+
+		_AttributeMap = setmetatable({}, WEAK_KEY)
 
 		-- Recycle the cache for dispose attributes
 		_AttributeCache4Dispose = setmetatable({}, {
@@ -7730,18 +7687,6 @@ do
 			<param name="...">the event's name list</param>
 		]]
 		UnBlockEvent = Reflector.UnBlockEvent
-
-		__Doc__[[
-			<desc>Call method or function as a thread</desc>
-			<param name="method" type="string|function">the target method</param>
-			<param name="...">the arguments</param>
-			<return>the return value of the target method</return>
-		]]
-		function ThreadCall(self, method, ...)
-			if type(method) == "string" then method = self[method] end
-
-			if type(method) == "function" then return CallThread(method, self, ...) end
-		end
 	end)
 
 	_ModuleKeyWord = _KeywordAccessor()

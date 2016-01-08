@@ -17,6 +17,38 @@ interface "Threading" (function(_ENV)
 		"dead",
 	}
 
+	THREAD_POOL_SIZE = 100
+
+	-- This func means the function call is finished successful, so, we need send the running thread back to the pool
+	local function retValueAndRecycle(...) THREAD_POOL( running() ) return ... end
+
+	local function callFunc(func, ...) return retValueAndRecycle( func(...) ) end
+
+	local function newRycThread(pool, func)
+		while pool == THREAD_POOL and type(func) == "function" do pool, func = yield( callFunc ( func, yield() ) ) end
+	end
+
+	THREAD_POOL = setmetatable({}, {
+		__call = function(self, value)
+			if value then
+				-- re-use the thread or use resume to kill
+				if #self < THREAD_POOL_SIZE then tinsert(self, value) else resume(value) end
+			else
+				-- Keep safe from unexpected resume
+				while not value or status(value) == "dead" do value = tremove(self) or create(newRycThread) end
+				return value
+			end
+		end,
+	})
+
+	local function chkValue(flag, msg, ...)
+		if flag then
+			return msg, ...
+		else
+			return error(msg, 2)
+		end
+	end
+
 	ITER_POOL_SIZE = 100
 
 	ITER_CACHE = setmetatable({}, { __mode = "k" })
@@ -41,6 +73,26 @@ interface "Threading" (function(_ENV)
 		end,
 	})
 
+	------------------------------------------------------
+	-- Static Methods
+	------------------------------------------------------
+	__Doc__[[
+		<desc>Call the function in a thread from the thread pool</desc>
+		<param name="...">the parameters</param>
+		<return>the return value of the func</return>
+	]]
+	function ThreadCall(func, ...)
+		if type(func) == "thread" and status(func) == "suspended" then return chkValue( resume(func, ...) ) end
+
+		local th = THREAD_POOL()
+
+		-- Register the function
+		resume(th, THREAD_POOL, func)
+
+		-- Call and return the result
+		return chkValue( resume(th, ...) )
+	end
+
 	__Doc__[[
 		<desc>Used to make iterator from functions</desc>
 		<param name="func" type="function">the function contains yield instructions</param>
@@ -60,7 +112,7 @@ interface "Threading" (function(_ENV)
 		</usage>
 	]]
 	function Iterator(func)
-		return Reflector.ThreadCall(function()
+		return ThreadCall(function()
 			local th = ITER_POOL()
 
 			return func( th:Yield( th ) )
