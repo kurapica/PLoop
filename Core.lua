@@ -4868,9 +4868,8 @@ do
 			_GetStructMembersCache = setmetatable({}, WEAK_ALL)
 		else
 			_GetStructMembersIter = function (ns, key)
-				local mem
-				key, mem = next(_NSInfo[ns].Members, key)
-				if mem then return key, mem.Name end
+				local mem = _NSInfo[ns].Members[key]
+				if mem then return key + 1, mem.Name end
 			end
 		end
 		function GetStructMembers(ns, result)
@@ -4882,19 +4881,18 @@ do
 					return result
 				else
 					if SAVE_MEMORY then
-						return _GetStructMembersIter, info.Owner
+						return _GetStructMembersIter, info.Owner, 1
 					else
 						local members = info.Members
 						local iter = _GetStructMembersCache[members]
 						if not iter then
 							iter = function (ns, key)
-								local mem
-								key, mem = next(members, key)
-								if mem then return key, mem.Name end
+								local mem = members[key]
+								if mem then return key + 1, mem.Name end
 							end
 							_GetStructMembersCache[members] = iter
 						end
-						return iter, ns
+						return iter, ns, 1
 					end
 				end
 			else
