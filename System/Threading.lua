@@ -272,3 +272,7 @@ end)
 -- Global settings
 ------------------------------------------------------
 _G.tpairs = _G.tpairs or Threading.Iterator
+System.Object.ThreadCall = function(self, method, ...)
+	if type(method) == "string" then method = self[method] end
+	if type(method) == "function" then return Threading.ThreadCall(method, self, ...) end
+end

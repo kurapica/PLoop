@@ -83,9 +83,6 @@ do
 	wrap = coroutine.wrap
 	yield = coroutine.yield
 
-	geterrorhandler = geterrorhandler or function() return print end
-	errorhandler = errorhandler or function(err) return pcall(geterrorhandler(), err) end
-
 	-- Check For lua 5.2
 	newproxy = newproxy or (function ()
 		local _METATABLE_MAP = setmetatable({}, {__mode = "k"})
@@ -203,6 +200,8 @@ end
 ------------------------------------------------------
 do
 	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end})
+
+	DUMMY = {}
 
 	-- Clone
 	local function deepCloneObj(obj, cache)
@@ -671,12 +670,8 @@ do
 					-- No conflict
 					if info.Cache and info.Cache[name] or info.Method and info.Method[name] then
 						return error(("The [%s] %s - %s is defined, can't be used as namespace."):format(info.Type, tostring(info.Owner), name))
-					elseif info.Members then
-						for _, v in ipairs(info.Members) do
-							if v.Name == name then
-								return error(("'%s' already existed as member of [Struct] %s."):format(name, tostring(info.Owner)))
-							end
-						end
+					elseif info.Members and info.Members[name] then
+						return error(("'%s' already existed as member of [Struct] %s."):format(name, tostring(info.Owner)))
 					end
 
 					scls = newproxy(_NameSpace)
@@ -1832,7 +1827,7 @@ do
 				if info.IsSealed and (info.Cache[key] or info.Method[key]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 			elseif info.Type == TYPE_STRUCT then
 				if info.IsSealed and info.Method and info.Method[key] then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
-				if info.Members then for _, v in ipairs(info.Members) do if v.Name == key then return error(("'%s' already existed as struct member."):format(key)) end end end
+				if info.Members and info.Members[key] then return error(("'%s' already existed as struct member."):format(key)) end
 			end
 			info.Method = info.Method or {}
 			storage = info.Method
@@ -2084,13 +2079,11 @@ do
 			info.Members = info.Members or {}
 			for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' already existed."):format(key)) end end
 			tinsert(info.Members, memInfo)
+			info.Members[key] = memInfo
 
 			if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(memInfo, AttributeTargets.Member, info.Owner, key) end
 		elseif info.SubType == STRUCT_TYPE_ARRAY then
 			info.ArrayElement = memInfo
-
-			-- No Attribute for array element
-			-- if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes("ArrayElement", AttributeTargets.Member, info.Owner, "ArrayElement") end
 		end
 	end
 
@@ -2463,8 +2456,7 @@ do
 			pcall(setmetatable, self, _MetaIFEnv)
 			RefreshCache(owner)
 
-			local info = _NSInfo[owner]
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(owner, AttributeTargets.Interface) end
 
 			return owner
 		end
@@ -2516,7 +2508,7 @@ do
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
 			RefreshCache(IF)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(IF, AttributeTargets.Interface) end
 
 			return IF
 		else
@@ -2552,7 +2544,7 @@ do
 			setmetatable(env, _MetaIFEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(info.Owner, AttributeTargets.Interface) end
 			return env[BASE_ENV_FIELD]
 		else
 			error(("%s is not closed."):format(info.Name), stack)
@@ -2794,7 +2786,7 @@ do
 			pcall(setmetatable, self, _MetaClsEnv)
 			RefreshCache(owner)
 			local info = _NSInfo[owner]
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(owner, AttributeTargets.Class) end
 
 			-- Validate the interface
 			ValidateClass(info, 3)
@@ -3373,7 +3365,7 @@ do
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
 			RefreshCache(cls)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(cls, AttributeTargets.Class) end
 			ValidateClass(info, stack + 1)
 
 			return cls
@@ -3408,7 +3400,7 @@ do
 			setmetatable(env, _MetaClsEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(info.Owner, AttributeTargets.Class) end
 		else
 			error(("%s is not closed."):format(info.Name), stack)
 		end
@@ -3643,7 +3635,7 @@ do
 			pcall(setmetatable, self, _MetaStrtEnv)
 			RefreshStruct(owner)
 			local info = _NSInfo[owner]
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(owner, AttributeTargets.Struct) end
 
 			return owner
 		end
@@ -3668,22 +3660,20 @@ do
 			_ValidatedCache[value] = true
 
 			if sType == STRUCT_TYPE_MEMBER then
-				if info.Members then
-					for _, mem in ipairs(info.Members) do
-						local name = mem.Name
-						local default = mem.Default
-						local val = value[name]
+				for _, mem in ipairs(info.Members or DUMMY) do
+					local name = mem.Name
+					local default = mem.Default
+					local val = value[name]
 
-						if val == nil then
-							if default ~= nil then
-								-- Deep clone to make sure no change on default value
-								value[name] = CloneObj(default, true)
-							elseif mem.Require then
-								return error(("%s.%s can't be nil."):format("%s", name))
-							end
-						else
-							value[name] = Validate4Type(mem.Type, val, name)
+					if val == nil then
+						if default ~= nil then
+							-- Deep clone to make sure no change on default value
+							value[name] = CloneObj(default, true)
+						elseif mem.Require then
+							return error(("%s.%s can't be nil."):format("%s", name))
 						end
+					else
+						value[name] = Validate4Type(mem.Type, val, name)
 					end
 				end
 			elseif sType == STRUCT_TYPE_ARRAY and info.ArrayElement then
@@ -3858,7 +3848,7 @@ do
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
 			RefreshStruct(strt)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(strt, AttributeTargets.Struct) end
 
 			return strt
 		else
@@ -3892,7 +3882,7 @@ do
 			setmetatable(env, _MetaStrtEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshStruct(info.Owner)
-			if info.ApplyAttributes then info.ApplyAttributes() end
+			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(info.Owner, AttributeTargets.Struct) end
 			return env[BASE_ENV_FIELD]
 		else
 			error(("%s is not closed."):format(info.Name), stack)
@@ -4846,11 +4836,8 @@ do
 		function HasStructMember(ns, member)
 			local info = _NSInfo[ns]
 
-			if info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_MEMBER and info.Members then
-				for _, part in ipairs(info.Members) do if part.Name == member then return true end end
-			end
-
-			return false
+			return info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_MEMBER
+				and info.Members and info.Members[member] and true or false
 		end
 
 		doc "IsRequiredMember" [[
@@ -4929,11 +4916,8 @@ do
 
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == STRUCT_TYPE_MEMBER and info.Members then
-					for _, mem in ipairs(info.Members) do
-						if part == mem.Name then
-							return mem.Type, mem.Default, mem.Require
-						end
-					end
+					local mem = info.Members[part]
+					if mem then return mem.Type, mem.Default, mem.Require end
 				elseif info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement then
 					return info.ArrayElement.Type
 				end
@@ -5168,11 +5152,8 @@ do
 					if info.SubType == STRUCT_TYPE_CUSTOM and not part then
 						return info.Default
 					elseif info.SubType == STRUCT_TYPE_MEMBER and part then
-						for _, mem in ipairs(info.Members) do
-							if mem.Name == part then
-								return mem.Default
-							end
-						end
+						local mem = info.Members and info.Members[part]
+						if mem then return mem.Default end
 					end
 				end
 			end
@@ -5363,6 +5344,8 @@ do
 
 		_AttributeMap = setmetatable({}, WEAK_KEY)
 
+		_ApplyRestAttribute = setmetatable({}, WEAK_KEY)
+
 		-- Recycle the cache for dispose attributes
 		_AttributeCache4Dispose = setmetatable({}, {
 			__call = function(self, cache)
@@ -5388,124 +5371,44 @@ do
 			end
 		end
 
-		function GetTargetAttributes(target, targetType, owner, name, noSuper)
-			local info = _NSInfo[owner or target]
-
-			if targetType == AttributeTargets.Event then
-				return target.Attribute
-			elseif targetType == AttributeTargets.Method then
-				if info.Attributes and info.Attributes[name] then
-					return info.Attributes[name]
-				elseif not noSuper then
-					if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
-						return GetTargetAttributes(target, targetType, info.SuperClass, name)
-					end
-
-					if info.ExtendInterface then
-						for _, IF in ipairs(info.ExtendInterface) do
-							if type(_NSInfo[IF].Cache[name]) == "function" then
-								return GetTargetAttributes(target, targetType, IF, name)
-							end
-						end
-					end
-				end
-			elseif targetType == AttributeTargets.Property then
-				local pInfo = info.Cache[name]
-				return type(pInfo) == "table" and not getmetatable(pInfo) and pInfo.Attribute or nil
-			elseif targetType == AttributeTargets.Member then
-				if info.SubType == STRUCT_TYPE_MEMBER then
-					return info.Attributes and info.Attributes[name]
-				elseif info.SubType == STRUCT_TYPE_ARRAY then
-					return info.ElementAttribute
-				end
-			elseif targetType ~= AttributeTargets.Constructor then
-				return info.Attribute
-			end
-		end
-
 		function GetSuperAttributes(target, targetType, owner, name)
 			local info = _NSInfo[owner or target]
 
-			if targetType == AttributeTargets.Event then
-				if info.SuperClass and getmetatable(_NSInfo[info.SuperClass].Cache[name]) then
-					return _NSInfo[info.SuperClass].Cache[name].Attribute
-				end
+			if targetType == AttributeTargets.Class then
+				return info.SuperClass and _AttributeMap[info.SuperClass]
+			end
 
-				if info.ExtendInterface then
+			if targetType == AttributeTargets.Event or
+				targetType == AttributeTargets.Method or
+				targetType == AttributeTargets.Property then
+
+				local star = info.SuperClass and _NSInfo[info.SuperClass].Cache[name]
+
+				if not star and info.ExtendInterface then
 					for _, IF in ipairs(info.ExtendInterface) do
-						if getmetatable(_NSInfo[IF].Cache[name]) then
-							return _NSInfo[IF].Cache[name].Attribute
-						end
+						star = _NSInfo[IF].Cache[name]
+						if star then break end
 					end
 				end
-			elseif targetType == AttributeTargets.Method then
-				if info.SuperClass and type(_NSInfo[info.SuperClass].Cache[name]) == "function" then
-					return GetTargetAttributes(nil, targetType, info.SuperClass, name)
-				end
 
-				if info.ExtendInterface then
-					for _, IF in ipairs(info.ExtendInterface) do
-						if type(_NSInfo[IF].Cache[name]) == "function" then
-							return GetTargetAttributes(nil, targetType, IF, name)
-						end
-					end
-				end
-			elseif targetType == AttributeTargets.Property then
-				if info.SuperClass then
-					local tar = _NSInfo[info.SuperClass].Cache[name]
-					return type(tar) == "table" and not getmetatable(tar) and GetTargetAttributes(nil, targetType, info.SuperClass, name)
-				end
-
-				if info.ExtendInterface then
-					for _, IF in ipairs(info.ExtendInterface) do
-						local tar = _NSInfo[IF].Cache[name]
-						if type(tar) == "table" and not getmetatable(tar) then
-							return GetTargetAttributes(nil, targetType, IF, name)
-						end
-					end
-				end
-			elseif targetType == AttributeTargets.Class then
-				if info.SuperClass then
-					return _NSInfo[info.SuperClass].Attribute
+				if star then
+					if targetType == AttributeTargets.Event and getmetatable(star) then return _AttributeMap[star] end
+					if targetType == AttributeTargets.Method and type(star) == "function" then return _AttributeMap[star] end
+					if targetType == AttributeTargets.Property and type(star) == "table" and not getmetatable(star) then return _AttributeMap[star] end
 				end
 			end
 		end
 
-		function SaveTargetAttributes(target, targetType, owner, name, config)
-			local info = _NSInfo[owner or target]
-
-			if targetType == AttributeTargets.Event then
-				target.Attribute = config
-			elseif targetType == AttributeTargets.Method then
-				if config then
-					info.Attributes = info.Attributes or {}
-					info.Attributes[name] = config
-				elseif info.Attributes then
-					info.Attributes[name] = nil
-				end
-			elseif targetType == AttributeTargets.Property then
-				local pInfo = info.Property[name]
-				if pInfo then pInfo.Attribute = config end
-			elseif targetType == AttributeTargets.Member then
-				if info.SubType == STRUCT_TYPE_MEMBER then
-					if config then
-						info.Attributes = info.Attributes or {}
-						info.Attributes[name] = config
-					elseif info.Attributes then
-						info.Attributes[name] = nil
-					end
-				elseif info.SubType == STRUCT_TYPE_ARRAY then
-					info.ElementAttribute = config
-				end
-			elseif targetType ~= AttributeTargets.Constructor then
-				info.Attribute = config
-			else
+		function SaveTargetAttributes(target, targetType, config)
+			if targetType == AttributeTargets.Constructor then
 				DisposeAttributes(config)
+			else
+				_AttributeMap[target] = config
 			end
 		end
 
 		function GetAttributeUsage(target)
-			local config = GetTargetAttributes(target, AttributeTargets.Class)
+			local config = _AttributeMap[target]
 
 			if not config then
 				return
@@ -5517,38 +5420,10 @@ do
 		end
 
 		function ParseAttributeTarget(target, targetType, owner, name)
-			if targetType == AttributeTargets.Class then
-				return "[Class]" .. tostring(target)
-			elseif targetType == AttributeTargets.Constructor then
-				return "[Class.Constructor]" .. tostring(owner)
-			elseif targetType == AttributeTargets.Enum then
-				return "[Enum]" .. tostring(target)
-			elseif targetType == AttributeTargets.Event then
-				return "[Class]" .. tostring(owner) .. " [Event]" .. tostring(target.Name)
-			elseif targetType == AttributeTargets.Interface then
-				return "[Interface]" .. tostring(target)
-			elseif targetType == AttributeTargets.Method then
-				if Reflector.IsClass(owner) then
-					return "[Class]" .. tostring(owner) .. " [Method]" .. tostring(name or "anonymous")
-				elseif Reflector.IsInterface(owner) then
-					return "[Interface]" .. tostring(owner) .. " [Method]" .. tostring(name or "anonymous")
-				else
-					return "[Method]" .. tostring(name or "anonymous")
-				end
-			elseif targetType == AttributeTargets.Property then
-				if Reflector.IsClass(owner) then
-					return "[Class]" .. tostring(owner) .. " [Property]" .. tostring(target.Name  or "anonymous")
-				elseif Reflector.IsInterface(owner) then
-					return "[Interface]" .. tostring(owner) .. " [Property]" .. tostring(target.Name  or "anonymous")
-				else
-					return "[Property]" .. tostring(target.Name  or "anonymous")
-				end
-			elseif targetType == AttributeTargets.Struct then
-				return "[Struct]" .. tostring(target)
-			elseif targetType == AttributeTargets.Member then
-				return "[Struct]" .. tostring(owner) .. " [Field]" .. tostring(name)
-			elseif targetType == AttributeTargets.NameSpace then
-				return "[NameSpace]" .. tostring(target)
+			if not owner or owner == target then
+				return ("[%s]%s"):fromat(_NSInfo[owner].Type, tostring(owner))
+			else
+				return ("[%s]%s [%s]%s"):fromat(_NSInfo[owner].Type, tostring(owner), AttributeTargets(targetType), name or "anonymous")
 			end
 		end
 
@@ -5568,14 +5443,22 @@ do
 			return true
 		end
 
-		function ApplyAttributes(target, targetType, owner, name, start, config, halt, atLast)
-			if halt and atLast then _NSInfo[target].ApplyAttributes = nil end
+		function ApplyRestAttribute(target, targetType)
+			local args = _ApplyRestAttribute[target]
+			if args then
+				_ApplyRestAttribute[target] = nil
+				local start, config = args[1], args[2]
+				CACHE_TABLE(args)
+				return ApplyAttributes(target, targetType, nil, nil, start, config, true, true)
+			end
+		end
 
+		function ApplyAttributes(target, targetType, owner, name, start, config, halt, atLast)
 			-- Check config
-			config = config or GetTargetAttributes(target, targetType, owner, name)
+			config = config or _AttributeMap[target]
 
 			-- Clear
-			SaveTargetAttributes(target, targetType, owner, name, nil)
+			SaveTargetAttributes(target, targetType, nil)
 
 			-- Apply the attributes
 			if config then
@@ -5610,7 +5493,7 @@ do
 						ok, ret = pcall(config.ApplyAttribute, config, arg1, arg2, arg3, arg4)
 
 						if not ok then
-							errorhandler(ret)
+							print(ret)
 
 							config:Dispose()
 							config = nil
@@ -5641,7 +5524,7 @@ do
 
 							if not ok then
 								tremove(config, i):Dispose()
-								errorhandler(ret)
+								print(ret)
 							else
 								if usage and not usage.Inherited and usage.RunOnce then
 									tremove(config, i):Dispose()
@@ -5663,13 +5546,15 @@ do
 				end
 
 				if halt and hasAfter then
-					_NSInfo[target].ApplyAttributes = function()
-						return ApplyAttributes(target, targetType, owner, name, start, config, true, true)
-					end
+					local args = CACHE_TABLE()
+					args[1] = start
+					args[2] = config
+
+					_ApplyRestAttribute[target] = args
 				end
 			end
 
-			SaveTargetAttributes(target, targetType, owner, name, config)
+			SaveTargetAttributes(target, targetType, config)
 
 			return target
 		end
@@ -5677,24 +5562,18 @@ do
 		function SendAttributeToPrepared(self)
 			-- Send to prepared cache
 			local prepared = _PreparedAttributes
-
 			for i, v in ipairs(prepared) do if v == self then return end end
-
 			tinsert(prepared, self)
 		end
 
 		function RemoveAttributeToPrepared(self)-- Send to prepared cache
 			local prepared = _PreparedAttributes
-
 			for i, v in ipairs(prepared) do if v == self then return tremove(prepared, i) end end
 		end
 
 		function ClearPreparedAttributes(noDispose)
 			local prepared = _PreparedAttributes
-
-			if not noDispose then
-				for _, attr in ipairs(prepared) do attr:Dispose() end
-			end
+			if not noDispose then for _, attr in ipairs(prepared) do attr:Dispose() end end
 			wipe(prepared)
 		end
 
@@ -5716,12 +5595,12 @@ do
 					usage = GetAttributeUsage(cls)
 
 					if usage and usage.AttributeTarget > 0 and not Reflector.ValidateFlags(targetType, usage.AttributeTarget) then
-						errorhandler("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
+						print("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
 					elseif ValidateAttributeUsable(usableAttr, attr) then
 						usableAttr[attr] = true
 						tinsert(usableAttr, attr)
 					else
-						errorhandler("Can't apply the " .. tostring(cls) .. " attribute for multi-times.")
+						print("Can't apply the " .. tostring(cls) .. " attribute for multi-times.")
 					end
 				end
 
@@ -5738,7 +5617,7 @@ do
 			end
 
 			-- Check if already existed
-			local pconfig = GetTargetAttributes(target, targetType, owner, name, true)
+			local pconfig = _AttributeMap[target]
 
 			if pconfig then
 				if #prepared > 0 then
@@ -5757,7 +5636,7 @@ do
 						-- Erase old no-multi attributes
 						if getmetatable(pconfig) then
 							if not ValidateAttributeUsable(prepared, pconfig) then
-								SaveTargetAttributes(target, targetType, owner, name, nil)
+								SaveTargetAttributes(target, targetType, nil)
 								pconfig:Dispose()
 							end
 						else
@@ -5767,7 +5646,7 @@ do
 								end
 							end
 
-							if #pconfig == 0 then SaveTargetAttributes(target, targetType, owner, name, nil) end
+							if #pconfig == 0 then SaveTargetAttributes(target, targetType, nil) end
 						end
 					end
 				end
@@ -5834,11 +5713,11 @@ do
 		function InheritAttributes(source, target, targetType)
 			if source == target then return end
 
-			local sconfig = GetTargetAttributes(source, targetType)
+			local sconfig = _AttributeMap[source]
 
 			-- Save & apply the attributes for target
 			if sconfig then
-				local config = GetTargetAttributes(target, targetType)
+				local config = _AttributeMap[target]
 				local hasAttr = false
 
 				-- Check existed attributes
@@ -5864,12 +5743,7 @@ do
 	------------------------------------------------------
 	-- System.IAttribute
 	------------------------------------------------------
-	interface "IAttribute" (function (_ENV)
-		------------------------------------------------------
-		-- Initializer
-		------------------------------------------------------
-		IAttribute = SendAttributeToPrepared
-	end)
+	interface "IAttribute" { SendAttributeToPrepared }
 
 	------------------------------------------------------
 	-- System.__Attribute__
@@ -6142,8 +6016,8 @@ do
 	-- Static method for __Attribute__
 	__Sealed__()
 	class "__Attribute__" (function(_ENV)
-		local function IsDefined(target, targetType, owner, name, type)
-			local config = GetTargetAttributes(target, targetType, owner, name)
+		local function IsDefined(target, type)
+			local config = _AttributeMap[target]
 
 			if not config then
 				return false
@@ -6157,15 +6031,26 @@ do
 			return false
 		end
 
+		doc "IsNameSpaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">the name space</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsNameSpaceAttributeDefined(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			return target and IsDefined(target, ty) or false
+		end
+
 		doc "IsClassAttributeDefined" [[
 			<desc>Check whether the target contains such type attribute</desc>
 			<param name="target">class</param>
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		__Static__() function IsClassAttributeDefined(target, type)
-			if Reflector.IsClass(target) then return IsDefined(target, AttributeTargets.Class, nil, nil, type) end
-			return false
+		__Static__() function IsClassAttributeDefined(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			return Reflector.IsClass(target) and IsDefined(target, ty)
 		end
 
 		doc "IsEnumAttributeDefined" [[
@@ -6174,9 +6059,31 @@ do
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		__Static__() function IsEnumAttributeDefined(target, type)
-			if Reflector.IsEnum(target) then return IsDefined(target, AttributeTargets.Enum, nil, nil, type) end
-			return false
+		__Static__() function IsEnumAttributeDefined(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			return Reflector.IsEnum(target) and IsDefined(target, ty)
+		end
+
+		doc "IsInterfaceAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsInterfaceAttributeDefined(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			return Reflector.IsInterface(target) and IsDefined(target, ty)
+		end
+
+		doc "IsStructAttributeDefined" [[
+			<desc>Check whether the target contains such type attribute</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return type="boolean">true if the target contains attribute with the type</return>
+		]]
+		__Static__() function IsStructAttributeDefined(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			return Reflector.IsStruct(target) and IsDefined(target, ty)
 		end
 
 		doc "IsEventAttributeDefined" [[
@@ -6186,24 +6093,10 @@ do
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		__Static__() function IsEventAttributeDefined(target, event, type)
+		__Static__() function IsEventAttributeDefined(target, evt, ty)
 			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
-				return IsDefined(info.Cache[event], AttributeTargets.Event, target, event, type)
-			end
-			return false
-		end
-
-		doc "IsInterfaceAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">interface</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		__Static__() function IsInterfaceAttributeDefined(target, type)
-			if Reflector.IsInterface(target) then return IsDefined(target, AttributeTargets.Interface, nil, nil, type) end
-			return false
+			evt = info and info.Cache and info.Cache[evt]
+			return getmetatable(evt) and IsDefined(evt, ty) or false
 		end
 
 		doc "IsMethodAttributeDefined" [[
@@ -6214,10 +6107,9 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		__Static__() function IsMethodAttributeDefined(target, method, ty)
-			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return IsDefined(nil, AttributeTargets.Method, target, method, ty)
-			end
-			return false
+			local info = _NSInfo[target]
+			method = info and (info.Cache and info.Cache[method] or info.Method and info.Method[method])
+			return type(method) == "function" and IsDefined(method, ty) or false
 		end
 
 		doc "IsPropertyAttributeDefined" [[
@@ -6229,53 +6121,25 @@ do
 		]]
 		__Static__() function IsPropertyAttributeDefined(target, prop, ty)
 			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local tar = info.Cache[prop]
-				return type(tar) == "function" and not getmetatable(tar) and IsDefined(tar, AttributeTargets.Property, target, prop, ty)
-			end
-			return false
-		end
-
-		doc "IsStructAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">struct</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		__Static__() function IsStructAttributeDefined(target, type)
-			if Reflector.IsStruct(target) then return IsDefined(target, AttributeTargets.Struct, nil, nil, type) end
-			return false
+			prop = info and (info.Cache and info.Cache[prop] or info.Property and info.Property[prop])
+			return type(prop) == "table" and getmetatable(prop) == nil and IsDefined(prop, ty) or false
 		end
 
 		doc "IsMemberAttributeDefined" [[
 			<desc>Check whether the target contains such type attribute</desc>
 			<param name="target">struct</param>
-			<param name="field">the field's name</param>
+			<param name="member">the member's name</param>
 			<param name="type">the attribute class type</param>
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
-		__Static__() function IsMemberAttributeDefined(target, field, ty)
-			if Reflector.IsStruct(target) and type(field) == "string" then
-				return IsDefined(nil, AttributeTargets.Member, target, field, ty)
-			end
-
-			return false
+		__Static__() function IsMemberAttributeDefined(target, member, ty)
+			local info = _NSInfo[target]
+			member = info and info.Members and info.Members[member]
+			return member and IsDefined(member, ty) or false
 		end
 
-		doc "IsNameSpaceAttributeDefined" [[
-			<desc>Check whether the target contains such type attribute</desc>
-			<param name="target">the name space</param>
-			<param name="type">the attribute class type</param>
-			<return type="boolean">true if the target contains attribute with the type</return>
-		]]
-		__Static__() function IsNameSpaceAttributeDefined(target, type)
-			if Reflector.GetNameSpaceName(target) then return IsDefined(target, AttributeTargets.NameSpace, nil, nil, type) end
-			return false
-		end
-
-		local function GetCustomAttribute(target, targetType, owner, name, type)
-			local config = GetTargetAttributes(target, targetType, owner, name)
+		local function GetCustomAttribute(target, type)
+			local config = _AttributeMap[target]
 
 			if not config then
 				return
@@ -6311,14 +6175,26 @@ do
 			end
 		end
 
+		doc "GetNameSpaceAttribute" [[
+			<desc>Return the attributes of the given type for the NameSpace</desc>
+			<param name="target">NameSpace</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetNameSpaceAttribute(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if target then return GetCustomAttribute(target, ty) end
+		end
+
 		doc "GetClassAttribute" [[
 			<desc>Return the attributes of the given type for the class</desc>
 			<param name="target">class</param>
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		__Static__() function GetClassAttribute(target, type)
-			if Reflector.IsClass(target) then return GetCustomAttribute(target, AttributeTargets.Class, nil, nil, type) end
+		__Static__() function GetClassAttribute(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if target and Reflector.IsClass(target) then return GetCustomAttribute(target, ty) end
 		end
 
 		doc "GetEnumAttribute" [[
@@ -6327,8 +6203,31 @@ do
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		__Static__() function GetEnumAttribute(target, type)
-			if Reflector.IsEnum(target) then return GetCustomAttribute(target, AttributeTargets.Enum, nil, nil, type) end
+		__Static__() function GetEnumAttribute(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if target and Reflector.IsEnum(target) then return GetCustomAttribute(target, ty) end
+		end
+
+		doc "GetInterfaceAttribute" [[
+			<desc>Return the attributes of the given type for the interface</desc>
+			<param name="target">interface</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetInterfaceAttribute(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if target and Reflector.IsInterface(target) then return GetCustomAttribute(target, ty) end
+		end
+
+		doc "GetStructAttribute" [[
+			<desc>Return the attributes of the given type for the struct</desc>
+			<param name="target">struct</param>
+			<param name="type">the attribute class type</param>
+			<return>the attribute objects</return>
+		]]
+		__Static__() function GetStructAttribute(target, ty)
+			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if target and Reflector.IsStruct(target) then return GetCustomAttribute(target, ty) end
 		end
 
 		doc "GetEventAttribute" [[
@@ -6338,22 +6237,10 @@ do
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		__Static__() function GetEventAttribute(target, event, type)
+		__Static__() function GetEventAttribute(target, evt, ty)
 			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) and getmetatable(info.Cache[event]) then
-				return GetCustomAttribute(info.Cache[event], AttributeTargets.Event, target, event, type)
-			end
-		end
-
-		doc "GetInterfaceAttribute" [[
-			<desc>Return the attributes of the given type for the interface</desc>
-			<param name="target">interface</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		__Static__() function GetInterfaceAttribute(target, type)
-			if Reflector.IsInterface(target) then return GetCustomAttribute(target, AttributeTargets.Interface, nil, nil, type) end
+			evt = info and info.Cache and info.Cache[evt]
+			if getmetatable(evt) then return GetCustomAttribute(evt, ty) end
 		end
 
 		doc "GetMethodAttribute" [[
@@ -6366,9 +6253,9 @@ do
 			<return>the attribute objects</return>
 		]]
 		__Static__() function GetMethodAttribute(target, method, ty)
-			if (Reflector.IsClass(target) or Reflector.IsInterface(target) or Reflector.IsStruct(target)) and type(method) == "string" then
-				return GetCustomAttribute(nil, AttributeTargets.Method, target, method, ty)
-			end
+			local info = _NSInfo[target]
+			method = info and (info.Cache and info.Cache[method] or info.Method and info.Method[method])
+			if type(method) == "function" then return GetCustomAttribute(method, ty) end
 		end
 
 		doc "GetPropertyAttribute" [[
@@ -6380,45 +6267,23 @@ do
 		]]
 		__Static__() function GetPropertyAttribute(target, prop, ty)
 			local info = _NSInfo[target]
-
-			if info and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
-				local tar = info.Cache[prop]
-				return type(tar) == "table" and not getmetatable(tar) and GetCustomAttribute(tar, AttributeTargets.Property, target, prop, ty)
-			end
-		end
-
-		doc "GetStructAttribute" [[
-			<desc>Return the attributes of the given type for the struct</desc>
-			<param name="target">struct</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		__Static__() function GetStructAttribute(target, type)
-			if Reflector.IsStruct(target) then return GetCustomAttribute(target, AttributeTargets.Struct, nil, nil, type) end
+			prop = info and (info.Cache and info.Cache[prop] or info.Property and info.Property[prop])
+			if type(prop) == "table" and getmetatable(prop) == nil then return GetCustomAttribute(prop, ty) end
 		end
 
 		doc "GetMemberAttribute" [[
 			<desc>Return the attributes of the given type for the struct's field</desc>
 			<param name="target">struct</param>
-			<param name="field">the field's name</param>
+			<param name="member">the member's name</param>
 			<param name="type">the attribute class type</param>
 			<return>the attribute objects</return>
 		]]
-		__Static__() function GetMemberAttribute(target, field, ty)
-			if Reflector.IsStruct(target) and type(field) == "string" then
-				return GetCustomAttribute(nil, AttributeTargets.Member, target, field, ty)
-			end
+		__Static__() function GetMemberAttribute(target, member, ty)
+			local info = _NSInfo[target]
+			member = info and info.Members and info.Members[member]
+			if member then return GetCustomAttribute(member, ty) end
 		end
 
-		doc "GetNameSpaceAttribute" [[
-			<desc>Return the attributes of the given type for the NameSpace</desc>
-			<param name="target">NameSpace</param>
-			<param name="type">the attribute class type</param>
-			<return>the attribute objects</return>
-		]]
-		__Static__() function GetNameSpaceAttribute(target, type)
-			if Reflector.GetNameSpaceName(target) then return GetCustomAttribute(target, AttributeTargets.NameSpace, nil, nil, type) end
-		end
 	end)
 
 	__Sealed__()
@@ -6439,10 +6304,8 @@ do
 				if info.SubType == STRUCT_TYPE_MEMBER then
 					if info.Validator then return true end
 
-					if info.Members then
-						for _, n in ipairs(info.Members) do
-							if isCloneNeeded(n.Type) then return true end
-						end
+					for _, n in ipairs(info.Members or DUMMY) do
+						if isCloneNeeded(n.Type) then return true end
 					end
 				elseif info.SubType == STRUCT_TYPE_ARRAY then
 					return isCloneNeeded(info.ArrayElement and info.ArrayElement.Type)
