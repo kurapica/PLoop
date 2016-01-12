@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2016/01/08
--- Version          r142
+-- Last Update Date 2016/01/12
+-- Version          r143
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -52,6 +52,8 @@ do
 
 	-- Local Environment
 	if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
+
+	LUA_VERSION = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1
 
 	WEAK_KEY, WEAK_VALUE, WEAK_ALL = {__mode = "k"}, {__mode = "v"}, {__mode = "kv"}
 
@@ -188,11 +190,20 @@ do
 	-- Base env field
 	BASE_ENV_FIELD = "__PLOOP_BASE_ENV"
 
+	-- Import env field
+	IMPORT_ENV_FIELD = "__PLOOP_IMPORT_ENV"
+
 	-- Attribute System
 	ATTRIBUTE_INSTALLED = false
 
-	-- FIELD
-
+	-- MODIFIER
+	MD_FINAL_FEATURE = 2^0
+	MD_FLAGS_ENUM = 2^1
+	MD_SEALED_FEATURE = 2^2
+	MD_ABSTRACT_CLASS = 2^3
+	MD_STATIC_FEATURE = 2^4
+	MD_REQUIRE_FEATURE = 2^5
+	MD_OPTIONAL_FEATURE = 2^6
 end
 
 ------------------------------------------------------
@@ -337,6 +348,44 @@ do
 			return info
 		end
 	end
+
+	-- 	ValidateFlags
+	function ValidateFlags(checkValue, targetValue)
+		if not targetValue then return false end
+		targetValue = targetValue % (2 * checkValue)
+		return (targetValue - targetValue % checkValue) == checkValue
+	end
+
+	function TurnOnFlags(checkValue, targetValue)
+		if not ValidateFlags(checkValue, targetValue) then
+			return checkValue + (targetValue or 0)
+		end
+	end
+
+	if LUA_VERSION >= 5.3 then
+		ValidateFlags = loadstring [[
+			return function(checkValue, targetValue)
+				return (checkValue & (targetValue or 0)) > 0
+			end
+		]] ()
+
+		TurnOnFlags = loadstring [[
+			return function(checkValue, targetValue)
+				return checkValue | (targetValue or 0)
+			end
+		]] ()
+	elseif (LUA_VERSION == 5.2 and type(bit32) == "table") or (LUA_VERSION == 5.1 and type(bit) == "table") then
+		local band = bit32 and bit32.band or bit.band
+		local bor = bit32 and bit32.bor  or bit.bor
+
+		ValidateFlags = function (checkValue, targetValue)
+			return band(checkValue, targetValue or 0) > 0
+		end
+
+		TurnOnFlags = function (checkValue, targetValue)
+			return bor(checkValue, targetValue or 0)
+		end
+	end
 end
 
 ------------------------------------------------------
@@ -381,7 +430,7 @@ do
 			elseif info.Type == TYPE_ENUM then
 				-- Parse Enum
 				local value = ...
-				if info.IsFlags and type(value) == "number" and value >= 0 and value <= info.MaxValue then
+				if info.MaxValue and type(value) == "number" and value == floor(value) and value >= 0 and value <= info.MaxValue then
 					if value == 0 or info.Cache[value] then
 						return info.Cache[value]
 					else
@@ -390,11 +439,7 @@ do
 						local ckv = 1
 
 						while ckv <= value do
-							local sub = value % (2 * ckv)
-							if (sub - sub % ckv) == ckv then
-								tinsert(rCache, eCache[ckv])
-							end
-
+							if ValidateFlags(ckv, value) then tinsert(rCache, eCache[ckv]) end
 							ckv = ckv * 2
 						end
 
@@ -424,7 +469,7 @@ do
 					-- Meta-method
 					if _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
 
-					if key == _SuperIndex then
+					if key == "Super" then
 						info = _NSInfo[info.SuperClass]
 						if info then
 							return info.ClassAlias or BuildClassAlias(info)
@@ -433,15 +478,15 @@ do
 						end
 					end
 
-					if key == _ThisIndex then return info.ClassAlias or BuildClassAlias(info) end
+					if key == "This" then return info.ClassAlias or BuildClassAlias(info) end
 				end
 
 				-- Method
-				ret = info.Method[key] or info.Cache[key]
+				ret = info.Cache[key] or info.Method and info.Method[key]
 				if type(ret) == "function" then return ret end
 
 				-- Property
-				ret = info.Property[key]
+				ret = info.Property and info.Property[key]
 				if ret and ret.IsStatic then
 					-- Property
 					local oper = ret
@@ -514,7 +559,7 @@ do
 
 			if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
 				-- Static Property
-				local oper = info.Property[key]
+				local oper = info.Property and info.Property[key]
 
 				if oper and oper.IsStatic then
 					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
@@ -628,7 +673,7 @@ do
 			elseif _KeyMeta[key] then
 				return info.MetaTable[_KeyMeta[key]]
 			else
-				ret = info.Method[key] or info.Cache[key]
+				ret = info.Cache[key] or info.Method and info.Method[key]
 				if type(ret) == "function" then return ret end
 			end
 		end
@@ -668,10 +713,8 @@ do
 
 				if not scls then
 					-- No conflict
-					if info.Cache and info.Cache[name] or info.Method and info.Method[name] then
+					if info.Members and info.Members[name] or info.Cache and info.Cache[name] or info.Method and info.Method[name] or info.Property and info.Property[name] then
 						return error(("The [%s] %s - %s is defined, can't be used as namespace."):format(info.Type, tostring(info.Owner), name))
-					elseif info.Members and info.Members[name] then
-						return error(("'%s' already existed as member of [Struct] %s."):format(name, tostring(info.Owner)))
 					end
 
 					scls = newproxy(_NameSpace)
@@ -750,24 +793,24 @@ do
 		return ns and ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(ns, AttributeTargets.NameSpace)
 	end
 
-	function GetDefineNS(env, name)
+	function GetDefineNS(env, name, ty)
 		if getmetatable(name) == TYPE_NAMESPACE then
 			return name
 		elseif type(name) == "table" then
 			-- Anonymous
-			return BuildNameSpace(nil, "Anonymous")
+			return BuildNameSpace(nil, "Anonymous" .. ty)
 		elseif type(name) == "string" then
 			if not name:match("^[_%w]+$") then return end
 
 			local ns = not IsLocal() and (GetPrepareNameSpace() == nil and GetNameSpace4Env(env) or GetPrepareNameSpace()) or nil
 
 			if ns then
-				return BuildNameSpace(ns, name), ns
+				return BuildNameSpace(ns, name)
 			else
 				local tar = env[name]
 				info = _NSInfo[tar]
 
-				if not (info and info.NameSpace == nil ) then
+				if not (info and info.NameSpace == nil and info.Type == ty ) then
 					tar = BuildNameSpace(nil, name)
 				end
 
@@ -896,13 +939,15 @@ end
 -- Documentation
 ------------------------------------------------------
 do
+	_DocMap = setmetatable({}, WEAK_KEY)
+
 	function getSuperDoc(info, key, dkey)
 		if info.SuperClass then
 			local sinfo = _NSInfo[info.SuperClass]
 
 			while sinfo do
-				if sinfo.Documentation and (sinfo.Documentation[key] or sinfo.Documentation[dkey]) then
-					return sinfo.Documentation[key] or sinfo.Documentation[dkey]
+				if _DocMap[sinfo] and (_DocMap[sinfo][key] or _DocMap[sinfo][dkey]) then
+					return _DocMap[sinfo][key] or _DocMap[sinfo][dkey]
 				end
 
 				if sinfo.SuperClass then
@@ -918,8 +963,8 @@ do
 			for _, IF in ipairs(info.Cache4Interface) do
 				local sinfo = _NSInfo[IF]
 
-				if sinfo.Documentation and (sinfo.Documentation[key] or sinfo.Documentation[dkey]) then
-					return sinfo.Documentation[key] or sinfo.Documentation[dkey]
+				if _DocMap[sinfo] and (_DocMap[sinfo][key] or _DocMap[sinfo][dkey]) then
+					return _DocMap[sinfo][key] or _DocMap[sinfo][dkey]
 				end
 			end
 		end
@@ -970,8 +1015,8 @@ do
 
 		if targetType then key = tostring(targetType) .. name end
 
-		info.Documentation = info.Documentation or {}
-		info.Documentation[key] = data
+		_DocMap[info] = _DocMap[info] or {}
+		_DocMap[info][key] = data
 	end
 
 	function GetDocument(owner, name, targetType)
@@ -989,7 +1034,7 @@ do
 
 		local key = targetType and tostring(targetType) .. name or nil
 
-		return info.Documentation and (info.Documentation[key] or info.Documentation[name]) or (targetType ~= "CLASS" and targetType ~= "INTERFACE") and getSuperDoc(info, key, name) or nil
+		return _DocMap[info] and (_DocMap[info][key] or _DocMap[info][name]) or (targetType ~= "CLASS" and targetType ~= "INTERFACE") and getSuperDoc(info, key, name) or nil
 	end
 
 	do
@@ -1094,19 +1139,19 @@ do
 		if info.ExtendInterface then for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(iCache, _NSInfo[IF].Cache) end end
 
 		-- Cache for event
-		CloneWithOverride(iCache, info.Event)
+		CloneWithOverride(iCache, info.Event or DUMMY)
 
 		-- Cache for Method
-		local staticMethod = info.StaticMethod
-		if staticMethod then
-			for key, value in pairs(info.Method) do if not staticMethod[key] then iCache[key] = value end end
-		else
-			for key, value in pairs(info.Method) do iCache[key] = value end
+		for key, value in pairs(info.Method or DUMMY) do
+			-- No static methods
+			if not (info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[key])) then
+				iCache[key] = value
+			end
 		end
 
 		-- Cache for Property
 		-- Validate the properties
-		for name, prop in pairs(info.Property) do
+		for name, prop in pairs(info.Property or DUMMY) do
 			if prop.Predefined then
 				local set = prop.Predefined
 
@@ -1136,13 +1181,7 @@ do
 							prop.Field = v ~= name and v or nil
 						elseif k == "type" then
 							local tInfo = _NSInfo[v]
-
-							if tInfo and (tInfo.Type == TYPE_ENUM or
-											tInfo.Type == TYPE_STRUCT or
-											tInfo.Type == TYPE_INTERFACE or
-											tInfo.Type == TYPE_CLASS) then
-								prop.Type = v
-							end
+							if tInfo and tInfo.Type then prop.Type = v end
 						elseif k == "default" then
 							prop.Default = v
 						elseif k == "event" and (type(v) == "string" or getmetatable(v) == Event) then
@@ -1180,36 +1219,44 @@ do
 				local uname = name:gsub("^%a", strupper)
 
 				if prop.IsStatic then
+					-- Only use static methods
 					if prop.GetMethod then
-						if staticMethod and staticMethod[prop.GetMethod] then prop.Get = info.Method[prop.GetMethod] end
+						if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.GetMethod]) then
+							prop.Get = info.Method[prop.GetMethod]
+						end
 						prop.GetMethod = nil
 					end
 					if prop.SetMethod then
-						if staticMethod and staticMethod[prop.SetMethod] then prop.Set = info.Method[prop.SetMethod] end
+						if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.SetMethod]) then
+							prop.Set = info.Method[prop.SetMethod]
+						end
 						prop.SetMethod = nil
 					end
 
-					if staticMethod then
+					if info.FeatureModifier and info.Method then
 						-- Auto generate GetMethod
 						if ( prop.Get == nil or prop.Get == true ) and prop.Field == nil then
 							-- GetMethod
-							if staticMethod["get" .. uname] then
+							if info.Method["get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["get" .. uname]) then
 								prop.Get = info.Method["get" .. uname]
-							elseif staticMethod["Get" .. uname] then
+							elseif info.Method["Get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Get" .. uname]) then
 								prop.Get = info.Method["Get" .. uname]
 							elseif prop.Type == Boolean then
 								-- FlagEnabled -> IsFlagEnabled
-								if staticMethod["is" .. uname] then
+								if info.Method["is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["is" .. uname]) then
 									prop.Get = info.Method["is" .. uname]
-								elseif staticMethod["Is" .. uname] then
+								elseif info.Method["Is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Is" .. uname]) then
 									prop.Get = info.Method["Is" .. uname]
 								else
 									-- FlagEnable -> IsEnableFlag
 									local pattern = ParseAdj(uname, true)
 
 									if pattern then
-										for mname, method in pairs(staticMethod) do
-											if method and mname:match(pattern) then prop.Get = info.Method[mname] break end
+										for mname, mod in pairs(info.FeatureModifier) do
+											if info.Method[mname] and ValidateFlags(MD_STATIC_FEATURE, mod) and mname:match(pattern) then
+												prop.Get = info.Method[mname]
+												break
+											end
 										end
 									end
 								end
@@ -1219,17 +1266,20 @@ do
 						-- Auto generate SetMethod
 						if ( prop.Set == nil or prop.Set == true ) and prop.Field == nil then
 							-- SetMethod
-							if staticMethod["set" .. uname] then
+							if info.Method["set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["set" .. uname]) then
 								prop.Set = info.Method["set" .. uname]
-							elseif staticMethod["Set" .. uname] then
+							elseif info.Method["Set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Set" .. uname]) then
 								prop.Set = info.Method["Set" .. uname]
 							elseif prop.Type == Boolean then
 								-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 								local pattern = ParseAdj(uname)
 
 								if pattern then
-									for mname, method in pairs(staticMethod) do
-										if method and mname:match(pattern) then prop.Set = info.Method[mname] break end
+									for mname, mod in pairs(info.FeatureModifier) do
+										if info.Method[mname] and ValidateFlags(MD_STATIC_FEATURE, mod) and mname:match(pattern) then
+											prop.Set = info.Method[mname]
+											break
+										end
 									end
 								end
 							end
@@ -1294,6 +1344,7 @@ do
 						-- Auto create
 						local ename = prop.Event
 						evt = Event(ename)
+						info.Event = info.Event or {}
 						info.Event[ename] = evt
 						iCache[ename] = evt
 						prop.Event = evt
@@ -1310,11 +1361,11 @@ do
 
 				-- Validate the Setter
 				if prop.Setter then
-					prop.SetDeepClone = Reflector.ValidateFlags(Setter.DeepClone, prop.Setter) or nil
-					prop.SetClone = Reflector.ValidateFlags(Setter.Clone, prop.Setter) or prop.SetDeepClone
+					prop.SetDeepClone = ValidateFlags(Setter.DeepClone, prop.Setter) or nil
+					prop.SetClone = ValidateFlags(Setter.Clone, prop.Setter) or prop.SetDeepClone
 
 					if prop.Set == nil and not prop.SetMethod then
-						if Reflector.ValidateFlags(Setter.Retain, prop.Setter) and prop.Type then
+						if ValidateFlags(Setter.Retain, prop.Setter) and prop.Type then
 							local tinfo = _NSInfo[prop.Type]
 
 							if tinfo.Type == TYPE_CLASS or tinfo.Type == TYPE_INTERFACE then
@@ -1323,7 +1374,7 @@ do
 						end
 
 						if prop.Get == nil and not prop.GetMethod then
-							if Reflector.ValidateFlags(Setter.Weak, prop.Setter) then prop.SetWeak = true end
+							if ValidateFlags(Setter.Weak, prop.Setter) then prop.SetWeak = true end
 						end
 					end
 
@@ -1332,8 +1383,8 @@ do
 
 				-- Validate the Getter
 				if prop.Getter then
-					prop.GetDeepClone = Reflector.ValidateFlags(Getter.DeepClone, prop.Getter) or nil
-					prop.GetClone = Reflector.ValidateFlags(Getter.Clone, prop.Getter) or prop.GetDeepClone
+					prop.GetDeepClone = ValidateFlags(Getter.DeepClone, prop.Getter) or nil
+					prop.GetClone = ValidateFlags(Getter.Clone, prop.Getter) or prop.GetDeepClone
 
 					prop.Getter = nil
 				end
@@ -1395,6 +1446,7 @@ do
 							tinsert(gbody, [[return value]])
 							tinsert(gbody, [[end]])
 
+							info.Method = info.Method or {}
 							info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
 
 							-- Generate setMethod
@@ -1463,9 +1515,9 @@ do
 							CACHE_TABLE(gbody)
 							CACHE_TABLE(upValues)
 
-							info.StaticMethod = info.StaticMethod or {}
-							info.StaticMethod[getName] = true
-							info.StaticMethod[setName] = true
+							info.FeatureModifier = info.FeatureModifier or {}
+							info.FeatureModifier[getName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[getName])
+							info.FeatureModifier[setName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[setName])
 
 							prop.Get = info.Method[getName]
 							prop.Set = info.Method[setName]
@@ -1514,6 +1566,7 @@ do
 							tinsert(gbody, [[return value]])
 							tinsert(gbody, [[end]])
 
+							info.Method = info.Method or {}
 							info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
 
 							-- Generate setMethod
@@ -1596,50 +1649,18 @@ do
 			end
 		end
 		--- self property
-		CloneWithOverride(iCache, info.Property, true)
+		CloneWithOverride(iCache, info.Property or DUMMY, true)
 
 		-- AutoCache
-		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache == true then
+		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then
 			info.AutoCache = true
-		elseif info.AutoCache ~= true and info.Type == TYPE_CLASS then
-			local cache = CACHE_TABLE()
-
-			if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then
-				tinsert(cache, _NSInfo[info.SuperClass].AutoCache)
-			end
-
-			if info.ExtendInterface then
-				for _, IF in ipairs(info.ExtendInterface) do
-					if _NSInfo[IF].AutoCache == true then
-						tinsert(cache, _NSInfo[IF].Method)
-					elseif _NSInfo[IF].AutoCache then
-						tinsert(cache, _NSInfo[IF].AutoCache)
-					end
-				end
-			end
-
-			if #cache > 0 then
-				local autoCache = info.AutoCache or {}
-
-				-- Clear if static
-				if staticMethod then
-					for name in pairs(autoCache) do if staticMethod[name] then autoCache[name] = nil end end
-					for _, sCache in ipairs(cache) do for name in pairs(sCache) do if not staticMethod[name] then autoCache[name] = true end end end
-				else
-					for _, sCache in ipairs(cache) do for name in pairs(sCache) do autoCache[name] = true end end
-				end
-
-				if next(autoCache) then info.AutoCache = autoCache end
-			end
-
-			CACHE_TABLE(cache)
 		end
 
 		-- Refresh branch
 		if info.ChildClass then
 			for _, subcls in ipairs(info.ChildClass) do RefreshCache(subcls) end
-		elseif info.ExtendClass then
-			for _, subcls in ipairs(info.ExtendClass) do RefreshCache(subcls) end
+		elseif info.ExtendChild then
+			for _, subcls in ipairs(info.ExtendChild) do RefreshCache(subcls) end
 		end
 	end
 
@@ -1717,14 +1738,14 @@ do
 		if not ns then return false end
 
 		if not name then
-			return ns.IsFinal
+			return ValidateFlags(MD_FINAL_FEATURE, ns.Modifier)
 		else
 			if isSuper and not ns.Cache[name] then return nil end
 
 			-- Check self
-			if ns.FinalFeatures and ns.FinalFeatures[name] then return true end
-			if ns.Method and ns.Method[name] then return isSuper and ns.IsFinal or false end
-			if ns.Property and ns.Property[name] then return isSuper and ns.IsFinal or false end
+			if ns.FeatureModifier and ValidateFlags(MD_FINAL_FEATURE, ns.FeatureModifier[name]) then return true end
+			if ns.Method and ns.Method[name] then return isSuper and ValidateFlags(MD_FINAL_FEATURE, ns.Modifier) or false end
+			if ns.Property and ns.Property[name] then return isSuper and ValidateFlags(MD_FINAL_FEATURE, ns.Modifier) or false end
 
 			-- Check Super class
 			if ns.SuperClass then
@@ -1794,28 +1815,28 @@ do
 		if key == info.Name then
 			if info.Type == TYPE_CLASS then
 				-- Constructor
-				if info.IsSealed then return error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
+				if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the constructor."):format(tostring(info.Owner))) end
 				isConstructor = true
 				rkey = "Constructor"
 			elseif info.Type == TYPE_INTERFACE then
 				-- Initializer
-				if info.IsSealed then return error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
+				if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the initializer."):format(tostring(info.Owner))) end
 				info.Initializer = value
 				return
 			elseif info.Type == TYPE_STRUCT then
 				-- Valiator
-				if info.IsSealed then return error(("%s is sealed, can't set the validator."):format(tostring(info.Owner))) end
+				if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the validator."):format(tostring(info.Owner))) end
 				info.Validator = value
 				return
 			end
 		elseif key == DISPOSE_METHOD and (info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE) then
 			-- Dispose
-			if info.IsSealed then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
+			if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the dispose method."):format(tostring(info.Owner))) end
 			info[DISPOSE_METHOD] = value
 			return
 		elseif _KeyMeta[key] and info.Type == TYPE_CLASS then
 			-- Meta-method
-			if info.IsSealed then return error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
+			if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
 			isMeta = true
 			rkey = _KeyMeta[key]
 			storage = info.MetaTable
@@ -1824,9 +1845,9 @@ do
 			-- Method
 			if info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS then
 				if IsFinalFeature(info.Owner, key) then return error(("%s.%s is final, can't be overwrited."):format(tostring(info.Owner), key)) end
-				if info.IsSealed and (info.Cache[key] or info.Method[key]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+				if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) and (info.Cache[key] or info.Method and info.Method[key]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 			elseif info.Type == TYPE_STRUCT then
-				if info.IsSealed and info.Method and info.Method[key] then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
+				if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) and info.Method and info.Method[key] then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), key)) end
 				if info.Members and info.Members[key] then return error(("'%s' already existed as struct member."):format(key)) end
 			end
 			info.Method = info.Method or {}
@@ -1846,10 +1867,9 @@ do
 	function SaveProperty(info, name, set)
 		if type(set) ~= "table" then return error([[Usage: property "Name" { Property Definition }]]) end
 
-		local prop = info.Property[name] or {}
+		local prop = {}
+		info.Property = info.Property or {}
 		info.Property[name] = prop
-
-		wipe(prop)
 
 		prop.Name = name
 		prop.Predefined = set
@@ -1858,21 +1878,22 @@ do
 	end
 
 	function SaveEvent(info, name)
-		if info.IsSealed and (info.Cache[name] or info.Event[name]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), name)) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) and (info.Cache[name] or info.Event and info.Event[name]) then return error(("%s.%s is sealed, can't be overwrited."):format(tostring(info.Owner), name)) end
 
+		info.Event = info.Event or {}
 		info.Event[name] = info.Event[name] or Event(name)
 
 		return ATTRIBUTE_INSTALLED and ConsumePreparedAttributes(info.Event[name], AttributeTargets.Event, info.Owner, name)
 	end
 
 	function SaveExtend(info, IF)
-		if info.IsSealed then return error(("%s is sealed, can't extend interface."):format(tostring(info.Owner))) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't extend interface."):format(tostring(info.Owner))) end
 
 		local IFInfo = _NSInfo[IF]
 
 		if not IFInfo or IFInfo.Type ~= TYPE_INTERFACE then
 			return error("Usage: extend (interface) : 'interface' - interface expected")
-		elseif IFInfo.IsFinal then
+		elseif ValidateFlags(MD_FINAL_FEATURE, IFInfo.Modifier) then
 			return error(("%s is marked as final, can't be extened."):format(tostring(IF)))
 		end
 
@@ -1968,7 +1989,7 @@ do
 		for i = #(info.ExtendInterface), 1, -1 do
 			local pIF = info.ExtendInterface[i]
 			if IsExtend(pIF, IF) then
-				local pExtend = _NSInfo[pIF].ExtendClass
+				local pExtend = _NSInfo[pIF].ExtendChild
 				for j, v in ipairs(pExtend) do
 					if v == owner then
 						tremove(pExtend, j)
@@ -1979,19 +2000,19 @@ do
 			end
 		end
 
-		IFInfo.ExtendClass = IFInfo.ExtendClass or {}
-		tinsert(IFInfo.ExtendClass, owner)
+		IFInfo.ExtendChild = IFInfo.ExtendChild or {}
+		tinsert(IFInfo.ExtendChild, owner)
 
 		tinsert(info.ExtendInterface, IF)
 	end
 
 	function SaveInherit(info, superCls)
-		if info.IsSealed then return error(("%s is sealed, can't set super class."):format(tostring(info.Owner))) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set super class."):format(tostring(info.Owner))) end
 
 		local superInfo = _NSInfo[superCls]
 
 		if not superInfo or superInfo.Type ~= TYPE_CLASS then return error("Usage: inherit (class) : 'class' - class expected") end
-		if superInfo.IsFinal then return error(("%s is marked as final, can't be inherited."):format(tostring(superCls))) end
+		if ValidateFlags(MD_FINAL_FEATURE, superInfo.Modifier) then return error(("%s is marked as final, can't be inherited."):format(tostring(superCls))) end
 		if IsChildClass(info.Owner, superCls) then return error(("%s is inherited from %s, can't be used as super class."):format(tostring(superCls), tostring(info.Owner))) end
 		if info.SuperClass == superCls then return end
 		if info.SuperClass then return error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass))) end
@@ -2016,8 +2037,8 @@ do
 		-- Only check the conflict caused by child interfaces or classes
 		if child and info.RequireClass and not IsChildClass(req, info.RequireClass) then return false, info.Owner end
 
-		if info.ExtendClass then
-			for _, subcls in ipairs(info.ExtendClass) do
+		if info.ExtendChild then
+			for _, subcls in ipairs(info.ExtendChild) do
 				local sinfo = _NSInfo[subcls]
 				if sinfo.Type == TYPE_CLASS then
 					if not IsChildClass(req, subcls) then return false, subcls end
@@ -2032,7 +2053,7 @@ do
 	end
 
 	function SaveRequire(info, req)
-		if info.IsSealed then return error(("%s is sealed, can't set the required class."):format(tostring(info.Owner))) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the required class."):format(tostring(info.Owner))) end
 		if not rawget(_NSInfo, req) or _NSInfo[req].Type ~= TYPE_CLASS then error("Usage : require 'class'") end
 
 		local ok, ret = CheckRequireConflict(info, req)
@@ -2169,7 +2190,6 @@ do
 	function import_Def(env, name)
 		if type(name) ~= "string" and not IsNameSpace(name) then return error([[Usage: import "namespaceA.namespaceB"]]) end
 
-		local info = _NSInfo[env[OWNER_FIELD]]
 		local ns
 
 		if type(name) == "string" then
@@ -2180,11 +2200,11 @@ do
 
 		if not ns then return error(("No namespace is found with name : %s"):format(name)) end
 
-		info.Import4Env = info.Import4Env or {}
+		env[IMPORT_ENV_FIELD] = env[IMPORT_ENV_FIELD] or {}
 
-		for _, v in ipairs(info.Import4Env) do if v == ns then return end end
+		for _, v in ipairs(env[IMPORT_ENV_FIELD]) do if v == ns then return end end
 
-		tinsert(info.Import4Env, ns)
+		tinsert(env[IMPORT_ENV_FIELD], ns)
 	end
 
 	local fetchPropertyCache = setmetatable({}, WEAK_KEY)
@@ -2340,14 +2360,6 @@ do
 			cls = name
 		end
 
-		local cInfo = _NSInfo[cls]
-
-		if not cInfo or cInfo.Type ~= TYPE_CLASS then
-			return error("Usage: require (class) : class expected")
-		elseif cInfo.IsFinal then
-			return error(("%s is marked as final, can't be used as the required class."):format(tostring(cls)))
-		end
-
 		return SaveRequire(info, cls)
 	end
 end
@@ -2369,18 +2381,20 @@ do
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
 					return info.NameSpace
-				elseif info.NameSpace[key] then
-					return info.NameSpace[key]
+				else
+					value = info.NameSpace[key]
+					if value ~= nil then return value end
 				end
 			end
 
 			-- Check imports
-			if info.Import4Env then
-				for _, ns in ipairs(info.Import4Env) do
+			if rawget(self, IMPORT_ENV_FIELD) then
+				for _, ns in ipairs(self[IMPORT_ENV_FIELD]) do
 					if key == _NSInfo[ns].Name then
 						return ns
-					elseif ns[key] then
-						return ns[key]
+					else
+						value = ns[key]
+						if value ~= nil then return value end
 					end
 				end
 			end
@@ -2391,11 +2405,11 @@ do
 
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same interface
-			value = info.Method[key]
+			value = info.Method and info.Method[key]
 			if value then return value end
 
 			-- Check event
-			value = info.Event[key]
+			value = info.Event and info.Event[key]
 			if value then return value end
 
 			-- Check Base
@@ -2413,7 +2427,11 @@ do
 			value = _KeyWord4IFEnv:GetKeyword(self, key)
 			if value then return value end
 
-			-- Check namespace
+			-- Check Static Property
+			value = info.Property and info.Property[key]
+			if value and value.IsStatic then return info.Owner[key] end
+
+			-- Check others
 			value = __index(self, info, key)
 			if value ~= nil then rawset(self, key, value) return value end
 		end
@@ -2430,6 +2448,11 @@ do
 			value = _KeyWord4IFEnv:GetKeyword(self, key)
 			if value then return value end
 
+			-- Check Static Property
+			value = info.Property and info.Property[key]
+			if value and value.IsStatic then return info.Owner[key] end
+
+			-- Check others
 			return __index(self, info, key)
 		end
 
@@ -2441,6 +2464,12 @@ do
 			if key == info.Name or key == DISPOSE_METHOD or (type(key) == "string" and type(value) == "function") then
 				local ok, msg = pcall(SaveFeature, info, key, value)
 				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
+			end
+
+			-- Check Static Property
+			if info.Property and info.Property[key] and info.Property[key].IsStatic then
+				info.Owner[key] = value
 				return
 			end
 
@@ -2472,7 +2501,7 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local ok, IF, ns = pcall(GetDefineNS, fenv, name)
+		local ok, IF = pcall(GetDefineNS, fenv, name, TYPE_INTERFACE)
 		if not ok then error(IF:match("%d+:%s*(.-)$") or IF, stack) end
 
 		local info = _NSInfo[IF]
@@ -2489,16 +2518,12 @@ do
 		name = info.Name
 
 		-- Check if the class is final
-		if info.IsSealed then error("The interface is sealed, can't be re-defined.", stack) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The interface is sealed, can't be re-defined.", stack) end
 
-		info.Type = TYPE_INTERFACE
-		info.NameSpace = info.NameSpace or ns
-		info.Event = info.Event or {}
-		info.Property = info.Property or {}
-		info.Method = info.Method or {}
-
-		-- Cache
-		info.Cache = info.Cache or {}
+		if not info.Type then
+			info.Type = TYPE_INTERFACE
+			info.Cache = info.Cache or {}
+		end
 
 		-- No super target for interface
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface) end
@@ -2588,9 +2613,6 @@ end
 -- Class
 ------------------------------------------------------
 do
-	_SuperIndex = "Super"
-	_ThisIndex = "This"
-
 	_KeyWord4ClsEnv = _KeywordAccessor()
 
 	_KeyMeta = {
@@ -2626,12 +2648,9 @@ do
 	--------------------------------------------------
 	do
 		function InitObjectWithInterface(info, obj)
-			local cache = info.Cache4Interface
-			if cache then
-				for _, IF in ipairs(cache) do
-					info = _NSInfo[IF]
-					if info.Initializer then info.Initializer(obj) end
-				end
+			for _, IF in ipairs(info.Cache4Interface or DUMMY) do
+				info = _NSInfo[IF]
+				if info.Initializer then info.Initializer(obj) end
 			end
 		end
 
@@ -2659,7 +2678,7 @@ do
 			end
 
 			-- Call Class Dispose
-			while objCls and _NSInfo[objCls] do
+			while objCls do
 				disfunc = _NSInfo[objCls][DISPOSE_METHOD]
 
 				if disfunc then pcall(disfunc, self) end
@@ -2678,50 +2697,52 @@ do
 	_MetaClsDefEnv = {}
 	do
 		local function __index(self, info, key)
-			if key == _SuperIndex then
+			if key == "Super" then
 				info = _NSInfo[info.SuperClass]
 				if info then
 					return info.ClassAlias or BuildClassAlias(info)
 				else
-					return error("The class has no super class.", 2)
+					error("The class has no super class.", 3)
 				end
 			end
 
-			if key == _ThisIndex then
-				return info.ClassAlias or BuildClassAlias(info)
-			end
+			if key == "This" then return info.ClassAlias or BuildClassAlias(info) end
+
+			local value
 
 			-- Check namespace
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
 					return info.NameSpace
-				elseif info.NameSpace[key] then
-					return info.NameSpace[key]
+				else
+					value = info.NameSpace[key]
+					if value ~= nil then return value end
 				end
 			end
 
 			-- Check imports
-			if info.Import4Env then
-				for _, ns in ipairs(info.Import4Env) do
+			if rawget(self, IMPORT_ENV_FIELD) then
+				for _, ns in ipairs(self[IMPORT_ENV_FIELD]) do
 					if key == _NSInfo[ns].Name then
 						return ns
-					elseif ns[key] then
-						return ns[key]
+					else
+						value = ns[key]
+						if value ~= nil then return value end
 					end
 				end
 			end
 
 			-- Check base namespace
-			local value = GetNameSpace(GetDefaultNameSpace(), key)
+			value = GetNameSpace(GetDefaultNameSpace(), key)
 			if value then return value end
 
 			-- Check method, so definition environment can use existed method
 			-- created by another definition environment for the same class
-			value = info.Method[key]
+			value = info.Method and info.Method[key]
 			if value then return value end
 
 			-- Check event
-			value = info.Event[key]
+			value = info.Event and info.Event[key]
 			if value then return value end
 
 			-- Check meta-methods
@@ -2745,6 +2766,11 @@ do
 			value = _KeyWord4ClsEnv:GetKeyword(self, key)
 			if value then return value end
 
+			-- Check Static Property
+			value = info.Property and info.Property[key]
+			if value and value.IsStatic then return info.Owner[key] end
+
+			-- Check others
 			value = __index(self, info, key)
 			if value ~= nil then rawset(self, key, value) return value end
 		end
@@ -2760,6 +2786,11 @@ do
 			value = _KeyWord4ClsEnv:GetKeyword(self, key)
 			if value then return value end
 
+			-- Check Static Property
+			value = info.Property and info.Property[key]
+			if value and value.IsStatic then return info.Owner[key] end
+
+			-- Check others
 			return __index(self, info, key)
 		end
 
@@ -2771,6 +2802,12 @@ do
 			if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] or (type(key) == "string" and type(value) == "function") then
 				local ok, msg = pcall(SaveFeature, info, key, value)
 				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
+				return
+			end
+
+			-- Check Static Property
+			if info.Property and info.Property[key] and info.Property[key].IsStatic then
+				info.Owner[key] = value
 				return
 			end
 
@@ -2809,7 +2846,7 @@ do
 		if oper then
 			if type(oper) == "function" then
 				-- Method
-				if info.AutoCache == true then
+				if info.AutoCache then
 					rawset(self, key, oper)
 					return oper
 				else
@@ -3007,7 +3044,7 @@ do
 			if oper then
 				if type(oper) == "function" then
 					-- Method
-					if info.AutoCache == true then
+					if info.AutoCache then
 						rawset(self, key, oper)
 						return oper
 					else
@@ -3206,19 +3243,21 @@ do
 
 				wipe(cacheIF)
 
-				if sinfo.RequireMethod then
-					for name in pairs(sinfo.RequireMethod) do
-						if sinfo.Method[name] == info.Cache[name] then tinsert(cacheIF, name) end
+				if sinfo.FeatureModifier then
+					for name, mod in pairs(sinfo.FeatureModifier) do
+						if sinfo.Method and sinfo.Method[name] and sinfo.Method[name] == info.Cache[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
+							tinsert(cacheIF, name)
+						end
 					end
 
 					if #cacheIF > 0 then msg = "[Method]" .. tblconcat(cacheIF, ", ") end
-				end
 
-				wipe(cacheIF)
+					wipe(cacheIF)
 
-				if sinfo.RequireProperty then
-					for name in pairs(sinfo.RequireProperty) do
-						if sinfo.Property[name] == info.Cache[name] then tinsert(cacheIF, name) end
+					for name, mod in pairs(sinfo.FeatureModifier) do
+						if sinfo.Property and sinfo.Property[name] and sinfo.Property[name] == info.Cache[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
+							tinsert(cacheIF, name)
+						end
 					end
 
 					if #cacheIF > 0 then
@@ -3277,7 +3316,7 @@ do
 	function Class2Obj(cls, ...)
 		local info = _NSInfo[cls]
 
-		if info.AbstractClass then error("The class is abstract, can't be used to create objects.", 3) end
+		if ValidateFlags(MD_ABSTRACT_CLASS, info.Modifier) then error("The class is abstract, can't be used to create objects.", 3) end
 
 		-- Check if the class is unique and already created one object to be return
 		if getmetatable(info.UniqueObject) then
@@ -3303,17 +3342,6 @@ do
 
 		InitObjectWithInterface(info, obj)
 
-		-- if not ok then DisposeObject(obj) error(ret, 3) end
-
-		-- Auto-Cache methods
-		if type(info.AutoCache) == "table" then
-			for name in pairs(info.AutoCache) do
-				if rawget(obj, name) == nil then
-					rawset(obj, name, info.Cache[name])
-				end
-			end
-		end
-
 		if info.UniqueObject then info.UniqueObject = obj end
 
 		return obj
@@ -3327,7 +3355,7 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local ok, cls, ns = pcall(GetDefineNS, fenv, name)
+		local ok, cls = pcall(GetDefineNS, fenv, name, TYPE_CLASS)
 		if not ok then error(cls:match("%d+:%s*(.-)$") or cls, stack) end
 
 		local info = _NSInfo[cls]
@@ -3344,19 +3372,13 @@ do
 		name = info.Name
 
 		-- Check if the class is final
-		if info.IsSealed then error("The class is sealed, can't be re-defined.", stack) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The class is sealed, can't be re-defined.", stack) end
 
-		info.Type = TYPE_CLASS
-		info.NameSpace = info.NameSpace or ns
-		info.Event = info.Event or {}
-		info.Property = info.Property or {}
-		info.Method = info.Method or {}
-
-		-- Cache
-		info.Cache = info.Cache or {}
-
-		-- MetaTable
-		info.MetaTable = info.MetaTable or GenerateMetaTable(info)
+		if not info.Type then
+			info.Type = TYPE_CLASS
+			info.Cache = {}
+			info.MetaTable = GenerateMetaTable(info)
+		end
 
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
 
@@ -3487,7 +3509,7 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local ok, enm, ns = pcall(GetDefineNS, fenv, name)
+		local ok, enm = pcall(GetDefineNS, fenv, name, TYPE_ENUM)
 		if not ok then error(enm:match("%d+:%s*(.-)$") or enm, stack) end
 
 		local info = _NSInfo[enm]
@@ -3504,10 +3526,12 @@ do
 		name = info.Name
 
 		-- Check if the enum is final
-		if info.IsSealed then error("The enum is sealed, can't be re-defined.", stack) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The enum is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_ENUM
-		info.NameSpace = info.NameSpace or ns
+		info.Enum = nil
+		info.Cache = nil
+		info.MaxValue = nil
 
 		if definition then
 			BuildEnum(info, definition)
@@ -3516,12 +3540,6 @@ do
 		else
 			-- save enum to the environment
 			rawset(fenv, name, enm)
-
-			-- Clear Attributes
-			if ATTRIBUTE_INSTALLED then
-				DisposeAttributes(info.Attribute)
-				info.Attribute = nil
-			end
 
 			return function(set) return BuildEnum(info, set) end
 		end
@@ -3549,18 +3567,20 @@ do
 			if info.NameSpace then
 				if key == _NSInfo[info.NameSpace].Name then
 					return info.NameSpace
-				elseif info.NameSpace[key] then
-					return info.NameSpace[key]
+				else
+					value = info.NameSpace[key]
+					if value ~= nil then return value end
 				end
 			end
 
 			-- Check imports
-			if info.Import4Env then
-				for _, ns in ipairs(info.Import4Env) do
+			if rawget(self, IMPORT_ENV_FIELD) then
+				for _, ns in ipairs(self[IMPORT_ENV_FIELD]) do
 					if key == _NSInfo[ns].Name then
 						return ns
-					elseif ns[key] then
-						return ns[key]
+					else
+						value = ns[key]
+						if value ~= nil then return value end
 					end
 				end
 			end
@@ -3713,13 +3733,9 @@ do
 
 	function CopyStructMethods(info, obj)
 		if info.Method and type(obj) == "table" then
-			if info.StaticMethod then
-				for k, v in pairs(info.Method) do
-					if not info.StaticMethod[k] and obj[k] == nil then obj[k] = v end
-				end
-			else
-				for k, v in pairs(info.Method) do
-					if obj[k] == nil then obj[k] = v end
+			for k, v in pairs(info.Method) do
+				if obj[k] == nil and not(info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[k])) then
+					obj[k] = v
 				end
 			end
 		end
@@ -3761,7 +3777,6 @@ do
 
 				local args = ""
 				for i, n in ipairs(info.Members) do
-					--if info.StructEnv[n]:Is(nil) and not args:find("%[") then n = "["..n end
 					if i == 1 then args = n.Name else args = args..", "..n.Name end
 				end
 				--if args:find("%[") then args = args.."]" end
@@ -3800,7 +3815,7 @@ do
 		name = name or env
 		local fenv = type(env) == "table" and env or getfenv(stack) or _G
 
-		local ok, strt, ns = pcall(GetDefineNS, fenv, name)
+		local ok, strt = pcall(GetDefineNS, fenv, name, TYPE_STRUCT)
 		if not ok then error(strt:match("%d+:%s*(.-)$") or strt, stack) end
 
 		local info = _NSInfo[strt]
@@ -3817,31 +3832,20 @@ do
 		name = info.Name
 
 		-- Check if the struct is final
-		if info.IsSealed then error("The struct is sealed, can't be re-defined.", stack) end
+		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The struct is sealed, can't be re-defined.", stack) end
 
 		info.Type = TYPE_STRUCT
 		info.SubType = STRUCT_TYPE_MEMBER
-		info.NameSpace = info.NameSpace or ns
 		info.Members = nil
 		info.Default = nil
 		info.ArrayElement = nil
 		info.Validator = nil
 		info.Method = nil
-		info.StaticMethod = nil
-		info.Import4Env = nil
+		info.FeatureModifier = nil
+		info.Modifier = nil
 
 		-- Clear Attribute
-		if ATTRIBUTE_INSTALLED then
-			DisposeAttributes(info.Attribute)
-			DisposeAttributes(info.ElementAttribute)
-			DisposeAttributes(info.Attributes)
-
-			info.Attribute = nil
-			info.ElementAttribute = nil
-			info.Attributes = nil
-
-			ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct)
-		end
+		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct) end
 
 		if definition then
 			local ok, msg = pcall(ParseTableDefinition, info, definition)
@@ -3855,17 +3859,17 @@ do
 			-- save struct to the environment
 			rawset(fenv, name, strt)
 
-			info.StructEnv = setmetatable({
+			local strtEnv = setmetatable({
 				[OWNER_FIELD] = strt,
 				[BASE_ENV_FIELD] = fenv,
 			}, _MetaStrtDefEnv)
 
 			-- Set namespace
-			SetNameSpace4Env(info.StructEnv, strt)
+			SetNameSpace4Env(strtEnv, strt)
 
-			setfenv(stack, info.StructEnv)
+			setfenv(stack, strtEnv)
 
-			return info.StructEnv
+			return strtEnv
 		end
 	end
 
@@ -4134,7 +4138,7 @@ do
 		]]
 		function IsSealed(ns)
 			local info = _NSInfo[ns]
-			return info and info.IsSealed or false
+			return info and ValidateFlags(MD_SEALED_FEATURE, info.Modifier) or false
 		end
 
 		doc "IsFinal" [[
@@ -4160,16 +4164,14 @@ do
 		end
 
 		doc "IsAutoCache" [[
-			<desc>Whether the class|interface|method is auto-cached</desc>
+			<desc>Whether the class is auto-cached</desc>
 			<param name="object">the object to query</param>
-			<param name="name" optional="true" type="string">the meethod name to query</param>
 			<return type="boolean">true if auto-cached</return>
 			<usage>System.Reflector.IsAutoCache(System.Object)</usage>
 		]]
 		function IsAutoCache(ns, name)
 			local info = _NSInfo[ns]
-			local autoCache = info and info.AutoCache
-			return autoCache == true or (name and autoCache and autoCache[name]) or false
+			return info and info.AutoCache or false
 		end
 
 		doc "GetSubNamespace" [[
@@ -4316,7 +4318,7 @@ do
 		if not SAVE_MEMORY then
 			_GetEventsCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetEventsIter = function (ns, key) return (next(_NSInfo[ns].Event, key)) end
+			_GetEventsIter = function (ns, key) return (next(_NSInfo[ns].Event or DUMMY, key)) end
 		end
 		function GetEvents(ns, result)
 			local info = _NSInfo[ns]
@@ -4361,7 +4363,7 @@ do
 		function GetAllEvents(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and info.Event then
+			if info and info.Cache then
 				if type(result) == "table" then
 					for k, v in pairs(info.Cache) do if getmetatable(v) then tinsert(result, k) end end
 					sort(result)
@@ -4396,7 +4398,7 @@ do
 		if not SAVE_MEMORY then
 			_GetPropertiesCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetPropertiesIter = function (ns, key) return (next(_NSInfo[ns].Property, key)) end
+			_GetPropertiesIter = function (ns, key) return (next(_NSInfo[ns].Property or DUMMY, key)) end
 		end
 		function GetProperties(ns, result)
 			local info = _NSInfo[ns]
@@ -4437,28 +4439,15 @@ do
 			_GetAllPropertiesCache = setmetatable({}, WEAK_ALL)
 		else
 			_GetAllPropertiesIter = function (ns, key)
-				local info = _NSInfo[ns]
-				local props = info.Cache
-
-				if key == nil or props[key] then
-					for k, v in next, props, key do if type(v) == "table" and not getmetatable(v) then return k end end
-					key = nil
-				end
-
-				props = info.Property
-
-				if key == nil or props[key] then
-					for k, v in next, props, key do if v.IsStatic then return k end end
-				end
+				for k, v in next, _NSInfo[ns].Cache, key do if type(v) == "table" and not getmetatable(v) then return k end end
 			end
 		end
 		function GetAllProperties(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and info.Property then
+			if info and info.Cache then
 				if type(result) == "table" then
 					for k, v in pairs(info.Cache) do if type(v) == "table" and not getmetatable(v) then tinsert(result, k) end end
-					for k, v in pairs(info.Property) do if v.IsStatic then tinsert(result, k) end end
 					sort(result)
 					return result
 				else
@@ -4469,16 +4458,8 @@ do
 						local iter = _GetAllPropertiesCache[ns]
 						if not iter then
 							local cache = info.Cache
-							local props = info.Property
 							iter = function (ns, key)
-								if key == nil or cache[key] then
-									for k, v in next, cache, key do if type(v) == "table" and not getmetatable(v) then return k end end
-									key = nil
-								end
-
-								if key == nil or props[key] then
-									for k, v in next, props, key do if v.IsStatic then return k end end
-								end
+								for k, v in next, cache, key do if type(v) == "table" and not getmetatable(v) then return k end end
 							end
 							_GetAllPropertiesCache[ns] = iter
 						end
@@ -4501,7 +4482,7 @@ do
 		if not SAVE_MEMORY then
 			_GetMethodsCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetMethodsIter = function (ns, key) return (next(_NSInfo[ns].Method, key)) end
+			_GetMethodsIter = function (ns, key) return (next(_NSInfo[ns].Method or DUMMY, key)) end
 		end
 		function GetMethods(ns, result)
 			local info = _NSInfo[ns]
@@ -4543,27 +4524,17 @@ do
 		else
 			_GetAllMethodsIter = function (ns, key)
 				local info = _NSInfo[ns]
-				local methods = info.Cache or info.Method
+				local methods = info.Cache or info.Method or DUMMY
 
-				if key == nil or methods[key] then
-					for k, v in next, methods, key do if type(v) == "function" then return k end end
-					key = nil
-				end
-
-				methods = info.StaticMethod
-
-				if methods and (key == nil or methods[key]) then
-					for k, v in next, methods, key do return k end
-				end
+				for k, v in next, methods, key do if type(v) == "function" then return k end end
 			end
 		end
 		function GetAllMethods(ns, result)
 			local info = _NSInfo[ns]
 
-			if info and info.Method then
+			if info and (info.Cache or info.Method) then
 				if type(result) == "table" then
 					for k, v in pairs(info.Cache or info.Method) do if type(v) == "function" then tinsert(result, k) end end
-					if info.StaticMethod then for k, v in pairs(info.StaticMethod) do tinsert(result, k) end end
 					sort(result)
 					return result
 				else
@@ -4574,16 +4545,8 @@ do
 						local iter = _GetAllMethodsCache[ns]
 						if not iter then
 							local cache = info.Cache or info.Method
-							local static = info.StaticMethod
 							iter = function (ns, key)
-								if key == nil or cache[key] then
-									for k, v in next, cache, key do if type(v) == "function" then return k end end
-									key = nil
-								end
-
-								if static and (key == nil or static[key]) then
-									for k, v in next, static, key do return k end
-								end
+								for k, v in next, cache, key do if type(v) == "function" then return k end end
 							end
 							_GetAllMethodsCache[ns] = iter
 						end
@@ -4605,8 +4568,8 @@ do
 		function GetPropertyType(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and info.Property then
-				local prop = info.Cache[name] or info.Property[name]
+			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
+				local prop = info.Cache[name] or info.Property and info.Property[name]
 				return type(prop) == "table" and getmetatable(prop) == nil and prop.Type or nil
 			end
 		end
@@ -4621,9 +4584,9 @@ do
 		function HasProperty(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and info.Property then
-				local prop = info.Cache[name] or info.Property[name]
-				if type(prop) == "table" and getmetatable(prop) == nil and prop.Type then return true end
+			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
+				local prop = info.Cache[name] or info.Property and info.Property[name]
+				if type(prop) == "table" and getmetatable(prop) == nil then return true end
 			end
 			return false
 		end
@@ -4638,10 +4601,10 @@ do
 		function IsPropertyReadable(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and info.Property then
+			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
 				local prop = info.Cache[name]
 				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
-				prop = info.Property[name]
+				prop = info.Property and info.Property[name]
 				if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
 			end
 		end
@@ -4656,10 +4619,10 @@ do
 		function IsPropertyWritable(ns, name)
 			local info = _NSInfo[ns]
 
-			if info and info.Property then
+			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
 				local prop = info.Cache[name]
 				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Set or prop.SetMethod or prop.Field) and true or false end
-				prop = info.Property[name]
+				prop = info.Property and info.Property[name]
 				if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
 			end
 		end
@@ -4672,7 +4635,7 @@ do
 		]]
 		function IsRequiredMethod(ns, name)
 			local info = _NSInfo[ns]
-			return info and info.RequireMethod and info.RequireMethod[name] or false
+			return info and info.Method and info.Method[name] and info.FeatureModifier and ValidateFlags(MD_REQUIRE_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsRequiredProperty" [[
@@ -4683,7 +4646,7 @@ do
 		]]
 		function IsRequiredProperty(ns, name)
 			local info = _NSInfo[ns]
-			return info and info.RequireProperty and info.RequireProperty[name] or false
+			return info and info.Property and info.Property[name] and info.FeatureModifier and ValidateFlags(MD_REQUIRE_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsOptionalMethod" [[
@@ -4694,7 +4657,7 @@ do
 		]]
 		function IsOptionalMethod(ns, name)
 			local info = _NSInfo[ns]
-			return info and info.OptionalMethod and info.OptionalMethod[name] or false
+			return info and info.Method and info.Method[name] and info.FeatureModifier and ValidateFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsOptionalProperty" [[
@@ -4705,7 +4668,7 @@ do
 		]]
 		function IsOptionalProperty(ns, name)
 			local info = _NSInfo[ns]
-			return info and info.OptionalProperty and info.OptionalProperty[name] or false
+			return info and info.Property and info.Property[name] and info.FeatureModifier and ValidateFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsStaticProperty" [[
@@ -4731,7 +4694,7 @@ do
 		]]
 		function IsStaticMethod(ns, name)
 			local info = _NSInfo[ns]
-			return info and info.StaticMethod and info.StaticMethod[name] or false
+			return info and info.Method and info.Method[name] and info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsFlagsEnum" [[
@@ -4742,7 +4705,7 @@ do
 		]]
 		function IsFlagsEnum(ns)
 			local info = _NSInfo[ns]
-			return info and info.IsFlags or false
+			return info and ValidateFlags(MD_FLAGS_ENUM, info.Modifier) or false
 		end
 
 		doc "GetEnums" [[
@@ -4790,10 +4753,7 @@ do
 			<param name="targetValue" type="number">like 3 : (1 + 2)</param>
 			<return type="boolean">true if the targetValue contains the checkValue</return>
 		]]
-		function ValidateFlags(checkValue, targetValue)
-			targetValue = targetValue % (2 * checkValue)
-			return (targetValue - targetValue % checkValue) == checkValue
-		end
+		ValidateFlags = ValidateFlags
 
 		doc "HasEvent" [[
 			<desc>Check if the class|interface has that event</desc>
@@ -4957,7 +4917,7 @@ do
 		]]
 		function IsAbstractClass(ns)
 			local info = _NSInfo[ns]
-			return info and info.AbstractClass or false
+			return info and ValidateFlags(MD_ABSTRACT_CLASS, info.Modifier)
 		end
 
 		doc "GetObjectClass" [[
@@ -5592,7 +5552,7 @@ do
 					cls = getmetatable(attr)
 					usage = GetAttributeUsage(cls)
 
-					if usage and usage.AttributeTarget > 0 and not Reflector.ValidateFlags(targetType, usage.AttributeTarget) then
+					if usage and usage.AttributeTarget > 0 and not ValidateFlags(targetType, usage.AttributeTarget) then
 						print("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
 					elseif ValidateAttributeUsable(usableAttr, attr) then
 						usableAttr[attr] = true
@@ -5795,9 +5755,10 @@ do
 		doc "__Unique__" [[Mark the class will only create one unique object, and can't be disposed, also the class can't be inherited]]
 
 		function ApplyAttribute(self, target, targetType)
-			if Reflector.IsClass(target) then
-				_NSInfo[target].IsFinal = true
-				_NSInfo[target].UniqueObject = true
+			local info = _NSInfo[target]
+			if info and info.Type == TYPE_CLASS then
+				info.Modifier = TurnOnFlags(MD_FINAL_FEATURE, info.Modifier)
+				info.UniqueObject = true
 			end
 		end
 	end)
@@ -5808,10 +5769,11 @@ do
 		doc "__Flags__" [[Indicates that an enumeration can be treated as a bit field; that is, a set of flags.]]
 
 		function ApplyAttribute(self, target, targetType)
-			if Reflector.IsEnum(target) then
-				_NSInfo[target].IsFlags = true
+			local info = _NSInfo[target]
+			if info and info.Type == TYPE_ENUM then
+				info.Modifier = TurnOnFlags(MD_FLAGS_ENUM, info.Modifier)
 
-				local enums = _NSInfo[target].Enum
+				local enums = info.Enum
 
 				local cache = {}
 				local count = 0
@@ -5831,7 +5793,7 @@ do
 					end
 				end
 
-				_NSInfo[target].MaxValue = 2^count - 1
+				info.MaxValue = 2^count - 1
 
 				-- Scan the existed bit values
 				for k, v in pairs(enums) do
@@ -5898,7 +5860,7 @@ do
 		doc "__Sealed__" [[Mark the feature to be sealed, and can't be re-defined again]]
 
 		function ApplyAttribute(self, target, targetType)
-			_NSInfo[target].IsSealed = true
+			_NSInfo[target].Modifier = TurnOnFlags(MD_SEALED_FEATURE, _NSInfo[target].Modifier)
 		end
 	end)
 
@@ -5908,11 +5870,12 @@ do
 		doc "__Final__" [[Mark the class|interface can't be inherited, or method|property can't be overwrited by child-classes]]
 
 		function ApplyAttribute(self, target, targetType, owner, name)
+			local info = _NSInfo[owner or target]
 			if targetType == AttributeTargets.Interface or targetType == AttributeTargets.Class then
-				_NSInfo[target].IsFinal = true
+				info.Modifier = TurnOnFlags(MD_FINAL_FEATURE, info.Modifier)
 			elseif _NSInfo[owner].Type == TYPE_INTERFACE or _NSInfo[owner].Type == TYPE_CLASS then
-				_NSInfo[owner].FinalFeatures = _NSInfo[owner].FinalFeatures or {}
-				_NSInfo[owner].FinalFeatures[name] = true
+				info.FeatureModifier = info.FeatureModifier or {}
+				info.FeatureModifier[name] = TurnOnFlags(MD_FINAL_FEATURE, info.FeatureModifier[name])
 			end
 		end
 	end)
@@ -6005,8 +5968,8 @@ do
 			elseif targetType == AttributeTargets.Method then
 				local info = _NSInfo[owner]
 
-				info.StaticMethod = info.StaticMethod or {}
-				info.StaticMethod[name] = true
+				info.FeatureModifier = info.FeatureModifier or {}
+				info.FeatureModifier[name] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[name])
 			end
 		end
 	end)
@@ -6389,7 +6352,7 @@ do
 
 			if _NSInfo[ns] then
 				if Reflector.IsEnum(ns) then
-					if _NSInfo[ns].IsFlags and type(data) == "number" then
+					if _NSInfo[ns].MaxValue and type(data) == "number" then
 						local ret = {ns(data)}
 
 						local result = ""
@@ -6906,22 +6869,14 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Method + AttributeTargets.Interface, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Cache__" (function(_ENV)
 		inherit "__Attribute__"
 		doc "__Cache__" [[Mark the class so its objects will cache any methods they accessed, mark the method so the objects will cache the method when they are created, if using on an interface, all object methods defined in it would be marked with __Cache__ attribute .]]
 
 		function ApplyAttribute(self, target, targetType, owner, name)
-			if targetType == AttributeTargets.Class or targetType == AttributeTargets.Interface then
-				_NSInfo[target].AutoCache = true
-			elseif Reflector.IsClass(owner) or Reflector.IsInterface(owner) then
-				local info = _NSInfo[owner]
-				if info.AutoCache == true then return end
-
-				if not info.AutoCache then info.AutoCache = {} end
-				info.AutoCache[name] = true
-			end
+			_NSInfo[target].AutoCache = true
 		end
 	end)
 
@@ -7031,7 +6986,7 @@ do
 		doc "__Abstract__" [[Mark the class as abstract class, can't be used to create objects.]]
 
 		function ApplyAttribute(self, target, targetType)
-			if _NSInfo[target] then _NSInfo[target].AbstractClass = true end
+			_NSInfo[target].Modifier = TurnOnFlags(MD_ABSTRACT_CLASS, _NSInfo[target].Modifier)
 		end
 	end)
 
@@ -7075,14 +7030,11 @@ do
 				local info = _NSInfo[owner]
 
 				if info and type(name) == "string" then
-					if targetType == AttributeTargets.Method then
-						info.RequireMethod = info.RequireMethod or {}
-						info.RequireMethod[name] = true
-					elseif targetType == AttributeTargets.Property then
-						info.RequireProperty = info.RequireProperty or {}
-						info.RequireProperty[name] = true
-					elseif targetType == AttributeTargets.Member then
+					if targetType == AttributeTargets.Member then
 						target.Require = true
+					else
+						info.FeatureModifier = info.FeatureModifier or {}
+						info.FeatureModifier[name] = TurnOnFlags(MD_REQUIRE_FEATURE, info.FeatureModifier[name])
 					end
 				end
 			end
@@ -7099,7 +7051,7 @@ do
 		__Arguments__{ Class }
 		function __Require__(self, value)
 			local IFInfo = rawget(_NSInfo, value)
-			if IFInfo.IsFinal then
+			if ValidateFlags(MD_FINAL_FEATURE, IFInfo.Modifier) then
 				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
 			end
 			self.Require = value
@@ -7113,7 +7065,7 @@ do
 
 			if not IFInfo or IFInfo.Type ~= TYPE_CLASS then
 				error("Usage: __Require__ (class) : class expected", 3)
-			elseif IFInfo.IsFinal then
+			elseif ValidateFlags(MD_FINAL_FEATURE, IFInfo.Modifier) then
 				error(("%s is marked as final, can't be used with __Require__ ."):format(tostring(value)), 3)
 			end
 
@@ -7135,13 +7087,8 @@ do
 			local info = _NSInfo[owner]
 
 			if info and type(name) == "string" then
-				if targetType == AttributeTargets.Method then
-					info.OptionalMethod = info.OptionalMethod or {}
-					info.OptionalMethod[name] = true
-				elseif targetType == AttributeTargets.Property then
-					info.OptionalProperty = info.OptionalProperty or {}
-					info.OptionalProperty[name] = true
-				end
+				info.FeatureModifier = info.FeatureModifier or {}
+				info.FeatureModifier[name] = TurnOnFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name])
 			end
 		end
 	end)
