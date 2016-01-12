@@ -796,7 +796,7 @@ do
 	function GetDefineNS(env, name, ty)
 		if getmetatable(name) == TYPE_NAMESPACE then
 			return name
-		elseif type(name) == "table" then
+		elseif type(name) == "table" or type(name) == "function" then
 			-- Anonymous
 			return BuildNameSpace(nil, "Anonymous" .. ty)
 		elseif type(name) == "string" then
@@ -2513,7 +2513,7 @@ do
 		end
 
 		-- For Anonymous
-		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
 
 		name = info.Name
 
@@ -2528,7 +2528,7 @@ do
 		-- No super target for interface
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Interface) end
 
-		if definition then
+		if type(definition) == "table" then
 			local ok, msg = pcall(ParseTableDefinition, info, definition)
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
@@ -2537,9 +2537,6 @@ do
 
 			return IF
 		else
-			-- save interface to the environment
-			rawset(fenv, name, IF)
-
 			-- Generate the interface environment
 			local interfaceEnv = setmetatable({
 				[OWNER_FIELD] = IF,
@@ -2549,10 +2546,24 @@ do
 			-- Set namespace
 			SetNameSpace4Env(interfaceEnv, IF)
 
-			-- Set the environment to interface's environment
-			setfenv(stack, interfaceEnv)
+			if definition then
+				setfenv(definition, interfaceEnv)
+				definition(interfaceEnv)
 
-			return interfaceEnv
+				pcall(setmetatable, interfaceEnv, _MetaIFEnv)
+				RefreshCache(IF)
+				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(IF, AttributeTargets.Interface) end
+
+				return IF
+			else
+				-- save interface to the environment
+				rawset(fenv, name, IF)
+
+				-- Set the environment to interface's environment
+				setfenv(stack, interfaceEnv)
+
+				return interfaceEnv
+			end
 		end
 	end
 
@@ -3367,7 +3378,7 @@ do
 		end
 
 		-- For Anonymous
-		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
 
 		name = info.Name
 
@@ -3382,7 +3393,7 @@ do
 
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Class) end
 
-		if definition then
+		if type(definition) == "table" then
 			local ok, msg = pcall(ParseTableDefinition, info, definition)
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
@@ -3392,9 +3403,6 @@ do
 
 			return cls
 		else
-			-- save class to the environment
-			rawset(fenv, name, cls)
-
 			local classEnv = setmetatable({
 				[OWNER_FIELD] = cls,
 				[BASE_ENV_FIELD] = fenv,
@@ -3403,9 +3411,26 @@ do
 			-- Set namespace
 			SetNameSpace4Env(classEnv, cls)
 
-			setfenv(stack, classEnv)
+			if definition then
+				setfenv(definition, classEnv)
+				definition(classEnv)
 
-			return classEnv
+				pcall(setmetatable, classEnv, _MetaClsEnv)
+				RefreshCache(cls)
+				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(cls, AttributeTargets.Class) end
+
+				-- Validate the interface
+				ValidateClass(info, stack + 1)
+
+				return cls
+			else
+				-- save class to the environment
+				rawset(fenv, name, cls)
+
+				setfenv(stack, classEnv)
+
+				return classEnv
+			end
 		end
 	end
 
@@ -3654,7 +3679,7 @@ do
 			setfenv(2, self[BASE_ENV_FIELD])
 			pcall(setmetatable, self, _MetaStrtEnv)
 			RefreshStruct(owner)
-			local info = _NSInfo[owner]
+
 			if ATTRIBUTE_INSTALLED then ApplyRestAttribute(owner, AttributeTargets.Struct) end
 
 			return owner
@@ -3827,7 +3852,7 @@ do
 		end
 
 		-- For Anonymous
-		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
+		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
 
 		name = info.Name
 
@@ -3847,7 +3872,7 @@ do
 		-- Clear Attribute
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct) end
 
-		if definition then
+		if type(definition) == "table" then
 			local ok, msg = pcall(ParseTableDefinition, info, definition)
 			if not ok then error(msg:match("%d+:%s*(.-)$") or msg, stack) end
 
@@ -3856,9 +3881,6 @@ do
 
 			return strt
 		else
-			-- save struct to the environment
-			rawset(fenv, name, strt)
-
 			local strtEnv = setmetatable({
 				[OWNER_FIELD] = strt,
 				[BASE_ENV_FIELD] = fenv,
@@ -3867,9 +3889,23 @@ do
 			-- Set namespace
 			SetNameSpace4Env(strtEnv, strt)
 
-			setfenv(stack, strtEnv)
+			if definition then
+				setfenv(definition, strtEnv)
+				definition(strtEnv)
 
-			return strtEnv
+				pcall(setmetatable, strtEnv, _MetaStrtEnv)
+				RefreshStruct(strt)
+				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(strt, AttributeTargets.Struct) end
+
+				return strt
+			else
+				-- save struct to the environment
+				rawset(fenv, name, strt)
+
+				setfenv(stack, strtEnv)
+
+				return strtEnv
+			end
 		end
 	end
 
