@@ -21,7 +21,7 @@ do
 			return strformat("%q", data)
 		elseif dtType == "number" or dtType == "boolean" then
 			return tostring(data)
-		elseif GetNameSpaceType(data) then
+		elseif GetNameSpaceType(data) and Reflector.GetUpperNameSpace(data) then
 			return strformat("%q", tostring(data))
 		end
 	end
@@ -34,7 +34,7 @@ do
 		if val then
 			data[field] = nil
 
-			if not objectTypeIgnored then
+			if not objectTypeIgnored and Reflector.GetUpperNameSpace(val) then
 				if next(data) then
 					write(strformat("%s=%q,", field, tostring(val)))
 				else
@@ -78,7 +78,7 @@ do
 		if val then
 			data[field] = nil
 
-			if not objectTypeIgnored then
+			if not objectTypeIgnored and Reflector.GetUpperNameSpace(val) then
 				if next(data) then
 					write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
 				else
@@ -124,7 +124,7 @@ do
 		if val then
 			data[field] = nil
 
-			if not objectTypeIgnored then
+			if not objectTypeIgnored and Reflector.GetUpperNameSpace(val) then
 				if next(data) then
 					write(object, strformat("%s=%q,", field, tostring(val)))
 				else
@@ -168,7 +168,7 @@ do
 		if val then
 			data[field] = nil
 
-			if not objectTypeIgnored then
+			if not objectTypeIgnored and Reflector.GetUpperNameSpace(val) then
 				if next(data) then
 					write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
 				else

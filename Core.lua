@@ -641,7 +641,7 @@ do
 				while info and info.NameSpace do
 					info = _NSInfo[info.NameSpace]
 
-					if info then name = info.Name.."."..name end
+					if info.Name then name = info.Name.."."..name end
 				end
 
 				return name
@@ -729,7 +729,7 @@ do
 
 			info = _NSInfo[cls]
 			info.Name = info.Name or name
-			if not info.NameSpace and parent ~= _NameSpace then info.NameSpace = parent end
+			if not info.NameSpace then info.NameSpace = parent end
 			parent = cls
 		end
 
@@ -4046,6 +4046,17 @@ do
 		]]
 		function GetNameSpaceForName(name)
 			return GetNameSpace(GetDefaultNameSpace(), name)
+		end
+
+		doc "GetUpperNameSpace" [[
+			<desc>Get the upper namespace of the target</desc>
+			<param name="name" type="namespace|string">the target namespace</param>
+			<return>The target's namesapce</return>
+			<usage>ns = System.Reflector.GetUpperNameSpace("System.Object")</usage>
+		]]
+		function GetUpperNameSpace(ns)
+			local info = _NSInfo[ns]
+			return info and info.NameSpace
 		end
 
 		doc "GetNameSpaceType" [[
