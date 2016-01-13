@@ -2,7 +2,7 @@
 -- Create Date : 2015/06/24
 -- ChangeLog   :
 
-Module "System.Text.UTF16Encoding" "1.0.0"
+_ENV = Module "System.Text.UTF16Encoding" "1.0.0"
 
 namespace "System.Text"
 

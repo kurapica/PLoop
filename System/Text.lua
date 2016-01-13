@@ -2,7 +2,7 @@
 -- Create Date : 2014/10/05
 -- ChangeLog   :
 
-Module "System.Text" "0.1.0"
+_ENV = Module "System.Text" "0.1.0"
 
 namespace "System.Text"
 

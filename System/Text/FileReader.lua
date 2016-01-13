@@ -2,7 +2,7 @@
 -- Create Date : 2015/08/17
 -- ChangeLog   :
 
-Module "System.Text.FileReader" "1.0.0"
+_ENV = Module "System.Text.FileReader" "1.0.0"
 
 namespace "System.Text"
 

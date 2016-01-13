@@ -2,7 +2,7 @@
 -- Create Date : 2015/09/14
 -- ChangeLog   :
 
-Module "System.Serialization.LuaFormatProvider" "1.0.0"
+_ENV = Module "System.Serialization.LuaFormatProvider" "1.0.0"
 
 namespace "System.Serialization"
 

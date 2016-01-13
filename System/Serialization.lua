@@ -2,7 +2,7 @@
 -- Create Date : 2015/07/22
 -- ChangeLog   :
 
-Module "System.Serialization" "0.1.0"
+_ENV = Module "System.Serialization" "0.1.0"
 
 namespace "System"
 
