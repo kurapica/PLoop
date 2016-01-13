@@ -80,14 +80,14 @@ interface "Serialization" (function (_ENV)
 						storage[member] = value
 					end
 				end
-			elseif type(object.Serialize) == "function" then
+			--[[elseif type(object.Serialize) == "function" then
 				local info = rycInfo()
 				_InfoStorage[info] = storage
 				_InfoCache[info] = cache
 
 				object:Serialize(info)
 
-				rycInfo(info)
+				rycInfo(info)--]]
 			else
 				-- A custom table data, can't know its true type, works as default
 				clsType = nil
