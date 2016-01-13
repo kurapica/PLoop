@@ -235,7 +235,7 @@ interface "Serialization" (function (_ENV)
 	__Doc__ [[Allows an object to control its own serialization and deserialization.]]
 	interface "ISerializable" (function (_ENV)
 		__Doc__[[Use a SerializationInfo to serialize the target object.]]
-		__Require__() function Serialize(dt, info) end
+		__Require__() function Serialize(self, info) end
 	end)
 
 	__Sealed__()
