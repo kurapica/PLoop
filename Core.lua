@@ -203,7 +203,6 @@ do
 	MD_ABSTRACT_CLASS = 2^3
 	MD_STATIC_FEATURE = 2^4
 	MD_REQUIRE_FEATURE = 2^5
-	MD_OPTIONAL_FEATURE = 2^6
 end
 
 ------------------------------------------------------
@@ -211,8 +210,6 @@ end
 ------------------------------------------------------
 do
 	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end})
-
-	DUMMY = {}
 
 	-- Clone
 	local function deepCloneObj(obj, cache)
@@ -418,16 +415,23 @@ do
 	do
 		_MetaNS.__call = function(self, ...)
 			local info = _NSInfo[self]
+			local iType = info.Type
 
-			if info.Type == TYPE_CLASS then
+			if iType == TYPE_CLASS then
 				-- Create Class object, using ret avoid tail call error stack
 				local ret = Class2Obj(self, ...)
 				return ret
-			elseif info.Type == TYPE_STRUCT then
+			elseif iType == TYPE_STRUCT then
 				-- Create Struct
 				local ret = Struct2Obj(self, ...)
 				return ret
-			elseif info.Type == TYPE_ENUM then
+			elseif iType == TYPE_INTERFACE then
+				local val = ...
+
+				if type(val) == "table" then
+				elseif type(val) == "function" then
+				end
+			elseif iType == TYPE_ENUM then
 				-- Parse Enum
 				local value = ...
 				if info.MaxValue and type(value) == "number" and value == floor(value) and value >= 0 and value <= info.MaxValue then
@@ -1139,122 +1143,148 @@ do
 		if info.ExtendInterface then for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(iCache, _NSInfo[IF].Cache) end end
 
 		-- Cache for event
-		CloneWithOverride(iCache, info.Event or DUMMY)
+		if info.Event then CloneWithOverride(iCache, info.Event) end
 
 		-- Cache for Method
-		for key, value in pairs(info.Method or DUMMY) do
-			-- No static methods
-			if not (info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[key])) then
-				iCache[key] = value
+		if info.Method then
+			for key, value in pairs(info.Method) do
+				-- No static methods
+				if not (info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[key])) then
+					iCache[key] = value
+				end
 			end
 		end
 
 		-- Cache for Property
 		-- Validate the properties
-		for name, prop in pairs(info.Property or DUMMY) do
-			if prop.Predefined then
-				local set = prop.Predefined
+		if info.Property then
+			for name, prop in pairs(info.Property) do
+				if prop.Predefined then
+					local set = prop.Predefined
 
-				prop.Predefined = nil
+					prop.Predefined = nil
 
-				for k, v in pairs(set) do
-					if type(k) == "string" then
-						k = strlower(k)
+					for k, v in pairs(set) do
+						if type(k) == "string" then
+							k = strlower(k)
 
-						if k == "get" then
-							if type(v) == "function" or type(v) == "boolean" then
-								prop.Get = v
-							elseif type(v) == "string" then
-								prop.GetMethod = v
+							if k == "get" then
+								if type(v) == "function" or type(v) == "boolean" then
+									prop.Get = v
+								elseif type(v) == "string" then
+									prop.GetMethod = v
+								end
+							elseif k == "set" then
+								if type(v) == "function" or type(v) == "boolean" then
+									prop.Set = v
+								elseif type(v) == "string" then
+									prop.SetMethod = v
+								end
+							elseif k == "getmethod" then
+								if type(v) == "string" then prop.GetMethod = v end
+							elseif k == "setmethod" then
+								if type(v) == "string" then prop.SetMethod = v end
+							elseif k == "field" then
+								prop.Field = v ~= name and v or nil
+							elseif k == "type" then
+								local tInfo = _NSInfo[v]
+								if tInfo and tInfo.Type then prop.Type = v end
+							elseif k == "default" then
+								prop.Default = v
+							elseif k == "event" and (type(v) == "string" or getmetatable(v) == Event) then
+								prop.Event = v
+							elseif k == "handler" then
+								if type(v) == "string" then
+									prop.HandlerName = v
+								elseif type(v) == "function" then
+									prop.Handler = v
+								end
+							elseif k == "setter" and type(v) == "number" and floor(v) == v and v > 0 and v <= _NSInfo[Setter].MaxValue then
+								prop.Setter = v
+							elseif k == "getter" and type(v) == "number" and floor(v) == v and v > 0 and v <= _NSInfo[Getter].MaxValue then
+								prop.Getter = v
+							elseif k == "isstatic" or k == "static" then
+								prop.IsStatic = v and true or false
 							end
-						elseif k == "set" then
-							if type(v) == "function" or type(v) == "boolean" then
-								prop.Set = v
-							elseif type(v) == "string" then
-								prop.SetMethod = v
-							end
-						elseif k == "getmethod" then
-							if type(v) == "string" then prop.GetMethod = v end
-						elseif k == "setmethod" then
-							if type(v) == "string" then prop.SetMethod = v end
-						elseif k == "field" then
-							prop.Field = v ~= name and v or nil
-						elseif k == "type" then
-							local tInfo = _NSInfo[v]
-							if tInfo and tInfo.Type then prop.Type = v end
-						elseif k == "default" then
-							prop.Default = v
-						elseif k == "event" and (type(v) == "string" or getmetatable(v) == Event) then
-							prop.Event = v
-						elseif k == "handler" then
-							if type(v) == "string" then
-								prop.HandlerName = v
-							elseif type(v) == "function" then
-								prop.Handler = v
-							end
-						elseif k == "setter" and type(v) == "number" and floor(v) == v and v > 0 and v <= _NSInfo[Setter].MaxValue then
-							prop.Setter = v
-						elseif k == "getter" and type(v) == "number" and floor(v) == v and v > 0 and v <= _NSInfo[Getter].MaxValue then
-							prop.Getter = v
-						elseif k == "isstatic" or k == "static" then
-							prop.IsStatic = v and true or false
 						end
 					end
-				end
 
-				-- Validate the default
-				if type(prop.Default) == "function" then
-					prop.DefaultFunc = prop.Default
-					prop.Default = nil
-				end
-
-				if prop.Default ~= nil and prop.Type then
-					prop.Default = GetValidatedValue(prop.Type, prop.Default)
-				end
-
-				-- Clear
-				if prop.Get ~= nil then prop.GetMethod = nil end
-				if prop.Set ~= nil then prop.SetMethod = nil end
-
-				local uname = name:gsub("^%a", strupper)
-
-				if prop.IsStatic then
-					-- Only use static methods
-					if prop.GetMethod then
-						if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.GetMethod]) then
-							prop.Get = info.Method[prop.GetMethod]
-						end
-						prop.GetMethod = nil
-					end
-					if prop.SetMethod then
-						if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.SetMethod]) then
-							prop.Set = info.Method[prop.SetMethod]
-						end
-						prop.SetMethod = nil
+					-- Validate the default
+					if type(prop.Default) == "function" then
+						prop.DefaultFunc = prop.Default
+						prop.Default = nil
 					end
 
-					if info.FeatureModifier and info.Method then
-						-- Auto generate GetMethod
-						if ( prop.Get == nil or prop.Get == true ) and prop.Field == nil then
-							-- GetMethod
-							if info.Method["get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["get" .. uname]) then
-								prop.Get = info.Method["get" .. uname]
-							elseif info.Method["Get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Get" .. uname]) then
-								prop.Get = info.Method["Get" .. uname]
-							elseif prop.Type == Boolean then
-								-- FlagEnabled -> IsFlagEnabled
-								if info.Method["is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["is" .. uname]) then
-									prop.Get = info.Method["is" .. uname]
-								elseif info.Method["Is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Is" .. uname]) then
-									prop.Get = info.Method["Is" .. uname]
-								else
-									-- FlagEnable -> IsEnableFlag
-									local pattern = ParseAdj(uname, true)
+					if prop.Default ~= nil and prop.Type then
+						prop.Default = GetValidatedValue(prop.Type, prop.Default)
+					end
+
+					-- Clear
+					if prop.Get ~= nil then prop.GetMethod = nil end
+					if prop.Set ~= nil then prop.SetMethod = nil end
+
+					local uname = name:gsub("^%a", strupper)
+
+					if prop.IsStatic then
+						-- Only use static methods
+						if prop.GetMethod then
+							if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.GetMethod]) then
+								prop.Get = info.Method[prop.GetMethod]
+							end
+							prop.GetMethod = nil
+						end
+						if prop.SetMethod then
+							if info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[prop.SetMethod]) then
+								prop.Set = info.Method[prop.SetMethod]
+							end
+							prop.SetMethod = nil
+						end
+
+						if info.FeatureModifier and info.Method then
+							-- Auto generate GetMethod
+							if ( prop.Get == nil or prop.Get == true ) and prop.Field == nil then
+								-- GetMethod
+								if info.Method["get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["get" .. uname]) then
+									prop.Get = info.Method["get" .. uname]
+								elseif info.Method["Get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Get" .. uname]) then
+									prop.Get = info.Method["Get" .. uname]
+								elseif prop.Type == Boolean then
+									-- FlagEnabled -> IsFlagEnabled
+									if info.Method["is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["is" .. uname]) then
+										prop.Get = info.Method["is" .. uname]
+									elseif info.Method["Is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Is" .. uname]) then
+										prop.Get = info.Method["Is" .. uname]
+									else
+										-- FlagEnable -> IsEnableFlag
+										local pattern = ParseAdj(uname, true)
+
+										if pattern then
+											for mname, mod in pairs(info.FeatureModifier) do
+												if info.Method[mname] and ValidateFlags(MD_STATIC_FEATURE, mod) and mname:match(pattern) then
+													prop.Get = info.Method[mname]
+													break
+												end
+											end
+										end
+									end
+								end
+							end
+
+							-- Auto generate SetMethod
+							if ( prop.Set == nil or prop.Set == true ) and prop.Field == nil then
+								-- SetMethod
+								if info.Method["set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["set" .. uname]) then
+									prop.Set = info.Method["set" .. uname]
+								elseif info.Method["Set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Set" .. uname]) then
+									prop.Set = info.Method["Set" .. uname]
+								elseif prop.Type == Boolean then
+									-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
+									local pattern = ParseAdj(uname)
 
 									if pattern then
 										for mname, mod in pairs(info.FeatureModifier) do
 											if info.Method[mname] and ValidateFlags(MD_STATIC_FEATURE, mod) and mname:match(pattern) then
-												prop.Get = info.Method[mname]
+												prop.Set = info.Method[mname]
 												break
 											end
 										end
@@ -1262,394 +1292,374 @@ do
 								end
 							end
 						end
+					else
+						if prop.GetMethod and type(iCache[prop.GetMethod]) ~= "function" then prop.GetMethod = nil end
+						if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
 
-						-- Auto generate SetMethod
-						if ( prop.Set == nil or prop.Set == true ) and prop.Field == nil then
-							-- SetMethod
-							if info.Method["set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["set" .. uname]) then
-								prop.Set = info.Method["set" .. uname]
-							elseif info.Method["Set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Set" .. uname]) then
-								prop.Set = info.Method["Set" .. uname]
+						-- Auto generate GetMethod
+						if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
+							-- GetMethod
+							if type(iCache["get" .. uname]) == "function" then
+								prop.GetMethod = "get" .. uname
+							elseif type(iCache["Get" .. uname]) == "function" then
+								prop.GetMethod = "Get" .. uname
 							elseif prop.Type == Boolean then
-								-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
-								local pattern = ParseAdj(uname)
+								-- FlagEnabled -> IsFlagEnabled
+								if type(iCache["is" .. uname]) == "function" then
+									prop.GetMethod = "is" .. uname
+								elseif type(iCache["Is" .. uname]) == "function" then
+									prop.GetMethod = "Is" .. uname
+								else
+									-- FlagEnable -> IsEnableFlag
+									local pattern = ParseAdj(uname, true)
 
-								if pattern then
-									for mname, mod in pairs(info.FeatureModifier) do
-										if info.Method[mname] and ValidateFlags(MD_STATIC_FEATURE, mod) and mname:match(pattern) then
-											prop.Set = info.Method[mname]
-											break
+									if pattern then
+										for mname, method in pairs(iCache) do
+											if type(method) == "function" and mname:match(pattern) then prop.GetMethod = mname break end
 										end
 									end
 								end
 							end
 						end
-					end
-				else
-					if prop.GetMethod and type(iCache[prop.GetMethod]) ~= "function" then prop.GetMethod = nil end
-					if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
 
-					-- Auto generate GetMethod
-					if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
-						-- GetMethod
-						if type(iCache["get" .. uname]) == "function" then
-							prop.GetMethod = "get" .. uname
-						elseif type(iCache["Get" .. uname]) == "function" then
-							prop.GetMethod = "Get" .. uname
-						elseif prop.Type == Boolean then
-							-- FlagEnabled -> IsFlagEnabled
-							if type(iCache["is" .. uname]) == "function" then
-								prop.GetMethod = "is" .. uname
-							elseif type(iCache["Is" .. uname]) == "function" then
-								prop.GetMethod = "Is" .. uname
-							else
-								-- FlagEnable -> IsEnableFlag
-								local pattern = ParseAdj(uname, true)
+						-- Auto generate SetMethod
+						if ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and prop.Field == nil then
+							-- SetMethod
+							if type(iCache["set" .. uname]) == "function" then
+								prop.SetMethod = "set" .. uname
+							elseif type(iCache["Set" .. uname]) == "function" then
+								prop.SetMethod = "Set" .. uname
+							elseif prop.Type == Boolean then
+								-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
+								local pattern = ParseAdj(uname)
 
 								if pattern then
 									for mname, method in pairs(iCache) do
-										if type(method) == "function" and mname:match(pattern) then prop.GetMethod = mname break end
+										if type(method) == "function" and mname:match(pattern) then prop.SetMethod = mname break end
 									end
 								end
 							end
 						end
 					end
 
-					-- Auto generate SetMethod
-					if ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and prop.Field == nil then
-						-- SetMethod
-						if type(iCache["set" .. uname]) == "function" then
-							prop.SetMethod = "set" .. uname
-						elseif type(iCache["Set" .. uname]) == "function" then
-							prop.SetMethod = "Set" .. uname
-						elseif prop.Type == Boolean then
-							-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
-							local pattern = ParseAdj(uname)
-
-							if pattern then
-								for mname, method in pairs(iCache) do
-									if type(method) == "function" and mname:match(pattern) then prop.SetMethod = mname break end
-								end
-							end
-						end
-					end
-				end
-
-				-- Validate the Event
-				if type(prop.Event) == "string" then
-					local evt = iCache[prop.Event]
-					if getmetatable(evt) then
-						prop.Event = evt
-					elseif evt == nil then
-						-- Auto create
-						local ename = prop.Event
-						evt = Event(ename)
-						info.Event = info.Event or {}
-						info.Event[ename] = evt
-						iCache[ename] = evt
-						prop.Event = evt
-					else
-						prop.Event = nil
-					end
-				end
-
-				-- Validate the Handler
-				if prop.HandlerName then
-					prop.Handler = iCache[prop.HandlerName]
-					if type(prop.Handler) ~= "function" then prop.Handler = nil end
-				end
-
-				-- Validate the Setter
-				if prop.Setter then
-					prop.SetDeepClone = ValidateFlags(Setter.DeepClone, prop.Setter) or nil
-					prop.SetClone = ValidateFlags(Setter.Clone, prop.Setter) or prop.SetDeepClone
-
-					if prop.Set == nil and not prop.SetMethod then
-						if ValidateFlags(Setter.Retain, prop.Setter) and prop.Type then
-							local tinfo = _NSInfo[prop.Type]
-
-							if tinfo.Type == TYPE_CLASS or tinfo.Type == TYPE_INTERFACE then
-								prop.SetRetain = true
-							end
-						end
-
-						if prop.Get == nil and not prop.GetMethod then
-							if ValidateFlags(Setter.Weak, prop.Setter) then prop.SetWeak = true end
-						end
-					end
-
-					prop.Setter = nil
-				end
-
-				-- Validate the Getter
-				if prop.Getter then
-					prop.GetDeepClone = ValidateFlags(Getter.DeepClone, prop.Getter) or nil
-					prop.GetClone = ValidateFlags(Getter.Clone, prop.Getter) or prop.GetDeepClone
-
-					prop.Getter = nil
-				end
-
-				-- Auto generate Field or methods
-				if (prop.Set == nil or (prop.Set == false and prop.DefaultFunc)) and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
-					if prop.Field == true then prop.Field = nil end
-					local field = prop.Field or "_" .. info.Name:match("^_*(.-)$") .. "_" .. uname
-
-					if set.Synthesize and prop.Set == nil then
-						local getName, setName
-
-						if set.Synthesize == __Synthesize__.NameCases.Pascal then
-							getName, setName = "Get" .. uname, "Set" .. uname
-						elseif set.Synthesize == __Synthesize__.NameCases.Camel then
-							getName, setName = "get" .. uname, "set" .. uname
-						end
-
-						if prop.IsStatic then
-							-- Generate getMethod
-							local gbody = CACHE_TABLE()
-							local upValues = CACHE_TABLE()
-
-							tinsert(upValues, info) tinsert(gbody, "info")
-							tinsert(upValues, field) tinsert(gbody, "field")
-							if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
-							if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
-							if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
-							if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
-
-							local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
-							wipe(gbody)
-							tinsert(gbody, gHeader)
-
-							tinsert(gbody, [[return function ()]])
-							tinsert(gbody, [[local value]])
-							if prop.SetWeak then
-								tinsert(gbody, [[value = info.WeakStaticFields]])
-								tinsert(gbody, [[value = value and value[field] ]])
-							else
-								tinsert(gbody, [[value = info.StaticFields]])
-								tinsert(gbody, [[value = value and value[field] ]])
-							end
-							if prop.DefaultFunc then
-								tinsert(gbody, [[if value == nil then]])
-								tinsert(gbody, [[	value = defaultFunc(info.Owner)]])
-								tinsert(gbody, [[	if value ~= nil then info.Owner[propName] = value end]])
-								tinsert(gbody, [[end]])
-							elseif prop.Default ~= nil then
-								tinsert(gbody, [[if value == nil then value = default end]])
-							end
-							if prop.GetClone then
-								if prop.GetDeepClone then
-									tinsert(gbody, [[value = CloneObj(value, true)]])
-								else
-									tinsert(gbody, [[value = CloneObj(value)]])
-								end
-							end
-							tinsert(gbody, [[return value]])
-							tinsert(gbody, [[end]])
-
-							info.Method = info.Method or {}
-							info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
-
-							-- Generate setMethod
-							wipe(gbody)
-							wipe(upValues)
-
-							tinsert(upValues, info) tinsert(gbody, "info")
-							if prop.Type then
-								tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
-								tinsert(upValues, prop.Type) tinsert(gbody, "pType")
-							end
-							if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
-							if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
-							if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
-							tinsert(upValues, field) tinsert(gbody, "field")
-							if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
-							if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
-
-							gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
-							wipe(gbody)
-							tinsert(gbody, gHeader)
-
-							tinsert(gbody, [[return function (value)]])
-							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
-							if prop.SetClone then
-								if prop.SetDeepClone then
-									tinsert(gbody, [[value = CloneObj(value, true)]])
-								else
-									tinsert(gbody, [[value = CloneObj(value)]])
-								end
-							end
-							tinsert(gbody, [[local container]])
-							if prop.SetWeak then
-								tinsert(gbody, [[container = info.WeakStaticFields]])
-								tinsert(gbody, [[if not container then]])
-								tinsert(gbody, [[	container = setmetatable({}, WEAK_VALUE)]])
-								tinsert(gbody, [[	info.WeakStaticFields = container]])
-								tinsert(gbody, [[end]])
-							else
-								tinsert(gbody, [[container = info.StaticFields]])
-								tinsert(gbody, [[if not container then]])
-								tinsert(gbody, [[	container = {}]])
-								tinsert(gbody, [[	info.StaticFields = container]])
-								tinsert(gbody, [[end]])
-							end
-							tinsert(gbody, [[local old = container[field] ]])
-							if prop.Default ~= nil then tinsert(gbody, [[if old == nil then old = default end]]) end
-							tinsert(gbody, [[if old == value then return end]])
-							tinsert(gbody, [[container[field] = value]])
-							if prop.SetRetain then
-								if prop.Default ~= nil then
-									tinsert(gbody, [[if type(old) == "table" and getmetatable(old) and old ~= default then]])
-								else
-									tinsert(gbody, [[if type(old) == "table" and getmetatable(old) then]])
-								end
-								tinsert(gbody, [[DisposeObject(old)]])
-								tinsert(gbody, [[old = nil]])
-								tinsert(gbody, [[end]])
-							end
-							if prop.Handler then tinsert(gbody, ([[return handler(info.Owner, value, old, "%s")]]):format(name)) end
-
-							tinsert(gbody, [[end]])
-
-							info.Method[setName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
-
-							CACHE_TABLE(gbody)
-							CACHE_TABLE(upValues)
-
-							info.FeatureModifier = info.FeatureModifier or {}
-							info.FeatureModifier[getName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[getName])
-							info.FeatureModifier[setName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[setName])
-
-							prop.Get = info.Method[getName]
-							prop.Set = info.Method[setName]
+					-- Validate the Event
+					if type(prop.Event) == "string" then
+						local evt = iCache[prop.Event]
+						if getmetatable(evt) then
+							prop.Event = evt
+						elseif evt == nil then
+							-- Auto create
+							local ename = prop.Event
+							evt = Event(ename)
+							info.Event = info.Event or {}
+							info.Event[ename] = evt
+							iCache[ename] = evt
+							prop.Event = evt
 						else
-							-- Generate getMethod
-							local gbody = CACHE_TABLE()
-							local upValues = CACHE_TABLE()
-
-							tinsert(upValues, field) tinsert(gbody, "field")
-							if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
-							if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
-							if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
-							if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
-
-							local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
-							wipe(gbody)
-							tinsert(gbody, gHeader)
-
-							tinsert(gbody, [[return function (self)]])
-							tinsert(gbody, [[local value]])
-							if prop.SetWeak then
-								tinsert(gbody, [[value = rawget(self, "__WeakFields")]])
-								tinsert(gbody, [[if type(value) == "table" then]])
-								tinsert(gbody, [[value = value[field] ]])
-								tinsert(gbody, [[else]])
-								tinsert(gbody, [[value = nil]])
-								tinsert(gbody, [[end]])
-							else
-								tinsert(gbody, [[value = rawget(self, field)]])
-							end
-							if prop.DefaultFunc then
-								tinsert(gbody, [[if value == nil then]])
-								tinsert(gbody, [[	value = defaultFunc(self)]])
-								tinsert(gbody, [[	if value ~= nil then self[propName] = value end]])
-								tinsert(gbody, [[end]])
-							elseif prop.Default ~= nil then
-								tinsert(gbody, [[if value == nil then value = default end]])
-							end
-							if prop.GetClone then
-								if prop.GetDeepClone then
-									tinsert(gbody, [[value = CloneObj(value, true)]])
-								else
-									tinsert(gbody, [[value = CloneObj(value)]])
-								end
-							end
-							tinsert(gbody, [[return value]])
-							tinsert(gbody, [[end]])
-
-							info.Method = info.Method or {}
-							info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
-
-							-- Generate setMethod
-							wipe(gbody)
-							wipe(upValues)
-
-							if prop.Type then
-								tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
-								tinsert(upValues, prop.Type) tinsert(gbody, "pType")
-							end
-							if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
-							if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
-							if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
-							tinsert(upValues, field) tinsert(gbody, "field")
-							if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
-							if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
-							if prop.Event then tinsert(upValues, prop.Event) tinsert(gbody, "evt") end
-
-							gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
-							wipe(gbody)
-							tinsert(gbody, gHeader)
-
-							tinsert(gbody, [[return function (self, value)]])
-							if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
-							if prop.SetClone then
-								if prop.SetDeepClone then
-									tinsert(gbody, [[value = CloneObj(value, true)]])
-								else
-									tinsert(gbody, [[value = CloneObj(value)]])
-								end
-							end
-							tinsert(gbody, [[local container = self]])
-							if prop.SetWeak then
-								tinsert(gbody, [[container = rawget(self, "__WeakFields")]])
-								tinsert(gbody, [[if type(container) ~= "table" then]])
-								tinsert(gbody, [[	container = setmetatable({}, WEAK_VALUE)]])
-								tinsert(gbody, [[	rawset(self, "__WeakFields", container)]])
-								tinsert(gbody, [[end]])
-							end
-							tinsert(gbody, [[local old = rawget(container, field)]])
-							if prop.Default ~= nil then tinsert(gbody, [[if old == nil then old = default end]]) end
-							tinsert(gbody, [[if old == value then return end]])
-							tinsert(gbody, [[rawset(container, field, value)]])
-							if prop.SetRetain then
-								if prop.Default ~= nil then
-									tinsert(gbody, [[if type(old) == "table" and getmetatable(old) and old ~= default then]])
-								else
-									tinsert(gbody, [[if type(old) == "table" and getmetatable(old) then]])
-								end
-								tinsert(gbody, [[DisposeObject(old)]])
-								tinsert(gbody, [[old = nil]])
-								tinsert(gbody, [[end]])
-							end
-							if prop.Handler then tinsert(gbody, ([[handler(self, value, old, "%s")]]):format(name)) end
-							if prop.Event then tinsert(gbody, ([[return evt(self, value, old, "%s")]]):format(name)) end
-							tinsert(gbody, [[end]])
-
-							info.Method[setName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
-
-							CACHE_TABLE(gbody)
-							CACHE_TABLE(upValues)
-
-							iCache[getName] = info.Method[getName]
-							iCache[setName] = info.Method[setName]
-
-							prop.GetMethod = getName
-							prop.SetMethod = setName
+							prop.Event = nil
 						end
-					else
-						prop.Field = field
 					end
-				end
 
-				-- Auto generate Default
-				if prop.Type and prop.Default == nil then
-					local pinfo = _NSInfo[prop.Type]
+					-- Validate the Handler
+					if prop.HandlerName then
+						prop.Handler = iCache[prop.HandlerName]
+						if type(prop.Handler) ~= "function" then prop.Handler = nil end
+					end
 
-					if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
+					-- Validate the Setter
+					if prop.Setter then
+						prop.SetDeepClone = ValidateFlags(Setter.DeepClone, prop.Setter) or nil
+						prop.SetClone = ValidateFlags(Setter.Clone, prop.Setter) or prop.SetDeepClone
+
+						if prop.Set == nil and not prop.SetMethod then
+							if ValidateFlags(Setter.Retain, prop.Setter) and prop.Type then
+								local tinfo = _NSInfo[prop.Type]
+
+								if tinfo.Type == TYPE_CLASS or tinfo.Type == TYPE_INTERFACE then
+									prop.SetRetain = true
+								end
+							end
+
+							if prop.Get == nil and not prop.GetMethod then
+								if ValidateFlags(Setter.Weak, prop.Setter) then prop.SetWeak = true end
+							end
+						end
+
+						prop.Setter = nil
+					end
+
+					-- Validate the Getter
+					if prop.Getter then
+						prop.GetDeepClone = ValidateFlags(Getter.DeepClone, prop.Getter) or nil
+						prop.GetClone = ValidateFlags(Getter.Clone, prop.Getter) or prop.GetDeepClone
+
+						prop.Getter = nil
+					end
+
+					-- Auto generate Field or methods
+					if (prop.Set == nil or (prop.Set == false and prop.DefaultFunc)) and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
+						if prop.Field == true then prop.Field = nil end
+						local field = prop.Field or "_" .. info.Name:match("^_*(.-)$") .. "_" .. uname
+
+						if set.Synthesize and prop.Set == nil then
+							local getName, setName
+
+							if set.Synthesize == __Synthesize__.NameCases.Pascal then
+								getName, setName = "Get" .. uname, "Set" .. uname
+							elseif set.Synthesize == __Synthesize__.NameCases.Camel then
+								getName, setName = "get" .. uname, "set" .. uname
+							end
+
+							if prop.IsStatic then
+								-- Generate getMethod
+								local gbody = CACHE_TABLE()
+								local upValues = CACHE_TABLE()
+
+								tinsert(upValues, info) tinsert(gbody, "info")
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
+
+								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
+								tinsert(gbody, [[return function ()]])
+								tinsert(gbody, [[local value]])
+								if prop.SetWeak then
+									tinsert(gbody, [[value = info.WeakStaticFields]])
+									tinsert(gbody, [[value = value and value[field] ]])
+								else
+									tinsert(gbody, [[value = info.StaticFields]])
+									tinsert(gbody, [[value = value and value[field] ]])
+								end
+								if prop.DefaultFunc then
+									tinsert(gbody, [[if value == nil then]])
+									tinsert(gbody, [[	value = defaultFunc(info.Owner)]])
+									tinsert(gbody, [[	if value ~= nil then info.Owner[propName] = value end]])
+									tinsert(gbody, [[end]])
+								elseif prop.Default ~= nil then
+									tinsert(gbody, [[if value == nil then value = default end]])
+								end
+								if prop.GetClone then
+									if prop.GetDeepClone then
+										tinsert(gbody, [[value = CloneObj(value, true)]])
+									else
+										tinsert(gbody, [[value = CloneObj(value)]])
+									end
+								end
+								tinsert(gbody, [[return value]])
+								tinsert(gbody, [[end]])
+
+								info.Method = info.Method or {}
+								info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
+
+								-- Generate setMethod
+								wipe(gbody)
+								wipe(upValues)
+
+								tinsert(upValues, info) tinsert(gbody, "info")
+								if prop.Type then
+									tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
+									tinsert(upValues, prop.Type) tinsert(gbody, "pType")
+								end
+								if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
+								if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
+
+								gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
+								tinsert(gbody, [[return function (value)]])
+								if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
+								if prop.SetClone then
+									if prop.SetDeepClone then
+										tinsert(gbody, [[value = CloneObj(value, true)]])
+									else
+										tinsert(gbody, [[value = CloneObj(value)]])
+									end
+								end
+								tinsert(gbody, [[local container]])
+								if prop.SetWeak then
+									tinsert(gbody, [[container = info.WeakStaticFields]])
+									tinsert(gbody, [[if not container then]])
+									tinsert(gbody, [[	container = setmetatable({}, WEAK_VALUE)]])
+									tinsert(gbody, [[	info.WeakStaticFields = container]])
+									tinsert(gbody, [[end]])
+								else
+									tinsert(gbody, [[container = info.StaticFields]])
+									tinsert(gbody, [[if not container then]])
+									tinsert(gbody, [[	container = {}]])
+									tinsert(gbody, [[	info.StaticFields = container]])
+									tinsert(gbody, [[end]])
+								end
+								tinsert(gbody, [[local old = container[field] ]])
+								if prop.Default ~= nil then tinsert(gbody, [[if old == nil then old = default end]]) end
+								tinsert(gbody, [[if old == value then return end]])
+								tinsert(gbody, [[container[field] = value]])
+								if prop.SetRetain then
+									if prop.Default ~= nil then
+										tinsert(gbody, [[if type(old) == "table" and getmetatable(old) and old ~= default then]])
+									else
+										tinsert(gbody, [[if type(old) == "table" and getmetatable(old) then]])
+									end
+									tinsert(gbody, [[DisposeObject(old)]])
+									tinsert(gbody, [[old = nil]])
+									tinsert(gbody, [[end]])
+								end
+								if prop.Handler then tinsert(gbody, ([[return handler(info.Owner, value, old, "%s")]]):format(name)) end
+
+								tinsert(gbody, [[end]])
+
+								info.Method[setName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
+
+								CACHE_TABLE(gbody)
+								CACHE_TABLE(upValues)
+
+								info.FeatureModifier = info.FeatureModifier or {}
+								info.FeatureModifier[getName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[getName])
+								info.FeatureModifier[setName] = TurnOnFlags(MD_STATIC_FEATURE, info.FeatureModifier[setName])
+
+								prop.Get = info.Method[getName]
+								prop.Set = info.Method[setName]
+							else
+								-- Generate getMethod
+								local gbody = CACHE_TABLE()
+								local upValues = CACHE_TABLE()
+
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.GetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.DefaultFunc then tinsert(upValues, prop.DefaultFunc) tinsert(gbody, "defaultFunc") end
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.DefaultFunc then tinsert(upValues, name) tinsert(gbody, "propName") end
+
+								local gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
+								tinsert(gbody, [[return function (self)]])
+								tinsert(gbody, [[local value]])
+								if prop.SetWeak then
+									tinsert(gbody, [[value = rawget(self, "__WeakFields")]])
+									tinsert(gbody, [[if type(value) == "table" then]])
+									tinsert(gbody, [[value = value[field] ]])
+									tinsert(gbody, [[else]])
+									tinsert(gbody, [[value = nil]])
+									tinsert(gbody, [[end]])
+								else
+									tinsert(gbody, [[value = rawget(self, field)]])
+								end
+								if prop.DefaultFunc then
+									tinsert(gbody, [[if value == nil then]])
+									tinsert(gbody, [[	value = defaultFunc(self)]])
+									tinsert(gbody, [[	if value ~= nil then self[propName] = value end]])
+									tinsert(gbody, [[end]])
+								elseif prop.Default ~= nil then
+									tinsert(gbody, [[if value == nil then value = default end]])
+								end
+								if prop.GetClone then
+									if prop.GetDeepClone then
+										tinsert(gbody, [[value = CloneObj(value, true)]])
+									else
+										tinsert(gbody, [[value = CloneObj(value)]])
+									end
+								end
+								tinsert(gbody, [[return value]])
+								tinsert(gbody, [[end]])
+
+								info.Method = info.Method or {}
+								info.Method[getName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
+
+								-- Generate setMethod
+								wipe(gbody)
+								wipe(upValues)
+
+								if prop.Type then
+									tinsert(upValues, Validate4Type) tinsert(gbody, "Validate4Type")
+									tinsert(upValues, prop.Type) tinsert(gbody, "pType")
+								end
+								if prop.SetRetain then tinsert(upValues, DisposeObject) tinsert(gbody, "DisposeObject") end
+								if prop.SetClone then tinsert(upValues, CloneObj) tinsert(gbody, "CloneObj") end
+								if prop.SetWeak then tinsert(upValues, WEAK_VALUE) tinsert(gbody, "WEAK_VALUE") end
+								tinsert(upValues, field) tinsert(gbody, "field")
+								if prop.Default ~= nil then tinsert(upValues, prop.Default) tinsert(gbody, "default") end
+								if prop.Handler then tinsert(upValues, prop.Handler) tinsert(gbody, "handler") end
+								if prop.Event then tinsert(upValues, prop.Event) tinsert(gbody, "evt") end
+
+								gHeader = "local " .. tblconcat(gbody, ", ") .. " = ..."
+								wipe(gbody)
+								tinsert(gbody, gHeader)
+
+								tinsert(gbody, [[return function (self, value)]])
+								if prop.Type then tinsert(gbody, ([[value = Validate4Type(pType, value, "%s", "%s", 3)]]):format(name, name)) end
+								if prop.SetClone then
+									if prop.SetDeepClone then
+										tinsert(gbody, [[value = CloneObj(value, true)]])
+									else
+										tinsert(gbody, [[value = CloneObj(value)]])
+									end
+								end
+								tinsert(gbody, [[local container = self]])
+								if prop.SetWeak then
+									tinsert(gbody, [[container = rawget(self, "__WeakFields")]])
+									tinsert(gbody, [[if type(container) ~= "table" then]])
+									tinsert(gbody, [[	container = setmetatable({}, WEAK_VALUE)]])
+									tinsert(gbody, [[	rawset(self, "__WeakFields", container)]])
+									tinsert(gbody, [[end]])
+								end
+								tinsert(gbody, [[local old = rawget(container, field)]])
+								if prop.Default ~= nil then tinsert(gbody, [[if old == nil then old = default end]]) end
+								tinsert(gbody, [[if old == value then return end]])
+								tinsert(gbody, [[rawset(container, field, value)]])
+								if prop.SetRetain then
+									if prop.Default ~= nil then
+										tinsert(gbody, [[if type(old) == "table" and getmetatable(old) and old ~= default then]])
+									else
+										tinsert(gbody, [[if type(old) == "table" and getmetatable(old) then]])
+									end
+									tinsert(gbody, [[DisposeObject(old)]])
+									tinsert(gbody, [[old = nil]])
+									tinsert(gbody, [[end]])
+								end
+								if prop.Handler then tinsert(gbody, ([[handler(self, value, old, "%s")]]):format(name)) end
+								if prop.Event then tinsert(gbody, ([[return evt(self, value, old, "%s")]]):format(name)) end
+								tinsert(gbody, [[end]])
+
+								info.Method[setName] = loadstring(tblconcat(gbody, "\n"))(unpack(upValues))
+
+								CACHE_TABLE(gbody)
+								CACHE_TABLE(upValues)
+
+								iCache[getName] = info.Method[getName]
+								iCache[setName] = info.Method[setName]
+
+								prop.GetMethod = getName
+								prop.SetMethod = setName
+							end
+						else
+							prop.Field = field
+						end
+					end
+
+					-- Auto generate Default
+					if prop.Type and prop.Default == nil then
+						local pinfo = _NSInfo[prop.Type]
+
+						if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
+					end
 				end
 			end
+
+			--- self property
+			CloneWithOverride(iCache, info.Property, true)
 		end
-		--- self property
-		CloneWithOverride(iCache, info.Property or DUMMY, true)
+
 
 		-- AutoCache
 		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then
@@ -2610,6 +2620,16 @@ do
 		end
 	end
 
+	function BuildAnonymousClass(self, rebuild)
+		local info = _NSInfo[self]
+
+		if info.AnonymousClass == nil or rebuild then
+			local mName
+
+
+		end
+	end
+
 	_KeyWord4IFEnv.extend = extend_IF
 	_KeyWord4IFEnv.import = import_Def
 	_KeyWord4IFEnv.event = event_Def
@@ -2659,7 +2679,8 @@ do
 	--------------------------------------------------
 	do
 		function InitObjectWithInterface(info, obj)
-			for _, IF in ipairs(info.Cache4Interface or DUMMY) do
+			if not info.Cache4Interface then return end
+			for _, IF in ipairs(info.Cache4Interface) do
 				info = _NSInfo[IF]
 				if info.Initializer then info.Initializer(obj) end
 			end
@@ -3243,52 +3264,41 @@ do
 	end
 
 	function ValidateClass(info, stack)
-		if info.ExtendInterface then
-			local cache = CACHE_TABLE()
-			local cacheIF = CACHE_TABLE()
-			local ret
+		if not info.ExtendInterface then return end
+		for _, IF in ipairs(info.ExtendInterface) do
+			local sinfo = _NSInfo[IF]
 
-			for _, IF in ipairs(info.ExtendInterface) do
-				local sinfo = _NSInfo[IF]
-				local msg
-
-				wipe(cacheIF)
-
-				if sinfo.FeatureModifier then
-					for name, mod in pairs(sinfo.FeatureModifier) do
-						if sinfo.Method and sinfo.Method[name] and sinfo.Method[name] == info.Cache[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
-							tinsert(cacheIF, name)
+			if sinfo.FeatureModifier then
+				if sinfo.Method then
+					for name, func in pairs(sinfo.Method) do
+						if ValidateFlags(MD_REQUIRE_FEATURE, sinfo.FeatureModifier[name]) and func == info.Cache[name] then
+							error(("The %s lack method declaration for [%s] %s."):format(tostring(info.Owner), tostring(IF), name), stack)
 						end
-					end
-
-					if #cacheIF > 0 then msg = "[Method]" .. tblconcat(cacheIF, ", ") end
-
-					wipe(cacheIF)
-
-					for name, mod in pairs(sinfo.FeatureModifier) do
-						if sinfo.Property and sinfo.Property[name] and sinfo.Property[name] == info.Cache[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
-							tinsert(cacheIF, name)
-						end
-					end
-
-					if #cacheIF > 0 then
-						msg = msg and (msg .. " ") or ""
-						msg = msg .. "[Property]" .. tblconcat(cacheIF, ", ")
 					end
 				end
 
-				if msg then tinsert(cache, tostring(IF) .. " - " .. msg) end
+				if sinfo.Property then
+					for name, prop in pairs(sinfo.Property) do
+						if ValidateFlags(MD_REQUIRE_FEATURE, sinfo.FeatureModifier[name]) then
+							local iprop = info.Cache[name]
+
+							if not (iprop and type(iprop) == "table" and getmetatable(iprop) == nil) then
+								error(("The %s lack property declaration for [%s] %s."):format(tostring(info.Owner), tostring(IF), name), stack)
+							elseif prop.Type and iprop.Type ~= prop.Type then
+								if not iprop.Type then
+									iprop.Type = prop.Type
+									if iprop.Default ~= nil then
+										iprop.Default = GetValidatedValue(iprop.Type, iprop.Default)
+									end
+								else
+									error(("The %s has wrong type property for [%s] %s(%s)."):format(tostring(info.Owner), tostring(IF), name, tostring(prop.Type)), stack)
+								end
+								if iprop.Default == nil then iprop.Default = prop.Default end
+							end
+						end
+					end
+				end
 			end
-
-			if #cache > 0 then
-				tinsert(cache, 1, tostring(info.Owner) .. " lack declaration of :")
-				ret = tblconcat(cache, "\n")
-			end
-
-			CACHE_TABLE(cacheIF)
-			CACHE_TABLE(cache)
-
-			if ret then error(ret, stack) end
 		end
 	end
 
@@ -3705,20 +3715,22 @@ do
 			_ValidatedCache[value] = true
 
 			if sType == STRUCT_TYPE_MEMBER then
-				for _, mem in ipairs(info.Members or DUMMY) do
-					local name = mem.Name
-					local default = mem.Default
-					local val = value[name]
+				if info.Members then
+					for _, mem in ipairs(info.Members) do
+						local name = mem.Name
+						local default = mem.Default
+						local val = value[name]
 
-					if val == nil then
-						if default ~= nil then
-							-- Deep clone to make sure no change on default value
-							value[name] = CloneObj(default, true)
-						elseif mem.Require then
-							return error(("%s.%s can't be nil."):format("%s", name))
+						if val == nil then
+							if default ~= nil then
+								-- Deep clone to make sure no change on default value
+								value[name] = CloneObj(default, true)
+							elseif mem.Require then
+								return error(("%s.%s can't be nil."):format("%s", name))
+							end
+						else
+							value[name] = Validate4Type(mem.Type, val, name)
 						end
-					else
-						value[name] = Validate4Type(mem.Type, val, name)
 					end
 				end
 			elseif sType == STRUCT_TYPE_ARRAY and info.ArrayElement then
@@ -4365,7 +4377,10 @@ do
 		if not SAVE_MEMORY then
 			_GetEventsCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetEventsIter = function (ns, key) return (next(_NSInfo[ns].Event or DUMMY, key)) end
+			_GetEventsIter = function (ns, key)
+				local evt = _NSInfo[ns].Event
+				return evt and next(evt, key)
+			end
 		end
 		function GetEvents(ns, result)
 			local info = _NSInfo[ns]
@@ -4445,7 +4460,10 @@ do
 		if not SAVE_MEMORY then
 			_GetPropertiesCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetPropertiesIter = function (ns, key) return (next(_NSInfo[ns].Property or DUMMY, key)) end
+			_GetPropertiesIter = function (ns, key)
+				local prop = _NSInfo[ns].Property
+				return prop and next(prop, key)
+			end
 		end
 		function GetProperties(ns, result)
 			local info = _NSInfo[ns]
@@ -4529,7 +4547,10 @@ do
 		if not SAVE_MEMORY then
 			_GetMethodsCache = setmetatable({}, WEAK_ALL)
 		else
-			_GetMethodsIter = function (ns, key) return (next(_NSInfo[ns].Method or DUMMY, key)) end
+			_GetMethodsIter = function (ns, key)
+				local method = _NSInfo[ns].Method
+				return method and next(method, key)
+			end
 		end
 		function GetMethods(ns, result)
 			local info = _NSInfo[ns]
@@ -4571,9 +4592,11 @@ do
 		else
 			_GetAllMethodsIter = function (ns, key)
 				local info = _NSInfo[ns]
-				local methods = info.Cache or info.Method or DUMMY
+				local methods = info.Cache or info.Method
 
-				for k, v in next, methods, key do if type(v) == "function" then return k end end
+				if methods then
+					for k, v in next, methods, key do if type(v) == "function" then return k end end
+				end
 			end
 		end
 		function GetAllMethods(ns, result)
@@ -4694,28 +4717,6 @@ do
 		function IsRequiredProperty(ns, name)
 			local info = _NSInfo[ns]
 			return info and info.Property and info.Property[name] and info.FeatureModifier and ValidateFlags(MD_REQUIRE_FEATURE, info.FeatureModifier[name]) or false
-		end
-
-		doc "IsOptionalMethod" [[
-			<desc>Whether the method is optional to be overwrited</desc>
-			<param name="owner" type="interface">the method's owner</param>
-			<param name="name" type="string">the method's name</param>
-			<return type="boolean">true if the method should be overwrited</return>
-		]]
-		function IsOptionalMethod(ns, name)
-			local info = _NSInfo[ns]
-			return info and info.Method and info.Method[name] and info.FeatureModifier and ValidateFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name]) or false
-		end
-
-		doc "IsOptionalProperty" [[
-			<desc>Whether the property is optional to be overwrited</desc>
-			<param name="owner" type="interface">the property's owner</param>
-			<param name="name" type="string">the property's name</param>
-			<return type="boolean">true if the property should be overwrited</return>
-		]]
-		function IsOptionalProperty(ns, name)
-			local info = _NSInfo[ns]
-			return info and info.Property and info.Property[name] and info.FeatureModifier and ValidateFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name]) or false
 		end
 
 		doc "IsStaticProperty" [[
@@ -6291,7 +6292,6 @@ do
 			member = info and info.Members and info.Members[member]
 			if member then return GetCustomAttribute(member, ty) end
 		end
-
 	end)
 
 	__Sealed__()
@@ -6311,10 +6311,7 @@ do
 			if info and info.Type == TYPE_STRUCT then
 				if info.SubType == STRUCT_TYPE_MEMBER then
 					if info.Validator then return true end
-
-					for _, n in ipairs(info.Members or DUMMY) do
-						if isCloneNeeded(n.Type) then return true end
-					end
+					if info.Members then for _, n in ipairs(info.Members) do if isCloneNeeded(n.Type) then return true end end end
 				elseif info.SubType == STRUCT_TYPE_ARRAY then
 					return isCloneNeeded(info.ArrayElement and info.ArrayElement.Type)
 				elseif info.SubType == STRUCT_TYPE_CUSTOM and info.Validator then
@@ -7120,26 +7117,6 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true}
-	__Sealed__() __Unique__()
-	class "__Optional__" (function(_ENV)
-		inherit "__Attribute__"
-
-		doc "__Optional__" [[Whether the method or property is optional to be override]]
-
-		------------------------------------------------------
-		-- Method
-		------------------------------------------------------
-		function ApplyAttribute(self, target, targetType, owner, name)
-			local info = _NSInfo[owner]
-
-			if info and type(name) == "string" then
-				info.FeatureModifier = info.FeatureModifier or {}
-				info.FeatureModifier[name] = TurnOnFlags(MD_OPTIONAL_FEATURE, info.FeatureModifier[name])
-			end
-		end
-	end)
-
 	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Synthesize__" (function(_ENV)
@@ -7458,7 +7435,7 @@ end
 do
 	------------------------------------------------------
 	-- System.ICloneable
-	------------------------------------------------------
+	------------------------------------------------------ICloneable
 	__Doc__ [[Supports cloning, which creates a new instance of a class with the same value as an existing instance.]]
 	interface "ICloneable" (function(_ENV)
 		------------------------------------------------------

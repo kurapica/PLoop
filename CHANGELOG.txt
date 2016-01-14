@@ -1,3 +1,6 @@
+2016/01/14
+    Remove useless __Optional__, modify the __Require__ property usage, anonymous class for interface added, like `local obj = ICloneable { function(self) return {} end }`.
+
 2016/01/08
     Anonymous class|interface|struct|enum can be created, like A = class { }; ArrayA = struct { A };
 

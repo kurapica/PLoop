@@ -23,7 +23,6 @@ interface "IFIterator" (function(_ENV)
 		<return>self</return>
 		<return>firstkey</return>
 	]]
-	__Optional__()
 	function Next(self, key)
 		return next, self, key and self[key] ~= nil and key or nil
 	end
