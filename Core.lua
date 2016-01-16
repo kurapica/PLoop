@@ -419,18 +419,16 @@ do
 
 			if iType == TYPE_CLASS then
 				-- Create Class object, using ret avoid tail call error stack
-				local ret = Class2Obj(self, ...)
+				local ret = Class2Obj(info, ...)
 				return ret
 			elseif iType == TYPE_STRUCT then
 				-- Create Struct
-				local ret = Struct2Obj(self, ...)
+				local ret = Struct2Obj(info, ...)
 				return ret
 			elseif iType == TYPE_INTERFACE then
-				local val = ...
-
-				if type(val) == "table" then
-				elseif type(val) == "function" then
-				end
+				-- Create interface's anonymousClass' object
+				local ret = Interface2Obj(info, ...)
+				return ret
 			elseif iType == TYPE_ENUM then
 				-- Parse Enum
 				local value = ...
@@ -662,14 +660,12 @@ do
 	do
 		_MetaSA.__call = function(self, ...)
 			-- Init the class object
-			local cls = _AliasMap[self].Owner
-
-			if IsChildClass(cls, getmetatable(...)) then return Class1Obj(cls, ...) end
+			local info = _AliasMap[self]
+			if IsChildClass(info.Owner, getmetatable(...)) then return Class1Obj(info, ...) end
 		end
 
 		_MetaSA.__index = function(self, key)
 			local info = _AliasMap[self]
-
 			local ret = info.SubNS and info.SubNS[key]
 
 			if ret then
@@ -1660,10 +1656,24 @@ do
 			CloneWithOverride(iCache, info.Property, true)
 		end
 
-
 		-- AutoCache
-		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then
-			info.AutoCache = true
+		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then info.AutoCache = true end
+
+		-- Simple Class Check(No Constructor, No Property, No Super Class, No Extend Interfaces)
+		if info.Type == TYPE_CLASS then info.IsSimpleClass = (not info.Constructor and not info.Property and not info.SuperClass and not info.ExtendInterface) or nil end
+
+		-- One-required method interface check
+		if info.Type == TYPE_INTERFACE then
+			local isOneReqMethod
+			if info.FeatureModifier and info.Method and not info.ExtendInterface then
+				for name, mod in pairs(info.FeatureModifier) do
+					if info.Method[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
+						if isOneReqMethod then isOneReqMethod = false break end
+						isOneReqMethod = name
+					end
+				end
+			end
+			info.IsOneReqMethod = isOneReqMethod or nil
 		end
 
 		-- Refresh branch
@@ -2620,14 +2630,23 @@ do
 		end
 	end
 
-	function BuildAnonymousClass(self, rebuild)
-		local info = _NSInfo[self]
+	function BuildAnonymousClass(info)
+		local cls = class {}
+		SaveExtend(_NSInfo[cls], info.Owner)
+		RefreshCache(cls)
+		info.AnonymousClass = cls
+		return cls
+	end
 
-		if info.AnonymousClass == nil or rebuild then
-			local mName
-
-
+	function Interface2Obj(info, init)
+		if type(init) == "function" then
+			if not info.IsOneReqMethod then error(("%s is not a one required method interface."):format(info.Owner), 3) end
+			init = { [info.IsOneReqMethod] = init }
 		end
+
+		if type(init) ~= "table" then error(("%s {} is the only format can be accepted."):format(info.Owner), 3) end
+
+		return (info.AnonymousClass or BuildAnonymousClass(info))(init)
 	end
 
 	_KeyWord4IFEnv.extend = extend_IF
@@ -3307,8 +3326,7 @@ do
 	end
 
 	-- Init the object with class's constructor
-	function Class1Obj(cls, obj, ...)
-		local info = _NSInfo[cls]
+	function Class1Obj(info, obj, ...)
 		local count = select('#', ...)
 		local initTable = select(1, ...)
 		local ctor = info.Constructor or info.Ctor
@@ -3334,15 +3352,13 @@ do
 	end
 
 	-- The cache for constructor parameters
-	function Class2Obj(cls, ...)
-		local info = _NSInfo[cls]
-
+	function Class2Obj(info, ...)
 		if ValidateFlags(MD_ABSTRACT_CLASS, info.Modifier) then error("The class is abstract, can't be used to create objects.", 3) end
 
 		-- Check if the class is unique and already created one object to be return
 		if getmetatable(info.UniqueObject) then
 			-- Init the obj with new arguments
-			Class1Obj(cls, info.UniqueObject, ...)
+			Class1Obj(info, info.UniqueObject, ...)
 
 			InitObjectWithInterface(info, info.UniqueObject)
 
@@ -3353,15 +3369,22 @@ do
 		if info.MetaTable.__exist then
 			local ok, obj = pcall(info.MetaTable.__exist, ...)
 
-			if ok and getmetatable(obj) == cls then return obj end
+			if ok and getmetatable(obj) == info.Owner then return obj end
 		end
 
 		-- Create new object
-		local obj = setmetatable({}, info.MetaTable)
+		local obj
 
-		Class1Obj(cls, obj, ...)
+		if info.IsSimpleClass and select('#', ...) == 1 and type((...)) == "table" and getmetatable((...)) == nil then
+			-- Save memory cost for simple class
+			obj = setmetatable((...), info.MetaTable)
+		else
+			obj = setmetatable({}, info.MetaTable)
 
-		InitObjectWithInterface(info, obj)
+			Class1Obj(info, obj, ...)
+
+			InitObjectWithInterface(info, obj)
+		end
 
 		if info.UniqueObject then info.UniqueObject = obj end
 
@@ -3780,8 +3803,8 @@ do
 		return obj
 	end
 
-	function Struct2Obj(strt, ...)
-		local info = _NSInfo[strt]
+	function Struct2Obj(info, ...)
+		local strt = info.Owner
 
 		local count = select("#", ...)
 		local initTable = select(1, ...)
@@ -7067,9 +7090,7 @@ do
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
 			if targetType == AttributeTargets.Interface then
-				if self.Require then
-					return SaveRequire(info, self.Require)
-				end
+				if self.Require then return SaveRequire(info, self.Require) end
 			else
 				local info = _NSInfo[owner]
 
