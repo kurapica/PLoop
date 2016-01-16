@@ -1659,17 +1659,48 @@ do
 		-- AutoCache
 		if info.SuperClass and _NSInfo[info.SuperClass].AutoCache then info.AutoCache = true end
 
-		-- Simple Class Check(No Constructor, No Property, No Super Class, No Extend Interfaces)
-		if info.Type == TYPE_CLASS then info.IsSimpleClass = (not info.Constructor and not info.Property and not info.SuperClass and not info.ExtendInterface) or nil end
+		-- Simple Class Check(No Constructor, No Property)
+		if info.Type == TYPE_CLASS then
+			local isSimpleClass = true
+
+			if info.Constructor or info.Property then
+				isSimpleClass = false
+			elseif info.SuperClass and not _NSInfo[info.SuperClass].IsSimpleClass then
+				isSimpleClass = false
+			elseif info.ExtendInterface then
+				for _, IF in ipairs(info.ExtendInterface) do
+					if _NSInfo[IF].Property then
+						isSimpleClass = false
+						break
+					end
+				end
+			end
+
+			info.IsSimpleClass = isSimpleClass or nil
+		end
 
 		-- One-required method interface check
 		if info.Type == TYPE_INTERFACE then
 			local isOneReqMethod
-			if info.FeatureModifier and info.Method and not info.ExtendInterface then
+			if info.FeatureModifier and info.Method then
 				for name, mod in pairs(info.FeatureModifier) do
 					if info.Method[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
 						if isOneReqMethod then isOneReqMethod = false break end
 						isOneReqMethod = name
+					end
+				end
+
+				if isOneReqMethod and info.ExtendInterface then
+					for _, IF in ipairs(info.ExtendInterface) do
+						local iInfo = _NSInfo[IF]
+						if iInfo.FeatureModifier and iInfo.Method then
+							for name, mod in pairs(iInfo.FeatureModifier) do
+								if iInfo.Method[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
+									isOneReqMethod = false
+									break
+								end
+							end
+						end
 					end
 				end
 			end
@@ -2640,11 +2671,11 @@ do
 
 	function Interface2Obj(info, init)
 		if type(init) == "function" then
-			if not info.IsOneReqMethod then error(("%s is not a one required method interface."):format(info.Owner), 3) end
+			if not info.IsOneReqMethod then error(("%s is not a one required method interface."):format(tostring(info.Owner)), 3) end
 			init = { [info.IsOneReqMethod] = init }
 		end
 
-		if type(init) ~= "table" then error(("%s {} is the only format can be accepted."):format(info.Owner), 3) end
+		if type(init) ~= "table" then error(("%s {} is the only format can be accepted."):format(tostring(info.Owner)), 3) end
 
 		return (info.AnonymousClass or BuildAnonymousClass(info))(init)
 	end
@@ -3382,9 +3413,9 @@ do
 			obj = setmetatable({}, info.MetaTable)
 
 			Class1Obj(info, obj, ...)
-
-			InitObjectWithInterface(info, obj)
 		end
+
+		InitObjectWithInterface(info, obj)
 
 		if info.UniqueObject then info.UniqueObject = obj end
 
