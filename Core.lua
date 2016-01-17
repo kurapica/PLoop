@@ -209,7 +209,7 @@ end
 -- Tools
 ------------------------------------------------------
 do
-	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end})
+	CACHE_TABLE = setmetatable({}, {__call = function(self, key)if key then if getmetatable(key) == nil then wipe(key) tinsert(self, key) end else return tremove(self) or {} end end})
 
 	-- Clone
 	local function deepCloneObj(obj, cache)
@@ -5782,13 +5782,15 @@ do
 
 				-- Check existed attributes
 				if getmetatable(sconfig) then
-					if config and not ValidateAttributeUsable(config, sconfig) then return end
-
-					sconfig:Clone()
-					hasAttr = true
+					local usage = GetAttributeUsage(getmetatable(sconfig))
+					if (not usage or usage.Inherited) and (not config or ValidateAttributeUsable(config, sconfig)) then
+						sconfig:Clone()
+						hasAttr = true
+					end
 				else
 					for i = 1, #sconfig do
-						if not config or ValidateAttributeUsable(config, sconfig[i]) then
+						local usage = GetAttributeUsage(getmetatable(sconfig[i]))
+						if (not usage or usage.Inherited) and (not config or ValidateAttributeUsable(config, sconfig[i])) then
 							sconfig[i]:Clone()
 							hasAttr = true
 						end
