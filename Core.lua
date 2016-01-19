@@ -6267,6 +6267,9 @@ do
 		------------------------------------------------------
 		-- For Attribute system
 		------------------------------------------------------
+		-- System.IAttribute
+		__Sealed__:ApplyAttribute(IAttribute)
+
 		-- System.AttributeTargets
 		__Flags__:ApplyAttribute(AttributeTargets)
 		__Sealed__:ApplyAttribute(AttributeTargets)
