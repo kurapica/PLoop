@@ -1,3 +1,6 @@
+2016/01/19
+    Remove __Local__ attribute, it can be replaced by anonymous features. Remvoe __Attribute__, no root attribute, use `extend "System.IAttribute" now, attribute can use __MyAttr_:GetClassAttribute(cls) to retreive attributes.
+
 2016/01/14
     Remove useless __Optional__, modify the __Require__ property usage, anonymous class for interface added, like `local obj = ICloneable { function(self) return {} end }`.
 

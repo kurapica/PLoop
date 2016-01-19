@@ -7,7 +7,6 @@ _ENV = Module "System.Serialization" "0.1.0"
 namespace "System"
 
 import "System.Reflector"
-import "System.__Attribute__"
 
 __Doc__ [[Serialization is the process of converting the state of an object into a form that can be persisted or transported.]]
 __Final__() __Sealed__()
@@ -49,7 +48,7 @@ interface "Serialization" (function (_ENV)
 				rycInfo(info)
 			else
 				for prop in GetProperties(cls) do
-					if IsPropertyReadable(cls, prop) and not GetPropertyAttribute(cls, prop, __NonSerialized__) then
+					if IsPropertyReadable(cls, prop) and not __NonSerialized__:GetPropertyAttribute(cls, prop) then
 						local value = object[prop]
 
 						if value ~= nil and IsSerializable(value) then
@@ -73,7 +72,7 @@ interface "Serialization" (function (_ENV)
 				end
 			elseif stype == "MEMBER" then
 				for _, member in GetStructMembers(oType) do
-					if not GetMemberAttribute(cls, member, __NonSerialized__) then
+					if not __NonSerialized__:GetMemberAttribute(cls, member) then
 						local value = object[member]
 
 						if type(value) == "table" then value = Serialize2Data(value, GetStructMember(oType, member), cache) end
@@ -146,7 +145,7 @@ interface "Serialization" (function (_ENV)
 					return obj
 				else
 					for prop in GetProperties(oType) do
-						if IsPropertyWritable(oType, prop) and not GetPropertyAttribute(oType, prop, __NonSerialized__) then
+						if IsPropertyWritable(oType, prop) and not __NonSerialized__:GetPropertyAttribute(oType, prop) then
 							local value = storage[prop]
 
 							if value ~= nil then
@@ -225,12 +224,12 @@ interface "Serialization" (function (_ENV)
 	__AttributeUsage__ { AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = false }
 	__Doc__ [[Indicates that a class can be serialized.(struct is always serializable.)]]
 	__Unique__() __Sealed__() __Final__()
-	class "__Serializable__" { __Attribute__ }
+	class "__Serializable__" { IAttribute }
 
 	__AttributeUsage__ { AttributeTarget = AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = false }
 	__Doc__ [[Indicates that a property of a serializable class should not be serialized.]]
 	__Unique__() __Sealed__() __Final__()
-	class "__NonSerialized__" { __Attribute__ }
+	class "__NonSerialized__" { IAttribute }
 
 	__Doc__ [[Allows an object to control its own serialization and deserialization.]]
 	interface "ISerializable" (function (_ENV)
@@ -325,7 +324,7 @@ interface "Serialization" (function (_ENV)
 			if cls == nil then
 				return true
 			else
-				return GetClassAttribute(cls, __Serializable__) and true or false
+				return __Serializable__:GetClassAttribute(cls) and true or false
 			end
 		else
 			return otype == "string" or otype == "number" or otype == "boolean"

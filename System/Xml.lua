@@ -16,7 +16,7 @@ do
 	cache = setmetatable({}, {__call = function(self, tbl) if tbl then wipe(tbl) tinsert(self, tbl) else return tremove(self) or {} end end,})
 	newIndex = function(flag) _M.AutoIndex = type(flag) == "number" and flag or flag and _M.AutoIndex or (_M.AutoIndex + 1); return _M.AutoIndex end
 
-	__Local__() struct "Stack" (function(_ENV)
+	Stack = struct (function(_ENV)
 		------------------------
 		-- Member
 		------------------------

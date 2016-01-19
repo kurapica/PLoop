@@ -60,7 +60,7 @@ interface "IFDataTable" (function(_ENV)
 		local cls = getmetatable(self)
 
     	if _IFDataTableInfo[cls] == nil then
-    		for _, attr in ipairs{  __Attribute__._GetClassAttribute(cls) } do
+    		for _, attr in ipairs{  IAttribute:GetClassAttribute(cls) } do
 	    		if Reflector.ObjectIsInterface(attr, IFDataProvider) then
 	    			_IFDataTableInfo[cls] = attr
 	    			break
@@ -75,7 +75,7 @@ end)
 
 __AttributeUsage__{ AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct }
 class "__DataTable__" (function(_ENV)
-	inherit "__Attribute__"
+	extend "IAttribute"
 	extend "IFDataProvider"
 
 	local function CheckExisted(tbl, value)
@@ -183,7 +183,7 @@ class "__DataTable__" (function(_ENV)
 			for prop in Reflector.GetAllProperties(target) do
 				local ty = Reflector.GetPropertyType(target, prop)
 				if ty and #ty == 1 and Reflector.GetStructType(ty[1]) == "CUSTOM" and Reflector.IsPropertyReadable(target, prop) and Reflector.IsPropertyWritable(target, prop) then
-					local field = __Attribute__._GetPropertyAttribute(target, prop, __DataField__)
+					local field = __DataField__:GetPropertyAttribute(target, prop)
 					if field or self.IncludeAll then
 						self.FieldMap[prop] = field and field.Name or prop
 						self.FieldDefault[prop] = Reflector.GetDefaultValue(target, prop)
@@ -236,7 +236,7 @@ class "__DataTable__" (function(_ENV)
 			for _, member in ipairs(members) do
 				local ty = Reflector.GetStructMember(target, member)
 				if ty and #ty == 1 and Reflector.GetStructType(ty[1]) == "CUSTOM" then
-					local field = __Attribute__._GetMemberAttribute(target, member, __DataField__)
+					local field = __DataField__:GetMemberAttribute(target, member)
 					if field or self.IncludeAll then
 						self.FieldMap[member] = field and field.Name or member
 						self.FieldDefault[member] = Reflector.GetDefaultValue(target, member)
@@ -377,7 +377,7 @@ end)
 
 __AttributeUsage__{ AttributeTarget = AttributeTargets.Property + AttributeTargets.Member }
 class "__DataField__" (function(_ENV)
-	inherit "__Attribute__"
+	extend "IAttribute"
 
 	-------------------------------------------
 	-- Property
