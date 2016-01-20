@@ -36,7 +36,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
 -- Last Update Date 2016/01/12
--- Version          r143
+-- Version          r144
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1240,7 +1240,7 @@ do
 									prop.Get = info.Method["get" .. uname]
 								elseif info.Method["Get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Get" .. uname]) then
 									prop.Get = info.Method["Get" .. uname]
-								elseif prop.Type == Boolean then
+								elseif prop.Type == Boolean or prop.Type == BooleanNil then
 									-- FlagEnabled -> IsFlagEnabled
 									if info.Method["is" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["is" .. uname]) then
 										prop.Get = info.Method["is" .. uname]
@@ -1269,7 +1269,7 @@ do
 									prop.Set = info.Method["set" .. uname]
 								elseif info.Method["Set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["Set" .. uname]) then
 									prop.Set = info.Method["Set" .. uname]
-								elseif prop.Type == Boolean then
+								elseif prop.Type == Boolean or prop.Type == BooleanNil then
 									-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 									local pattern = ParseAdj(uname)
 
@@ -1295,7 +1295,7 @@ do
 								prop.GetMethod = "get" .. uname
 							elseif type(iCache["Get" .. uname]) == "function" then
 								prop.GetMethod = "Get" .. uname
-							elseif prop.Type == Boolean then
+							elseif prop.Type == Boolean or prop.Type == BooleanNil then
 								-- FlagEnabled -> IsFlagEnabled
 								if type(iCache["is" .. uname]) == "function" then
 									prop.GetMethod = "is" .. uname
@@ -1321,7 +1321,7 @@ do
 								prop.SetMethod = "set" .. uname
 							elseif type(iCache["Set" .. uname]) == "function" then
 								prop.SetMethod = "Set" .. uname
-							elseif prop.Type == Boolean then
+							elseif prop.Type == Boolean or prop.Type == BooleanNil then
 								-- FlagEnabled -> EnableFlag, FlagDisabled -> DisableFlag
 								local pattern = ParseAdj(uname)
 
@@ -1388,6 +1388,12 @@ do
 						prop.Getter = nil
 					end
 
+					-- Auto generate Default
+					if prop.Type and prop.Default == nil then
+						local pinfo = _NSInfo[prop.Type]
+						if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
+					end
+
 					-- Auto generate Field or methods
 					if (prop.Set == nil or (prop.Set == false and prop.DefaultFunc)) and not prop.SetMethod and prop.Get == nil and not prop.GetMethod then
 						if prop.Field == true then prop.Field = nil end
@@ -1398,9 +1404,14 @@ do
 
 							if set.Synthesize == __Synthesize__.NameCases.Pascal then
 								getName, setName = "Get" .. uname, "Set" .. uname
+								if prop.Type == Boolean or prop.Type == BooleanNil then getName = "Is" .. uname end
 							elseif set.Synthesize == __Synthesize__.NameCases.Camel then
 								getName, setName = "get" .. uname, "set" .. uname
+								if prop.Type == Boolean or prop.Type == BooleanNil then getName = "is" .. uname end
 							end
+
+							if set.SynthesizeGet then getName = set.SynthesizeGet end
+							if set.SynthesizeSet then setName = set.SynthesizeSet end
 
 							if prop.IsStatic then
 								-- Generate getMethod
@@ -1637,13 +1648,6 @@ do
 						else
 							prop.Field = field
 						end
-					end
-
-					-- Auto generate Default
-					if prop.Type and prop.Default == nil then
-						local pinfo = _NSInfo[prop.Type]
-
-						if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
 					end
 				end
 			end
@@ -7175,16 +7179,36 @@ do
 		}
 
 		------------------------------------------------------
-		-- Property
+		-- Static Property
 		------------------------------------------------------
 		doc "NameCase" [[The name case of the generate method, in one program, only need to be set once, default is Pascal case]]
 		property "NameCase" { Type = NameCases, Default = NameCases.Pascal, IsStatic = true }
+
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc "Get" [[The get method name]]
+		property "Get" { Type = String }
+
+		doc "Set" [[The set method name]]
+		property "Set" { Type = String }
 
 		------------------------------------------------------
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
 			target.Synthesize = __Synthesize__.NameCase
+			target.SynthesizeGet = self.Get
+			target.SynthesizeSet = self.Set
+		end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		__Arguments__ {}
+		function __Synthesize__(self)
+			self.Get = nil
+			self.Set = nil
 		end
 	end)
 
