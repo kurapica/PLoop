@@ -221,12 +221,12 @@ interface "Serialization" (function (_ENV)
 	--------------------------------------
 	-- Sub-NameSpace
 	--------------------------------------
-	__AttributeUsage__ { AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = false }
+	__AttributeUsage__ { AttributeTarget = AttributeTargets.Class }
 	__Doc__ [[Indicates that a class can be serialized.(struct is always serializable.)]]
 	__Unique__() __Sealed__() __Final__()
 	class "__Serializable__" { IAttribute }
 
-	__AttributeUsage__ { AttributeTarget = AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = false }
+	__AttributeUsage__ { AttributeTarget = AttributeTargets.Property + AttributeTargets.Member }
 	__Doc__ [[Indicates that a property of a serializable class should not be serialized.]]
 	__Unique__() __Sealed__() __Final__()
 	class "__NonSerialized__" { IAttribute }

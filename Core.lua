@@ -6206,8 +6206,8 @@ do
 		doc "AttributeTarget" [[The attribute target type, default AttributeTargets.All]]
 		property "AttributeTarget" { Default = AttributeTargets.All, Type = AttributeTargets }
 
-		doc "Inherited" [[Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied. Default true]]
-		property "Inherited" { Default = true, Type = Boolean }
+		doc "Inherited" [[Whether your attribute can be inherited by classes that are derived from the classes to which your attribute is applied.]]
+		property "Inherited" { Type = Boolean }
 
 		doc "AllowMultiple" [[whether multiple instances of your attribute can exist on an element. default false]]
 		property "AllowMultiple" { Type = Boolean }
@@ -6279,31 +6279,31 @@ do
 		__Sealed__:ApplyAttribute(AttributeTargets)
 
 		-- System.__Unique__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true, BeforeDefinition = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
 		ConsumePreparedAttributes(__Unique__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Unique__)
 		__Sealed__:ApplyAttribute(__Unique__)
 
 		-- System.__Flags__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Enum, RunOnce = true}
 		ConsumePreparedAttributes(__Flags__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Flags__)
 		__Sealed__:ApplyAttribute(__Flags__)
 
 		-- System.__AttributeUsage__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class}
 		ConsumePreparedAttributes(__AttributeUsage__, AttributeTargets.Class)
 		__Sealed__:ApplyAttribute(__AttributeUsage__)
 		__Final__:ApplyAttribute(__AttributeUsage__, AttributeTargets.Class)
 
 		-- System.__Sealed__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, RunOnce = true}
 		ConsumePreparedAttributes(__Sealed__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Sealed__)
 		__Sealed__:ApplyAttribute(__Sealed__)
 
 		-- System.__Final__
-		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property, Inherited = false, RunOnce = true, BeforeDefinition = true}
+		__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property, RunOnce = true, BeforeDefinition = true}
 		ConsumePreparedAttributes(__Final__, AttributeTargets.Class)
 		__Unique__:ApplyAttribute(__Final__)
 		__Sealed__:ApplyAttribute(__Final__)
@@ -6324,7 +6324,7 @@ do
 		__Final__:ApplyAttribute(EventHandler, AttributeTargets.Class)
 	end
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property + AttributeTargets.Method, Inherited = false, RunOnce = true }
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property + AttributeTargets.Method, RunOnce = true }
 	__Sealed__() __Unique__()
 	class "__Static__" (function(_ENV)
 		extend "IAttribute"
@@ -6389,7 +6389,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor, Inherited = false, RunOnce = true }
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Method + AttributeTargets.Constructor, RunOnce = true }
 	__Sealed__()
 	class "__Arguments__" (function(_ENV)
 		extend "IAttribute"
@@ -6666,6 +6666,18 @@ do
 			end
 		end
 
+		local function getUsage(method, index)
+			local overLoads = _OverLoad[method]
+
+			if overLoads then
+				index = (index or 0) + 1
+
+				local info = overLoads[index]
+
+				if info then return index, buildUsage(overLoads, info) end
+			end
+		end
+
 		local function raiseError(overLoads)
 			-- Check if this is a static method
 			if overLoads.HasSelf == nil then
@@ -6916,10 +6928,20 @@ do
 
 			return overLoads[0]
 		end
+
+		doc "GetOverLoadUsage" [[Return the usage of the target method]]
+		__Static__() function GetOverLoadUsage(ns, name)
+			if type(ns) == "function" then return getUsage, ns end
+			local info = _NSInfo[ns]
+			if info and (info.Cache or info.Method) then
+				local tar = info.Cache[name] or info.Method[name]
+				if type(tar) == "function" then return getUsage, tar end
+			end
+		end
 	end)
 
 	-- More usable attributes
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Delegate__" (function(_ENV)
 		extend "IAttribute"
@@ -6964,7 +6986,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Cache__" (function(_ENV)
 		extend "IAttribute"
@@ -6981,7 +7003,7 @@ do
 		"CUSTOM"
 	}
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__StructType__" (function(_ENV)
 		extend "IAttribute"
@@ -7032,7 +7054,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true}
 	__Sealed__()
 	class "__StructOrder__" (function(_ENV)
 		extend "IAttribute"
@@ -7074,7 +7096,7 @@ do
 	    end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__Abstract__" (function(_ENV)
 		extend "IAttribute"
@@ -7085,7 +7107,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__InitTable__" (function(_ENV)
 		extend "IAttribute"
@@ -7106,7 +7128,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Require__" (function(_ENV)
 		extend "IAttribute"
@@ -7166,7 +7188,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Synthesize__" (function(_ENV)
 		extend "IAttribute"
@@ -7212,7 +7234,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Event__" (function(_ENV)
 		extend "IAttribute"
@@ -7251,7 +7273,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Handler__" (function(_ENV)
 		extend "IAttribute"
@@ -7289,7 +7311,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Property + AttributeTargets.Member, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Property + AttributeTargets.Member, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Default__" (function(_ENV)
 		extend "IAttribute"
@@ -7348,7 +7370,7 @@ do
 		"DeepClone",
 	}
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Setter__" (function(_ENV)
 		extend "IAttribute"
@@ -7380,7 +7402,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, Inherited = false, RunOnce = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Getter__" (function(_ENV)
 		extend "IAttribute"
@@ -7412,7 +7434,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__AttributeUsage__{RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__Doc__" (function(_ENV)
 		extend "IAttribute"
@@ -7452,7 +7474,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, Inherited = false, RunOnce = true, BeforeDefinition = true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct + AttributeTargets.Enum, RunOnce = true, BeforeDefinition = true}
 	__Sealed__() __Unique__()
 	class "__NameSpace__" (function(_ENV)
 		extend "IAttribute"
