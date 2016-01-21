@@ -6929,8 +6929,8 @@ do
 			return overLoads[0]
 		end
 
-		doc "GetOverLoadUsage" [[Return the usage of the target method]]
-		__Static__() function GetOverLoadUsage(ns, name)
+		doc "GetOverloadUsage" [[Return the usage of the target method]]
+		__Static__() function GetOverloadUsage(ns, name)
 			if type(ns) == "function" then return getUsage, ns end
 			local info = _NSInfo[ns]
 			if info and (info.Cache or info.Method) then
