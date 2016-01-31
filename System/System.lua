@@ -57,3 +57,6 @@ running = coroutine.running
 status = coroutine.status
 wrap = coroutine.wrap
 yield = coroutine.yield
+
+loadstring = loadstring or load
+loadfile = loadfile or load

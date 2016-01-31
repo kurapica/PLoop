@@ -2051,7 +2051,7 @@ do
 			end
 		end
 
-		IFInfo.ExtendChild = IFInfo.ExtendChild or {}
+		IFInfo.ExtendChild = IFInfo.ExtendChild or setmetatable({}, WEAK_VALUE)
 		tinsert(IFInfo.ExtendChild, owner)
 
 		tinsert(info.ExtendInterface, IF)
@@ -2068,7 +2068,7 @@ do
 		if info.SuperClass == superCls then return end
 		if info.SuperClass then return error(("%s is inherited from %s, can't inherit another class."):format(tostring(info.Owner), tostring(info.SuperClass))) end
 
-		superInfo.ChildClass = superInfo.ChildClass or {}
+		superInfo.ChildClass = superInfo.ChildClass or setmetatable({}, WEAK_VALUE)
 		tinsert(superInfo.ChildClass, info.Owner)
 
 		info.SuperClass = superCls
@@ -4051,7 +4051,7 @@ do
 	struct "RawTable"	{ function (value) assert(type(value) == "table" and getmetatable(value) == nil, "%s must be a table without metatable.") end }
 	struct "Userdata"	{ function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
 	struct "Thread"		{ function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
-	struct "Any"		{ function (value) end }
+	struct "Any"		{ }
 	struct "Callable"	{ function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
 	struct "Class"		{ function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
 	struct "Interface"	{ function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
