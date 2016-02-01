@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/01
--- Last Update Date 2016/01/12
--- Version          r144
+-- Last Update Date 2016/02/01
+-- Version          r145
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -315,6 +315,10 @@ do
 				return self.KeyAccessor
 			end
 		end,
+		ClearKeyword = function(self)
+			self.Owner = nil
+			self.Keyword = nil
+		end,
 	}
 	local _KeyAccessor = newproxy(true)
 	getmetatable(_KeyAccessor).__call = function (self, value)
@@ -336,7 +340,7 @@ do
 			for _, info in pairs(_KeywordAccessorInfo) do if type(info) == "table" then info[key] = value end end
 		else
 			local keyAccessor = newproxy(_KeyAccessor)
-			local info = { GetKeyword = _KeywordAccessorInfo.GetKeyword, KeyAccessor = keyAccessor }
+			local info = { GetKeyword = _KeywordAccessorInfo.GetKeyword, ClearKeyword = _KeywordAccessorInfo.ClearKeyword, KeyAccessor = keyAccessor }
 			_KeywordAccessorInfo[keyAccessor] = info
 			return info
 		end
@@ -2474,10 +2478,6 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
-			-- Check keywords
-			value = _KeyWord4IFEnv:GetKeyword(self, key)
-			if value then return value end
-
 			-- Check Static Property
 			value = info.Property and info.Property[key]
 			if value and value.IsStatic then return info.Owner[key] end
@@ -2533,6 +2533,7 @@ do
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
+			_KeyWord4IFEnv:ClearKeyword()
 			pcall(setmetatable, self, _MetaIFEnv)
 			RefreshCache(owner)
 
@@ -2540,8 +2541,6 @@ do
 
 			return owner
 		end
-
-		_MetaIFEnv.__call = _MetaIFDefEnv.__call
 	end
 
 	------------------------------------
@@ -2601,6 +2600,7 @@ do
 				setfenv(definition, interfaceEnv)
 				definition(interfaceEnv)
 
+				_KeyWord4IFEnv:ClearKeyword()
 				pcall(setmetatable, interfaceEnv, _MetaIFEnv)
 				RefreshCache(IF)
 				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(IF, AttributeTargets.Interface) end
@@ -2628,6 +2628,7 @@ do
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
+			_KeyWord4IFEnv:ClearKeyword()
 			setmetatable(env, _MetaIFEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
@@ -2844,10 +2845,6 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
-			-- Check keywords
-			value = _KeyWord4ClsEnv:GetKeyword(self, key)
-			if value then return value end
-
 			-- Check Static Property
 			value = info.Property and info.Property[key]
 			if value and value.IsStatic then return info.Owner[key] end
@@ -2902,6 +2899,7 @@ do
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
+			_KeyWord4ClsEnv:ClearKeyword()
 			pcall(setmetatable, self, _MetaClsEnv)
 			RefreshCache(owner)
 			local info = _NSInfo[owner]
@@ -2912,8 +2910,6 @@ do
 
 			return owner
 		end
-
-		_MetaClsEnv.__call = _MetaClsDefEnv.__call
 	end
 
 	function Class_Index(self, key)
@@ -3479,6 +3475,7 @@ do
 				setfenv(definition, classEnv)
 				definition(classEnv)
 
+				_KeyWord4ClsEnv:ClearKeyword()
 				pcall(setmetatable, classEnv, _MetaClsEnv)
 				RefreshCache(cls)
 				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(cls, AttributeTargets.Class) end
@@ -3508,6 +3505,7 @@ do
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
+			_KeyWord4ClsEnv:ClearKeyword()
 			setmetatable(env, _MetaClsEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshCache(info.Owner)
@@ -3693,10 +3691,6 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
-			-- Check keywords
-			value = _KeyWord4StrtEnv:GetKeyword(self, key)
-			if value then return value end
-
 			value = __index(self, info, key)
 			if value ~= nil then rawset(self, key, value) return value end
 		end
@@ -3741,6 +3735,7 @@ do
 			local owner = self[OWNER_FIELD]
 
 			setfenv(2, self[BASE_ENV_FIELD])
+			_KeyWord4StrtEnv:ClearKeyword()
 			pcall(setmetatable, self, _MetaStrtEnv)
 			RefreshStruct(owner)
 
@@ -3748,8 +3743,6 @@ do
 
 			return owner
 		end
-
-		_MetaStrtEnv.__call = _MetaStrtDefEnv.__call
 	end
 
 	-- Some struct object may ref to each others, that would crash the validation
@@ -3959,6 +3952,7 @@ do
 				setfenv(definition, strtEnv)
 				definition(strtEnv)
 
+				_KeyWord4StrtEnv:ClearKeyword()
 				pcall(setmetatable, strtEnv, _MetaStrtEnv)
 				RefreshStruct(strt)
 				if ATTRIBUTE_INSTALLED then ApplyRestAttribute(strt, AttributeTargets.Struct) end
@@ -3985,6 +3979,7 @@ do
 		local info = _NSInfo[env[OWNER_FIELD]]
 
 		if info.Name == name or info.Owner == name then
+			_KeyWord4StrtEnv:ClearKeyword()
 			setmetatable(env, _MetaStrtEnv)
 			setfenv(stack, env[BASE_ENV_FIELD])
 			RefreshStruct(info.Owner)
