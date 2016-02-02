@@ -276,8 +276,8 @@ do
 			cache[obj2] = true
 		end
 
+		if IsNameSpace(obj1) then return false end
 		local cls = getmetatable(obj1)
-		if cls == TYPE_NAMESPACE then return false end
 
 		local info = cls and _NSInfo[cls]
 		if info then
@@ -389,21 +389,15 @@ end
 -- NameSpace & ClassAlias
 ------------------------------------------------------
 do
-	_NameSpace = newproxy(true)
-	_ClassAlias = newproxy(true)
+	PROTYPE_NAMESPACE = newproxy(true)
+	PROTYPE_CLASSALIAS = newproxy(true)
 
-	_NSInfo = setmetatable({}, {
+	_NSInfo = setmetatable({ [PROTYPE_NAMESPACE] = { Owner = PROTYPE_NAMESPACE } }, {
 		__index = function(self, key)
 			if type(key) == "string" then
-				key = GetNameSpace(GetDefaultNameSpace(), key)
-				if not key then return end
-				local ret = rawget(self, key)
-				if ret then return ret end
+				key = GetNameSpace(PROTYPE_NAMESPACE, key)
+				return key and rawget(self, key)
 			end
-			if not IsNameSpace(key) then return end
-			local ret = { Owner = key }
-			self[key] = ret
-			return ret
 		end,
 		__mode = "k",
 	})
@@ -411,7 +405,7 @@ do
 	_AliasMap = setmetatable({}, WEAK_ALL)
 
 	-- metatable for namespaces
-	_MetaNS = getmetatable(_NameSpace)
+	_MetaNS = getmetatable(PROTYPE_NAMESPACE)
 	do
 		_MetaNS.__call = function(self, ...)
 			local info = _NSInfo[self]
@@ -656,12 +650,12 @@ do
 	end
 
 	-- metatable for super alias
-	_MetaSA = getmetatable(_ClassAlias)
+	_MetaSA = getmetatable(PROTYPE_CLASSALIAS)
 	do
-		_MetaSA.__call = function(self, ...)
+		_MetaSA.__call = function(self, obj, ...)
 			-- Init the class object
 			local info = _AliasMap[self]
-			if IsChildClass(info.Owner, getmetatable(...)) then return Class1Obj(info, ...) end
+			if IsChildClass(info.Owner, getmetatable(obj)) then return Class1Obj(info, obj, ...) end
 		end
 
 		_MetaSA.__index = function(self, key)
@@ -686,14 +680,14 @@ do
 
 	-- BuildClassAlias
 	function BuildClassAlias(info)
-		local value = newproxy(_ClassAlias)
+		local value = newproxy(PROTYPE_CLASSALIAS)
 		info.ClassAlias = value
 		_AliasMap[value] = info
 		return value
 	end
 
 	-- IsNameSpace
-	function IsNameSpace(ns) return getmetatable(ns) == TYPE_NAMESPACE end
+	function IsNameSpace(ns) return rawget(_NSInfo, ns) and true or false end
 
 	-- BuildNameSpace
 	function BuildNameSpace(ns, namelist)
@@ -705,7 +699,7 @@ do
 
 		for name in namelist:gmatch("[_%w]+") do
 			if not info then
-				cls = newproxy(_NameSpace)
+				cls = newproxy(PROTYPE_NAMESPACE)
 			elseif info.Type == TYPE_ENUM then
 				return error(("The %s is an enumeration, can't define sub-namespace in it."):format(tostring(info.Owner)))
 			else
@@ -717,19 +711,21 @@ do
 						return error(("The [%s] %s - %s is defined, can't be used as namespace."):format(info.Type, tostring(info.Owner), name))
 					end
 
-					scls = newproxy(_NameSpace)
+					scls = newproxy(PROTYPE_NAMESPACE)
 					info.SubNS = info.SubNS or {}
 					info.SubNS[name] = scls
 
-					if cls == _NameSpace then _G[name] = _G[name] or scls end
+					if cls == PROTYPE_NAMESPACE and _G[name] == nil then _G[name] = scls end
 				end
 
 				cls = scls
 			end
 
 			info = _NSInfo[cls]
-			info.Name = info.Name or name
-			if not info.NameSpace then info.NameSpace = parent end
+			if not info then
+				info = { Owner = cls, Name = name, NameSpace = parent }
+				_NSInfo[cls] = info
+			end
 			parent = cls
 		end
 
@@ -757,14 +753,11 @@ do
 		return cls
 	end
 
-	-- GetDefaultNameSpace
-	function GetDefaultNameSpace() return _NameSpace end
-
 	-- SetNameSpace
 	function SetNameSpace4Env(env, name)
 		if type(env) ~= "table" then return end
 
-		local ns = type(name) == "string" and BuildNameSpace(GetDefaultNameSpace(), name) or IsNameSpace(name) and name or nil
+		local ns = type(name) == "string" and BuildNameSpace(PROTYPE_NAMESPACE, name) or IsNameSpace(name) and name or nil
 		rawset(env, NAMESPACE_FIELD, ns)
 
 		return ns
@@ -794,7 +787,7 @@ do
 	end
 
 	function GetDefineNS(env, name, ty)
-		if getmetatable(name) == TYPE_NAMESPACE then
+		if IsNameSpace(name) then
 			return name
 		elseif type(name) == "table" or type(name) == "function" then
 			-- Anonymous
@@ -1022,7 +1015,7 @@ do
 	function GetDocument(owner, name, targetType)
 		if not DOCUMENT_ENABLED then return end
 
-		if type(owner) == "string" then owner = GetNameSpace(GetDefaultNameSpace(), owner) end
+		if type(owner) == "string" then owner = GetNameSpace(PROTYPE_NAMESPACE, owner) end
 
 		local info = _NSInfo[owner]
 		if not info then return end
@@ -1667,9 +1660,7 @@ do
 		if info.Type == TYPE_CLASS then
 			local isSimpleClass = true
 
-			if info.Constructor or info.Property then
-				isSimpleClass = false
-			elseif info.SuperClass and not _NSInfo[info.SuperClass].IsSimpleClass then
+			if info.Constructor or info.Property or (info.SuperClass and not _NSInfo[info.SuperClass].IsSimpleClass) then
 				isSimpleClass = false
 			elseif info.ExtendInterface then
 				for _, IF in ipairs(info.ExtendInterface) do
@@ -1741,7 +1732,7 @@ do
 
 			if ele and ele.Predefined then
 				for k, v in pairs(ele.Predefined) do
-					if k:lower() == "type" and getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
+					if k:lower() == "type" and IsNameSpace(v) and _NSInfo[v].Type then
 						ele.Type = v
 						break
 					end
@@ -1755,7 +1746,7 @@ do
 						k = k:lower()
 
 						if k == "type" then
-							if getmetatable(v) == TYPE_NAMESPACE and _NSInfo[v].Type then
+							if IsNameSpace(v) and _NSInfo[v].Type then
 								mem.Type = v
 							end
 						elseif k == "default" then
@@ -2133,7 +2124,7 @@ do
 		local memInfo = { Name = key }
 
 		-- Validate the value
-		if getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then value = { Type = value } end
+		if IsNameSpace(value) and _NSInfo[value].Type then value = { Type = value } end
 
 		if type(value) ~= "table" then return error([[Usage: member "Name" { -- Field Definition }]]) end
 
@@ -2175,7 +2166,7 @@ do
 
 		-- Save feature
 		if tonumber(key) then
-			if getmetatable(value) == TYPE_NAMESPACE then
+			if IsNameSpace(value) then
 				local vType = _NSInfo[value].Type
 
 				if info.Type == TYPE_STRUCT then
@@ -2212,7 +2203,7 @@ do
 		elseif type(key) == "string" then
 			local vType = type(value)
 
-			if getmetatable(value) == TYPE_NAMESPACE then
+			if IsNameSpace(value) then
 				if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
 					return SaveProperty(info, key, { Type = value })
 				elseif info.Type == TYPE_STRUCT then
@@ -2248,7 +2239,7 @@ do
 		local ns
 
 		if type(name) == "string" then
-			ns = GetNameSpace(GetDefaultNameSpace(), name)
+			ns = GetNameSpace(PROTYPE_NAMESPACE, name)
 		elseif IsNameSpace(name) then
 			ns = name
 		end
@@ -2455,7 +2446,7 @@ do
 			end
 
 			-- Check base namespace
-			value = GetNameSpace(GetDefaultNameSpace(), key)
+			value = GetNameSpace(PROTYPE_NAMESPACE, key)
 			if value then return value end
 
 			-- Check method, so definition environment can use existed method
@@ -2816,7 +2807,7 @@ do
 			end
 
 			-- Check base namespace
-			value = GetNameSpace(GetDefaultNameSpace(), key)
+			value = GetNameSpace(PROTYPE_NAMESPACE, key)
 			if value then return value end
 
 			-- Check method, so definition environment can use existed method
@@ -3673,7 +3664,7 @@ do
 			end
 
 			-- Check base namespace
-			value = GetNameSpace(GetDefaultNameSpace(), key)
+			value = GetNameSpace(PROTYPE_NAMESPACE, key)
 			if value then return value end
 
 			-- Check Method
@@ -3720,7 +3711,7 @@ do
 				return
 			end
 
-			if (type(key) == "string" or tonumber(key)) and getmetatable(value) == TYPE_NAMESPACE and _NSInfo[value].Type then
+			if (type(key) == "string" or tonumber(key)) and IsNameSpace(value) and _NSInfo[value].Type then
 				local ok, msg = pcall(SaveStructMember, info, key, value)
 				if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
 				return
@@ -4106,7 +4097,7 @@ do
 			<usage>ns = System.Reflector.GetNameSpaceForName("System")</usage>
 		]]
 		function GetNameSpaceForName(name)
-			return GetNameSpace(GetDefaultNameSpace(), name)
+			return GetNameSpace(PROTYPE_NAMESPACE, name)
 		end
 
 		doc "GetUpperNameSpace" [[
@@ -4192,7 +4183,7 @@ do
 			<return type="boolean">true if the object is a NameSpace</return>
 			<usage>System.Reflector.IsNameSpace(System.Object)</usage>
 		]]
-		function IsNameSpace(ns) return _NSInfo[ns] and true or false end
+		IsNameSpace = IsNameSpace
 
 		doc "IsClass" [[
 			<desc>Check if the namespace is a class</desc>
@@ -5826,7 +5817,7 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function IsNameSpaceAttributeDefined(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			return target and IsDefined(target, cls) or false
 		end
 
@@ -5837,7 +5828,7 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function IsClassAttributeDefined(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			return Reflector.IsClass(target) and IsDefined(target, cls)
 		end
 
@@ -5848,7 +5839,7 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function IsEnumAttributeDefined(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			return Reflector.IsEnum(target) and IsDefined(target, cls)
 		end
 
@@ -5859,7 +5850,7 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function IsInterfaceAttributeDefined(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			return Reflector.IsInterface(target) and IsDefined(target, cls)
 		end
 
@@ -5870,7 +5861,7 @@ do
 			<return type="boolean">true if the target contains attribute with the type</return>
 		]]
 		function IsStructAttributeDefined(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			return Reflector.IsStruct(target) and IsDefined(target, cls)
 		end
 
@@ -5970,7 +5961,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function GetNameSpaceAttribute(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			if target then return GetCustomAttribute(target, cls) end
 		end
 
@@ -5981,7 +5972,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function GetClassAttribute(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			if target and Reflector.IsClass(target) then return GetCustomAttribute(target, cls) end
 		end
 
@@ -5992,7 +5983,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function GetEnumAttribute(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			if target and Reflector.IsEnum(target) then return GetCustomAttribute(target, cls) end
 		end
 
@@ -6003,7 +5994,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function GetInterfaceAttribute(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			if target and Reflector.IsInterface(target) then return GetCustomAttribute(target, cls) end
 		end
 
@@ -6014,7 +6005,7 @@ do
 			<return>the attribute objects</return>
 		]]
 		function GetStructAttribute(cls, target)
-			if type(target) == "string" then target = GetNameSpace(GetDefaultNameSpace(), target) end
+			if type(target) == "string" then target = GetNameSpace(PROTYPE_NAMESPACE, target) end
 			if target and Reflector.IsStruct(target) then return GetCustomAttribute(target, cls) end
 		end
 
@@ -7169,7 +7160,7 @@ do
 
 		__Arguments__{ String }
 		function __Require__(self, value)
-			value = GetNameSpace(GetDefaultNameSpace(), value)
+			value = GetNameSpace(PROTYPE_NAMESPACE, value)
 
 			local IFInfo = rawget(_NSInfo, value)
 
@@ -7484,10 +7475,10 @@ do
 		-- Constructor
 		------------------------------------------------------
 		function __NameSpace__(self, ns)
-			if getmetatable(ns) == TYPE_NAMESPACE then
+			if IsNameSpace(ns) then
 				PrepareNameSpace(ns)
 			elseif type(ns) == "string" then
-				PrepareNameSpace(BuildNameSpace(GetDefaultNameSpace(), ns))
+				PrepareNameSpace(BuildNameSpace(PROTYPE_NAMESPACE, ns))
 			elseif ns == nil or ns == false then
 				PrepareNameSpace(false)
 			else
