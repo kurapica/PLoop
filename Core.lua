@@ -34,9 +34,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
--- Create Date      2011/02/01
+-- Create Date      2011/02/03
 -- Last Update Date 2016/02/01
--- Version          r145
+-- Version          r146
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -558,7 +558,7 @@ do
 				local oper = info.Property and info.Property[key]
 
 				if oper and oper.IsStatic then
-					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
+					if oper.Set == false then error(("%s can't be set."):format(key), 2) end
 
 					-- Property
 					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
@@ -611,7 +611,7 @@ do
 
 							return operTar and operTar(self, value, old, key)
 						else
-							error(("%s can't be overwrited."):format(key), 2)
+							error(("%s can't be set."):format(key), 2)
 						end
 					end
 				else
@@ -1778,6 +1778,28 @@ end
 -- Feature Definition
 --------------------------------------------------
 do
+	function IsPropertyReadable(ns, name)
+		local info = _NSInfo[ns]
+
+		if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
+			local prop = info.Cache[name]
+			if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
+			prop = info.Property and info.Property[name]
+			if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
+		end
+	end
+
+	function IsPropertyWritable(ns, name)
+		local info = _NSInfo[ns]
+
+		if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
+			local prop = info.Cache[name]
+			if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Set or prop.SetMethod or prop.Field) and true or false end
+			prop = info.Property and info.Property[name]
+			if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
+		end
+	end
+
 	function IsFinalFeature(ns, name, isSuper)
 		ns = _NSInfo[ns]
 
@@ -3037,7 +3059,7 @@ do
 				end
 			else
 				-- Property
-				if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
+				if oper.Set == false then error(("%s can't be set."):format(key), 2) end
 				if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
 				if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -3087,7 +3109,7 @@ do
 
 						return
 					else
-						error(("%s can't be overwrited."):format(key), 2)
+						error(("%s can't be set."):format(key), 2)
 					end
 				end
 			end
@@ -3234,7 +3256,7 @@ do
 					end
 				else
 					-- Property
-					if oper.Set == false then error(("%s can't be overwrited."):format(key), 2) end
+					if oper.Set == false then error(("%s can't be set."):format(key), 2) end
 					if oper.Type then value = Validate4Type(oper.Type, value, key, key, 3) end
 					if oper.SetClone then value = CloneObj(value, oper.SetDeepClone) end
 
@@ -3284,7 +3306,7 @@ do
 
 							return
 						else
-							error(("%s can't be overwrited."):format(key), 2)
+							error(("%s can't be set."):format(key), 2)
 						end
 					end
 				end
@@ -3321,7 +3343,7 @@ do
 
 							if not (iprop and type(iprop) == "table" and getmetatable(iprop) == nil) then
 								error(("The %s lack property declaration for [%s] %s."):format(tostring(info.Owner), tostring(IF), name), stack)
-							elseif prop.Type and iprop.Type ~= prop.Type then
+							elseif (prop.Type and iprop.Type ~= prop.Type) or (IsPropertyReadable(IF, name) and not IsPropertyReadable(info.Owner, name)) or (IsPropertyWritable(IF, name) and not IsPropertyWritable(info.Owner, name)) then
 								if not iprop.Type then
 									iprop.Type = prop.Type
 									if iprop.Default ~= nil then
@@ -3393,10 +3415,32 @@ do
 		-- Create new object
 		local obj
 
-		if info.IsSimpleClass and select('#', ...) == 1 and type((...)) == "table" and getmetatable((...)) == nil then
+		if select('#', ...) == 1 then
 			-- Save memory cost for simple class
-			obj = setmetatable((...), info.MetaTable)
-		else
+			local init = ...
+			if type(init) == "table" and getmetatable(init) == nil then
+				if info.IsSimpleClass then
+					obj = setmetatable(init, info.MetaTable)
+				elseif info.AsSimpleClass then
+					local noConflict = true
+					for name, set in pairs(info.Cache) do
+						if type(set) == "table" then
+							-- Property | Event
+							if init[name] ~= nil then noConflict = false break end
+						else
+							-- Method
+							if init[name] ~= nil and type(init[name]) ~= "function" then noConflict = false break end
+						end
+					end
+					if noConflict then
+						obj = setmetatable(init, info.MetaTable)
+
+						Class1Obj(info, obj)
+					end
+				end
+			end
+		end
+		if not obj then
 			obj = setmetatable({}, info.MetaTable)
 
 			Class1Obj(info, obj, ...)
@@ -4668,6 +4712,18 @@ do
 			end
 		end
 
+		doc "HasMetaMethod" [[
+			<desc>Whether the class has the meta-method</desc>
+			<param name="class">the query class</param>
+			<param name="meta-method">the result table</param>
+			<return type="boolean">true if the class has the meta-method</return>
+			<usage>print(System.Reflector.HasMetaMethod(System.Object, "__call")</usage>
+		]]
+		function HasMetaMethod(ns, name)
+			local info = _NSInfo[ns]
+			return info and info.MetaTable and info.MetaTable[_KeyMeta[name]] and true or false
+		end
+
 		doc "GetPropertyType" [[
 			<desc>Get the property type of the property</desc>
 			<param name="owner" type="class|interface">the property's owner</param>
@@ -4708,16 +4764,7 @@ do
 			<return type="boolean">true if the property is readable</return>
 			<usage>System.Reflector.IsPropertyReadable(System.Object, "Name")</usage>
 		]]
-		function IsPropertyReadable(ns, name)
-			local info = _NSInfo[ns]
-
-			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
-				local prop = info.Cache[name]
-				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Get or prop.GetMethod or prop.Field or prop.Default ~= nil) and true or false end
-				prop = info.Property and info.Property[name]
-				if prop and prop.IsStatic then return (prop.Get or prop.GetMethod or prop.Default ~= nil) and true or false end
-			end
-		end
+		IsPropertyReadable = IsPropertyReadable
 
 		doc "IsPropertyWritable" [[
 			<desc>whether the property is writable</desc>
@@ -4726,16 +4773,7 @@ do
 			<return type="boolean">true if the property is writable</return>
 			<usage>System.Reflector.IsPropertyWritable(System.Object, "Name")</usage>
 		]]
-		function IsPropertyWritable(ns, name)
-			local info = _NSInfo[ns]
-
-			if info and (info.Type == TYPE_INTERFACE or info.Type == TYPE_CLASS) then
-				local prop = info.Cache[name]
-				if prop then return type(prop) == "table" and getmetatable(prop) == nil and (prop.Set or prop.SetMethod or prop.Field) and true or false end
-				prop = info.Property and info.Property[name]
-				if prop and prop.IsStatic then return (prop.Set or prop.SetMethod) and true or false end
-			end
-		end
+		IsPropertyWritable = IsPropertyWritable
 
 		doc "IsRequiredMethod" [[
 			<desc>Whether the method is required to be overwrited</desc>
@@ -6556,7 +6594,7 @@ do
 				overLoads.HasSelf = true
 				if overLoads.TargetType == AttributeTargets.Method then
 					if Reflector.IsInterface(overLoads.Owner) and Reflector.IsFinal(overLoads.Owner) then overLoads.HasSelf = false end
-					if Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+					if overLoads.Name == "__exist" or Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
 				end
 			end
 
@@ -6670,7 +6708,7 @@ do
 				overLoads.HasSelf = true
 				if overLoads.TargetType == AttributeTargets.Method then
 					if Reflector.IsInterface(overLoads.Owner) and Reflector.IsFinal(overLoads.Owner) then overLoads.HasSelf = false end
-					if Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+					if overLoads.Name == "__exist" or Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
 				end
 			end
 
@@ -6713,7 +6751,7 @@ do
 				overLoads.HasSelf = true
 				if overLoads.TargetType == AttributeTargets.Method then
 					if Reflector.IsInterface(overLoads.Owner) and Reflector.IsFinal(overLoads.Owner) then overLoads.HasSelf = false end
-					if Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+					if overLoads.Name == "__exist" or Reflector.IsStaticMethod(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
 				end
 			end
 
@@ -7485,6 +7523,25 @@ do
 				error([[Usage: __NameSpace__(name|nil|false)]], 2)
 			end
 		end
+	end)
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+	__Sealed__() __Unique__()
+	class "__SimpleClass__" (function(_ENV)
+		extend "IAttribute"
+		doc "__SimpleClass__" [[
+			Mark the class as a simple class, if the class is a real simple class, the init-table would be converted as the object.
+			If the class is not a simple class, the system would check the init-table's key-value pairs:
+				i.   The table don't have key equals the class's property name.
+				ii.  The table don't have key equals the class's event name.
+				iii. The table don't have key equals the class's method name, or the value is a function.
+			If the init-table follow the three rules, it would be converted as the class's object directly.
+		]]
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self, target) _NSInfo[target].AsSimpleClass = true end
 	end)
 end
 

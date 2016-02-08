@@ -167,11 +167,15 @@ interface "Threading" (function(_ENV)
 			<return name="..."> any return values from the thread</return>
 		]]
 		function Resume(self, ...)
-			if running() ~= _MainThread then
+			if self.Thread then
+				if running() == self.Thread then
+					return ...
+				else
+					return chkValue( self, resume(self.Thread, ...) )
+				end
+			elseif running() ~= _MainThread then
 				self.Thread = running()
 				return ...
-			elseif self.Thread then
-				return chkValue( self, resume(self.Thread, ...) )
 			end
 		end
 

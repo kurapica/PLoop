@@ -1,3 +1,9 @@
+2016/02/08
+    System.Collections is added to provide the basic mechanism for collections, System.Expression.Lambda is added to support short function definition.
+
+2016/02/03
+    __SimpleClass__ is added, to mark a class as a simple class, the system would try to use the init-table as the object unless there is conflict between the init-table and the class.
+
 2016/01/20
     __Synthesize__ modify, if the property's type is System.Boolean, then Is(is) would be used for get method, you can apply __Synthesize__{ Get = "getName", Set="setName" } to apply the generated method's name directly.
 

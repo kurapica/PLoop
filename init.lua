@@ -3,6 +3,7 @@ require "PLoop.Core"
 
 -- System
 require "PLoop.System.System"
+require "PLoop.System.Expression"
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
 require "PLoop.System.Recycle"
@@ -33,3 +34,7 @@ require "PLoop.System.IO.Resource"
 
 -- System.IO.Resource
 require "PLoop.System.IO.Resource.LuaLoader"
+
+-- System.Collections.ListStreamWorker
+require "PLoop.System.Collections.ListStreamWorker"
+require "PLoop.System.Collections.DictionaryStreamWorker"
