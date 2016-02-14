@@ -9,6 +9,9 @@ namespace "System"
 __Final__() __Sealed__()
 interface "Expression" (function (_ENV)
 
+	-----------------------------------
+	-- Lambda & new Callable
+	-----------------------------------
 	-- A simple lambda generator
 	_LambdaCache = {}
 
@@ -16,22 +19,35 @@ interface "Expression" (function (_ENV)
 	__Sealed__()
 	struct "Lambda" {
 		function (value)
-			assert(type(value) == "string", "%s must be a string like 'x,y=>x+y'")
+			assert(type(value) == "string" and value:find("=>"), "%s must be a string like 'x,y=>x+y'")
 			local func = _LambdaCache[value]
 			if not func then
 				local param, body = value:match("^(.-)=>(.+)$")
-				assert(param and body, "%s must be a string like 'x=>x^2'")
 				local args
-				for arg in param:gmatch("[_%w]+") do args = (args and args .. "," or "") .. arg end
-				if not body:find(";") and not body:find("return") then body = "return " .. body end
+				if param then for arg in param:gmatch("[_%w]+") do args = (args and args .. "," or "") .. arg end end
 				if args then
-					func = loadstring(("local %s = ... %s"):format(args, body))
+					func = loadstring(("local %s = ... return %s"):format(args, body or ""))
+					if not func then
+						func = loadstring(("local %s = ... %s"):format(args, body or ""))
+					end
 				else
-					func = loadstring(body)
+					func = loadstring("return " .. (body or ""))
+					if not func then
+						func = loadstring(body or "")
+					end
 				end
 			end
 			assert(func, "%s must be a string like 'x,y=>x+y'")
 			return func
+		end
+	}
+
+	__Doc__[[The value must be callable or a lambda expression]]
+	__Sealed__()
+	struct "Callable" {
+		function (value)
+			if type(value) == "string" then return Lambda(value) end
+			assert(Reflector.IsCallable(value), "%s isn't callable.")
 		end
 	}
 end)

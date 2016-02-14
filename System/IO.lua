@@ -161,7 +161,7 @@ interface "IO" (function (_ENV)
 		if ct then
 			OS_TYPE = OSType.Windows
 		else
-			f = popen("uname", "r")
+			f = popen("export PATH=/usr/bin\nuname", "r")
 			ct = f:read("*all"):match("^%w+")
 			f:close()
 			OS_TYPE = ct == "Darwin" and OSType.MacOS

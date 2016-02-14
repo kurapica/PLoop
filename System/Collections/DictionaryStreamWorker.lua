@@ -22,12 +22,12 @@ class "DictionaryStreamWorker" (function (_ENV)
 	-- Method
 	---------------------------
 	function GetIterator(self)
-		local targetList = self.TargetList
+		local targetDict = self.TargetDict
 		local map = self.MapAction
 		local filter = self.FilterAction
 
 		-- Clear self and put self into IdleWorkers
-		self.TargetList = nil
+		self.TargetDict = nil
 		self.MapAction = nil
 		self.FilterAction = nil
 
@@ -54,25 +54,19 @@ class "DictionaryStreamWorker" (function (_ENV)
 		end
 
 		-- Generate the for iterator
-		return Threading.Iterator(function() for key, value in targetList:GetIterator() do dowork(key, value) end end)
+		return Threading.Iterator(function() for key, value in targetDict:GetIterator() do dowork(key, value) end end)
 	end
 
 	---------------------------
 	-- Queue Method
 	---------------------------
 	__Doc__[[Map the items to other type datas]]
-	__Arguments__{ Function }
+	__Arguments__{ Expression.Callable }
 	function Map(self, func) self.MapAction = func return self end
 
-	__Arguments__{ Lambda }
-	function Map(self, lambda) self.MapAction = lambda return self end
-
 	__Doc__[[Used to filter the items with a check function]]
-	__Arguments__{ Function }
+	__Arguments__{ Expression.Callable }
 	function Filter(self, func) self.FilterAction = func return self end
-
-	__Arguments__{ Lambda }
-	function Filter(self, lambda) self.FilterAction = lambda return self end
 
 	---------------------------
 	-- Final Method
@@ -103,24 +97,29 @@ class "DictionaryStreamWorker" (function (_ENV)
 		end) )
 	end
 
-	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Function }
-	function Each(self, func) for key, value in self:GetIterator() do func(key, value) end end
+	__Doc__[[Combine the key-value pairs to get a result]]
+	__Arguments__{ Expression.Callable, Argument(Any, true) }
+	function Reduce(self, func, init)
+		local iter = self:GetIterator()
+		for key, value in iter do init = func(key, value, init) end
+		return init
+	end
 
-	__Arguments__{ Lambda }
-	function Each(self, lambda) for key, value in self:GetIterator() do lambda(key, value) end end
+	__Doc__[[Call the function for each element or set property's value for each element]]
+	__Arguments__{ Expression.Callable }
+	function Each(self, func) for key, value in self:GetIterator() do func(key, value) end end
 
 	----------------------------
 	-- Constructor
 	----------------------------
-	__Arguments__{ IDictionary } function DictionaryStreamWorker(self, list) self.TargetList = list end
+	__Arguments__{ IDictionary } function DictionaryStreamWorker(self, dict) self.TargetDict = dict end
 
 	----------------------------
 	-- Meta-method
 	----------------------------
-	__Arguments__{ IDictionary } function __exist(self, list)
+	__Arguments__{ IDictionary } function __exist(dict)
 		local worker = tremove(IdleWorkers)
-		if worker then worker.TargetList = list end
+		if worker then worker.TargetDict = dict end
 		return worker
 	end
 
@@ -135,10 +134,12 @@ end)
 -- Queue Method
 ---------------------------
 __Doc__[[Map the items to other type datas]]
-function IDictionary:Map(...) return DictionaryStreamWorker(self):Map(...) end
+__Arguments__{ Expression.Callable }
+function IDictionary:Map(func) return DictionaryStreamWorker(self):Map(func) end
 
 __Doc__[[Used to filter the items with a check function]]
-function IDictionary:Filter(...) return DictionaryStreamWorker(self):Filter(...) end
+__Arguments__{ Expression.Callable }
+function IDictionary:Filter(func) return DictionaryStreamWorker(self):Filter(func) end
 
 ---------------------------
 -- Final Method
@@ -149,5 +150,10 @@ function IDictionary:Keys() return DictionaryStreamWorker(self):Keys() end
 __Doc__[[Get the ListStreamWorker of values]]
 function IDictionary:Values() return DictionaryStreamWorker(self):Values() end
 
+__Doc__[[Combine the key-value pairs to get a result]]
+__Arguments__{ Expression.Callable, Argument(Any, true) }
+function IDictionary:Reduce(func, init) return DictionaryStreamWorker(self):Reduce(func, init) end
+
 __Doc__[[Call the function for each element or set property's value for each element]]
-function IDictionary:Each(...) return DictionaryStreamWorker(self):Each(...) end
+__Arguments__{ Expression.Callable }
+function IDictionary:Each(func) return DictionaryStreamWorker(self):Each(func) end

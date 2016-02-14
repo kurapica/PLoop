@@ -26,11 +26,9 @@ __Abstract__() class "UTF8Encoding" (function(_ENV)
 	property "EncodingName" { Set = false, Default = "UTF-8" }
 
 	__Doc__[[Decode to the unicode code points]]
-	__Static__()
 	function Decode(str, startp) return decode, str, startp or 1 end
 
 	__Doc__[[Encode the unicode code points]]
-	__Static__()
 	function Encode(codes, arg1, arg2)
 		local ty = type(codes)
 		if ty == "number" then

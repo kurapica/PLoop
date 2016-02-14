@@ -16,11 +16,9 @@ __Abstract__() class "UTF16EncodingLE" (function(_ENV)
 	property "EncodingName" { Set = false, Default = "UTF-16LE" }
 
 	__Doc__[[Decode to the unicode code points]]
-	__Static__()
 	function Decode(str, startp) return decodeLE, str, startp or 1 end
 
 	__Doc__[[Encode the unicode code points]]
-	__Static__()
 	function Encode(codes, arg1, arg2)
 		if type(codes) == "number" then
 			return encodeLE(codes)
@@ -55,15 +53,10 @@ __Abstract__() class "UTF16EncodingBE" (function(_ENV)
 	__Static__()
 	property "EncodingName" { Set = false, Default = "UTF-16BE" }
 
-	__Doc__[[Whether the encoding is big-endian]]
-	property "IsBigEndian" { Type = Boolean, Default = true }
-
 	__Doc__[[Decode to the unicode code points]]
-	__Static__()
 	function Decode(str, startp) return decodeBE, str, startp or 1 end
 
 	__Doc__[[Encode the unicode code points]]
-	__Static__()
 	function Encode(codes, arg1, arg2)
 		if type(codes) == "number" then
 			return encodeBE(codes)

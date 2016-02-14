@@ -2,7 +2,7 @@
 -- Create Date : 2014/03/10
 -- ChangeLog   :
 
-_ENV = Module "System.Xml" "1.0.0"
+_ENV = Module "System.Xml" "0.0.1"
 
 import "System"
 

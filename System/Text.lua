@@ -11,6 +11,12 @@ __Abstract__() class "Encoding" (function(_ENV)
 	__Doc__[[The name of the encoding]]
 	__Static__()
 	property "EncodingName" { Set = false, Default = "Encoding" }
+
+	__Doc__[[Decode to the unicode code points]]
+	function Decode() end
+
+	__Doc__[[Encode the unicode code points]]
+	function Encode() end
 end)
 
 __Doc__[[Represents a writer that can write a sequential series of characters]]
