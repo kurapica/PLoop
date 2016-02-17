@@ -576,6 +576,6 @@ end
 __Doc__[[Apply default sort on the indexed list]]
 __Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:Sort(func, start, stop)
-	if start == 1 and (stop == -1 or stop == self.Count) then return table.sort(self, func) end
+	if start == 1 and (stop == -1 or stop == self.Count) then table.sort(self, func) return self end
 	return self:TimSort(func, start, stop)
 end
