@@ -8,6 +8,8 @@ _ENV = Module "System.IO.File" "1.0.0"
 
 namespace "System.IO"
 
+fopen = io.open
+
 __Final__() __Sealed__() __Abstract__()
 class "File" (function (_ENV)
 	local function formatMacTime(result)
@@ -32,4 +34,7 @@ class "File" (function (_ENV)
 	__PipeRead__ ("ls -l -T -u \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time -u \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
 	function GetLastAccessTime(result, path) return result end
+
+	__Doc__[[Whether the file is existed]]
+	function Exist(path) local f = fopen(path, "r") if f then f:close() return true end return false  end
 end)

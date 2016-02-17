@@ -96,7 +96,7 @@ class "Resource" (function (_ENV)
 					if noModifed then return _ResourcePathMap[path] end
 				end
 			end
-print("Relaod", path)
+
 			local suffix = Path.GetSuffix(path)
 			local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
 			if loader then
