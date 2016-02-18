@@ -4088,12 +4088,13 @@ do
 	struct "Any"		{ }
 
 	struct "Lambda" (function (_ENV)
-		_LambdaCache = {}
+		_LambdaCache = setmetatable({}, WEAK_VALUE)
 
 		function Lambda(value)
 			assert(type(value) == "string" and value:find("=>"), "%s must be a string like 'x,y=>x+y'")
 			local func = _LambdaCache[value]
 			if not func then
+				print("Generate lambda for " .. value)
 				local param, body = value:match("^(.-)=>(.+)$")
 				local args
 				if param then for arg in param:gmatch("[_%w]+") do args = (args and args .. "," or "") .. arg end end
@@ -4108,8 +4109,9 @@ do
 						func = loadstring(body or "")
 					end
 				end
+				assert(func, "%s must be a string like 'x,y=>x+y'")
+				_LambdaCache[value] = func
 			end
-			assert(func, "%s must be a string like 'x,y=>x+y'")
 			return func
 		end
 	end)
