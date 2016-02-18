@@ -1,3 +1,6 @@
+2016/02/19
+    System.Expression.Lambda is removed, System.Lambda added.
+
 2016/02/08
     System.Collections is added to provide the basic mechanism for collections, System.Expression.Lambda is added to support short function definition.
 

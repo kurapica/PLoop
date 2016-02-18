@@ -6,8 +6,6 @@ _ENV = Module "System.Collections" "0.1.0"
 
 namespace "System.Collections"
 
-import "System.Expression"
-
 _DefaultCompare = function(a, b) return a < b end
 
 -----------------------
@@ -90,7 +88,7 @@ class "List" (function (_ENV)
 		end
 	end
 
-	__Arguments__{ NaturalNumber, Argument(Expression.Callable) }
+	__Arguments__{ NaturalNumber, Argument(Callable) }
 	function List(self, count, initValue)
 		if initValue ~= nil then
 			if Reflector.IsCallable(initValue) then

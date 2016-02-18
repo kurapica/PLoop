@@ -3,7 +3,6 @@ require "PLoop.Core"
 
 -- System
 require "PLoop.System.System"
-require "PLoop.System.Expression"
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
 require "PLoop.System.Recycle"

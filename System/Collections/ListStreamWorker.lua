@@ -9,7 +9,6 @@ _ENV = Module "System.Collections.ListStreamWorker" "1.0.0"
 namespace "System.Collections"
 
 import "System.Threading"
-import "System.Expression"
 
 __Final__() __Sealed__()
 class "ListStreamWorker" (function (_ENV)
@@ -149,11 +148,11 @@ class "ListStreamWorker" (function (_ENV)
 	-- Queue Method
 	---------------------------
 	__Doc__[[Map the items to other type datas]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Map(self, func) self.MapAction = func return self end
 
 	__Doc__[[Used to filter the items with a check function]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Filter(self, func) self.FilterAction = func return self end
 
 	__Doc__[[Used to select items with ranged index]]
@@ -168,7 +167,7 @@ class "ListStreamWorker" (function (_ENV)
 	function ToList(self, cls) return cls(self) end
 
 	__Doc__[[Combine the items to get a result]]
-	__Arguments__{ Expression.Callable, Argument(Any, true) }
+	__Arguments__{ Callable, Argument(Any, true) }
 	function Reduce(self, func, init)
 		local iter = self:GetIterator()
 		if init == nil then init = select(2, iter()) end
@@ -177,7 +176,7 @@ class "ListStreamWorker" (function (_ENV)
 	end
 
 	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Each(self, func) for _, obj in self:GetIterator() do func(obj) end end
 
 	----------------------------
@@ -223,11 +222,11 @@ end)
 -- Queue Method
 ---------------------------
 __Doc__[[Map the items to other type datas]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IList:Map(func) return ListStreamWorker(self):Map(func) end
 
 __Doc__[[Used to filter the items with a check function]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IList:Filter(func) return ListStreamWorker(self):Filter(func) end
 
 __Doc__[[Used to select items with ranged index]]
@@ -242,9 +241,9 @@ __Arguments__{ Argument(IListClass, true) }
 function IList:ToList(cls) return ListStreamWorker(self):ToList(cls) end
 
 __Doc__[[Combine the items to get a result]]
-__Arguments__{ Expression.Callable, Argument(Any, true) }
+__Arguments__{ Callable, Argument(Any, true) }
 function IList:Reduce(func, init) return ListStreamWorker(self):Reduce(func, init) end
 
 __Doc__[[Call the function for each element or set property's value for each element]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IList:Each(func) return ListStreamWorker(self):Each(func) end

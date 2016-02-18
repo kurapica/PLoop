@@ -9,7 +9,6 @@ _ENV = Module "System.Collections.IIndexedListSorter" "1.0.0"
 namespace "System.Collections"
 
 import "System.Threading"
-import "System.Expression"
 
 local function formatParams(self, start, stop)
 	local count = self.Count or #self
@@ -342,7 +341,7 @@ end
 -- Sort for Indexed List
 ----------------------------
 __Doc__[[Apply insertion sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:InsertionSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -359,7 +358,7 @@ function IIndexedList:InsertionSort(compare, start, stop)
 end
 
 __Doc__[[Apply bubble sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:BubbleSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -395,7 +394,7 @@ function IIndexedList:BubbleSort(compare, start, stop)
 end
 
 __Doc__[[Apply selection sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:SelectionSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -410,7 +409,7 @@ function IIndexedList:SelectionSort(compare, start, stop)
 end
 
 __Doc__[[Apply comb sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:CombSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -440,7 +439,7 @@ function IIndexedList:CombSort(compare, start, stop)
 end
 
 __Doc__[[Apply merge sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:MergeSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -452,7 +451,7 @@ function IIndexedList:MergeSort(compare, start, stop)
 end
 
 __Doc__[[Apply quick sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:QuickSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -461,7 +460,7 @@ function IIndexedList:QuickSort(compare, start, stop)
 end
 
 __Doc__[[Apply heap sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:HeapSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -478,7 +477,7 @@ function IIndexedList:HeapSort(compare, start, stop)
 end
 
 __Doc__[[Apply timsort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:TimSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
@@ -574,7 +573,7 @@ function IIndexedList:TimSort(compare, start, stop)
 end
 
 __Doc__[[Apply default sort on the indexed list]]
-__Arguments__{ Argument(Expression.Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
+__Arguments__{ Argument(Callable, true, "x,y=>x<y"), Argument(Integer, true, 1), Argument(Integer, true, -1) }
 function IIndexedList:Sort(func, start, stop)
 	if start == 1 and (stop == -1 or stop == self.Count) then table.sort(self, func) return self end
 	return self:TimSort(func, start, stop)

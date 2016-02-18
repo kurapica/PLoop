@@ -9,7 +9,6 @@ _ENV = Module "System.Collections.DictionaryStreamWorker" "1.0.0"
 namespace "System.Collections"
 
 import "System.Threading"
-import "System.Expression"
 
 __Final__() __Sealed__()
 class "DictionaryStreamWorker" (function (_ENV)
@@ -61,11 +60,11 @@ class "DictionaryStreamWorker" (function (_ENV)
 	-- Queue Method
 	---------------------------
 	__Doc__[[Map the items to other type datas]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Map(self, func) self.MapAction = func return self end
 
 	__Doc__[[Used to filter the items with a check function]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Filter(self, func) self.FilterAction = func return self end
 
 	---------------------------
@@ -98,7 +97,7 @@ class "DictionaryStreamWorker" (function (_ENV)
 	end
 
 	__Doc__[[Combine the key-value pairs to get a result]]
-	__Arguments__{ Expression.Callable, Argument(Any, true) }
+	__Arguments__{ Callable, Argument(Any, true) }
 	function Reduce(self, func, init)
 		local iter = self:GetIterator()
 		for key, value in iter do init = func(key, value, init) end
@@ -106,7 +105,7 @@ class "DictionaryStreamWorker" (function (_ENV)
 	end
 
 	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Expression.Callable }
+	__Arguments__{ Callable }
 	function Each(self, func) for key, value in self:GetIterator() do func(key, value) end end
 
 	----------------------------
@@ -134,11 +133,11 @@ end)
 -- Queue Method
 ---------------------------
 __Doc__[[Map the items to other type datas]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IDictionary:Map(func) return DictionaryStreamWorker(self):Map(func) end
 
 __Doc__[[Used to filter the items with a check function]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IDictionary:Filter(func) return DictionaryStreamWorker(self):Filter(func) end
 
 ---------------------------
@@ -151,9 +150,9 @@ __Doc__[[Get the ListStreamWorker of values]]
 function IDictionary:Values() return DictionaryStreamWorker(self):Values() end
 
 __Doc__[[Combine the key-value pairs to get a result]]
-__Arguments__{ Expression.Callable, Argument(Any, true) }
+__Arguments__{ Callable, Argument(Any, true) }
 function IDictionary:Reduce(func, init) return DictionaryStreamWorker(self):Reduce(func, init) end
 
 __Doc__[[Call the function for each element or set property's value for each element]]
-__Arguments__{ Expression.Callable }
+__Arguments__{ Callable }
 function IDictionary:Each(func) return DictionaryStreamWorker(self):Each(func) end

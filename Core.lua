@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/02/01
--- Version          r146
+-- Last Update Date 2016/02/19
+-- Version          r147
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2684,6 +2684,10 @@ do
 	end
 
 	function Interface2Obj(info, init)
+		if  type(init) == "string" then
+			init = Lambda(init)
+		end
+
 		if type(init) == "function" then
 			if not info.IsOneReqMethod then error(("%s is not a one required method interface."):format(tostring(info.Owner)), 3) end
 			init = { [info.IsOneReqMethod] = init }
@@ -4082,7 +4086,41 @@ do
 	struct "Userdata"	{ function (value) if type(value) ~= "userdata" then error(("%s must be a userdata, got %s."):format("%s", type(value))) end end }
 	struct "Thread"		{ function (value) if type(value) ~= "thread" then error(("%s must be a thread, got %s."):format("%s", type(value))) end end }
 	struct "Any"		{ }
-	struct "Callable"	{ function (value) assert(Reflector.IsCallable(value), "%s isn't callable.") end }
+
+	struct "Lambda" (function (_ENV)
+		_LambdaCache = {}
+
+		function Lambda(value)
+			assert(type(value) == "string" and value:find("=>"), "%s must be a string like 'x,y=>x+y'")
+			local func = _LambdaCache[value]
+			if not func then
+				local param, body = value:match("^(.-)=>(.+)$")
+				local args
+				if param then for arg in param:gmatch("[_%w]+") do args = (args and args .. "," or "") .. arg end end
+				if args then
+					func = loadstring(("local %s = ... return %s"):format(args, body or ""))
+					if not func then
+						func = loadstring(("local %s = ... %s"):format(args, body or ""))
+					end
+				else
+					func = loadstring("return " .. (body or ""))
+					if not func then
+						func = loadstring(body or "")
+					end
+				end
+			end
+			assert(func, "%s must be a string like 'x,y=>x+y'")
+			return func
+		end
+	end)
+
+	struct "Callable"	{
+		function (value)
+			if type(value) == "string" then return Lambda(value) end
+			assert(Reflector.IsCallable(value), "%s isn't callable.")
+		end
+	}
+
 	struct "Class"		{ function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
 	struct "Interface"	{ function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
 	struct "Struct"		{ function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
