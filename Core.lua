@@ -2685,7 +2685,9 @@ do
 
 	function Interface2Obj(info, init)
 		if  type(init) == "string" then
-			init = Lambda(init)
+			local ok, ret = pcall(Lambda, init)
+			if not ok then error(ret:match("%d+:%s*(.-)$") or ret, 3) end
+			init = ret
 		end
 
 		if type(init) == "function" then
