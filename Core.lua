@@ -1676,7 +1676,7 @@ do
 
 		-- One-required method interface check
 		if info.Type == TYPE_INTERFACE then
-			local isOneReqMethod
+			local isOneReqMethod = nil
 			if info.FeatureModifier and info.Method then
 				for name, mod in pairs(info.FeatureModifier) do
 					if info.Method[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
@@ -1685,12 +1685,22 @@ do
 					end
 				end
 
-				if isOneReqMethod and info.ExtendInterface then
-					for _, IF in ipairs(info.ExtendInterface) do
-						local iInfo = _NSInfo[IF]
-						if iInfo.FeatureModifier and iInfo.Method then
-							for name, mod in pairs(iInfo.FeatureModifier) do
-								if iInfo.Method[name] and ValidateFlags(MD_REQUIRE_FEATURE, mod) then
+				if info.ExtendInterface then
+					if isOneReqMethod ~= false then
+						for _, IF in ipairs(info.ExtendInterface) do
+							local iInfo = _NSInfo[IF]
+							if isOneReqMethod then
+								if iInfo.IsOneReqMethod and iInfo.IsOneReqMethod ~= isOneReqMethod then
+									isOneReqMethod = false
+									break
+								elseif iInfo.IsOneReqMethod == false then
+									isOneReqMethod = false
+									break
+								end
+							else
+								if iInfo.IsOneReqMethod then
+									isOneReqMethod = iInfo.IsOneReqMethod
+								elseif iInfo.IsOneReqMethod == false then
 									isOneReqMethod = false
 									break
 								end
@@ -1699,7 +1709,7 @@ do
 					end
 				end
 			end
-			info.IsOneReqMethod = isOneReqMethod or nil
+			info.IsOneReqMethod = isOneReqMethod
 		end
 
 		-- Refresh branch
