@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/02/19
--- Version          r147
+-- Last Update Date 2016/02/24
+-- Version          r148
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -160,6 +160,7 @@ do
 
 	-- In lua 5.2, the loadstring is deprecated
 	loadstring = loadstring or load
+	loadfile = loadfile
 end
 
 ------------------------------------------------------
@@ -357,6 +358,7 @@ do
 		if not ValidateFlags(checkValue, targetValue) then
 			return checkValue + (targetValue or 0)
 		end
+		return targetValue
 	end
 
 	if LUA_VERSION >= 5.3 then
@@ -689,6 +691,19 @@ do
 	-- IsNameSpace
 	function IsNameSpace(ns) return rawget(_NSInfo, ns) and true or false end
 
+	-- RecordNSFeatures
+	local _newFeatures
+
+	function RecordNSFeatures()
+		_newFeatures = {}
+	end
+
+	function GetNsFeatures()
+		local ret = _newFeatures
+		_newFeatures = nil
+		return ret
+	end
+
 	-- BuildNameSpace
 	function BuildNameSpace(ns, namelist)
 		if type(namelist) ~= "string" or (ns and not IsNameSpace(ns)) then return end
@@ -730,6 +745,8 @@ do
 		end
 
 		if cls == ns then return end
+
+		if _newFeatures then _newFeatures[cls] = true end
 
 		return cls
 	end
@@ -5305,6 +5322,27 @@ do
 			local info = cls and rawget(_NSInfo, cls)
 
 			return info and info.Type == TYPE_CLASS and info.MetaTable.__call and true or false
+		end
+
+		doc "LoadLuaFile" [[
+			<desc>Load the lua file and return any features that may be created by the file</desc>
+			<param name="path">the file's path</param>
+			<return type="table">the hash table use feature types as key</return>
+		]]
+		function LoadLuaFile(path)
+			local f = assert(loadfile(path))
+
+			if f then
+				RecordNSFeatures()
+
+				local ok, msg = pcall(f)
+
+				local ret = GetNsFeatures()
+
+				assert(ok, msg)
+
+				return ret
+			end
 		end
 	end)
 end
