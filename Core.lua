@@ -322,15 +322,21 @@ do
 		end,
 	}
 	local _KeyAccessor = newproxy(true)
-	getmetatable(_KeyAccessor).__call = function (self, value)
+	getmetatable(_KeyAccessor).__call = function (self, value, value2)
 		self = _KeywordAccessorInfo[self]
 		local keyword, owner = self.Keyword, self.Owner
 		self.Keyword, self.Owner = nil, nil
 		if keyword and owner then
 			-- In 5.1, tail call for error & setfenv is not supported
-			local ok, ret = pcall(keyword, owner, value, 4)
-			if not ok then error(ret:match("%d+:%s*(.-)$") or ret, 2) end
-			return ret
+			if value2 ~= nil then
+				local ok, ret = pcall(keyword, owner, value, value2, 4)
+				if not ok then error(ret:match("%d+:%s*(.-)$") or ret, 2) end
+				return ret
+			else
+				local ok, ret = pcall(keyword, owner, value, 4)
+				if not ok then error(ret:match("%d+:%s*(.-)$") or ret, 2) end
+				return ret
+			end
 		end
 	end
 	getmetatable(_KeyAccessor).__metatable = false
@@ -548,7 +554,11 @@ do
 					return value
 				end
 			elseif iType == TYPE_ENUM then
-				return type(key) == "string" and info.Enum[strupper(key)] or error(("%s is not an enumeration value of %s."):format(tostring(key), tostring(self)), 2)
+				local val
+				if type(key) == "string" then val = info.Enum[strupper(key)] end
+				if val == nil and info.Cache[key] ~= nil then val = key end
+				if val == nil then error(("%s is not an enumeration value of %s."):format(tostring(key), tostring(self)), 2) end
+				return val
 			end
 		end
 
@@ -804,11 +814,11 @@ do
 	end
 
 	function GetDefineNS(env, name, ty)
-		if IsNameSpace(name) then
-			return name
-		elseif type(name) == "table" or type(name) == "function" then
+		if not name then
 			-- Anonymous
 			return BuildNameSpace(nil, "Anonymous" .. ty)
+		elseif IsNameSpace(name) then
+			return name
 		elseif type(name) == "string" then
 			if not name:match("^[_%w]+$") then return end
 
@@ -1805,6 +1815,127 @@ end
 -- Feature Definition
 --------------------------------------------------
 do
+	function checkTypeParams(...)
+		local cnt = select('#', ...)
+		local env, target, defintion, stack
+
+		if cnt > 0 then
+			if cnt > 4 then cnt = 4 end
+
+			stack = select(cnt, ...)
+
+			if type(stack) == "number" then
+				cnt = cnt - 1
+			else
+				stack = nil
+			end
+
+			if cnt == 1 then
+				local val = select(1, ...)
+				local ty = type(val)
+
+				if ty == "table" then
+					if getmetatable(val) == nil then
+						defintion = val
+					elseif _NSInfo[val] then
+						target = val
+					end
+				elseif ty == "string" then
+					if ty:find("^[%w_]+$") then
+						target = val
+					else
+						defintion = val
+					end
+				elseif ty == "function" then
+					defintion = val
+				elseif _NSInfo[val] then
+					target = val
+				end
+			elseif cnt == 2 then
+				local val = select(2, ...)
+				local ty = type(val)
+
+				if ty == "table" then
+					if getmetatable(val) == nil then
+						defintion = val
+					elseif _NSInfo[val] then
+						target = val
+					end
+				elseif ty == "string" then
+					if ty:find("^[%w_]+$") then
+						target = val
+					else
+						defintion = val
+					end
+				elseif ty == "function" then
+					defintion = val
+				elseif _NSInfo[val] then
+					target = val
+				end
+
+				-- Check first value
+				val = select(1, ...)
+				ty = type(val)
+
+				if target then
+					if ty == "table" then env = val end
+				elseif defintion then
+					if ty == "table" then
+						if _NSInfo[val] then
+							target = val
+						else
+							env = val
+						end
+					elseif ty == "string" then
+						if ty:find("^[%w_]+$") then
+							target = val
+						end
+					elseif _NSInfo[val] then
+						target = val
+					end
+				else
+					if ty == "table" then
+						if getmetatable(val) == nil then
+							defintion = val
+						elseif _NSInfo[val] then
+							target = val
+						end
+					elseif ty == "string" then
+						if ty:find("^[%w_]+$") then
+							target = val
+						else
+							defintion = val
+						end
+					elseif ty == "function" then
+						defintion = val
+					elseif _NSInfo[val] then
+						target = val
+					end
+				end
+			elseif cnt == 3 then
+				-- No match just check
+				env, target, defintion = ...
+				if type(env) ~= "table" then env = nil end
+				if type(target) ~= "string" and not _NSInfo[target] then target = nil end
+				if type(target) == "string" and not target:find("^[%w_]+$") then target = nil end
+				local ty = type(defintion)
+				if not (ty == "function" or ty == "table" or ty == "string") then defintion = nil end
+			end
+		end
+
+		stack = stack or 2
+
+		if type(defintion) == "string" then
+			local ret, msg = loadstring("return function(_ENV) " .. defintion .. " end")
+			if not ret then error(msg:match("%d+:%s*(.-)$") or msg, stack + 1) end
+			ret, msg = pcall(ret)
+			if not ret then error(msg:match("%d+:%s*(.-)$") or msg, stack + 1) end
+			defintion = msg
+		end
+
+		return env, target, defintion, stack
+	end
+
 	function IsPropertyReadable(ns, name)
 		local info = _NSInfo[ns]
 
@@ -2518,6 +2649,10 @@ do
 			-- Check owner
 			if key == info.Name then return info.Owner end
 
+			-- Check keywords
+			value = _KeyWord4IFEnv:GetKeyword(self, key)
+			if value then return value end
+
 			-- Check Static Property
 			value = info.Property and info.Property[key]
 			if value and value.IsStatic then return info.Owner[key] end
@@ -2586,10 +2721,10 @@ do
 	------------------------------------
 	--- Create interface in currect environment's namespace or default namespace
 	------------------------------------
-	function interface(env, name, stack)
-		stack = stack or 2
-		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(stack) or _G
+	function interface(...)
+		local env, name, definition, stack = checkTypeParams(...)
+
+		local fenv = env or getfenv(stack) or _G
 
 		local ok, IF = pcall(GetDefineNS, fenv, name, TYPE_INTERFACE)
 		if not ok then error(IF:match("%d+:%s*(.-)$") or IF, stack) end
@@ -2601,11 +2736,6 @@ do
 		elseif info.Type and info.Type ~= TYPE_INTERFACE then
 			error(("%s is existed as %s, not interface."):format(tostring(name), tostring(info.Type)), stack)
 		end
-
-		-- For Anonymous
-		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
-
-		name = info.Name
 
 		-- Check if the class is final
 		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The interface is sealed, can't be re-defined.", stack) end
@@ -2648,7 +2778,7 @@ do
 				return IF
 			else
 				-- save interface to the environment
-				rawset(fenv, name, IF)
+				if type(name) == "string" then rawset(fenv, name, IF) end
 
 				-- Set the environment to interface's environment
 				setfenv(stack, interfaceEnv)
@@ -2890,6 +3020,10 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
+
+			-- Check keywords
+			value = _KeyWord4ClsEnv:GetKeyword(self, key)
+			if value then return value end
 
 			-- Check Static Property
 			value = info.Property and info.Property[key]
@@ -3489,10 +3623,10 @@ do
 	------------------------------------
 	--- Create class in currect environment's namespace or default namespace
 	------------------------------------
-	function class(env, name, stack)
-		stack = stack or 2
-		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(stack) or _G
+	function class(...)
+		local env, name, definition, stack = checkTypeParams(...)
+
+		local fenv = env or getfenv(stack) or _G
 
 		local ok, cls = pcall(GetDefineNS, fenv, name, TYPE_CLASS)
 		if not ok then error(cls:match("%d+:%s*(.-)$") or cls, stack) end
@@ -3504,11 +3638,6 @@ do
 		elseif info.Type and info.Type ~= TYPE_CLASS then
 			error(("%s is existed as %s, not class."):format(tostring(name), tostring(info.Type)), stack)
 		end
-
-		-- For Anonymous
-		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
-
-		name = info.Name
 
 		-- Check if the class is final
 		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The class is sealed, can't be re-defined.", stack) end
@@ -3554,7 +3683,7 @@ do
 				return cls
 			else
 				-- save class to the environment
-				rawset(fenv, name, cls)
+				if type(name) == "string" then rawset(fenv, name, cls) end
 
 				setfenv(stack, classEnv)
 
@@ -3659,10 +3788,10 @@ do
 	------------------------------------
 	--- create a enumeration
 	------------------------------------
-	function enum(env, name, stack)
-		stack = stack or 2
-		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(stack) or _G
+	function enum(...)
+		local env, name, definition, stack = checkTypeParams(...)
+
+		local fenv = env or getfenv(stack) or _G
 
 		local ok, enm = pcall(GetDefineNS, fenv, name, TYPE_ENUM)
 		if not ok then error(enm:match("%d+:%s*(.-)$") or enm, stack) end
@@ -3675,11 +3804,6 @@ do
 			error(("%s is existed as %s, not enum."):format(tostring(name), tostring(info.Type)), stack)
 		end
 
-		-- For Anonymous
-		local definition = type(name) == "table" and getmetatable(name) == nil and name or nil
-
-		name = info.Name
-
 		-- Check if the enum is final
 		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The enum is sealed, can't be re-defined.", stack) end
 
@@ -3688,13 +3812,13 @@ do
 		info.Cache = nil
 		info.MaxValue = nil
 
-		if definition then
+		if type(definition) == "table" then
 			BuildEnum(info, definition)
 
 			return enm
 		else
 			-- save enum to the environment
-			rawset(fenv, name, enm)
+			if type(name) == "string" then rawset(fenv, name, enm) end
 
 			return function(set) return BuildEnum(info, set) end
 		end
@@ -3758,6 +3882,10 @@ do
 
 			-- Check owner
 			if key == info.Name then return info.Owner end
+
+			-- Check keywords
+			value = _KeyWord4StrtEnv:GetKeyword(self, key)
+			if value then return value end
 
 			value = __index(self, info, key)
 			if value ~= nil then rawset(self, key, value) return value end
@@ -3962,10 +4090,10 @@ do
 	------------------------------------
 	--- create a structure
 	------------------------------------
-	function struct(env, name, stack)
-		stack = stack or 2
-		name = name or env
-		local fenv = type(env) == "table" and env or getfenv(stack) or _G
+	function struct(...)
+		local env, name, definition, stack = checkTypeParams(...)
+
+		local fenv = env or getfenv(stack) or _G
 
 		local ok, strt = pcall(GetDefineNS, fenv, name, TYPE_STRUCT)
 		if not ok then error(strt:match("%d+:%s*(.-)$") or strt, stack) end
@@ -3977,11 +4105,6 @@ do
 		elseif info.Type and info.Type ~= TYPE_STRUCT then
 			error(("%s is existed as %s, not struct."):format(tostring(name), tostring(info.Type)), stack)
 		end
-
-		-- For Anonymous
-		local definition = (type(name) == "function" or type(name) == "table" and getmetatable(name) == nil) and name or nil
-
-		name = info.Name
 
 		-- Check if the struct is final
 		if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The struct is sealed, can't be re-defined.", stack) end
@@ -4028,7 +4151,7 @@ do
 				return strt
 			else
 				-- save struct to the environment
-				rawset(fenv, name, strt)
+				if type(name) == "string" then rawset(fenv, name, strt) end
 
 				setfenv(stack, strtEnv)
 
@@ -8176,11 +8299,12 @@ do
 	System = Reflector.GetNameSpaceForName("System")
 
 	function Install_OOP(env)
-		env.interface = env.interface or interface
-		env.class = env.class or class
-		env.enum = env.enum or enum
+		env.interface = interface
+		env.class = class
+		env.struct = struct
+		env.enum = enum
+
 		env.namespace = env.namespace or namespace
-		env.struct = env.struct or struct
 		env.import = env.import or function(env, name)
 			local ns = Reflector.GetNameSpaceForName(name or env)
 			if not ns then error("No such namespace.", 2) end

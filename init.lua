@@ -3,12 +3,12 @@ require "PLoop.Core"
 
 -- System
 require "PLoop.System.System"
+require "PLoop.System.Logger"
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
 require "PLoop.System.Recycle"
 require "PLoop.System.Serialization"
 require "PLoop.System.Threading"
-require "PLoop.System.Logger"
 require "PLoop.System.Data"
 require "PLoop.System.Xml"
 require "PLoop.System.IO"

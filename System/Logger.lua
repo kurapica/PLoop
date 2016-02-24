@@ -8,14 +8,24 @@ _ENV = Module "System.Logger" "1.0.1"
 
 namespace "System"
 
+__Sealed__()
+enum "LogLevel" {
+	Trace = 1,
+	Debug = 2,
+	Info = 3,
+	Warn = 4,
+	Error = 5,
+	Fatal = 6,
+}
+
 __Doc__[[
 	Logger is used to keep and distribute log message.
 	Logger object can use 'logObject(logLevel, logMessage, ...)' for short to send out log messages.
 	Logger object also cache the log messages, like use 'logObject[1]' to get the lateset message, 'logObject[2]' to get the previous message, Logger object will cache messages for a count equal to it's MaxLog property value, the MaxLog default value is 1, always can be change.
 ]]
+__Sealed__()
 class "Logger" (function(_ENV)
 	_Logger = {}
-	_Info = setmetatable({}, {__mode = "k"})
 
 	------------------------------------------------------
 	-- Method
@@ -47,7 +57,7 @@ class "Logger" (function(_ENV)
 				prefix = "["..prefix.."]"
 			end
 
-			prefix = prefix..(_Info[self].Prefix[logLvl] or "")
+			prefix = prefix..(self.Prefix[logLvl] or "")
 
 			if select('#', ...) > 0 then
 				msg = msg:format(...)
@@ -55,21 +65,10 @@ class "Logger" (function(_ENV)
 
 			msg = prefix..msg
 
-			-- Save message to pool
-			local pool = _Info[self].Pool
-			pool[pool.EndLog] = msg
-			pool.EndLog = pool.EndLog + 1
-
-			-- Remove old message
-			while pool.EndLog - pool.StartLog - 1 > self.MaxLog do
-				pool.StartLog = pool.StartLog + 1
-				pool[pool.StartLog] = nil
-			end
-
 			-- Send message to handlers
 			local chk, err
 
-			for handler, lvl in pairs(_Info[self].Handler) do
+			for handler, lvl in pairs(self.Handler) do
 				if lvl == true or lvl == logLvl then
 					chk, err = pcall(handler, msg)
 					if not chk then
@@ -86,10 +85,11 @@ class "Logger" (function(_ENV)
 		<param name="logLevel" optional="true">the handler only receive this level's message if setted, or receive all level's message if keep nil</param>
 		<return type="nil"></return>
 	]]
+	__Arguments__{ Callable, Argument(LogLevel, true) }
 	function AddHandler(self, handler, loglevel)
 		if type(handler) == "function" then
-			if not _Info[self].Handler[handler] then
-				_Info[self].Handler[handler] = loglevel and tonumber(loglevel) or true
+			if not self.Handler[handler] then
+				self.Handler[handler] = loglevel and tonumber(loglevel) or true
 			end
 		else
 			error(("Usage : Logger:AddHandler(handler) : 'handler' - function expected, got %s."):format(type(handler)), 2)
@@ -100,10 +100,11 @@ class "Logger" (function(_ENV)
 		<desc>Remove a log handler</desc>
 		<param name="handler" type="function">function, the handler need be removed</param>
 	]]
+	__Arguments__{ Callable }
 	function RemoveHandler(self, handler)
 		if type(handler) == "function" then
-			if _Info[self].Handler[handler] then
-				_Info[self].Handler[handler] = nil
+			if self.Handler[handler] then
+				self.Handler[handler] = nil
 			end
 		else
 			error(("Usage : Logger:RemoveHandler(handler) : 'handler' - function expected, got %s."):format(type(handler)), 2)
@@ -122,6 +123,7 @@ class "Logger" (function(_ENV)
 			Info("This is a test message") -- log out '[Info]This is a test message'
 		</usage>
 	]]
+	__Arguments__{ LogLevel, Argument(String, true), Argument(Boolean, true) }
 	function SetPrefix(self, loglvl, prefix, createMethod)
 		if type(prefix) == "string" then
 			if not prefix:match("%W+$") then
@@ -130,7 +132,7 @@ class "Logger" (function(_ENV)
 		else
 			prefix = nil
 		end
-		_Info[self].Prefix[loglvl] = prefix
+		self.Prefix[loglvl] = prefix
 
 		-- Register
 		if createMethod then
@@ -146,39 +148,7 @@ class "Logger" (function(_ENV)
 	-- Property
 	------------------------------------------------------
 	__Doc__[[the log level]]
-	property "LogLevel" {
-		Set = function(self, lvl)
-			if lvl < 0 then lvl = 0 end
-
-			_Info[self].LogLevel = floor(lvl)
-		end,
-		Get = function(self)
-			return _Info[self].LogLevel or 0
-		end,
-		Type = Number,
-	}
-
-	__Doc__[[the max log count]]
-	property "MaxLog" {
-		Set = function(self, maxv)
-			if maxv < 1 then maxv = 1 end
-
-			maxv = floor(maxv)
-
-			_Info[self].MaxLog = maxv
-
-			local pool = _Info[self].Pool
-
-			while pool.EndLog - pool.StartLog - 1 > maxv do
-				pool.StartLog = pool.StartLog + 1
-				pool[pool.StartLog] = nil
-			end
-		end,
-		Get = function(self)
-			return _Info[self].MaxLog or 1
-		end,
-		Type = Number,
-	}
+	property "LogLevel" { Type = LogLevel }
 
 	__Doc__[[
 		if the timeformat is setted, the log message will add a timestamp at the header
@@ -202,88 +172,37 @@ class "Logger" (function(_ENV)
 		    %Y full year (1998)
 		    %y two-digit year (98) [00-99]
 	]]
-	property "TimeFormat" {
-		Set = function(self, timeFormat)
-			if timeFormat and type(timeFormat) == "string" and timeFormat ~= "*t" then
-				_Info[self].TimeFormat = timeFormat
-			else
-				_Info[self].TimeFormat = nil
-			end
-		end,
-		Get = function(self)
-			return _Info[self].TimeFormat
-		end,
-		Type = String,
-	}
+	property "TimeFormat" { Type = String }
+
+	__Doc__[[The system logger]]
+	__Static__()
+	property "DefaultLogger" { Set = false, Default = function() return Logger("System.Default.Logger") end }
 
 	------------------------------------------------------
 	-- Dispose
 	------------------------------------------------------
 	function Dispose(self)
-		_Logger[_Info[self].Name] = nil
-		_Info[self] = nil
+		_Logger[self.Name] = nil
 	end
 
 	------------------------------------------------------
 	-- Constructor
 	------------------------------------------------------
+	__Arguments__{ String }
 	function Logger(self, name)
-		if type(name) ~= "string" then
-			error(("Usage : Logger(name) : 'name' - string expected, got %s."):format(type(name)), 2)
-		end
-
-		name = name:match("[_%w]+")
-
-		if not name or name == "" then return end
-
 		_Logger[name] = self
 
-		_Info[self] = {
-			Owner = self,
-			Name = name,
-			Pool = {["StartLog"] = 0, ["EndLog"] = 1},
-			Handler = {},
-			Prefix = {},
-		}
+		self.Name = name
+		self.Handler = {}
+		self.Prefix = {}
 	end
 
 	------------------------------------------------------
 	-- Exist checking
 	------------------------------------------------------
+	__Arguments__{ String }
 	function __exist(name)
-		if type(name) ~= "string" then
-			return
-		end
-
-		name = name:match("[_%w]+")
-
-		return name and _Logger[name]
-	end
-
-	------------------------------------------------------
-	-- __index for class instance
-	------------------------------------------------------
-	function __index(self, key)
-		if type(key) == "number" and key >= 1 then
-			key = floor(key)
-
-			return _Info[self].Pool[_Info[self].Pool.EndLog - key]
-		end
-	end
-
-	------------------------------------------------------
-	-- __newindex for class instance
-	------------------------------------------------------
-	function __newindex(self, key, value)
-		-- nothing to do
-		error("a logger is readonly.", 2)
-	end
-
-	------------------------------------------------------
-	-- __len for class instance
-	------------------------------------------------------
-	function __len(self)
-		return _Info[self].Pool.EndLog - _Info[self].Pool.StartLog - 1
+		return _Logger[name]
 	end
 
 	------------------------------------------------------
@@ -293,3 +212,17 @@ class "Logger" (function(_ENV)
 		return self:Log(loglvl, msg, ...)
 	end
 end)
+
+------------------------------------------------------
+-- Set the default logger
+------------------------------------------------------
+Logger.DefaultLogger.TimeFormat = "%X"
+
+_Parent.Trace = Logger.DefaultLogger:SetPrefix(LogLevel.Trace, "[Trace]", true)
+_Parent.Debug = Logger.DefaultLogger:SetPrefix(LogLevel.Debug, "[Debug]", true)
+_Parent.Info = Logger.DefaultLogger:SetPrefix(LogLevel.Info, "[Info]", true)
+_Parent.Warn = Logger.DefaultLogger:SetPrefix(LogLevel.Warn, "[Warn]", true)
+_Parent.Error = Logger.DefaultLogger:SetPrefix(LogLevel.Error, "[Error]", true)
+_Parent.Fatal = Logger.DefaultLogger:SetPrefix(LogLevel.Fatal, "[Fatal]", true)
+
+Logger.DefaultLogger.LogLevel = LogLevel.Info

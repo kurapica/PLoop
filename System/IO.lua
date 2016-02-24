@@ -156,14 +156,17 @@ interface "IO" (function (_ENV)
 		if OS_TYPE then return OS_TYPE end
 
 		local f = popen("echo %OS%", "r")
-		local ct = f:read("*all"):match("^%w+")
-		f:close()
+		local ct = f and f:read("*all"):match("^%w+")
+		if f then f:close() end
 		if ct then
 			OS_TYPE = OSType.Windows
 		else
-			f = popen("export PATH=/usr/bin\nuname", "r")
-			ct = f:read("*all"):match("^%w+")
-			f:close()
+			f = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
+			if f then
+				ct = f:read("*all")
+				f:close()
+				ct = ct:match("^%w+")
+			end
 			OS_TYPE = ct == "Darwin" and OSType.MacOS
 				or ct == "Linux" and OSType.Linux
 				or OSType.Unknown

@@ -51,7 +51,7 @@ class "Resource" (function (_ENV)
 	_ResourceMapPath = setmetatable({}, {__mode="k"})
 	_RelatedPath = {}
 
-	local _RootResource = nil
+	--local _RootResource = nil
 
 	----------------------------------
 	-- Static Property
@@ -70,49 +70,49 @@ class "Resource" (function (_ENV)
 		if type(path) ~= "string" then return end
 		path = path:lower()
 
-		if not _RootResource then
+		Trace("[Resource][LoadResource] %s", path)
+
+		--[[if not _RootResource then
 			_RootResource = path
 		elseif AutoAddRelatedPath then
 			AddRelatedPath(_RootResource, path)
-		end
+		end--]]
 
-		local ok, ret = pcall(function(...)
-			local lastModifiedTime
+		local lastModifiedTime
 
-			if _ResourcePathMap[path] ~= nil then
-				if not ReloadWhenModified then return _ResourcePathMap[path] end
+		if _ResourcePathMap[path] ~= nil then
+			if not ReloadWhenModified then return _ResourcePathMap[path] end
 
-				lastModifiedTime = File.GetLastWriteTime(path)
-				if lastModifiedTime == _ResourcePathModifiedTime[path] then
-					local noModifed = true
-					if _RelatedPath[path] then
-						for _, rpath in ipairs(_RelatedPath[path]) do
-							if _ResourcePathModifiedTime[rpath] ~= File.GetLastWriteTime(rpath) then
-								noModifed = false
-								break
-							end
+			lastModifiedTime = File.GetLastWriteTime(path)
+			if lastModifiedTime == _ResourcePathModifiedTime[path] then
+				local noModifed = true
+				if _RelatedPath[path] then
+					for _, rpath in ipairs(_RelatedPath[path]) do
+						if _ResourcePathModifiedTime[rpath] ~= File.GetLastWriteTime(rpath) then
+							noModifed = false
+							break
 						end
 					end
-					if noModifed then return _ResourcePathMap[path] end
 				end
+				if noModifed then return _ResourcePathMap[path] end
 			end
+		end
 
-			local suffix = Path.GetSuffix(path)
-			local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
-			if loader then
-				local res = loader():Load(path, ...)
-				if res ~= nil then
-					_ResourcePathMap[path] = res
-					_ResourceMapPath[res] = path
-				end
-				if ReloadWhenModified then
-					_ResourcePathModifiedTime[path] = lastModifiedTime or File.GetLastWriteTime(path)
-				end
-				return res
+		local suffix = Path.GetSuffix(path)
+		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
+		if loader then
+			local res = loader():Load(path, ...)
+			if res ~= nil then
+				_ResourcePathMap[path] = res
+				_ResourceMapPath[res] = path
 			end
-		end, ...)
+			if ReloadWhenModified then
+				_ResourcePathModifiedTime[path] = lastModifiedTime or File.GetLastWriteTime(path)
+			end
+			return res
+		end
 
-		if _RootResource == path then _RootResource = nil end
+		--if _RootResource == path then _RootResource = nil end
 
 		if not ok then error(ret) end
 		return ret
