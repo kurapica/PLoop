@@ -144,6 +144,39 @@ class "DictionaryStreamWorker" (function (_ENV)
 	__Arguments__{ Callable }
 	function Filter(self, func) self.FilterAction = func return self end
 
+	----------------------------
+	-- Constructor
+	----------------------------
+	__Arguments__{ IDictionary } function DictionaryStreamWorker(self, dict) self.TargetDict = dict end
+
+	----------------------------
+	-- Meta-method
+	----------------------------
+	__Arguments__{ IDictionary } function __exist(dict)
+		local worker = tremove(IdleWorkers)
+		if worker then worker.TargetDict = dict end
+		return worker
+	end
+
+	__call = GetIterator
+end)
+
+----------------------------
+-- Install to IDictionary
+----------------------------
+__Sealed__()
+interface "IDictionary" (function (_ENV)
+	---------------------------
+	-- Queue Method
+	---------------------------
+	__Doc__[[Map the items to other type datas]]
+	__Arguments__{ Callable }
+	function Map(self, func) return DictionaryStreamWorker(self):Map(func) end
+
+	__Doc__[[Used to filter the items with a check function]]
+	__Arguments__{ Callable }
+	function Filter(self, func) return DictionaryStreamWorker(self):Filter(func) end
+
 	---------------------------
 	-- Final Method
 	---------------------------
@@ -184,54 +217,4 @@ class "DictionaryStreamWorker" (function (_ENV)
 	__Doc__[[Call the function for each element or set property's value for each element]]
 	__Arguments__{ Callable }
 	function Each(self, func) for key, value in self:GetIterator() do func(key, value) end end
-
-	----------------------------
-	-- Constructor
-	----------------------------
-	__Arguments__{ IDictionary } function DictionaryStreamWorker(self, dict) self.TargetDict = dict end
-
-	----------------------------
-	-- Meta-method
-	----------------------------
-	__Arguments__{ IDictionary } function __exist(dict)
-		local worker = tremove(IdleWorkers)
-		if worker then worker.TargetDict = dict end
-		return worker
-	end
-
-	__call = GetIterator
-end)
-
-----------------------------
--- Install to IDictionary
-----------------------------
-__Sealed__()
-interface "IDictionary" (function (_ENV)
-	---------------------------
-	-- Queue Method
-	---------------------------
-	__Doc__[[Map the items to other type datas]]
-	__Arguments__{ Callable }
-	function Map(self, func) return DictionaryStreamWorker(self):Map(func) end
-
-	__Doc__[[Used to filter the items with a check function]]
-	__Arguments__{ Callable }
-	function Filter(self, func) return DictionaryStreamWorker(self):Filter(func) end
-
-	---------------------------
-	-- Final Method
-	---------------------------
-	__Doc__[[Get the ListStreamWorker of keys]]
-	function Keys(self) return DictionaryStreamWorker(self):Keys() end
-
-	__Doc__[[Get the ListStreamWorker of values]]
-	function Values(self) return DictionaryStreamWorker(self):Values() end
-
-	__Doc__[[Combine the key-value pairs to get a result]]
-	__Arguments__{ Callable, Argument(Any, true) }
-	function Reduce(self, func, init) return DictionaryStreamWorker(self):Reduce(func, init) end
-
-	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Callable }
-	function Each(self, func) return DictionaryStreamWorker(self):Each(func) end
 end)

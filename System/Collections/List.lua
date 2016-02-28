@@ -272,53 +272,6 @@ class "ListStreamWorker" (function (_ENV)
 	__Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
 	function Range(self, start, stop, step) self.RangeStart, self.RangeStop, self.RangeStep = start, stop, step return self end
 
-	---------------------------
-	-- Final Method
-	---------------------------
-	__Doc__[[Convert the selected items to a list]]
-	__Arguments__{ Argument(IListClass, true) }
-	function ToList(self, cls) return cls(self) end
-
-	__Doc__[[Combine the items to get a result]]
-	__Arguments__{ Callable, Argument(Any, true) }
-	function Reduce(self, func, init)
-		local iter = self:GetIterator()
-		if init == nil then init = select(2, iter()) end
-		for _, item in iter do init = func(item, init) end
-		return init
-	end
-
-	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ String, Argument(Any, true, nil, nil, true) }
-	function Each(self, feature, ...)
-		local getObjectClass = Reflector.GetObjectClass
-		local cls, cmethod
-
-		for _, obj in self:GetIterator() do
-			if type(obj) == "table" then
-				if getObjectClass(obj) ~= cls then
-					cls = getObjectClass(obj)
-					cmethod = nil
-					if cls then
-						local ok, ret = pcall(function() return cls[feature] end)
-						if ok and type(ret) == "function" then cmethod = ret end
-					end
-				end
-
-				local method = rawget(obj, feature) or cmethod
-
-				if type(method) == "function" then
-					method(obj, ...)
-				else
-					obj[feature] = ...
-				end
-			end
-		end
-	end
-
-	__Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
-	function Each(self, func, ...) for _, obj in self:GetIterator() do func(obj, ...) end end
-
 	----------------------------
 	-- Constructor
 	----------------------------
@@ -385,16 +338,45 @@ interface "IList" (function (_ENV)
 	---------------------------
 	__Doc__[[Convert the selected items to a list]]
 	__Arguments__{ Argument(IListClass, true) }
-	function ToList(self, cls) return ListStreamWorker(self):ToList(cls) end
+	function ToList(self, cls) return cls(self) end
 
 	__Doc__[[Combine the items to get a result]]
 	__Arguments__{ Callable, Argument(Any, true) }
-	function Reduce(self, func, init) return ListStreamWorker(self):Reduce(func, init) end
+	function Reduce(self, func, init)
+		local iter = self:GetIterator()
+		if init == nil then init = select(2, iter()) end
+		for _, item in iter do init = func(item, init) end
+		return init
+	end
 
 	__Doc__[[Call the function for each element or set property's value for each element]]
 	__Arguments__{ String, Argument(Any, true, nil, nil, true) }
-	function Each(self, ...) return ListStreamWorker(self):Each(...) end
+	function Each(self, feature, ...)
+		local getObjectClass = Reflector.GetObjectClass
+		local cls, cmethod
+
+		for _, obj in self:GetIterator() do
+			if type(obj) == "table" then
+				if getObjectClass(obj) ~= cls then
+					cls = getObjectClass(obj)
+					cmethod = nil
+					if cls then
+						local ret = cls[feature]
+						if type(ret) == "function" then cmethod = ret end
+					end
+				end
+
+				local method = rawget(obj, feature) or cmethod
+
+				if type(method) == "function" then
+					method(obj, ...)
+				else
+					obj[feature] = ...
+				end
+			end
+		end
+	end
 
 	__Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
-	function Each(self, ...) return ListStreamWorker(self):Each(...) end
+	function Each(self, func, ...) for _, obj in self:GetIterator() do func(obj, ...) end end
 end)
