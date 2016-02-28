@@ -482,6 +482,7 @@ function IIndexedList:TimSort(compare, start, stop)
 	start, stop = formatParams(self, start, stop)
 
 	local count = stop - start + 1
+	if count == 0 then return end
 
 	-- Calc minrun
 	local minRun = ceil(count / 2^(floor( log(count) / log(2) ) - 5))

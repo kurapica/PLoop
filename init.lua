@@ -32,6 +32,6 @@ require "PLoop.System.IO.Resource"
 require "PLoop.System.IO.Resource.LuaLoader"
 
 -- System.Collections.ListStreamWorker
-require "PLoop.System.Collections.ListStreamWorker"
-require "PLoop.System.Collections.DictionaryStreamWorker"
+require "PLoop.System.Collections.List"
+require "PLoop.System.Collections.Dictionary"
 require "PLoop.System.Collections.IIndexedListSorter"

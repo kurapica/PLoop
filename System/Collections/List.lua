@@ -1,15 +1,99 @@
 --=============================
--- System.Collections.ListStreamWorker
+-- System.Collections.List
 --
 -- Author : Kurapica
--- Create Date : 2016/02/04
+-- Create Date : 2016/02/28
 --=============================
-_ENV = Module "System.Collections.ListStreamWorker" "1.0.0"
+_ENV = Module "System.Collections.List" "1.0.0"
 
 namespace "System.Collections"
 
 import "System.Threading"
 
+-----------------------
+-- Interface
+-----------------------
+-- Interface for List
+__Doc__[[Provide basic support for list collection]]
+interface "IList" { Iterable }
+
+__Doc__[[The object should provide a Countable]]
+__Sealed__()
+interface "ICountable" (function (_ENV)
+	-- Since Lua 5.1 don't support __len on table, use Count property instead.
+	__Doc__[[Get the count of items in the object]]
+	__Require__() property "Count" { Set = false, Get = function (self) return #self end }
+end)
+
+__Doc__[[The list must be an indexed list that the system can use obj[idx] to access the datas]]
+__Sealed__()
+interface "IIndexedList" { IList, ICountable }
+
+-----------------------
+-- List
+-----------------------
+__Sealed__() __SimpleClass__()
+class "List" (function (_ENV)
+	extend "IIndexedList"
+
+	-----------------------
+	-- Method
+	-----------------------
+	GetIterator = ipairs
+
+	__Doc__[[Add an item to the list]]
+	Add = tinsert
+
+	__Doc__[[Get the index of the item if it existed in the list]]
+	function Contains(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
+
+	__Doc__[[Remove an item]]
+	function Remove(self, item) local i = self:Contains(item) if i then return self:RemoveByIndex(i) end end
+
+	__Doc__[[Remove an item from the tail or the given index]]
+	RemoveByIndex = tremove
+
+	-----------------------
+	-- Constructor
+	-----------------------
+	__Arguments__{ }
+	function List(self) end
+
+	__Arguments__{ IList }
+	function List(self, lst) for _, item in lst:GetIterator() do self:Add(item) end end
+
+	__Arguments__{ System.Callable, Argument(Any, true), Argument(Any, true) }
+	function List(self, iter, obj, idx) for idx, item in iter(obj, idx) do self:Add(item) end end
+
+	__Arguments__{ NaturalNumber, Argument(Any, true) }
+	function List(self, count, initValue)
+		if initValue ~= nil then
+			for i = 1, count do self:Add(initValue) end
+		else
+			for i = 1, count do self:Add(i) end
+		end
+	end
+
+	__Arguments__{ NaturalNumber, Callable }
+	function List(self, count, initValue) for i = 1, count do self:Add(initValue()) end end
+
+	-----------------------
+	-- Meta-method
+	-----------------------
+	function __call(self) return self:GetIterator() end
+
+	function __index(self, idx) if type(idx) == "number" and idx < 0 then return self[self.Count + idx + 1] end end
+end)
+
+-----------------------
+-- Struct
+-----------------------
+__Default__(List)    -- Use __Default__ to avoid define the struct as an array
+struct "IListClass" { function(value) assert(Reflector.IsExtendedInterface(value, IList), "%s must be a class extend from System.Collections.IList") end }
+
+-----------------------
+-- ListStreamWorker
+-----------------------
 __Final__() __Sealed__()
 class "ListStreamWorker" (function (_ENV)
 	extend "IList"
@@ -148,10 +232,39 @@ class "ListStreamWorker" (function (_ENV)
 	-- Queue Method
 	---------------------------
 	__Doc__[[Map the items to other type datas]]
+	__Arguments__{ String }
+	function Map(self, feature)
+		self.MapAction = function(item)
+			if type(item) == "table" then
+				local val = item[feature]
+				if type(val) == "function" then return val(item) end
+				return val
+			else
+				return item
+			end
+		end
+		return self
+	end
+
 	__Arguments__{ Callable }
 	function Map(self, func) self.MapAction = func return self end
 
 	__Doc__[[Used to filter the items with a check function]]
+	__Arguments__{ String, Argument(Any, true) }
+	function Filter(self, feature, value)
+		self.FilterAction = function(item)
+			if type(item) == "table" then
+				local val = item[feature]
+				if type(val) == "function" then val = val(item) end
+				if value ~= nil then return val == value end
+				return val and true or false
+			else
+				return false
+			end
+		end
+		return self
+	end
+
 	__Arguments__{ Callable }
 	function Filter(self, func) self.FilterAction = func return self end
 
@@ -176,8 +289,18 @@ class "ListStreamWorker" (function (_ENV)
 	end
 
 	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Callable }
-	function Each(self, func) for _, obj in self:GetIterator() do func(obj) end end
+	__Arguments__{ String, Argument(Any, true, nil, nil, true) }
+	function Each(self, feature, ...)
+		for _, obj in self:GetIterator() do
+			if type(obj) == "table" then
+				local method = obj[feature]
+				if type(method) == "function" then method(obj, ...) end
+			end
+		end
+	end
+
+	__Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
+	function Each(self, func, ...) for _, obj in self:GetIterator() do func(obj, ...) end end
 
 	----------------------------
 	-- Constructor
@@ -217,33 +340,44 @@ end)
 ----------------------------
 -- Install to IList
 ----------------------------
+__Sealed__()
+interface "IList" (function (_ENV)
+	---------------------------
+	-- Queue Method
+	---------------------------
+	__Doc__[[Map the items to other type datas]]
+	__Arguments__{ String }
+	function Map(self, feature) return ListStreamWorker(self):Map(feature) end
 
----------------------------
--- Queue Method
----------------------------
-__Doc__[[Map the items to other type datas]]
-__Arguments__{ Callable }
-function IList:Map(func) return ListStreamWorker(self):Map(func) end
+	__Arguments__{ Callable }
+	function Map(self, func) return ListStreamWorker(self):Map(func) end
 
-__Doc__[[Used to filter the items with a check function]]
-__Arguments__{ Callable }
-function IList:Filter(func) return ListStreamWorker(self):Filter(func) end
+	__Doc__[[Used to filter the items with a check function]]
+	__Arguments__{ String, Argument(Any, true) }
+	function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
 
-__Doc__[[Used to select items with ranged index]]
-__Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
-function IList:Range(start, stop, step) return ListStreamWorker(self):Range(start, stop, step) end
+	__Arguments__{ Callable }
+	function Filter(self, func) return ListStreamWorker(self):Filter(func) end
 
----------------------------
--- Final Method
----------------------------
-__Doc__[[Convert the selected items to a list]]
-__Arguments__{ Argument(IListClass, true) }
-function IList:ToList(cls) return ListStreamWorker(self):ToList(cls) end
+	__Doc__[[Used to select items with ranged index]]
+	__Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
+	function Range(self, start, stop, step) return ListStreamWorker(self):Range(start, stop, step) end
 
-__Doc__[[Combine the items to get a result]]
-__Arguments__{ Callable, Argument(Any, true) }
-function IList:Reduce(func, init) return ListStreamWorker(self):Reduce(func, init) end
+	---------------------------
+	-- Final Method
+	---------------------------
+	__Doc__[[Convert the selected items to a list]]
+	__Arguments__{ Argument(IListClass, true) }
+	function ToList(self, cls) return ListStreamWorker(self):ToList(cls) end
 
-__Doc__[[Call the function for each element or set property's value for each element]]
-__Arguments__{ Callable }
-function IList:Each(func) return ListStreamWorker(self):Each(func) end
+	__Doc__[[Combine the items to get a result]]
+	__Arguments__{ Callable, Argument(Any, true) }
+	function Reduce(self, func, init) return ListStreamWorker(self):Reduce(func, init) end
+
+	__Doc__[[Call the function for each element or set property's value for each element]]
+	__Arguments__{ String, Argument(Any, true, nil, nil, true) }
+	function Each(self, ...) return ListStreamWorker(self):Each(...) end
+
+	__Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
+	function Each(self, ...) return ListStreamWorker(self):Each(...) end
+end)
