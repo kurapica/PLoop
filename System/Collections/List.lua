@@ -291,9 +291,22 @@ class "ListStreamWorker" (function (_ENV)
 	__Doc__[[Call the function for each element or set property's value for each element]]
 	__Arguments__{ String, Argument(Any, true, nil, nil, true) }
 	function Each(self, feature, ...)
+		local getObjectClass = Reflector.GetObjectClass
+		local cls, cmethod
+
 		for _, obj in self:GetIterator() do
 			if type(obj) == "table" then
-				local method = obj[feature]
+				if getObjectClass(obj) ~= cls then
+					cls = getObjectClass(obj)
+					cmethod = nil
+					if cls then
+						local ok, ret = pcall(function() return cls[feature] end)
+						if ok and type(ret) == "function" then cmethod = ret end
+					end
+				end
+
+				local method = rawget(obj, feature) or cmethod
+
 				if type(method) == "function" then
 					method(obj, ...)
 				else
