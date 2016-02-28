@@ -294,7 +294,11 @@ class "ListStreamWorker" (function (_ENV)
 		for _, obj in self:GetIterator() do
 			if type(obj) == "table" then
 				local method = obj[feature]
-				if type(method) == "function" then method(obj, ...) end
+				if type(method) == "function" then
+					method(obj, ...)
+				else
+					obj[feature] = ...
+				end
 			end
 		end
 	end
