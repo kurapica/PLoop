@@ -41,8 +41,8 @@ class "List" (function (_ENV)
 	-----------------------
 	GetIterator = ipairs
 
-	__Doc__[[Add an item to the list]]
-	Add = tinsert
+	__Doc__[[Insert an item to the list]]
+	Insert = tinsert
 
 	__Doc__[[Get the index of the item if it existed in the list]]
 	function Contains(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
@@ -60,22 +60,22 @@ class "List" (function (_ENV)
 	function List(self) end
 
 	__Arguments__{ IList }
-	function List(self, lst) for _, item in lst:GetIterator() do self:Add(item) end end
+	function List(self, lst) for _, item in lst:GetIterator() do self:Insert(item) end end
 
 	__Arguments__{ System.Callable, Argument(Any, true), Argument(Any, true) }
-	function List(self, iter, obj, idx) for idx, item in iter(obj, idx) do self:Add(item) end end
+	function List(self, iter, obj, idx) for idx, item in iter(obj, idx) do self:Insert(item) end end
 
 	__Arguments__{ NaturalNumber, Argument(Any, true) }
 	function List(self, count, initValue)
 		if initValue ~= nil then
-			for i = 1, count do self:Add(initValue) end
+			for i = 1, count do self:Insert(initValue) end
 		else
-			for i = 1, count do self:Add(i) end
+			for i = 1, count do self:Insert(i) end
 		end
 	end
 
 	__Arguments__{ NaturalNumber, Callable }
-	function List(self, count, initValue) for i = 1, count do self:Add(initValue()) end end
+	function List(self, count, initValue) for i = 1, count do self:Insert(initValue()) end end
 
 	-----------------------
 	-- Meta-method
