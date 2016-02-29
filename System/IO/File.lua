@@ -15,8 +15,11 @@ class "File" (function (_ENV)
 	local function formatMacTime(result)
 		if result then
 			local month, day, time, year = result:match("(%w+)%s+(%d+)%s+(%d+:%d+:%d+)%s+(%d+)")
-			return ("%s-%s-%s %s"):format(year, month, day, time)
+			if month then
+				return ("%s-%s-%s %s"):format(year, month, day, time)
+			end
 		end
+		Trace("[File][GetXXXTime][Fail] - %s", result or "nil")
 	end
 
 	__Doc__[[Get the file's creation time]]

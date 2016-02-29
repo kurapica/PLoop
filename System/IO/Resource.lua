@@ -4,7 +4,7 @@
 -- Author : Kurapica
 -- Create Date : 2016/01/28
 --=============================
-_ENV = Module "System.IO.Resource" "1.0.0"
+_ENV = Module "System.IO.Resource" "1.0.1"
 
 namespace "System.IO"
 
@@ -62,6 +62,9 @@ class "Resource" (function (_ENV)
 	__Static__()
 	property "AutoAddRelatedPath" { Type = Boolean }
 
+	__Static__()
+	property "GetLastWriteTime" { Type = Callable }
+
 	----------------------------------
 	-- Static Method
 	----------------------------------
@@ -78,17 +81,21 @@ class "Resource" (function (_ENV)
 			AddRelatedPath(_RootResource, path)
 		end--]]
 
+		local getLastWriteTime = Resource.GetLastWriteTime
 		local lastModifiedTime
 
 		if _ResourcePathMap[path] ~= nil then
 			if not ReloadWhenModified then return _ResourcePathMap[path] end
 
-			lastModifiedTime = File.GetLastWriteTime(path)
+			lastModifiedTime = getLastWriteTime(path)
+
+			Trace("[Resource][Check][lastModifiedTime]%s - %s", path, lastModifiedTime)
+
 			if lastModifiedTime == _ResourcePathModifiedTime[path] then
 				local noModifed = true
 				if _RelatedPath[path] then
 					for _, rpath in ipairs(_RelatedPath[path]) do
-						if _ResourcePathModifiedTime[rpath] ~= File.GetLastWriteTime(rpath) then
+						if _ResourcePathModifiedTime[rpath] ~= getLastWriteTime(rpath) then
 							noModifed = false
 							break
 						end
@@ -107,8 +114,10 @@ class "Resource" (function (_ENV)
 				_ResourceMapPath[res] = path
 			end
 			if ReloadWhenModified then
-				_ResourcePathModifiedTime[path] = lastModifiedTime or File.GetLastWriteTime(path)
+				_ResourcePathModifiedTime[path] = lastModifiedTime or getLastWriteTime(path)
+				Trace("[Resource][Save][lastModifiedTime]%s - %s", path, _ResourcePathModifiedTime[path])
 			end
+			Debug("[Resource][New] %s", tostring(res))
 			return res
 		end
 
@@ -137,3 +146,6 @@ class "Resource" (function (_ENV)
 		return _ResourceMapPath[res]
 	end
 end)
+
+-- Bind the default func
+Resource.GetLastWriteTime = File.GetLastWriteTime

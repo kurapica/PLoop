@@ -343,9 +343,13 @@ interface "IList" (function (_ENV)
 	__Doc__[[Combine the items to get a result]]
 	__Arguments__{ Callable, Argument(Any, true) }
 	function Reduce(self, func, init)
-		local iter = self:GetIterator()
-		if init == nil then init = select(2, iter()) end
-		for _, item in iter do init = func(item, init) end
+		for _, obj in self:GetIterator() do
+			if init == nil then
+				init = obj
+			else
+				init = func(obj, init)
+			end
+		end
 		return init
 	end
 

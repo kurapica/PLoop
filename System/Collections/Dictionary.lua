@@ -182,11 +182,9 @@ interface "IDictionary" (function (_ENV)
 	---------------------------
 	__Doc__[[Get the ListStreamWorker of keys]]
 	function Keys(self)
-		local iter = self:GetIterator()
-
 		return ListStreamWorker( Threading.Iterator(function()
 			local index = 0
-			for key in iter do
+			for key in self:GetIterator() do
 				index = index + 1
 				yield(index, key)
 			end
@@ -195,11 +193,9 @@ interface "IDictionary" (function (_ENV)
 
 	__Doc__[[Get the ListStreamWorker of values]]
 	function Values(self)
-		local iter = self:GetIterator()
-
 		return ListStreamWorker( Threading.Iterator(function()
 			local index = 0
-			for _, value in iter do
+			for _, value in self:GetIterator() do
 				index = index + 1
 				yield(index, value)
 			end
@@ -209,12 +205,11 @@ interface "IDictionary" (function (_ENV)
 	__Doc__[[Combine the key-value pairs to get a result]]
 	__Arguments__{ Callable, Argument(Any, true) }
 	function Reduce(self, func, init)
-		local iter = self:GetIterator()
-		for key, value in iter do init = func(key, value, init) end
+		for key, value in self:GetIterator() do init = func(key, value, init) end
 		return init
 	end
 
 	__Doc__[[Call the function for each element or set property's value for each element]]
-	__Arguments__{ Callable }
-	function Each(self, func) for key, value in self:GetIterator() do func(key, value) end end
+	__Arguments__{ Callable, Argument(Any, true, nil, nil, true)  }
+	function Each(self, func, ...) for key, value in self:GetIterator() do func(key, value, ...) end end
 end)
