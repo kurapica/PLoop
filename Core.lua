@@ -1841,7 +1841,7 @@ do
 						target = val
 					end
 				elseif ty == "string" then
-					if ty:find("^[%w_]+$") then
+					if val:find("^[%w_]+$") then
 						target = val
 					else
 						defintion = val
@@ -1862,7 +1862,7 @@ do
 						target = val
 					end
 				elseif ty == "string" then
-					if ty:find("^[%w_]+$") then
+					if val:find("^[%w_]+$") then
 						target = val
 					else
 						defintion = val
@@ -1887,7 +1887,7 @@ do
 							env = val
 						end
 					elseif ty == "string" then
-						if ty:find("^[%w_]+$") then
+						if val:find("^[%w_]+$") then
 							target = val
 						end
 					elseif _NSInfo[val] then
@@ -1901,7 +1901,7 @@ do
 							target = val
 						end
 					elseif ty == "string" then
-						if ty:find("^[%w_]+$") then
+						if val:find("^[%w_]+$") then
 							target = val
 						else
 							defintion = val

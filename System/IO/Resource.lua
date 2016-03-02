@@ -47,61 +47,71 @@ end)
 __Final__() __Sealed__() __Abstract__()
 class "Resource" (function (_ENV)
 	_ResourcePathMap = {}
-	_ResourcePathModifiedTime = {}
-	_ResourceMapPath = setmetatable({}, {__mode="k"})
-	_RelatedPath = {}
-
-	--local _RootResource = nil
+	_ResourceMapInfo = setmetatable({}, {__mode="kv"})
 
 	----------------------------------
-	-- Static Property
+	-- FileLoadInfo
 	----------------------------------
-	__Static__()
-	property "ReloadWhenModified" { Type = Boolean }
+	FileLoadInfo = class {
+		-- Property
+		RequireReLoad = { Type = Boolean },
 
-	__Static__()
-	property "AutoAddRelatedPath" { Type = Boolean }
+		-- Constructor
+		function (self, path) self.Path = path end,
+		-- Meta-method
+		__exist = function(path) return _ResourcePathMap[path] end,
+	}
 
-	__Static__()
-	property "GetLastWriteTime" { Type = Callable }
+	function FileLoadInfo:AddRequireFileInfo(info)
+		self.RequireFileInfo = self.RequireFileInfo or {}
+		self.RequireFileInfo[info] = true
 
-	----------------------------------
-	-- Static Method
-	----------------------------------
-	__Doc__[[Load the target resource files]]
-	function LoadResource(path, ...)
-		if type(path) ~= "string" then return end
-		path = path:lower()
+		info.NoticeFileInfo = self.NoticeFileInfo or {}
+		info.NoticeFileInfo[self] = true
+	end
 
-		Trace("[Resource][LoadResource] %s", path)
+	function FileLoadInfo:Load(...)
+		local path = self.Path
+		local lastWriteTime
 
-		--[[if not _RootResource then
-			_RootResource = path
-		elseif AutoAddRelatedPath then
-			AddRelatedPath(_RootResource, path)
-		end--]]
+		if self.Resource then
+			if Resource.ReloadWhenModified then
+				local getLastWriteTime = Resource.GetLastWriteTime
 
-		local getLastWriteTime = Resource.GetLastWriteTime
-		local lastModifiedTime
+				if self.RequireReLoad then
+					self.RequireReLoad = false
+				else
+					lastWriteTime = getLastWriteTime(path)
 
-		if _ResourcePathMap[path] ~= nil then
-			if not ReloadWhenModified then return _ResourcePathMap[path] end
-
-			lastModifiedTime = getLastWriteTime(path)
-
-			Trace("[Resource][Check][lastModifiedTime]%s - %s", path, lastModifiedTime)
-
-			if lastModifiedTime == _ResourcePathModifiedTime[path] then
-				local noModifed = true
-				if _RelatedPath[path] then
-					for _, rpath in ipairs(_RelatedPath[path]) do
-						if _ResourcePathModifiedTime[rpath] ~= getLastWriteTime(rpath) then
-							noModifed = false
-							break
+					if not lastWriteTime then
+						if File.Exist(path) then
+							-- Failed to get the last writed time, wait for the next time
+							return self.Resource
 						end
+						-- File not existed
+						self.Resource = nil
+						return
+					end
+
+					if lastWriteTime == self.LastWriteTime then
+						local noModifed = true
+
+						if self.RequireFileInfo then
+							for info in pairs(self.RequireFileInfo) do
+								local writedTime = getLastWriteTime(info.Path)
+
+								if writedTime and writedTime ~= info.LastWriteTime then
+									noModifed = false
+									break
+								end
+							end
+						end
+
+						if noModifed then return self.Resource end
 					end
 				end
-				if noModifed then return _ResourcePathMap[path] end
+			else
+				return self.Resource
 			end
 		end
 
@@ -110,41 +120,73 @@ class "Resource" (function (_ENV)
 		if loader then
 			local res = loader():Load(path, ...)
 			if res ~= nil then
-				_ResourcePathMap[path] = res
-				_ResourceMapPath[res] = path
+				_ResourcePathMap[path] = self
+				_ResourceMapInfo[res] = self
+
+				if Resource.ReloadWhenModified then
+					-- Notice other files to be reloaed
+					if self.NoticeFileInfo and self.Resource ~= res then for info in pairs(self.NoticeFileInfo) do info.RequireReLoad = true end end
+
+					self.LastWriteTime = lastWriteTime or Resource.GetLastWriteTime(path)
+					Trace("[System.IO.Resource][Record][lastWriteTime]%s - %s", path, self.LastWriteTime)
+				end
+				self.Resource = res
+				Debug("[System.IO.Resource][Generate] %s", tostring(res))
+			else
+				_ResourcePathMap[path] = nil
+				if self.Resource then _ResourceMapInfo[self.Resource] = nil end
+				self.Resource = nil
+				Info("[System.IO.Resource][Nothing loaded] %s", path)
 			end
-			if ReloadWhenModified then
-				_ResourcePathModifiedTime[path] = lastModifiedTime or getLastWriteTime(path)
-				Trace("[Resource][Save][lastModifiedTime]%s - %s", path, _ResourcePathModifiedTime[path])
-			end
-			Debug("[Resource][New] %s", tostring(res))
 			return res
 		end
-
-		--if _RootResource == path then _RootResource = nil end
-
-		if not ok then error(ret) end
-		return ret
 	end
 
-	__Doc__[[Add related path, so the modified time should also be checked]]
-	function AddRelatedPath(main, related)
-		if type(main) ~= "string" or type(related) ~= "string" then return end
-		main = main:lower()
-		related = related:lower()
+	----------------------------------
+	-- Static Property
+	----------------------------------
+	__Static__()
+	property "ReloadWhenModified" { Type = Boolean }
 
-		local set = _RelatedPath[main] or {}
-		for _, v in ipairs(set) do if v == related then return end end
+	__Static__()
+	property "GetLastWriteTime" { Type = Callable }
 
-		tinsert(set, related)
+	----------------------------------
+	-- Static Method
+	----------------------------------
+	_ResourceLoadStack = {}
 
-		_RelatedPath[main] = set
+	__Doc__[[Load the target resource files]]
+	__Static__()
+	function LoadResource(path, ...)
+		if type(path) ~= "string" then return end
+		path = path:lower()
+
+		Trace("[System.IO.Resource][LoadResource] %s", path)
+
+		local fileLoadInfo = FileLoadInfo(path)
+
+		tinsert(_ResourceLoadStack, fileLoadInfo)
+
+		local ok, res = pcall(fileLoadInfo.Load, fileLoadInfo, ...)
+
+		tremove(_ResourceLoadStack)
+
+		if ok and res then
+			for _, info in ipairs(_ResourceLoadStack) do
+				Trace("[System.IO.Resource]%s[Require]%s", info.Path, fileLoadInfo.Path)
+				info:AddRequireFileInfo(fileLoadInfo)
+			end
+
+			return res
+		else
+			Error("[System.IO.Resource][Load Fail] %s - %s", path, res)
+		end
 	end
 
 	__Doc__[[Get the resource's path]]
-	function GetResourcePath(res)
-		return _ResourceMapPath[res]
-	end
+	__Static__()
+	function GetResourcePath(res) return _ResourceMapInfo[res] and _ResourceMapInfo[res].Path end
 end)
 
 -- Bind the default func
