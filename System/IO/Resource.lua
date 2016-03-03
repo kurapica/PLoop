@@ -12,7 +12,7 @@ __Doc__ [[The interface for the file loaders.]]
 __Sealed__()
 interface "IResourceLoader" (function (_ENV)
 	__Doc__ [[Load the target resource]]
-	__Require__() function Load(self, path, ...) end
+	__Require__() function Load(self, path) end
 end)
 
 __Doc__ [[The resource loader for specific suffix files to generate type features or others.]]
@@ -52,10 +52,8 @@ class "Resource" (function (_ENV)
 	----------------------------------
 	-- FileLoadInfo
 	----------------------------------
+	__Cache__()
 	FileLoadInfo = class {
-		-- Property
-		RequireReLoad = { Type = Boolean },
-
 		-- Constructor
 		function (self, path) self.Path = path end,
 		-- Meta-method
@@ -70,76 +68,79 @@ class "Resource" (function (_ENV)
 		info.NoticeFileInfo[self] = true
 	end
 
-	function FileLoadInfo:Load(...)
+	function FileLoadInfo:CheckReload()
+		local requireReload = self.RequireReLoad
 		local path = self.Path
-		local lastWriteTime
 
-		if self.Resource then
-			if Resource.ReloadWhenModified then
-				local getLastWriteTime = Resource.GetLastWriteTime
-
-				if self.RequireReLoad then
-					self.RequireReLoad = false
-				else
-					lastWriteTime = getLastWriteTime(path)
-
-					if not lastWriteTime then
-						if File.Exist(path) then
-							-- Failed to get the last writed time, wait for the next time
-							return self.Resource
-						end
-						-- File not existed
-						self.Resource = nil
-						return
-					end
-
-					if lastWriteTime == self.LastWriteTime then
-						local noModifed = true
-
-						if self.RequireFileInfo then
-							for info in pairs(self.RequireFileInfo) do
-								local writedTime = getLastWriteTime(info.Path)
-
-								if writedTime and writedTime ~= info.LastWriteTime then
-									noModifed = false
-									break
-								end
-							end
-						end
-
-						if noModifed then return self.Resource end
-					end
-				end
+		-- Check the file
+		if not requireReload then
+			if not self.Resource then
+				if File.Exist(path) then requireReload = true end
 			else
-				return self.Resource
+				local lastWriteTime = Resource.GetLastWriteTime(path)
+
+				if not lastWriteTime then
+					if not File.Exist(path) then requireReload = true end
+				elseif lastWriteTime ~= self.LastWriteTime then
+					requireReload = true
+				end
 			end
 		end
 
+		-- Check the required files
+		if not requireReload and self.RequireFileInfo then
+			for info in pairs(self.RequireFileInfo) do info:CheckReload() end
+		end
+
+		-- Relod the file
+		if requireReload or self.RequireReLoad then
+			local res = self:LoadFile()
+			if res ~= self.Resource then
+				-- Notice the other files
+				if self.NoticeFileInfo then
+					for info in pairs(self.NoticeFileInfo) do
+						if not info.Resource and not Reflector.GetUpperNameSpace(info.Resource) then
+							info.RequireReLoad = true
+						end
+					end
+				end
+				if res then _ResourceMapInfo[res] = self end
+				self.Resource = res
+			end
+		end
+
+		return self.Resource
+	end
+
+	function FileLoadInfo:LoadFile()
+		local path = self.Path
 		local suffix = Path.GetSuffix(path)
 		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
+		local res
 		if loader then
-			local res = loader():Load(path, ...)
-			if res ~= nil then
-				_ResourcePathMap[path] = self
-				_ResourceMapInfo[res] = self
-
-				if Resource.ReloadWhenModified then
-					-- Notice other files to be reloaed
-					if self.NoticeFileInfo and self.Resource ~= res then for info in pairs(self.NoticeFileInfo) do info.RequireReLoad = true end end
-
-					self.LastWriteTime = lastWriteTime or Resource.GetLastWriteTime(path)
-					Trace("[System.IO.Resource][Record][lastWriteTime]%s - %s", path, self.LastWriteTime)
-				end
-				self.Resource = res
-				Debug("[System.IO.Resource][Generate] %s", tostring(res))
-			else
-				_ResourcePathMap[path] = nil
-				if self.Resource then _ResourceMapInfo[self.Resource] = nil end
-				self.Resource = nil
-				Info("[System.IO.Resource][Nothing loaded] %s", path)
-			end
+			local res = loader():Load(path)
+			if Resource.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
+			Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
 			return res
 		end
+	end
+
+	function FileLoadInfo:Load()
+		local res = self.Resource
+
+		if not res or Resource.ReloadWhenModified then
+			res = self:CheckReload()
+		end
+
+		if res then
+			_ResourcePathMap[self.Path] = self
+		elseif _ResourcePathMap[self.Path] then
+			if not self.NoticeFileInfo then
+				_ResourcePathMap[self.Path] = nil
+			end
+		end
+
+		return res
 	end
 
 	----------------------------------
@@ -158,7 +159,7 @@ class "Resource" (function (_ENV)
 
 	__Doc__[[Load the target resource files]]
 	__Static__()
-	function LoadResource(path, ...)
+	function LoadResource(path)
 		if type(path) ~= "string" then return end
 		path = path:lower()
 
@@ -168,7 +169,7 @@ class "Resource" (function (_ENV)
 
 		tinsert(_ResourceLoadStack, fileLoadInfo)
 
-		local ok, res = pcall(fileLoadInfo.Load, fileLoadInfo, ...)
+		local ok, res = pcall(fileLoadInfo.Load, fileLoadInfo)
 
 		tremove(_ResourceLoadStack)
 
