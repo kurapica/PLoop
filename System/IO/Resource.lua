@@ -55,12 +55,15 @@ class "Resource" (function (_ENV)
 	__Cache__()
 	FileLoadInfo = class {
 		-- Constructor
-		function (self, path) self.Path = path end,
+		function (self, path)
+			self.Path = path
+			_ResourcePathMap[path] = self
+		end,
 		-- Meta-method
 		__exist = function(path) return _ResourcePathMap[path] end,
 	}
 
-	function FileLoadInfo:AddRequireFileInfo(info)
+	function FileLoadInfo:AddRelatedPath(info)
 		self.RequireFileInfo = self.RequireFileInfo or {}
 		self.RequireFileInfo[info] = true
 
@@ -70,36 +73,80 @@ class "Resource" (function (_ENV)
 
 	function FileLoadInfo:CheckReload()
 		local requireReload = self.RequireReLoad
-		local path = self.Path
+
+		Trace("[System.IO.Resource][CheckReload] %s - %s", self.Path, tostring(requireReload))
 
 		-- Check the file
 		if not requireReload then
+			local path = self.Path
+
 			if not self.Resource then
-				if File.Exist(path) then requireReload = true end
+				if File.Exist(path) then
+					Trace("[System.IO.Resource][CheckReload] Reload because File existed")
+					requireReload = true
+				end
 			else
 				local lastWriteTime = Resource.GetLastWriteTime(path)
 
 				if not lastWriteTime then
-					if not File.Exist(path) then requireReload = true end
+					if not File.Exist(path) then
+						Trace("[System.IO.Resource][CheckReload] Reload because File not existed")
+						requireReload = true
+					else
+						Trace("[System.IO.Resource][CheckReload] Can't get changed status of the file")
+					end
 				elseif lastWriteTime ~= self.LastWriteTime then
+					Trace("[System.IO.Resource][CheckReload] Reload because File changed at %s", lastWriteTime)
 					requireReload = true
+				else
+					Trace("[System.IO.Resource][CheckReload]%s == %s", lastWriteTime, self.LastWriteTime)
 				end
 			end
 		end
 
 		-- Check the required files
 		if not requireReload and self.RequireFileInfo then
-			for info in pairs(self.RequireFileInfo) do info:CheckReload() end
+			for info in pairs(self.RequireFileInfo) do info:Load() end
 		end
 
-		-- Relod the file
-		if requireReload or self.RequireReLoad then
-			local res = self:LoadFile()
+		Trace("[System.IO.Resource][CheckReload] Result %s", tostring(requireReload or self.RequireReLoad))
+
+		-- the RequireReLoad maybe changed by required files
+		return requireReload or self.RequireReLoad
+	end
+
+	function FileLoadInfo:LoadFile()
+		local path = self.Path
+		local suffix = Path.GetSuffix(path)
+		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
+		if loader then
+			local res = loader():Load(path)
+			if res and Resource.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
+			Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
+			return res
+		end
+	end
+
+	function FileLoadInfo:Load()
+		local res = self.Resource
+
+		if res ~= nil and Resource.ReloadWhenModified and self:CheckReload() then
+			if res and not Reflector.GetUpperNameSpace(res) and self.RequireFileInfo then
+				-- Mark the same resource must be reloaded
+				for info in pairs(self.RequireFileInfo) do if info.Resource == res then info.RequireReLoad = true end end
+			end
+
+			self.RequireReLoad = false
+			res = nil
+		end
+
+		if not res then
+			res = self:LoadFile() or false
 			if res ~= self.Resource then
 				-- Notice the other files
-				if self.NoticeFileInfo then
+				if self.NoticeFileInfo and Resource.ReloadWhenModified then
 					for info in pairs(self.NoticeFileInfo) do
-						if not info.Resource and not Reflector.GetUpperNameSpace(info.Resource) then
+						if info.Resource and not Reflector.GetUpperNameSpace(info.Resource) then
 							info.RequireReLoad = true
 						end
 					end
@@ -109,34 +156,13 @@ class "Resource" (function (_ENV)
 			end
 		end
 
-		return self.Resource
-	end
-
-	function FileLoadInfo:LoadFile()
 		local path = self.Path
-		local suffix = Path.GetSuffix(path)
-		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
-		local res
-		if loader then
-			local res = loader():Load(path)
-			if Resource.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
-			Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
-			return res
-		end
-	end
-
-	function FileLoadInfo:Load()
-		local res = self.Resource
-
-		if not res or Resource.ReloadWhenModified then
-			res = self:CheckReload()
-		end
 
 		if res then
-			_ResourcePathMap[self.Path] = self
-		elseif _ResourcePathMap[self.Path] then
+			_ResourcePathMap[path] = self
+		elseif _ResourcePathMap[path] then
 			if not self.NoticeFileInfo then
-				_ResourcePathMap[self.Path] = nil
+				_ResourcePathMap[path] = nil
 			end
 		end
 
@@ -155,39 +181,32 @@ class "Resource" (function (_ENV)
 	----------------------------------
 	-- Static Method
 	----------------------------------
-	_ResourceLoadStack = {}
-
 	__Doc__[[Load the target resource files]]
 	__Static__()
 	function LoadResource(path)
 		if type(path) ~= "string" then return end
 		path = path:lower()
 
-		Trace("[System.IO.Resource][LoadResource] %s", path)
+		local ok, res = pcall(FileLoadInfo.Load, FileLoadInfo(path))
 
-		local fileLoadInfo = FileLoadInfo(path)
+		if ok then return res end
 
-		tinsert(_ResourceLoadStack, fileLoadInfo)
-
-		local ok, res = pcall(fileLoadInfo.Load, fileLoadInfo)
-
-		tremove(_ResourceLoadStack)
-
-		if ok and res then
-			for _, info in ipairs(_ResourceLoadStack) do
-				Trace("[System.IO.Resource]%s[Require]%s", info.Path, fileLoadInfo.Path)
-				info:AddRequireFileInfo(fileLoadInfo)
-			end
-
-			return res
-		else
-			Error("[System.IO.Resource][Load Fail] %s - %s", path, res)
-		end
+		Error("[System.IO.Resource][Load Fail] %s - %s", path, res)
 	end
 
 	__Doc__[[Get the resource's path]]
 	__Static__()
 	function GetResourcePath(res) return _ResourceMapInfo[res] and _ResourceMapInfo[res].Path end
+
+	__Doc__[[Add the related path for reload checking]]
+	__Static__()
+	__Arguments__{ String, String }
+	function AddRelatedPath(path, related)
+		local info = _ResourcePathMap[path:lower()]
+		if info then
+			info:AddRelatedPath(FileLoadInfo(related:lower()))
+		end
+	end
 end)
 
 -- Bind the default func

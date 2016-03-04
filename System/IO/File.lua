@@ -36,6 +36,7 @@ class "File" (function (_ENV)
 	__PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
 	function GetLastWriteTime(result, path)
 		if not result then Error("[System.IO.File][GetLastWriteTime][Fail] %s - %s", path, result or "nil") end
+		Trace("[System.IO.File][GetLastWriteTime]%s - %s", path, result)
 		return result
 	end
 

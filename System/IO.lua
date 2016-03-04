@@ -41,6 +41,9 @@ interface "IO" (function (_ENV)
 		__Doc__ [[The provider to generate the result]]
 		property "ResultProvider" { Type = Function }
 
+		__Doc__[[The method's argumet numbers, default 1]]
+		property "ArgCount" { Type = NaturalNumber, Default = 1 }
+
 		----------------------------------
 		-- ApplyAttribute
 		----------------------------------
@@ -68,6 +71,7 @@ interface "IO" (function (_ENV)
 						if ftype(f) == "file" then
 							local rt = f:read("*all")
 							f:close()
+							Trace("[Result] %s", rt)
 							return target(resultProvider(rt), ...)
 						end
 					end
@@ -116,32 +120,36 @@ interface "IO" (function (_ENV)
 		----------------------------------
 		-- Constructor
 		----------------------------------
-		__Arguments__{ String, String, Argument(OSType, true) }
-		function __PipeRead__(self, commandFormat, resultFormat, ostype)
+		__Arguments__{ String, String, OSType, Argument(NaturalNumber, true, 1) }
+		function __PipeRead__(self, commandFormat, resultFormat, ostype, argCount)
 			self.CommandFormat = commandFormat
 			self.ResultFormat = resultFormat
 			self.OS = ostype
+			self.ArgCount = argCount
 		end
 
-		__Arguments__{ String, Function, Argument(OSType, true) }
-		function __PipeRead__(self, commandFormat, resultProvider, ostype)
+		__Arguments__{ String, Function, OSType, Argument(NaturalNumber, true, 1) }
+		function __PipeRead__(self, commandFormat, resultProvider, ostype, argCount)
 			self.CommandFormat = commandFormat
 			self.ResultProvider = resultProvider
 			self.OS = ostype
+			self.ArgCount = argCount
 		end
 
-		__Arguments__{ Function, String, Argument(OSType, true) }
-		function __PipeRead__(self, commandProvider, resultFormat, ostype)
+		__Arguments__{ Function, String, OSType, Argument(NaturalNumber, true, 1) }
+		function __PipeRead__(self, commandProvider, resultFormat, ostype, argCount)
 			self.CommandProvider = commandProvider
 			self.ResultFormat = resultFormat
 			self.OS = ostype
+			self.ArgCount = argCount
 		end
 
-		__Arguments__{ Function, Function, Argument(OSType, true) }
-		function __PipeRead__(self, commandProvider, resultProvider, ostype)
+		__Arguments__{ Function, Function, OSType, Argument(NaturalNumber, true, 1) }
+		function __PipeRead__(self, commandProvider, resultProvider, ostype, argCount)
 			self.CommandProvider = commandProvider
 			self.ResultProvider = resultProvider
 			self.OS = ostype
+			self.ArgCount = argCount
 		end
 
 		__Arguments__{}
@@ -152,7 +160,7 @@ interface "IO" (function (_ENV)
 	-- Static Method
 	----------------------------------
 	__Doc__[[Get the operation system]]
-	function GetOperationSystem(result)
+	function GetOperationSystem()
 		if OS_TYPE then return OS_TYPE end
 
 		local f = popen("echo %OS%", "r")
@@ -165,12 +173,13 @@ interface "IO" (function (_ENV)
 			if f then
 				ct = f:read("*all")
 				f:close()
-				ct = ct:match("^%w+")
+				if ct then ct = ct:match("^%w+") end
 			end
 			OS_TYPE = ct == "Darwin" and OSType.MacOS
 				or ct == "Linux" and OSType.Linux
 				or OSType.Unknown
 		end
+		Debug("[System.IO][GetOperationSystem] %s", OSType(OS_TYPE))
 		return OS_TYPE
 	end
 end)
