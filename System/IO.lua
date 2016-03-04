@@ -6,6 +6,22 @@ _ENV = Module "System.IO" "0.1.0"
 
 namespace "System"
 
+_PipeFunc = [[
+local popen, ftype, target, command, result = ...
+return function (%s)
+	local f = popen(%s, "r")
+	if ftype(f) == "file" then
+		local ct = f:read("*all")
+		f:close()
+		if ct then
+			return target(%s)
+		else
+			return target(%s)
+		end
+	end
+end
+]]
+
 __Doc__ [[The System.IO namespaces contain types that support input and output.]]
 __Final__() __Sealed__()
 interface "IO" (function (_ENV)
@@ -47,74 +63,21 @@ interface "IO" (function (_ENV)
 		----------------------------------
 		-- ApplyAttribute
 		----------------------------------
-		function ApplyAttribute(self, target)
+		function ApplyAttribute(self, target, targetType, owner, name)
 			if self.OS and not Reflector.ValidateFlags(GetOperationSystem(), self.OS) then return end
+			if not (self.CommandFormat or self.CommandProvider) then return end
 
-			local commandFormat = self.CommandFormat
-			local commandProvider = self.CommandProvider
-			local resultFormat = self.ResultFormat
-			local resultProvider = self.ResultProvider
-
-			if commandFormat then
-				if resultFormat then
-					return function (...)
-						local f = popen(commandFormat:format(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							return target(rt:match(resultFormat), ...)
-						end
-					end
-				elseif resultProvider then
-					return function (...)
-						local f = popen(commandFormat:format(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							Trace("[Result] %s", rt)
-							return target(resultProvider(rt), ...)
-						end
-					end
-				else
-					return function (...)
-						local f = popen(commandFormat:format(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							return target(rt, ...)
-						end
-					end
-				end
-			elseif commandProvider then
-				if resultFormat then
-					return function (...)
-						local f = popen(commandProvider(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							return target(rt:match(resultFormat), ...)
-						end
-					end
-				elseif resultProvider then
-					return function (...)
-						local f = popen(commandProvider(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							return target(resultProvider(rt), ...)
-						end
-					end
-				else
-					return function (...)
-						local f = popen(commandProvider(...), "r")
-						if ftype(f) == "file" then
-							local rt = f:read("*all")
-							f:close()
-							return target(rt, ...)
-						end
-					end
-				end
+			local args = ""
+			if self.ArgCount > 0 then
+				args = "arg1"
+				for i = 2, self.ArgCount do args = args .. ", arg" .. i end
 			end
+
+			local commandCode = self.CommandFormat and "command:format(" .. args .. ")" or self.CommandProvider and "command(" .. args .. ")"
+			local resultCode = self.ResultFormat and "ct:match(result)" or self.ResultProvider and "result(ct)" or "ct"
+			if args ~= "" then resultCode = args .. ", " .. resultCode end
+
+			return assert(loadstring(_PipeFunc:format(args, commandCode, resultCode, args))) (popen, ftype, target, self.CommandFormat or self.CommandProvider, self.ResultFormat or self.ResultProvider)
 		end
 
 		----------------------------------

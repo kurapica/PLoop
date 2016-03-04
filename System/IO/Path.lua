@@ -12,8 +12,8 @@ __Final__() __Sealed__() __Abstract__()
 class "Path" (function (_ENV)
 
 	__Doc__[[Get the current operation path]]
-	__PipeRead__ ("echo %%cd%%", "[^\n]+", OSType.Windows)
-	__PipeRead__ ("pwd", "[^\n]+", OSType.MacOS+OSType.Linux)
+	__PipeRead__ ("echo %%cd%%", "[^\n]+", OSType.Windows, 0)
+	__PipeRead__ ("pwd", "[^\n]+", OSType.MacOS+OSType.Linux, 0)
 	function GetCurrentPath(result) return result end
 
 	__Doc__[[Whether the path contains the root path]]

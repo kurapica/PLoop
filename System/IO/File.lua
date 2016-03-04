@@ -25,7 +25,7 @@ class "File" (function (_ENV)
 	__PipeRead__ ("dir /t:c \"%s\"", "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -U \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
-	function GetCreationTime(result, path)
+	function GetCreationTime(path, result)
 		if not result then Error("[System.IO.File][GetCreationTime][Fail] %s - %s", path, result or "nil") end
 		return result
 	end
@@ -34,7 +34,7 @@ class "File" (function (_ENV)
 	__PipeRead__ (function(path) return strformat("forfiles /p \"%s\" /M \"%s\" /C \"cmd /c echo @fdate @ftime\"", path:match("^(.+)[\\/](.-)$")) end, "[^\n]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
-	function GetLastWriteTime(result, path)
+	function GetLastWriteTime(path, result)
 		if not result then Error("[System.IO.File][GetLastWriteTime][Fail] %s - %s", path, result or "nil") end
 		Trace("[System.IO.File][GetLastWriteTime]%s - %s", path, result)
 		return result
@@ -44,7 +44,7 @@ class "File" (function (_ENV)
 	__PipeRead__ ("dir /t:a \"%s\"", "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -u \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time -u \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
-	function GetLastAccessTime(result, path)
+	function GetLastAccessTime(path, result)
 		if not result then Error("[System.IO.File][GetLastAccessTime][Fail] %s - %s", path, result or "nil") end
 		return result
 	end
