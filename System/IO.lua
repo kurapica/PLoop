@@ -11,6 +11,7 @@ local popen, ftype, target, command, result = ...
 return function (%s)
 	local f = popen(%s, "r")
 	if ftype(f) == "file" then
+		f:flush()
 		local ct = f:read("*all")
 		f:close()
 		if ct then
@@ -64,7 +65,7 @@ interface "IO" (function (_ENV)
 		-- ApplyAttribute
 		----------------------------------
 		function ApplyAttribute(self, target, targetType, owner, name)
-			if self.OS and not Reflector.ValidateFlags(GetOperationSystem(), self.OS) then return end
+			if self.OS and not Reflector.ValidateFlags(IO.GetOperationSystem(), self.OS) then return end
 			if not (self.CommandFormat or self.CommandProvider) then return end
 
 			local args = ""
@@ -126,23 +127,30 @@ interface "IO" (function (_ENV)
 	function GetOperationSystem()
 		if OS_TYPE then return OS_TYPE end
 
+		-- Check for windows
 		local f = popen("echo %OS%", "r")
-		local ct = f and f:read("*all"):match("^%w+")
-		if f then f:close() end
-		if ct then
-			OS_TYPE = OSType.Windows
-		else
-			f = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
-			if f then
-				ct = f:read("*all")
-				f:close()
-				if ct then ct = ct:match("^%w+") end
+		if f then
+			f:flush()
+			local ct = f:lines()()
+			if ct and ct:match("^%w+") then
+				OS_TYPE = OSType.Windows
+				return OS_TYPE
 			end
+		end
+
+		-- Check for unix
+		f = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
+		if f then
+			f:flush()
+			local ct = f:lines()()
+			f:close()
+			if ct then ct = ct:match("^%w+") end
+
 			OS_TYPE = ct == "Darwin" and OSType.MacOS
 				or ct == "Linux" and OSType.Linux
 				or OSType.Unknown
 		end
-		Debug("[System.IO][GetOperationSystem] %s", OSType(OS_TYPE))
+
 		return OS_TYPE
 	end
 end)

@@ -122,6 +122,7 @@ class "Resource" (function (_ENV)
 		if loader then
 			local res = loader():Load(path)
 			if res and Resource.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
+			self.RequireReLoad = false
 			Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
 			return res
 		end
