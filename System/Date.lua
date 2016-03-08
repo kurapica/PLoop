@@ -22,19 +22,19 @@ class "Date" (function (_ENV)
 	property "Year" { Type = Integer, Field = "year", Handler = r2Time }
 
 	__Doc__ [[The month of the year, 1-12]]
-	property "Month" { Type = Integer, Field = "month", Handler = r2Time }
+	property "Month" { Type = Integer, Field = "month", Handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
 
 	__Doc__ [[The day of the month, 1-31]]
-	property "Day" { Type = Integer, Field = "day", Handler = r2Time }
+	property "Day" { Type = Integer, Field = "day", Handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
 
 	__Doc__ [[The hour of the day, 0-23]]
-	property "Hour" { Type = Integer, Field = "hour", Handler = r2Time }
+	property "Hour" { Type = Integer, Field = "hour", Handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
 
 	__Doc__ [[The minute of the hour, 0-59]]
-	property "Minute" { Type = Integer, Field = "min", Handler = r2Time }
+	property "Minute" { Type = Integer, Field = "min", Handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
 	__Doc__ [[The Second of the minute, 0-61]]
-	property "Second" { Type = Integer, Field = "sec", Handler = r2Time }
+	property "Second" { Type = Integer, Field = "sec", Handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
 	__Doc__ [[The weekday, Sunday is 1]]
 	property "DayOfWeek" { Get = function(self) return date("*t", self.time).wday end }
@@ -43,7 +43,7 @@ class "Date" (function (_ENV)
 	property "DayOfYear" { Get = function(self) return date("*t", self.time).yday end }
 
 	__Doc__ [[Indicates whether this instance of DateTime is within the daylight saving time range for the current time zone.]]
-	property "IsDaylightSavingTime" { Type = "Boolean", Field = "isdst", Handler = r2Time }
+	property "IsDaylightSavingTime" { Get = function(self) return date("*t", self.time).isdst end }
 
 	__Doc__ [[Gets the time that represent the date and time of this instance.]]
 	property "Time" { Type = Integer, Field = "time", Handler = r4Time }
