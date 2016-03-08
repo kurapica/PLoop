@@ -4,6 +4,7 @@ require "PLoop.Core"
 -- System
 require "PLoop.System.System"
 require "PLoop.System.Logger"
+require "PLoop.System.Date"
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
 require "PLoop.System.Recycle"
