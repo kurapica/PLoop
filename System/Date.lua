@@ -131,18 +131,17 @@ class "Date" (function (_ENV)
 		Argument(Integer, true, 12, "hour"),
 		Argument(Integer, true, 0, "min"),
 		Argument(Integer, true, 0, "sec"),
-		Argument(Integer, true, nil, "isdst")
 	}
-	function Date(self, year, month, day, hour, min, sec, isdst)
+	function Date(self, year, month, day, hour, min, sec)
 		self.year = year
 		self.month = month
 		self.day = day
 		self.hour = hour
 		self.min = min
 		self.sec = sec
-		self.isdst = isdst
 
-		return r2Time(self)
+		r2Time(self)
+		r4Time(self)
 	end
 
 	------------------------------------
