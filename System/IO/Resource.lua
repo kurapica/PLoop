@@ -57,6 +57,7 @@ class "Resource" (function (_ENV)
 		-- Constructor
 		function (self, path)
 			self.Path = path
+			self.ReloadWhenModified = Resource.ReloadWhenModified
 			_ResourcePathMap[path] = self
 		end,
 		-- Meta-method
@@ -119,19 +120,30 @@ class "Resource" (function (_ENV)
 		local path = self.Path
 		local suffix = Path.GetSuffix(path)
 		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
+		local res
 		if loader then
-			local res = loader():Load(path)
-			if res and Resource.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
-			self.RequireReLoad = false
+			res = loader():Load(path) or false
+			if res and self.ReloadWhenModified then self.LastWriteTime = Resource.GetLastWriteTime(path) end
 			Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
-			return res
 		end
+
+		self.RequireReLoad = false
+
+		if res then
+			_ResourcePathMap[path] = self
+		elseif _ResourcePathMap[path] then
+			if not self.NoticeFileInfo then
+				_ResourcePathMap[path] = nil
+			end
+		end
+
+		return res
 	end
 
 	function FileLoadInfo:Load()
 		local res = self.Resource
 
-		if res ~= nil and Resource.ReloadWhenModified and self:CheckReload() then
+		if res ~= nil and self.ReloadWhenModified and self:CheckReload() then
 			if res and not Reflector.GetUpperNameSpace(res) and self.RequireFileInfo then
 				-- Mark the same resource must be reloaded
 				for info in pairs(self.RequireFileInfo) do if info.Resource == res then info.RequireReLoad = true end end
@@ -142,7 +154,7 @@ class "Resource" (function (_ENV)
 		end
 
 		if not res then
-			res = self:LoadFile() or false
+			res = self:LoadFile()
 			if res ~= self.Resource then
 				-- Notice the other files
 				if self.NoticeFileInfo and Resource.ReloadWhenModified then
@@ -154,16 +166,6 @@ class "Resource" (function (_ENV)
 				end
 				if res then _ResourceMapInfo[res] = self end
 				self.Resource = res
-			end
-		end
-
-		local path = self.Path
-
-		if res then
-			_ResourcePathMap[path] = self
-		elseif _ResourcePathMap[path] then
-			if not self.NoticeFileInfo then
-				_ResourcePathMap[path] = nil
 			end
 		end
 
@@ -207,6 +209,13 @@ class "Resource" (function (_ENV)
 		if info then
 			info:AddRelatedPath(FileLoadInfo(related:lower()))
 		end
+	end
+
+	__Doc__[[Mark the path reload when modified]]
+	__Static__()
+	__Arguments__{ String }
+	function SetReloadRequired(path)
+		FileLoadInfo(path:lower()).ReloadWhenModified = true
 	end
 end)
 
