@@ -130,7 +130,7 @@ class "Date" (function (_ENV)
 		Argument(Integer, nil, nil, "day"),
 		Argument(Integer, true, 12, "hour"),
 		Argument(Integer, true, 0, "min"),
-		Argument(Integer, true, 0, "sec"),
+		Argument(Integer, true, 0, "sec")
 	}
 	function Date(self, year, month, day, hour, min, sec)
 		self.year = year
