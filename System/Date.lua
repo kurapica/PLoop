@@ -16,6 +16,12 @@ class "Date" (function (_ENV)
 	local function r4Time(self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
 
 	------------------------------------
+	-- Static Property
+	------------------------------------
+	__Doc__ [[Gets a DateTime object that is set to the current date and time on this computer, expressed as the local time.]]
+	__Static__() property "Now" { Get = function() return Date( time() ) end }
+
+	------------------------------------
 	-- Property
 	------------------------------------
 	__Doc__ [[The year of the date]]
@@ -47,9 +53,6 @@ class "Date" (function (_ENV)
 
 	__Doc__ [[Gets the time that represent the date and time of this instance.]]
 	property "Time" { Type = Integer, Field = "time", Handler = r4Time }
-
-	__Doc__ [[Gets a DateTime object that is set to the current date and time on this computer, expressed as the local time.]]
-	__Static__() property "Now" { Get = function() return Date( time() ) end }
 
 	------------------------------------
 	-- Method
@@ -115,6 +118,48 @@ class "Date" (function (_ENV)
 		return date(fmt, self.time)
 	end
 
+	__Doc__ [[Adds the specified number of years to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddYears(self, years)
+		self.Year = self.Year + years
+		return self
+	end
+
+	__Doc__ [[Adds the specified number of months to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddMonths(self, months)
+		self.Month = self.Month + months
+		return self
+	end
+
+	__Doc__ [[Adds the specified number of months to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddDays(self, days)
+		self.Day = self.Day + days
+		return self
+	end
+
+	__Doc__ [[Adds the specified number of hours to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddHours(self, hours)
+		self.Hour = self.Hour + hours
+		return self
+	end
+
+	__Doc__ [[Adds the specified number of minutes to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddMinutes(self, minutes)
+		self.Minute = self.Minute + minutes
+		return self
+	end
+
+	__Doc__ [[Adds the specified number of seconds to the value of this instance, and return the object.]]
+	__Arguments__{ Integer }
+	function AddSeconds(self, seconds)
+		self.Second = self.Second + seconds
+		return self
+	end
+
 	------------------------------------
 	-- Constructor
 	------------------------------------
@@ -155,4 +200,6 @@ class "Date" (function (_ENV)
 
 	__Arguments__{ Date }
 	function __le(self, obj) return self.time <= obj.time end
+
+	__tostring = ToString
 end)
