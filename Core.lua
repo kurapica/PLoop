@@ -4274,6 +4274,22 @@ do
 		end
 	}
 
+	struct "Guid" (function (_ENV)
+		if math.randomseed and os.time then math.randomseed(os.time()) end
+
+		local GUID_TEMPLTE = [[xx-x-x-x-xxx]]
+		local GUID_FORMAT = "^" .. GUID_TEMPLTE:gsub("x", "%%x%%x%%x%%x"):gsub("%-", "%%-") .. "$"
+		local function GenerateGUIDPart(v) return ("%04X"):format(math.random(0xffff)) end
+
+		function Guid(value)
+			if value == nil then
+				return (GUID_TEMPLTE:gsub("x", GenerateGUIDPart))
+			elseif type(value) ~= "string" or #value ~= 36 or not value:match(GUID_FORMAT) then
+				error("%s require data with format like '" .. GUID_TEMPLTE:gsub("x", GenerateGUIDPart) .."'.")
+			end
+		end
+	end)
+
 	struct "Class"		{ function (value) assert(Reflector.IsClass(value), "%s must be a class.") end }
 	struct "Interface"	{ function (value) assert(Reflector.IsInterface(value), "%s must be an interface.") end }
 	struct "Struct"		{ function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }

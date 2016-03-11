@@ -10,7 +10,6 @@ require "PLoop.System.Text"
 require "PLoop.System.Recycle"
 require "PLoop.System.Serialization"
 require "PLoop.System.Threading"
-require "PLoop.System.Data"
 require "PLoop.System.Xml"
 require "PLoop.System.IO"
 
