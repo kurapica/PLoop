@@ -22,7 +22,7 @@ class "File" (function (_ENV)
 	end
 
 	__Doc__[[Get the file's creation time]]
-	__PipeRead__ ("dir /t:c \"%s\"", "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
+	__PipeRead__ (function(path) return strformat("dir /t:c \"%s\"", path:gsub("/", "\\")) end, "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -U \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
 	function GetCreationTime(path, result)
@@ -31,7 +31,7 @@ class "File" (function (_ENV)
 	end
 
 	__Doc__[[Get the file's last modified time]]
-	__PipeRead__ (function(path) return strformat("forfiles /p \"%s\" /M \"%s\" /C \"cmd /c echo @fdate @ftime\"", path:match("^(.+)[\\/](.-)$")) end, "[^\n]+", OSType.Windows)
+	__PipeRead__ (function(path) return strformat("forfiles /p \"%s\" /M \"%s\" /C \"cmd /c echo @fdate @ftime\"", path:gsub("/", "\\"):match("^(.+)[\\/](.-)$")) end, "[^\n]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
 	function GetLastWriteTime(path, result)
@@ -40,7 +40,7 @@ class "File" (function (_ENV)
 	end
 
 	__Doc__[[Get the file's last access time]]
-	__PipeRead__ ("dir /t:a \"%s\"", "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
+	__PipeRead__ (function(path) return strformat("dir /t:a \"%s\"", path:gsub("/", "\\")) end, "%d+/%d+/%d+%s+[%d:]+", OSType.Windows)
 	__PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -u \"%s\"", formatMacTime, OSType.MacOS)
 	__PipeRead__ ("ls --full-time -u \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OSType.Linux)
 	function GetLastAccessTime(path, result)

@@ -16,7 +16,7 @@ interface "IResourceLoader" (function (_ENV)
 end)
 
 __Doc__ [[The resource loader for specific suffix files to generate type features or others.]]
-__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+__AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, AllowMultiple = true}
 __Final__() __Sealed__()
 class "__ResourceLoader__" (function (_ENV)
 	extend "IAttribute"

@@ -19,6 +19,12 @@ __Abstract__() class "Encoding" (function(_ENV)
 	function Encode() end
 end)
 
+struct "EncodeClass" {
+	function (cls)
+		assert(Reflector.IsClass(cls) and Reflector.IsSuperClass(cls, Encoding), "%s should be an encoding class.")
+	end
+}
+
 __Doc__[[Represents a writer that can write a sequential series of characters]]
 __Abstract__() class "TextWriter" (function (_ENV)
 	__Doc__[[Gets the character encoding in which the output is written.]]
