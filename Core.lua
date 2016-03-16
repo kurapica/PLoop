@@ -2924,9 +2924,6 @@ do
 
 			if not info then return end
 
-			-- No dispose to a unique object
-			if info.UniqueObject then return end
-
 			local cache = info.Cache4Interface
 			if cache then
 				for i = #(cache), 1, -1 do
@@ -2944,6 +2941,9 @@ do
 
 				objCls = _NSInfo[objCls].SuperClass
 			end
+
+			-- No dispose to a unique object
+			if info.UniqueObject then return end
 
 			-- Clear the table
 			wipe(self)
