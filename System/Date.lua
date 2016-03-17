@@ -8,6 +8,8 @@ namespace "System"
 
 __Final__() __Sealed__() __SimpleClass__()
 class "Date" (function (_ENV)
+	extend "ICloneable"
+
 	local date = os.date
 	local time = os.time
 	local diff = os.difftime
@@ -158,6 +160,11 @@ class "Date" (function (_ENV)
 	function AddSeconds(self, seconds)
 		self.Second = self.Second + seconds
 		return self
+	end
+
+	__Doc__ [[Return a Clone of the date oject.]]
+	function Clone(self)
+		return Date(self.Time)
 	end
 
 	------------------------------------
