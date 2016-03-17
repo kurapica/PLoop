@@ -120,46 +120,40 @@ class "Date" (function (_ENV)
 		return date(fmt, self.time)
 	end
 
-	__Doc__ [[Adds the specified number of years to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of years to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddYears(self, years)
-		self.Year = self.Year + years
-		return self
+		return Date(self.year + years, self.month, self.day, self.hour, self.min, self.sec)
 	end
 
-	__Doc__ [[Adds the specified number of months to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of months to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddMonths(self, months)
-		self.Month = self.Month + months
-		return self
+		return Date(self.year, self.month + months, self.day, self.hour, self.min, self.sec)
 	end
 
-	__Doc__ [[Adds the specified number of months to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of months to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddDays(self, days)
-		self.Day = self.Day + days
-		return self
+		return Date(self.year, self.month, self.day + days, self.hour, self.min, self.sec)
 	end
 
-	__Doc__ [[Adds the specified number of hours to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of hours to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddHours(self, hours)
-		self.Hour = self.Hour + hours
-		return self
+		return Date(self.year, self.month, self.day, self.hour + hours, self.min, self.sec)
 	end
 
-	__Doc__ [[Adds the specified number of minutes to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of minutes to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddMinutes(self, minutes)
-		self.Minute = self.Minute + minutes
-		return self
+		return Date(self.year, self.month, self.day, self.hour, self.min + minutes, self.sec)
 	end
 
-	__Doc__ [[Adds the specified number of seconds to the value of this instance, and return the object.]]
+	__Doc__ [[Adds the specified number of seconds to the value of this instance, and return a new date object.]]
 	__Arguments__{ Integer }
 	function AddSeconds(self, seconds)
-		self.Second = self.Second + seconds
-		return self
+		return Date(self.year, self.month, self.day, self.hour, self.min, self.sec + seconds)
 	end
 
 	__Doc__ [[Return a Clone of the date oject.]]
