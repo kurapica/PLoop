@@ -4,7 +4,7 @@
 -- Author : Kurapica
 -- Create Date : 2016/01/28
 --=============================
-_ENV = Module "System.IO.Path" "1.0.0"
+_ENV = Module "System.IO.Path" "1.1.0"
 
 namespace "System.IO"
 
@@ -29,6 +29,7 @@ class "Path" (function (_ENV)
 	function CombinePath(...)
 		local path
 		local dirSep
+		local up
 		for i = 1, select('#', ...) do
 			local part = select(i, ...)
 			if not path then
@@ -38,6 +39,17 @@ class "Path" (function (_ENV)
 					if #root == 1 then dirSep = root else dirSep = root:sub(-1) end
 				end
 			else
+				-- Check . & ..
+				part, up = part:gsub("^%.%.[\\/]", "")
+				while up > 0 do
+					local updir = GetDirectory(path)
+					if updir and #updir > 0 then path = updir end
+
+					part, up = part:gsub("^%.%.[\\/]", "")
+				end
+
+				repeat part, up = part:gsub("^%.[\\/]", "") until up == 0
+
 				local prevSep, nxtSep = path:find("[\\/]$"), part:find("^[[\\/]")
 				if prevSep and nxtSep then
 					path = path .. part:sub(2)
