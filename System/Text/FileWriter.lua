@@ -56,4 +56,7 @@ class "FileWriter" (function(_ENV)
 
 		assert(self.File , "No file can be written.")
 	end
+
+	-- Meta-method
+	__call = Write
 end)
