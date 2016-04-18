@@ -661,6 +661,8 @@ do
 						end
 					end
 					return name
+				elseif info.OriginIF then
+					return tostring(info.OriginIF) .. "." .. "AnonymousClass"
 				else
 					local name = info.Name
 
@@ -703,7 +705,7 @@ do
 				end
 				return strt
 			else
-				error("The unary operation only support class and interface types", 2)
+				error("The unary '-' operation only support class and interface types", 2)
 			end
 		end
 
@@ -2915,8 +2917,10 @@ do
 
 	function BuildAnonymousClass(info)
 		local cls = class {}
+		local cInfo	= _NSInfo[cls]
 		SaveExtend(_NSInfo[cls], info.Owner)
 		RefreshCache(cls)
+		cInfo.OriginIF = info.Owner
 		info.AnonymousClass = cls
 		return cls
 	end
@@ -2932,8 +2936,6 @@ do
 			if not info.IsOneReqMethod then error(("%s is not a one required method interface."):format(tostring(info.Owner)), 3) end
 			init = { [info.IsOneReqMethod] = init }
 		end
-
-		if type(init) ~= "table" then error(("%s {} is the only format can be accepted."):format(tostring(info.Owner)), 3) end
 
 		return (info.AnonymousClass or BuildAnonymousClass(info))(init)
 	end
