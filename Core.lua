@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/02/24
--- Version          r148
+-- Last Update Date 2016/04/18
+-- Version          r149
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -415,6 +415,9 @@ do
 	-- metatable for namespaces
 	_MetaNS = getmetatable(PROTYPE_NAMESPACE)
 	do
+		local _UnmStruct = {}
+		local _MixedStruct = {}
+
 		_MetaNS.__call = function(self, ...)
 			local info = _NSInfo[self]
 			local iType = info.Type
@@ -644,15 +647,93 @@ do
 			local info = _NSInfo[self]
 
 			if info then
-				local name = info.Name
+				if info.OriginNS then
+					return "-" .. tostring(info.OriginNS)
+				elseif info.CombineNS then
+					local name = ""
+					for _, ns in ipairs(info.CombineNS) do
+						ns = tostring(ns)
+						if ns:match("^%-") then ns = "(" .. ns .. ")" end
+						if name ~= "" then
+							name = name .. "+" .. ns
+						else
+							name = ns
+						end
+					end
+					return name
+				else
+					local name = info.Name
 
-				while info and info.NameSpace do
-					info = _NSInfo[info.NameSpace]
+					while info and info.NameSpace do
+						info = _NSInfo[info.NameSpace]
 
-					if info.Name then name = info.Name.."."..name end
+						if info.Name then name = info.Name.."."..name end
+					end
+
+					return name
 				end
+			end
+		end
 
-				return name
+		_MetaNS.__unm = function(self)
+			local sinfo = _NSInfo[self]
+			if sinfo.Type == TYPE_CLASS or sinfo.TYPE_CLASS == TYPE_INTERFACE then
+				local strt = _UnmStruct[self]
+				if not strt then
+					if sinfo.Type == TYPE_CLASS then
+						local errMsg = "%s must be child-class of [Class]" .. tostring(self)
+						__Sealed__()
+						strt = struct {
+							function (value)
+								assert(IsChildClass(self, value), errMsg)
+							end
+						}
+					else
+						local errorMsg = "%s must extend the [Interface]" .. tostring(self)
+						__Sealed__()
+						strt = struct {
+							function (value)
+								assert(IsExtend(self, value), errMsg)
+							end
+						}
+					end
+
+					_UnmStruct[self] = strt
+					_NSInfo[strt].OriginNS = self
+				end
+				return strt
+			else
+				error("The unary operation only support class and interface types", 2)
+			end
+		end
+
+		_MetaNS.__add = function(self, other)
+			local sinfo = _NSInfo[self]
+			local oinfo = _NSInfo[other]
+			if sinfo and oinfo then
+				local sref = tostring(sinfo):match("%w+$")
+				local oref = tostring(oinfo):match("%w+$")
+
+				local strt = _MixedStruct[sref .. "_" .. oref] or _MixedStruct[oref .. "_" .. sref]
+				if strt then return strt end
+
+				local errMsg = "%s must be value of "
+
+				__Sealed__()
+				strt = struct {
+					function (value)
+						local ret = GetValidatedValue(self, value)
+						if ret == nil then ret = GetValidatedValue(other, value) end
+						assert(ret ~= nil, errMsg)
+						return ret
+					end
+				}
+
+				_MixedStruct[sref .. "_" .. oref] = strt
+				_NSInfo[strt].CombineNS = { self, other }
+				errMsg = errMsg .. tostring(strt)
+
+				return strt
 			end
 		end
 

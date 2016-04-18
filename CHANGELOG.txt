@@ -1,3 +1,6 @@
+2016/04/18
+    clsA + clsB, - clsA, - ifA are supported again, anonymous struct would be generated as the result.
+
 2016/02/19
     System.Expression.Lambda is removed, System.Lambda added.
 
