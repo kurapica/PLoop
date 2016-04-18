@@ -4378,6 +4378,7 @@ do
 	struct "Struct"		{ function (value) assert(Reflector.IsStruct(value), "%s must be a struct.") end }
 	struct "Enum"		{ function (value) assert(Reflector.IsEnum(value), "%s must be an enum.") end }
 	struct "AnyType"	{ function (value) local info = _NSInfo[value] assert(info and info.Type, "%s must be a type, such as enum, struct, class or interface.") end }
+	struct "NameSpace"	{ function (value) value = _NSInfo[value] assert(value, "%s must be a namespace") return value.Owner end}
 
 	------------------------------------------------------
 	-- System.AttributeTargets
