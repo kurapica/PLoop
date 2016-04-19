@@ -679,12 +679,13 @@ do
 
 		_MetaNS.__unm = function(self)
 			local sinfo = _NSInfo[self]
-			if sinfo.Type == TYPE_CLASS or sinfo.TYPE_CLASS == TYPE_INTERFACE then
+			if sinfo.Type == TYPE_CLASS or sinfo.Type == TYPE_INTERFACE then
 				local strt = _UnmStruct[self]
 				if not strt then
 					if sinfo.Type == TYPE_CLASS then
 						local errMsg = "%s must be child-class of [Class]" .. tostring(self)
 						__Sealed__()
+						__Default__(self)
 						strt = struct {
 							function (value)
 								assert(IsChildClass(self, value), errMsg)
@@ -693,6 +694,7 @@ do
 					else
 						local errorMsg = "%s must extend the [Interface]" .. tostring(self)
 						__Sealed__()
+						__Default__(self)
 						strt = struct {
 							function (value)
 								assert(IsExtend(self, value), errMsg)
