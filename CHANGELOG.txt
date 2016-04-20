@@ -1,3 +1,6 @@
+2016/04/20
+    No auto default value from type for properties if the default factory existed.
+
 2016/04/18
     clsA + clsB, - clsA, - ifA are supported again, anonymous struct would be generated as the result.
 

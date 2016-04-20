@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/04/18
--- Version          r149
+-- Last Update Date 2016/04/20
+-- Version          r150
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -1498,7 +1498,7 @@ do
 					end
 
 					-- Auto generate Default
-					if prop.Type and prop.Default == nil then
+					if prop.Type and prop.Default == nil and prop.DefaultFunc == nil then
 						local pinfo = _NSInfo[prop.Type]
 						if pinfo and (pinfo.Type == TYPE_STRUCT or pinfo.Type == TYPE_ENUM) then prop.Default = pinfo.Default end
 					end
