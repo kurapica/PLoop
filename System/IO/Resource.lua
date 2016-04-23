@@ -49,6 +49,14 @@ class "Resource" (function (_ENV)
 	_ResourcePathMap = {}
 	_ResourceMapInfo = setmetatable({}, {__mode="kv"})
 
+	local preparePath
+
+	if pcall(_G.require, [[PLoop.System.IO.casesensitivetest]]) then
+		preparePath = function(path) return path:lower() end
+	else
+		preparePath = function(path) return path end
+	end
+
 	----------------------------------
 	-- FileLoadInfo
 	----------------------------------
@@ -119,7 +127,7 @@ class "Resource" (function (_ENV)
 	function FileLoadInfo:LoadFile()
 		local path = self.Path
 		local suffix = Path.GetSuffix(path)
-		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix)
+		local loader = suffix and __ResourceLoader__.GetResourceLoader(suffix:lower())
 		local res
 		if loader then
 			res = loader():Load(path) or false
@@ -188,7 +196,7 @@ class "Resource" (function (_ENV)
 	__Static__()
 	function LoadResource(path)
 		if type(path) ~= "string" then return end
-		path = path:lower()
+		path = preparePath(path)
 
 		local ok, res = pcall(FileLoadInfo.Load, FileLoadInfo(path))
 
@@ -205,9 +213,9 @@ class "Resource" (function (_ENV)
 	__Static__()
 	__Arguments__{ String, String }
 	function AddRelatedPath(path, related)
-		local info = _ResourcePathMap[path:lower()]
+		local info = _ResourcePathMap[preparePath(path)]
 		if info then
-			info:AddRelatedPath(FileLoadInfo(related:lower()))
+			info:AddRelatedPath(FileLoadInfo(preparePath(related)))
 		end
 	end
 
@@ -215,7 +223,7 @@ class "Resource" (function (_ENV)
 	__Static__()
 	__Arguments__{ String }
 	function SetReloadRequired(path)
-		FileLoadInfo(path:lower()).ReloadWhenModified = true
+		FileLoadInfo(preparePath(path)).ReloadWhenModified = true
 	end
 end)
 
