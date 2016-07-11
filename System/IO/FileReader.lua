@@ -1,10 +1,10 @@
 -- Author      : Kurapica
--- Create Date : 2015/08/17
+-- Create Date : 2016/07/11
 -- ChangeLog   :
 
-_ENV = Module "System.Text.FileReader" "1.0.0"
+_ENV = Module "System.IO.FileReader" "1.0.0"
 
-namespace "System.Text"
+namespace "System.IO"
 
 fopen = io.open
 floor = floor or math.floor

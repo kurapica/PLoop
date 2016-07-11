@@ -7,31 +7,31 @@ require "PLoop.System.Logger"
 require "PLoop.System.Date"
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
+require "PLoop.System.IO"
 require "PLoop.System.Recycle"
 require "PLoop.System.Serialization"
 require "PLoop.System.Threading"
 require "PLoop.System.Xml"
-require "PLoop.System.IO"
-
--- System.Text
-require "PLoop.System.Text.UTF8Encoding"
-require "PLoop.System.Text.UTF16Encoding"
-require "PLoop.System.Text.FileWriter"
-require "PLoop.System.Text.FileReader"
-
--- System.Serialization
-require "PLoop.System.Serialization.LuaFormatProvider"
-require "PLoop.System.Serialization.StringFormatProvider"
-
--- System.IO
-require "PLoop.System.IO.Path"
-require "PLoop.System.IO.File"
-require "PLoop.System.IO.Resource"
-
--- System.IO.Resource
-require "PLoop.System.IO.Resource.LuaLoader"
 
 -- System.Collections.ListStreamWorker
 require "PLoop.System.Collections.List"
 require "PLoop.System.Collections.Dictionary"
 require "PLoop.System.Collections.IIndexedListSorter"
+
+-- System.Text
+require "PLoop.System.Text.UTF8Encoding"
+require "PLoop.System.Text.UTF16Encoding"
+
+-- System.IO
+require "PLoop.System.IO.Path"
+require "PLoop.System.IO.File"
+require "PLoop.System.IO.Resource"
+require "PLoop.System.IO.FileWriter"
+require "PLoop.System.IO.FileReader"
+
+-- System.IO.Resource
+require "PLoop.System.IO.Resource.LuaLoader"
+
+-- System.Serialization
+require "PLoop.System.Serialization.LuaFormatProvider"
+require "PLoop.System.Serialization.StringFormatProvider"

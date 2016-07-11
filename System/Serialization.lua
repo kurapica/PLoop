@@ -288,9 +288,9 @@ interface "Serialization" (function (_ENV)
 			error(("%s has no implementation for FormatProvider:Serialize(System.Any, write)"):format(getmetatable(self)))
 		end
 
-		__Arguments__{ Any, System.Text.TextWriter }
+		__Arguments__{ Any, System.IO.TextWriter }
 		function Serialize(self, data, writer)
-			error(("%s has no implementation for FormatProvider:Serialize(System.Any, System.Text.TextWriter)"):format(getmetatable(self)))
+			error(("%s has no implementation for FormatProvider:Serialize(System.Any, System.IO.TextWriter)"):format(getmetatable(self)))
 		end
 
 		__Doc__[[Deserialize the data to common lua data.]]
@@ -299,9 +299,9 @@ interface "Serialization" (function (_ENV)
 			error(("%s has no implementation for FormatProvider:Deserialize(System.Any)"):format(getmetatable(self)))
 		end
 
-		__Arguments__{ System.Text.TextReader }
+		__Arguments__{ System.IO.TextReader }
 		function Deserialize(self, reader)
-			error(("%s has no implementation for FormatProvider:Deserialize(System.Text.TextReader)"):format(getmetatable(self)))
+			error(("%s has no implementation for FormatProvider:Deserialize(System.IO.TextReader)"):format(getmetatable(self)))
 		end
 	end)
 
@@ -336,7 +336,7 @@ interface "Serialization" (function (_ENV)
 		return Deserialize2Object(provider:Deserialize(data))
 	end
 
-	__Arguments__{ FormatProvider, System.Text.TextReader }
+	__Arguments__{ FormatProvider, System.IO.TextReader }
 	__Static__() function Deserialize(provider, reader)
 		return Deserialize2Object(provider:Deserialize(reader))
 	end
@@ -346,7 +346,7 @@ interface "Serialization" (function (_ENV)
 		return Deserialize2Object(provider:Deserialize(data), oType)
 	end
 
-	__Arguments__{ FormatProvider, System.Text.TextReader, AnyType }
+	__Arguments__{ FormatProvider, System.IO.TextReader, AnyType }
 	__Static__() function Deserialize(provider, reader, oType)
 		return Deserialize2Object(provider:Deserialize(reader), oType)
 	end
@@ -370,7 +370,7 @@ interface "Serialization" (function (_ENV)
 		_Cache(cache)
 	end
 
-	__Arguments__{ FormatProvider, Serializable, System.Text.TextWriter }
+	__Arguments__{ FormatProvider, Serializable, System.IO.TextWriter }
 	__Static__() function Serialize(provider, object, writer)
 		if type(object) ~= "table" then return provider:Serialize(object, writer) end
 
@@ -398,7 +398,7 @@ interface "Serialization" (function (_ENV)
 		_Cache(cache)
 	end
 
-	__Arguments__{ FormatProvider, Serializable, AnyType, System.Text.TextWriter }
+	__Arguments__{ FormatProvider, Serializable, AnyType, System.IO.TextWriter }
 	__Static__() function Serialize(provider, object, oType, writer)
 		if type(object) ~= "table" then return provider:Serialize(object, writer) end
 

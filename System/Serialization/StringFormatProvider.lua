@@ -263,7 +263,7 @@ class "StringFormatProvider" (function(_ENV)
 		end
 	end
 
-	__Arguments__{ Any, System.Text.TextWriter }
+	__Arguments__{ Any, System.IO.TextWriter }
 	function Serialize(self, data, writer)
 		if type(data) == "table" then
 			if self.Indent then
@@ -283,7 +283,7 @@ class "StringFormatProvider" (function(_ENV)
 		return loadstring("return " .. data)()
 	end
 
-	__Arguments__{ System.Text.TextReader }
+	__Arguments__{ System.IO.TextReader }
 	function Deserialize(self, reader)
 		local data = reader:ReadToEnd()
 

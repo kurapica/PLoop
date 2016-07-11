@@ -1,10 +1,10 @@
 -- Author      : Kurapica
--- Create Date : 2015/07/22
+-- Create Date : 2016/07/11
 -- ChangeLog   :
 
-_ENV = Module "System.Text.FileWriter" "1.0.0"
+_ENV = Module "System.IO.FileWriter" "1.0.0"
 
-namespace "System.Text"
+namespace "System.IO"
 
 fopen = io.open
 
