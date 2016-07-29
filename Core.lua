@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/04/20
--- Version          r150
+-- Last Update Date 2016/07/29
+-- Version          r151
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -204,6 +204,7 @@ do
 	MD_ABSTRACT_CLASS = 2^3
 	MD_STATIC_FEATURE = 2^4
 	MD_REQUIRE_FEATURE = 2^5
+	MD_AUTO_PROPERTY = 2^6
 end
 
 ------------------------------------------------------
@@ -1259,6 +1260,7 @@ do
 		-- Cache for Property
 		-- Validate the properties
 		if info.Property then
+			local autoProp = ValidateFlags(MD_AUTO_PROPERTY, info.Modifier)
 			for name, prop in pairs(info.Property) do
 				if prop.Predefined then
 					local set = prop.Predefined
@@ -1343,7 +1345,7 @@ do
 
 						if info.FeatureModifier and info.Method then
 							-- Auto generate GetMethod
-							if ( prop.Get == nil or prop.Get == true ) and prop.Field == nil then
+							if autoProp and ( prop.Get == nil or prop.Get == true ) and prop.Field == nil then
 								-- GetMethod
 								if info.Method["get" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["get" .. uname]) then
 									prop.Get = info.Method["get" .. uname]
@@ -1372,7 +1374,7 @@ do
 							end
 
 							-- Auto generate SetMethod
-							if ( prop.Set == nil or prop.Set == true ) and prop.Field == nil then
+							if autoProp and ( prop.Set == nil or prop.Set == true ) and prop.Field == nil then
 								-- SetMethod
 								if info.Method["set" .. uname] and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier["set" .. uname]) then
 									prop.Set = info.Method["set" .. uname]
@@ -1398,7 +1400,7 @@ do
 						if prop.SetMethod and type(iCache[prop.SetMethod]) ~= "function" then prop.SetMethod = nil end
 
 						-- Auto generate GetMethod
-						if ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
+						if autoProp and ( prop.Get == nil or prop.Get == true ) and not prop.GetMethod and prop.Field == nil then
 							-- GetMethod
 							if type(iCache["get" .. uname]) == "function" then
 								prop.GetMethod = "get" .. uname
@@ -1424,7 +1426,7 @@ do
 						end
 
 						-- Auto generate SetMethod
-						if ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and prop.Field == nil then
+						if autoProp and ( prop.Set == nil or prop.Set == true ) and not prop.SetMethod and prop.Field == nil then
 							-- SetMethod
 							if type(iCache["set" .. uname]) == "function" then
 								prop.SetMethod = "set" .. uname
@@ -7856,6 +7858,17 @@ do
 		-- Method
 		------------------------------------------------------
 		function ApplyAttribute(self, target) _NSInfo[target].AsSimpleClass = true end
+	end)
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Class + AttributeTargets.Interface, RunOnce = true, BeforeDefinition = true}
+	__Sealed__() __Unique__()
+	class "__AutoProperty__" (function(_ENV)
+		extend "IAttribute"
+		doc "__AutoProperty__" [[Mark the class|interface to bind property with method automatically.]]
+
+		function ApplyAttribute(self, target, targetType)
+			_NSInfo[target].Modifier = TurnOnFlags(MD_AUTO_PROPERTY, _NSInfo[target].Modifier)
+		end
 	end)
 end
 

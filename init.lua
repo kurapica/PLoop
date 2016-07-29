@@ -23,14 +23,16 @@ require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
 
 -- System.IO
-require "PLoop.System.IO.Path"
-require "PLoop.System.IO.File"
-require "PLoop.System.IO.Resource"
-require "PLoop.System.IO.FileWriter"
-require "PLoop.System.IO.FileReader"
+if type(io) == "table" then
+	require "PLoop.System.IO.Path"
+	require "PLoop.System.IO.File"
+	require "PLoop.System.IO.Resource"
+	require "PLoop.System.IO.FileWriter"
+	require "PLoop.System.IO.FileReader"
 
--- System.IO.Resource
-require "PLoop.System.IO.Resource.LuaLoader"
+	-- System.IO.Resource
+	require "PLoop.System.IO.Resource.LuaLoader"
+end
 
 -- System.Serialization
 require "PLoop.System.Serialization.LuaFormatProvider"
