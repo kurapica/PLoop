@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/07/29
--- Version          r151
+-- Last Update Date 2016/09/15
+-- Version          r152
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -4036,6 +4036,11 @@ do
 
 		local sType = info.SubType
 
+		if info.BaseStruct then
+			-- Validate with the base struct
+			value = ValidateStruct(info.BaseStruct, value)
+		end
+
 		if sType ~= STRUCT_TYPE_CUSTOM then
 			if type(value) ~= "table" then wipe(_ValidatedCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
 
@@ -4205,6 +4210,7 @@ do
 		info.Method = nil
 		info.FeatureModifier = nil
 		info.Modifier = nil
+		info.BaseStruct = nil
 
 		-- Clear Attribute
 		if ATTRIBUTE_INSTALLED then ConsumePreparedAttributes(info.Owner, AttributeTargets.Struct) end
@@ -7718,6 +7724,8 @@ do
 		doc "__Setter__" [[Used to set the assign mode of the property]]
 
 		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
 		doc "Setter" [[The setter settings]]
 		property "Setter" { Type = Setter }
 
@@ -7868,6 +7876,41 @@ do
 
 		function ApplyAttribute(self, target, targetType)
 			_NSInfo[target].Modifier = TurnOnFlags(MD_AUTO_PROPERTY, _NSInfo[target].Modifier)
+		end
+	end)
+
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true, BeforeDefinition=true}
+	__Sealed__() __Unique__()
+	class "__Base__" (function(_ENV)
+		extend "IAttribute"
+		doc "__Base__" [[Give the struct a base struct type, so the value must match the base struct type before validate it.]]
+
+		------------------------------------------------------
+		-- Property
+		------------------------------------------------------
+		doc "Base" [[The base struct]]
+		property "Base" { Type = Struct }
+
+		------------------------------------------------------
+		-- Method
+		------------------------------------------------------
+		function ApplyAttribute(self, target, targetType)
+			if self.Base then
+				_NSInfo[target].BaseStruct = self.Base
+			end
+		end
+
+		------------------------------------------------------
+		-- Constructor
+		------------------------------------------------------
+		__Arguments__{}
+		function __Base__(self)
+			self.Base = nil
+		end
+
+		__Arguments__{ Struct }
+		function __Base__(self, value)
+			self.Base = value
 		end
 	end)
 end
