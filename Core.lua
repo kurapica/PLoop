@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/09/15
--- Version          r152
+-- Last Update Date 2016/09/16
+-- Version          r153
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -7879,7 +7879,7 @@ do
 		end
 	end)
 
-	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true, BeforeDefinition=true}
+	__AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true}
 	__Sealed__() __Unique__()
 	class "__Base__" (function(_ENV)
 		extend "IAttribute"
@@ -7896,6 +7896,10 @@ do
 		------------------------------------------------------
 		function ApplyAttribute(self, target, targetType)
 			if self.Base then
+				assert(_NSInfo[target].SubType == STRUCT_TYPE_CUSTOM and
+						_NSInfo[self.Base].SubType == STRUCT_TYPE_CUSTOM,
+						"System.__Base__ attribute can only be applied to custom struct type.")
+
 				_NSInfo[target].BaseStruct = self.Base
 			end
 		end
