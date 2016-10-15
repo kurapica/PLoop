@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/09/16
--- Version          r153
+-- Last Update Date 2016/10/15
+-- Version          r154
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -7953,18 +7953,6 @@ do
 		-- Method
 		------------------------------------------------------
 		__Doc__[[
-			<desc>Check if the event type is supported by the object</desc>
-			<param name="name">the event's name</param>
-			<return type="boolean">true if the object has that event type</return>
-		]]
-		function HasEvent(self, name)
-			if type(name) ~= "string" then
-				error(("Usage : object:HasEvent(name) : 'name' - string expected, got %s."):format(type(name)), 2)
-			end
-			return Reflector.HasEvent(Reflector.GetObjectClass(self), name) or false
-		end
-
-		__Doc__[[
 			<desc>Get the class type of the object</desc>
 			<return type="class">the object's class</return>
 		]]
@@ -7990,6 +7978,18 @@ do
 			<param name="...">the event's arguments</param>
 		]]
 		Fire = Reflector.FireObjectEvent
+
+		__Doc__[[
+			<desc>Check if the event type is supported by the object</desc>
+			<param name="name">the event's name</param>
+			<return type="boolean">true if the object has that event type</return>
+		]]
+		function HasEvent(self, name)
+			if type(name) ~= "string" then
+				error(("Usage : object:HasEvent(name) : 'name' - string expected, got %s."):format(type(name)), 2)
+			end
+			return Reflector.HasEvent(Reflector.GetObjectClass(self), name) or false
+		end
 
 		__Doc__[[
 			<desc>Block some events for the object</desc>
@@ -8223,23 +8223,17 @@ do
 		------------------------------------------------------
 		-- Constructor
 		------------------------------------------------------
-		function Module(self, parent, name)
+		__Arguments__{ String, Argument(Module, true) }
+		function Module(self, name, parent)
 			local prevName
 
-			-- Check args
-			name = type(parent) == "string" and parent or name
-
-			if not Reflector.ObjectIsClass(parent, Module) then parent = nil end
-
 			-- Check and create parent modules
-			if type(name) == "string" then
-				for sub in name:gmatch("[_%w]+") do
-					if not prevName then
-						prevName = sub
-					else
-						parent = Module(parent, prevName)
-						prevName = sub
-					end
+			for sub in name:gmatch("[_%w]+") do
+				if not prevName then
+					prevName = sub
+				else
+					parent = Module(prevName, parent)
+					prevName = sub
 				end
 			end
 
@@ -8265,31 +8259,25 @@ do
 		------------------------------------------------------
 		-- metamethod
 		------------------------------------------------------
-		function __exist(parent, name)
-			local mdl = nil
+		__Arguments__{ String, Argument(Module, true) }
+		function __exist(name, parent)
+			local mdl = parent
 
-			-- Check args
-			if Reflector.ObjectIsClass(parent, Module) then mdl = parent end
-
-			name = type(parent) == "string" and parent or name
-
-			if type(name) == "string" then
-				for sub in name:gmatch("[_%w]+") do
-					if not mdl then
-						mdl = _Module[sub]
-					elseif _ModuleInfo[mdl] and _ModuleInfo[mdl].Modules then
-						mdl = _ModuleInfo[mdl].Modules[sub]
-					else
-						mdl = nil
-					end
-
-					if not mdl then return end
+			for sub in name:gmatch("[_%w]+") do
+				if not mdl then
+					mdl = _Module[sub]
+				elseif _ModuleInfo[mdl] and _ModuleInfo[mdl].Modules then
+					mdl = _ModuleInfo[mdl].Modules[sub]
+				else
+					mdl = nil
 				end
 
-				if mdl == parent then return end
-
-				return mdl
+				if not mdl then return end
 			end
+
+			if mdl == parent then return end
+
+			return mdl
 		end
 
 		function __index(self, key)
