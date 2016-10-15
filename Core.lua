@@ -36,7 +36,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
 -- Last Update Date 2016/10/15
--- Version          r156
+-- Version          r157
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -8242,7 +8242,7 @@ do
 				if not prevName then
 					prevName = sub
 				else
-					parent = Module(prevName, parent)
+					parent = getmetatable(self)(prevName, parent)
 					prevName = sub
 				end
 			end
