@@ -36,7 +36,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
 -- Last Update Date 2016/10/15
--- Version          r155
+-- Version          r156
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -8047,6 +8047,10 @@ do
 			tinsert(info.Import, ns)
 		end
 
+		local function iter(self, key) return next(_ModuleInfo[self].Modules, key) end
+
+		local function noiter() end
+
 		------------------------------------------------------
 		-- Event
 		------------------------------------------------------
@@ -8158,16 +8162,22 @@ do
 
 		__Doc__[[
 			<desc>Get all child-modules of the module</desc>
-			<return name="table">the list of the the child-modules</return>
+			<param optional='true' name='result'>the result table</param>
+			<return name="iterator|result">the method iterator|the result table</return>
 		]]
-		function GetModules(self)
+		function GetModules(self, lst)
 			if _ModuleInfo[self] and _ModuleInfo[self].Modules then
-				local lst = {}
-
-				for _, mdl in pairs(_ModuleInfo[self].Modules) do tinsert(lst, mdl) end
-
-				return lst
+				if type(lst) == "table" then
+					for name, mdl in pairs(_ModuleInfo[self].Modules) do
+						lst[name] = mdl
+					end
+				else
+					return iter, self
+				end
+			elseif type(lst) ~= "table" then
+				return noiter
 			end
+			return lst
 		end
 
 		------------------------------------------------------

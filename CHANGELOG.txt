@@ -1,5 +1,6 @@
 2016/10/15
     The System.Module's constructor's parameter is re-designed like __Arguments__{ String, Argument(Module, true) }.
+    The System.Module.GetModules method would return an iterator.
 
 2016/09/26
     System.__Base__ attribute can only be appled to custom struct type.
