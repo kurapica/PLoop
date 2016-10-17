@@ -2725,10 +2725,6 @@ do
 			value = info.Event and info.Event[key]
 			if value then return value end
 
-			-- Check Cache for event
-			value = info.Cache and info.Cache[key]
-			if getmetatable(value) then return value end
-
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
 		end
@@ -3094,10 +3090,6 @@ do
 			-- Check event
 			value = info.Event and info.Event[key]
 			if value then return value end
-
-			-- Check Cache for event
-			value = info.Cache and info.Cache[key]
-			if getmetatable(value) then return value end
 
 			-- Check meta-methods
 			if _KeyMeta[key] then
