@@ -1,3 +1,18 @@
+2016/10/17
+    Since the users can define methods for System.Object, some methods are removed.
+
+    The child class|interface can call the event object from their parent's now, so the System.Object.Fire is useless now, just removed.
+
+        class "A" { OnNameChanged = true }
+
+        class "B" (function(_ENV)
+            inherit "A"
+
+            function SetName(self, name)
+                OnNameChanged(self, name)
+            end
+        end)
+
 2016/10/15
     The System.Module's constructor's parameter is re-designed like __Arguments__{ String, Argument(Module, true) }.
 

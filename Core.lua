@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/10/15
--- Version          r157
+-- Last Update Date 2016/10/17
+-- Version          r158
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -2725,6 +2725,10 @@ do
 			value = info.Event and info.Event[key]
 			if value then return value end
 
+			-- Check Cache for event
+			value = info.Cache and info.Cache[key]
+			if getmetatable(value) then return value end
+
 			-- Check Base
 			return self[BASE_ENV_FIELD][key]
 		end
@@ -3090,6 +3094,10 @@ do
 			-- Check event
 			value = info.Event and info.Event[key]
 			if value then return value end
+
+			-- Check Cache for event
+			value = info.Cache and info.Cache[key]
+			if getmetatable(value) then return value end
 
 			-- Check meta-methods
 			if _KeyMeta[key] then
@@ -7971,44 +7979,6 @@ do
 			<return type="boolean">true if the object is extend from the interface</return>
 		]]
 		IsInterface = Reflector.ObjectIsInterface
-
-		__Doc__[[
-			<desc>Fire an object's event, to trigger the object's event handlers</desc>
-			<param name="event">the event name</param>
-			<param name="...">the event's arguments</param>
-		]]
-		Fire = Reflector.FireObjectEvent
-
-		__Doc__[[
-			<desc>Check if the event type is supported by the object</desc>
-			<param name="name">the event's name</param>
-			<return type="boolean">true if the object has that event type</return>
-		]]
-		function HasEvent(self, name)
-			if type(name) ~= "string" then
-				error(("Usage : object:HasEvent(name) : 'name' - string expected, got %s."):format(type(name)), 2)
-			end
-			return Reflector.HasEvent(Reflector.GetObjectClass(self), name) or false
-		end
-
-		__Doc__[[
-			<desc>Block some events for the object</desc>
-			<param name="...">the event's name list</param>
-		]]
-		BlockEvent = Reflector.BlockEvent
-
-		__Doc__[[
-			<desc>Check if the event is blocked for the object</desc>
-			<param name="event">the event's name</param>
-			<return type="boolean">true if th event is blocked</return>
-		]]
-		IsEventBlocked = Reflector.IsEventBlocked
-
-		__Doc__[[
-			<desc>Un-Block some events for the object</desc>
-			<param name="...">the event's name list</param>
-		]]
-		UnBlockEvent = Reflector.UnBlockEvent
 	end)
 
 	_ModuleKeyWord = _KeywordAccessor()
