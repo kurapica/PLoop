@@ -240,6 +240,9 @@ interface "Serialization" (function (_ENV)
 	__Sealed__()
 	struct "Serializable" { function (value) assert(IsSerializable(value), "%s must be serializable.") end }
 
+	__Sealed__() __Base__(Struct + Class)
+	struct "SerializableType" { function(value) if GetNameSpaceType(value) == "Class" then assert(__Serializable__:GetClassAttribute(value), "%s must be a serializable class.") end end }
+
 	__Doc__ [[Stores all the data needed to serialize or deserialize an object. ]]
 	__Sealed__() __Final__()
 	class "SerializationInfo" (function (_ENV)
@@ -341,12 +344,12 @@ interface "Serialization" (function (_ENV)
 		return Deserialize2Object(provider:Deserialize(reader))
 	end
 
-	__Arguments__{ FormatProvider, Any, AnyType }
+	__Arguments__{ FormatProvider, Any, SerializableType }
 	__Static__() function Deserialize(provider, data, oType)
 		return Deserialize2Object(provider:Deserialize(data), oType)
 	end
 
-	__Arguments__{ FormatProvider, System.IO.TextReader, AnyType }
+	__Arguments__{ FormatProvider, System.IO.TextReader, SerializableType }
 	__Static__() function Deserialize(provider, reader, oType)
 		return Deserialize2Object(provider:Deserialize(reader), oType)
 	end
@@ -379,7 +382,7 @@ interface "Serialization" (function (_ENV)
 		_Cache(cache)
 	end
 
-	__Arguments__{ FormatProvider, Serializable, AnyType }
+	__Arguments__{ FormatProvider, Serializable, SerializableType }
 	__Static__() function Serialize(provider, object, oType)
 		if type(object) ~= "table" then return provider:Serialize(object) end
 
@@ -389,7 +392,7 @@ interface "Serialization" (function (_ENV)
 		return ret
 	end
 
-	__Arguments__{ FormatProvider, Serializable, AnyType, Function }
+	__Arguments__{ FormatProvider, Serializable, SerializableType, Function }
 	__Static__() function Serialize(provider, object, oType, write)
 		if type(object) ~= "table" then return provider:Serialize(object, write) end
 
@@ -398,7 +401,7 @@ interface "Serialization" (function (_ENV)
 		_Cache(cache)
 	end
 
-	__Arguments__{ FormatProvider, Serializable, AnyType, System.IO.TextWriter }
+	__Arguments__{ FormatProvider, Serializable, SerializableType, System.IO.TextWriter }
 	__Static__() function Serialize(provider, object, oType, writer)
 		if type(object) ~= "table" then return provider:Serialize(object, writer) end
 
