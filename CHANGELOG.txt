@@ -1,3 +1,8 @@
+2016/10/19
+    System.Reflector.GetBaseStruct is added to get the base struct of custom struct.
+
+    The class and custom struct must be mark with System.Serialization.__Serializable__ attribute as serializable data types, the array and member struct would be checked by the system automatically, the enum is always seriablizable.
+
 2016/10/17
     Since the users can define methods for System.Object, some methods are removed.
 
