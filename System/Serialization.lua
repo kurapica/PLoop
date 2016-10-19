@@ -364,12 +364,14 @@ interface "Serialization" (function (_ENV)
 
 		if stype == "ARRAY" then
 			return IsSerializableType( GetStructArrayElement(oType) )
-		elseif type == "MEMBER" then
+		elseif stype == "MEMBER" then
 			for _, member in GetStructMembers(oType) do
-				local mType = GetStructMember(oType, member)
+				if not __NonSerialized__:GetMemberAttribute(oType, member) then
+					local mType = GetStructMember(oType, member)
 
-				if not IsSerializableType(mType) then
-					return false
+					if not IsSerializableType(mType) then
+						return false
+					end
 				end
 			end
 			return true
