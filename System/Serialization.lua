@@ -218,13 +218,30 @@ interface "Serialization" (function (_ENV)
 		_InfoCache[info] = nil
 	end
 
+	_SerializableTypes = setmetatable({
+		[Boolean] = true,
+		[BooleanNil] = true,
+		[String] = true,
+		[Number] = true,
+		[NumberNil] = true,
+		[Guid] = true,
+	}, {__mode="k"})
+
 	--------------------------------------
 	-- Sub-NameSpace
 	--------------------------------------
-	__AttributeUsage__ { AttributeTarget = AttributeTargets.Class }
-	__Doc__ [[Indicates that a class can be serialized.(struct is always serializable.)]]
+	__AttributeUsage__ { AttributeTarget = AttributeTargets.Class + AttributeTargets.Struct, RunOnce = true }
+	__Doc__ [[Indicates that a class or custom struct can be serialized.]]
 	__Unique__() __Sealed__() __Final__()
-	class "__Serializable__" { IAttribute }
+	class "__Serializable__" { IAttribute,
+		ApplyAttribute = function(self, target, targetType)
+			if targetType == AttributeTargets.Struct and GetStructType(target) ~= StructType.CUSTOM then
+				return
+			end
+
+			_SerializableTypes[target] = true
+		end,
+	}
 
 	__AttributeUsage__ { AttributeTarget = AttributeTargets.Property + AttributeTargets.Member }
 	__Doc__ [[Indicates that a property of a serializable class should not be serialized.]]
@@ -240,8 +257,8 @@ interface "Serialization" (function (_ENV)
 	__Sealed__()
 	struct "Serializable" { function (value) assert(IsSerializable(value), "%s must be serializable.") end }
 
-	__Sealed__() __Base__(Struct + Class)
-	struct "SerializableType" { function(value) if GetNameSpaceType(value) == "Class" then assert(__Serializable__:GetClassAttribute(value), "%s must be a serializable class.") end end }
+	__Sealed__()
+	struct "SerializableType" { function(value) assert(IsSerializableType(value), "%s must be a serializable type.") end }
 
 	__Doc__ [[Stores all the data needed to serialize or deserialize an object. ]]
 	__Sealed__() __Final__()
@@ -327,10 +344,39 @@ interface "Serialization" (function (_ENV)
 			if cls == nil then
 				return true
 			else
-				return __Serializable__:GetClassAttribute(cls) and true or false
+				return _SerializableTypes[cls] or false
 			end
 		else
 			return otype == "string" or otype == "number" or otype == "boolean"
+		end
+	end
+
+	__Doc__ [[Whether the type is serializable]]
+	__Static__() function IsSerializableType(oType)
+		if not oType then return end
+		if _SerializableTypes[oType] then return true end
+
+		local nType = GetNameSpaceType(oType)
+		if nType == "Enum" then return true end
+		if nType ~= "Struct" then return false end
+
+		local stype = GetStructType(oType)
+
+		if stype == "ARRAY" then
+			return IsSerializableType( GetStructArrayElement(oType) )
+		elseif type == "MEMBER" then
+			for _, member in GetStructMembers(oType) do
+				local mType = GetStructMember(oType, member)
+
+				if not IsSerializableType(mType) then
+					return false
+				end
+			end
+			return true
+		else
+			-- Check if the custom struct have base struct
+			local btype = GetBaseStruct(oType)
+			return btype and IsSerializableType(btype) or false
 		end
 	end
 

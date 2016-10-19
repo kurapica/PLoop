@@ -35,8 +35,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 -- Author           kurapica125@outlook.com
 -- Create Date      2011/02/03
--- Last Update Date 2016/10/17
--- Version          r158
+-- Last Update Date 2016/10/19
+-- Version          r159
 ------------------------------------------------------------------------
 
 ------------------------------------------------------
@@ -5196,7 +5196,7 @@ do
 
 		doc "GetStructType" [[
 			<desc>Get the type of the struct type</desc>
-			<param name="struct" type="struct">the struct</param>
+			<param name="struct" type="System.Struct">the struct</param>
 			<return type="string">the type of the struct type</return>
 		]]
 		function GetStructType(ns)
@@ -5206,7 +5206,7 @@ do
 
 		doc "GetStructArrayElement" [[
 			<desc>Get the array element types of the struct</desc>
-			<param name="struct" type="struct">the struct type</param>
+			<param name="struct" type="System.Struct">the struct type</param>
 			<return type="System.Type">the array element's type</return>
 		]]
 		function GetStructArrayElement(ns)
@@ -5216,7 +5216,7 @@ do
 
 		doc "HasStructMember" [[
 			<desc>Whether the struct has the query member</desc>
-			<param name="struct" type="struct">the struct type</param>
+			<param name="struct" type="System.Struct">the struct type</param>
 			<param name="member" type="string">the query member</param>
 			<return type="boolean">true if the struct has the member</return>
 		]]
@@ -5229,7 +5229,7 @@ do
 
 		doc "IsRequiredMember" [[
 			<desc>Whether the member of the struct is required.</desc>
-			<param name="struct" type="struct">the struct type</param>
+			<param name="struct" type="System.Struct">the struct type</param>
 			<param name="member" type="string">the query member</param>
 			<return type="boolean">true if the struct has the member</return>
 		]]
@@ -5245,7 +5245,7 @@ do
 
 		doc "GetStructMembers" [[
 			<desc>Get the parts of the struct type</desc>
-			<param name="struct" type="struct">the struct type</param>
+			<param name="struct" type="System.Struct">the struct type</param>
 			<param name="result" optional="true">the result table</param>
 			<return name="iterator|result">the member iterator|the result table</return>
 			<usage>for _, member in System.Reflector.GetStructMembers(Position) do print(member) end</usage>
@@ -5289,7 +5289,7 @@ do
 
 		doc "GetStructMember" [[
 			<desc>Get the member's type of the struct</desc>
-			<param name="struct" type="struct">the struct type</param>
+			<param name="struct" type="System.Struct">the struct type</param>
 			<param name="member" type="string">the member's name</param>
 			<return type="System.Type">the member's type</return>
 			<return type="System.Any">the member's default value</return>
@@ -5306,6 +5306,19 @@ do
 				elseif info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement then
 					return info.ArrayElement.Type
 				end
+			end
+		end
+
+		doc "GetBaseStruct" [[
+			<desc>Get the base struct of the custom struct</desc>
+			<param name="struct" type="System.Struct">the struct type</param>
+			<return type="System.Struct">the base struct</return>
+		]]
+		function GetBaseStruct(ns)
+			local info = _NSInfo[ns]
+
+			if info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_CUSTOM then
+				return info.BaseStruct
 			end
 		end
 
