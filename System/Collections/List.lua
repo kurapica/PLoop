@@ -63,36 +63,67 @@ class "List" (function (_ENV)
     function List(self) end
 
     __Arguments__{ IList }
-    function List(self, lst) for _, item in lst:GetIterator() do self:Insert(item) end end
+    function List(self, lst)
+        local ins = self.Insert
+        for idx, item in lst:GetIterator() do
+            ins(self, item)
+        end
+    end
 
-    __Arguments__{ System.Callable, Argument(Any, true), Argument(Any, true) }
-    function List(self, iter, obj, idx) for idx, item in iter(obj, idx) do self:Insert(item) end end
-
-    __Arguments__{ NaturalNumber, Argument(Any, true) }
-    function List(self, count, initValue)
-        if initValue ~= nil then
-            for i = 1, count do self:Insert(initValue) end
-        else
-            for i = 1, count do self:Insert(i) end
+    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
+    function List(self, iter, obj, idx)
+        local ins = self.Insert
+        for idx, item in iter(obj, idx) do
+            ins(self, item)
         end
     end
 
     __Arguments__{ NaturalNumber, Callable }
-    function List(self, count, initValue) for i = 1, count do self:Insert(initValue()) end end
+    function List(self, count, initValue)
+        local ins = self.Insert
+        for i = 1, count do
+            ins(self, initValue())
+        end
+    end
+
+    __Arguments__{ NaturalNumber, Argument(Any, true) }
+    function List(self, count, initValue)
+        local ins = self.Insert
+        if initValue ~= nil then
+            for i = 1, count do ins(self, initValue) end
+        else
+            for i = 1, count do ins(self, i) end
+        end
+    end
+
+    __Arguments__{ { Type = Any, IsList = true } }
+    function List(self, ...)
+        local ins = self.Insert
+        for i = 1, select("#", ...) do
+            ins(self, (select(i, ...)))
+        end
+    end
 
     -----------------------
     -- Meta-method
     -----------------------
-    function __call(self) return self:GetIterator() end
+    __Arguments__{ NegtiveInteger }
+    function __index(self, idx)
+        local cnt = self.Count
 
-    function __index(self, idx) if type(idx) == "number" and idx < 0 then return self[self.Count + idx + 1] end end
+        idx = cnt + idx + 1
+        if idx >= 1 and idx <= cnt then
+            return self[idx]
+        else
+            return nil
+        end
+    end
+
+    __Arguments__{ Any }
+    function __index(self, idx)
+        return nil
+    end
 end)
-
------------------------
--- Struct
------------------------
-__Default__(List)    -- Use __Default__ to avoid define the struct as an array
-struct "IListClass" { function(value) assert(Reflector.IsExtendedInterface(value, IList), "%s must be a class extend from System.Collections.IList") end }
 
 -----------------------
 -- ListStreamWorker
@@ -234,6 +265,12 @@ class "ListStreamWorker" (function (_ENV)
     ---------------------------
     -- Queue Method
     ---------------------------
+    __Arguments__{ Callable }
+    function Map(self, func)
+        self.MapAction = func
+        return self
+    end
+
     __Doc__[[Map the items to other type datas]]
     __Arguments__{ String }
     function Map(self, feature)
@@ -250,7 +287,10 @@ class "ListStreamWorker" (function (_ENV)
     end
 
     __Arguments__{ Callable }
-    function Map(self, func) self.MapAction = func return self end
+    function Filter(self, func)
+        self.FilterAction = func
+        return self
+    end
 
     __Doc__[[Used to filter the items with a check function]]
     __Arguments__{ String, Argument(Any, true) }
@@ -268,29 +308,39 @@ class "ListStreamWorker" (function (_ENV)
         return self
     end
 
-    __Arguments__{ Callable }
-    function Filter(self, func) self.FilterAction = func return self end
-
     __Doc__[[Used to select items with ranged index]]
     __Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
-    function Range(self, start, stop, step) self.RangeStart, self.RangeStop, self.RangeStep = start, stop, step return self end
+    function Range(self, start, stop, step)
+        self.RangeStart, self.RangeStop, self.RangeStep = start, stop, step
+        return self
+    end
 
     ----------------------------
     -- Constructor
     ----------------------------
-    __Arguments__{ System.Callable, Argument(Any, true), Argument(Any, true) }
+    __Arguments__{ IList }
+    function ListStreamWorker(self, list)
+        self.TargetList = list
+    end
+
+    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
     function ListStreamWorker(self, iter, obj, idx)
         self.TargetIter = iter
         self.TargetObj = obj
         self.TargetIndex = idx
     end
 
-    __Arguments__{ IList } function ListStreamWorker(self, list) self.TargetList = list end
-
     ----------------------------
     -- Meta-method
     ----------------------------
-    __Arguments__{ System.Callable, Argument(Any, true), Argument(Any, true) }
+    __Arguments__{ IList }
+    function __exist(list)
+        local worker = tremove(IdleWorkers)
+        if worker then worker.TargetList = list end
+        return worker
+    end
+
+    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
     function __exist(iter, obj, idx)
         local worker = tremove(IdleWorkers)
         if worker then
@@ -300,14 +350,6 @@ class "ListStreamWorker" (function (_ENV)
         end
         return worker
     end
-
-    __Arguments__{ IList } function __exist(list)
-        local worker = tremove(IdleWorkers)
-        if worker then worker.TargetList = list end
-        return worker
-    end
-
-    __call = GetIterator
 end)
 
 ----------------------------
@@ -319,18 +361,18 @@ interface "IList" (function (_ENV)
     -- Queue Method
     ---------------------------
     __Doc__[[Map the items to other type datas]]
-    __Arguments__{ String }
-    function Map(self, feature) return ListStreamWorker(self):Map(feature) end
-
     __Arguments__{ Callable }
     function Map(self, func) return ListStreamWorker(self):Map(func) end
 
-    __Doc__[[Used to filter the items with a check function]]
-    __Arguments__{ String, Argument(Any, true) }
-    function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
+    __Arguments__{ String }
+    function Map(self, feature) return ListStreamWorker(self):Map(feature) end
 
+    __Doc__[[Used to filter the items with a check function]]
     __Arguments__{ Callable }
     function Filter(self, func) return ListStreamWorker(self):Filter(func) end
+
+    __Arguments__{ String, Argument(Any, true) }
+    function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
 
     __Doc__[[Used to select items with ranged index]]
     __Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
@@ -340,7 +382,7 @@ interface "IList" (function (_ENV)
     -- Final Method
     ---------------------------
     __Doc__[[Convert the selected items to a list]]
-    __Arguments__{ Argument(IListClass, true) }
+    __Arguments__{ Argument(-IList, true, List) }
     function ToList(self, cls) return cls(self) end
 
     __Doc__[[Combine the items to get a result]]
@@ -357,6 +399,13 @@ interface "IList" (function (_ENV)
     end
 
     __Doc__[[Call the function for each element or set property's value for each element]]
+    __Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
+    function Each(self, func, ...)
+        for _, obj in self:GetIterator() do
+            func(obj, ...)
+        end
+    end
+
     __Arguments__{ String, Argument(Any, true, nil, nil, true) }
     function Each(self, feature, ...)
         local getObjectClass = Reflector.GetObjectClass
@@ -383,7 +432,4 @@ interface "IList" (function (_ENV)
             end
         end
     end
-
-    __Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
-    function Each(self, func, ...) for _, obj in self:GetIterator() do func(obj, ...) end end
 end)

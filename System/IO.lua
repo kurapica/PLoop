@@ -134,31 +134,10 @@ interface "IO" (function (_ENV)
             ----------------------------------
             -- Constructor
             ----------------------------------
-            __Arguments__{ String, String, OSType, Argument(NaturalNumber, true, 1) }
-            function __PipeRead__(self, commandFormat, resultFormat, ostype, argCount)
-                self.CommandFormat = commandFormat
-                self.ResultFormat = resultFormat
-                self.OS = ostype
-                self.ArgCount = argCount
-            end
+            __Arguments__{}
+            function __PipeRead__() end
 
-            __Arguments__{ String, Function, OSType, Argument(NaturalNumber, true, 1) }
-            function __PipeRead__(self, commandFormat, resultProvider, ostype, argCount)
-                self.CommandFormat = commandFormat
-                self.ResultProvider = resultProvider
-                self.OS = ostype
-                self.ArgCount = argCount
-            end
-
-            __Arguments__{ Function, String, OSType, Argument(NaturalNumber, true, 1) }
-            function __PipeRead__(self, commandProvider, resultFormat, ostype, argCount)
-                self.CommandProvider = commandProvider
-                self.ResultFormat = resultFormat
-                self.OS = ostype
-                self.ArgCount = argCount
-            end
-
-            __Arguments__{ Function, Function, OSType, Argument(NaturalNumber, true, 1) }
+            __Arguments__{ Callable, Callable, OSType, Argument(NaturalNumber, true, 1) }
             function __PipeRead__(self, commandProvider, resultProvider, ostype, argCount)
                 self.CommandProvider = commandProvider
                 self.ResultProvider = resultProvider
@@ -166,8 +145,29 @@ interface "IO" (function (_ENV)
                 self.ArgCount = argCount
             end
 
-            __Arguments__{}
-            function __PipeRead__() end
+            __Arguments__{ Callable, String, OSType, Argument(NaturalNumber, true, 1) }
+            function __PipeRead__(self, commandProvider, resultFormat, ostype, argCount)
+                self.CommandProvider = commandProvider
+                self.ResultFormat = resultFormat
+                self.OS = ostype
+                self.ArgCount = argCount
+            end
+
+            __Arguments__{ String, Callable, OSType, Argument(NaturalNumber, true, 1) }
+            function __PipeRead__(self, commandFormat, resultProvider, ostype, argCount)
+                self.CommandFormat = commandFormat
+                self.ResultProvider = resultProvider
+                self.OS = ostype
+                self.ArgCount = argCount
+            end
+
+            __Arguments__{ String, String, OSType, Argument(NaturalNumber, true, 1) }
+            function __PipeRead__(self, commandFormat, resultFormat, ostype, argCount)
+                self.CommandFormat = commandFormat
+                self.ResultFormat = resultFormat
+                self.OS = ostype
+                self.ArgCount = argCount
+            end
         end)
 
         ----------------------------------

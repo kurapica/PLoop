@@ -300,7 +300,7 @@ interface "Serialization" (function (_ENV)
     end)
 
     __Doc__ [[Provide a format for serialization. Used to serialize the table data to target format or convert the target format data to the table data.]]
-    __Abstract__()
+    __Abstract__() __Sealed__()
     class "FormatProvider" (function (_ENV)
         __Doc__[[Serialize the common lua data to the target format for storage.]]
         __Arguments__{ Any }
@@ -318,15 +318,15 @@ interface "Serialization" (function (_ENV)
             error(("%s has no implementation for FormatProvider:Serialize(System.Any, System.IO.TextWriter)"):format(getmetatable(self)))
         end
 
+        __Arguments__{ System.IO.TextReader }
+        function Deserialize(self, reader)
+            error(("%s has no implementation for FormatProvider:Deserialize(System.IO.TextReader)"):format(getmetatable(self)))
+        end
+
         __Doc__[[Deserialize the data to common lua data.]]
         __Arguments__{ Any }
         function Deserialize(self, data)
             error(("%s has no implementation for FormatProvider:Deserialize(System.Any)"):format(getmetatable(self)))
-        end
-
-        __Arguments__{ System.IO.TextReader }
-        function Deserialize(self, reader)
-            error(("%s has no implementation for FormatProvider:Deserialize(System.IO.TextReader)"):format(getmetatable(self)))
         end
     end)
 
@@ -387,24 +387,24 @@ interface "Serialization" (function (_ENV)
         end
     end
 
-    __Arguments__{ FormatProvider, Any }
-    __Static__() function Deserialize(provider, data)
-        return Deserialize2Object(provider:Deserialize(data))
-    end
-
     __Arguments__{ FormatProvider, System.IO.TextReader }
     __Static__() function Deserialize(provider, reader)
         return Deserialize2Object(provider:Deserialize(reader))
     end
 
-    __Arguments__{ FormatProvider, Any, SerializableType }
-    __Static__() function Deserialize(provider, data, oType)
-        return Deserialize2Object(provider:Deserialize(data), oType)
+    __Arguments__{ FormatProvider, Any }
+    __Static__() function Deserialize(provider, data)
+        return Deserialize2Object(provider:Deserialize(data))
     end
 
     __Arguments__{ FormatProvider, System.IO.TextReader, SerializableType }
     __Static__() function Deserialize(provider, reader, oType)
         return Deserialize2Object(provider:Deserialize(reader), oType)
+    end
+
+    __Arguments__{ FormatProvider, Any, SerializableType }
+    __Static__() function Deserialize(provider, data, oType)
+        return Deserialize2Object(provider:Deserialize(data), oType)
     end
 
     __Arguments__{ FormatProvider, Serializable }

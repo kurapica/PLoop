@@ -12,7 +12,8 @@ _ENV = Module     "System.Text"                      "0.1.0"
 namespace "System.Text"
 
 __Doc__[[Represents a character encoding.]]
-__Abstract__() class "Encoding" (function(_ENV)
+__Abstract__() __Sealed__()
+class "Encoding" (function(_ENV)
     __Doc__[[The name of the encoding]]
     __Static__()
     property "EncodingName" { Set = false, Default = "Encoding" }

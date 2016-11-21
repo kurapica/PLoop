@@ -283,11 +283,6 @@ class "StringFormatProvider" (function(_ENV)
     end
 
     __Doc__[[Deserialize the data to common lua data.]]
-    __Arguments__{ Any }
-    function Deserialize(self, data)
-        return loadstring("return " .. data)()
-    end
-
     __Arguments__{ System.IO.TextReader }
     function Deserialize(self, reader)
         local data = reader:ReadToEnd()
@@ -295,5 +290,10 @@ class "StringFormatProvider" (function(_ENV)
         if data then
             return loadstring("return " .. data)()
         end
+    end
+
+    __Arguments__{ Any }
+    function Deserialize(self, data)
+        return loadstring("return " .. data)()
     end
 end)

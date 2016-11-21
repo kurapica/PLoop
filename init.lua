@@ -11,12 +11,13 @@ require "PLoop.System.IO"
 require "PLoop.System.Recycle"
 require "PLoop.System.Serialization"
 require "PLoop.System.Threading"
-require "PLoop.System.Xml"
+-- require "PLoop.System.Xml"
 
 -- System.Collections.ListStreamWorker
 require "PLoop.System.Collections.List"
 require "PLoop.System.Collections.Dictionary"
 require "PLoop.System.Collections.IIndexedListSorter"
+require "PLoop.System.Collections.ObjectArray"
 
 -- System.Text
 require "PLoop.System.Text.UTF8Encoding"

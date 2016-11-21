@@ -12,9 +12,9 @@ _ENV = Module     "System.Threading"                 "1.0.2"
 namespace "System"
 
 __Doc__[[Used for threading control]]
-__Final__()
+__Final__() __Sealed__()
 interface "Threading" (function(_ENV)
-
+    __Sealed__()
     enum "ThreadStatus" {
         "running",
         "suspended",
@@ -83,12 +83,19 @@ interface "Threading" (function(_ENV)
     ------------------------------------------------------
     __Doc__[[
         <desc>Call the function in a thread from the thread pool</desc>
+        <param name="func">the function or thread used to be call</param>
         <param name="...">the parameters</param>
         <return>the return value of the func</return>
     ]]
+    __Arguments__{ System.Thread, { IsList = true, Nilable = true } }
     function ThreadCall(func, ...)
-        if type(func) == "thread" and status(func) == "suspended" then return chkValue( resume(func, ...) ) end
+        if status(func) == "suspended" then
+            return chkValue( resume(func, ...) )
+        end
+    end
 
+    __Arguments__{ Function, { IsList = true, Nilable = true } }
+    function ThreadCall(func, ...)
         local th = THREAD_POOL()
 
         -- Register the function
@@ -116,6 +123,7 @@ interface "Threading" (function(_ENV)
             -- 3       i_3
         </usage>
     ]]
+    __Arguments__{ Function }
     function Iterator(func)
         return ThreadCall(function()
             local th = ITER_POOL()
@@ -134,9 +142,11 @@ interface "Threading" (function(_ENV)
         Thread object can use 'Resume' method to resume coroutine like 'obj:Resume(arg1, arg2, arg3)'. Also can use 'obj(arg1, arg2, arg3)' for short.
         In the Thread object's controling function, can use the System.Threading's method to control the coroutine.
     ]]
+    __Sealed__()
     class "Thread" (function(_ENV)
+        inherit "Object"
 
-        _MainThread = running()
+        _MainThread = running() or 0
 
         local function chkValue(self, flag, ...)
             if flag then
@@ -246,7 +256,8 @@ interface "Threading" (function(_ENV)
                     self.__Thread = create(th)
                 elseif type(th) == "thread" then
                     self.__Thread = th
-                elseif th then
+
+                elseif th and Reflector.ObjectIsClass(th, Threading.Thread) then
                     self.__Thread = th.Thread
                 else
                     self.__Thread = nil
@@ -257,15 +268,9 @@ interface "Threading" (function(_ENV)
         ------------------------------------------------------
         -- Constructor
         ------------------------------------------------------
-        __Doc__[[
-            <param name="func" type="function|thread" optional="true">The init function or thread</param>
-        ]]
+        __Arguments__( System.Thread + Function )
         function Thread(self, func)
-            if type(func) == "function" then
-                self.Thread = create(func)
-            elseif type(func) == "thread" then
-                self.Thread = func
-            end
+            self.Thread = func
         end
 
         ------------------------------------------------------

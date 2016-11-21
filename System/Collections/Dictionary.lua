@@ -30,7 +30,7 @@ class "Dictionary" (function (_ENV)
     -----------------------
     -- Property
     -----------------------
-    property "Items" { Type = Table, Default = function(self) return {} end }
+    property "Items" { Type = RawTable, Default = function(self) return {} end }
 
     -----------------------
     -- Method
@@ -49,10 +49,10 @@ class "Dictionary" (function (_ENV)
     __Arguments__{ }
     function Dictionary(self) end
 
-    __Arguments__{ Table }
+    __Arguments__{ RawTable }
     function Dictionary(self, tbl) self.Items = tbl end
 
-    __Arguments__{ Table, Table }
+    __Arguments__{ RawTable, RawTable }
     function Dictionary(self, lstKey, lstValue)
         local iter, o, idx, value = ipairs(lstValue)
         for _, key in ipairs(lstKey) do
@@ -80,11 +80,6 @@ class "Dictionary" (function (_ENV)
             end
         end
     end
-
-    -----------------------
-    -- Meta-method
-    -----------------------
-    function __call(self) return self:GetIterator() end
 end)
 
 -----------------------
@@ -150,18 +145,20 @@ class "DictionaryStreamWorker" (function (_ENV)
     ----------------------------
     -- Constructor
     ----------------------------
-    __Arguments__{ IDictionary } function DictionaryStreamWorker(self, dict) self.TargetDict = dict end
+    __Arguments__{ IDictionary }
+    function DictionaryStreamWorker(self, dict)
+        self.TargetDict = dict
+    end
 
     ----------------------------
     -- Meta-method
     ----------------------------
-    __Arguments__{ IDictionary } function __exist(dict)
+    __Arguments__{ IDictionary }
+    function __exist(dict)
         local worker = tremove(IdleWorkers)
         if worker then worker.TargetDict = dict end
         return worker
     end
-
-    __call = GetIterator
 end)
 
 ----------------------------

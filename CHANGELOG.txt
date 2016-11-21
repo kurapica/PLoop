@@ -1,3 +1,38 @@
+2016/11/21
+    System.RawBoolean is added, only accept true/false, used for `__Arguments__`.
+
+2016/11/10
+    The attribute system support new type - System.AttributeTargets.ObjectMethod, it's used to bind info or modify the object's method(the object method is assigned to the object directly), works like :
+
+        __ObjectMethodAttributeEnabled__{ Inheritable = true }
+        class "A" {
+            Name = { Type = System.String, Default = "Anonymous", Event = "OnNameChanged" }
+        }
+
+        o = A()
+
+        __Delegate__(System.Threading.ThreadCall)
+        function o:DoThreadTask(...)
+        end
+
+        __Delegate__(System.Threading.ThreadCall)
+        o.OnNameChanged = o.OnNameChanged + function(self, new) end
+
+    Only object whose class is marked with `__ObjectMethodAttributeEnabled__` attribute can use this feature.
+
+2016/11/09
+    The struct system is re-designed, the validator can be only used to validate the value, not to change it, if the struct would modify the value, it should be done in `__init` method like :
+
+        struct "Boolean" {
+            -- No check for boolean
+            Boolean = function (value) end;
+
+            -- Change the value
+            __init = function (value) return value and true or false end;
+        }
+
+    The old system would cause heavy clone cost and some problem for `__Arguments__` overload system, and split the validation and modification would be more useful.
+
 2016/10/19
     System.Reflector.GetBaseStruct is added to get the base struct of custom struct.
 
