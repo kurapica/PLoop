@@ -63,7 +63,7 @@ class "Resource" (function (_ENV)
     ----------------------------------
     -- FileLoadInfo
     ----------------------------------
-    __Cache__()
+    __AutoCache__()
     FileLoadInfo = class {
         -- Constructor
         function (self, path)
@@ -155,7 +155,7 @@ class "Resource" (function (_ENV)
         local res = self.Resource
 
         if res ~= nil and self.ReloadWhenModified and self:CheckReload() then
-            if res and not Reflector.GetUpperNameSpace(res) and self.RequireFileInfo then
+            if res and not Reflector.GetSuperNameSpace(res) and self.RequireFileInfo then
                 -- Mark the same resource must be reloaded
                 for info in pairs(self.RequireFileInfo) do if info.Resource == res then info.RequireReLoad = true end end
             end
@@ -170,7 +170,7 @@ class "Resource" (function (_ENV)
                 -- Notice the other files
                 if self.NoticeFileInfo and Resource.ReloadWhenModified then
                     for info in pairs(self.NoticeFileInfo) do
-                        if info.Resource and not Reflector.GetUpperNameSpace(info.Resource) then
+                        if info.Resource and not Reflector.GetSuperNameSpace(info.Resource) then
                             info.RequireReLoad = true
                         end
                     end

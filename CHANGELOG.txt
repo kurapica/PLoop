@@ -1,3 +1,11 @@
+2016/12/01
+    The attribute has *Priority* and *SubLevel* property now, they are used to decided the order of the attribute's applied process.
+
+    Many methods removed from the *System.Reflector*, since they can be replaced by attribute's methods.
+
+2016/11/24
+    Re-design the property system, disable the PLOOP_SAVE_MEMORY(default disabled) mode will speed up the property's access by 10%-30%.
+
 2016/11/21
     System.RawBoolean is added, only accept true/false, used for `__Arguments__`.
 

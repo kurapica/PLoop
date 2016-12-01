@@ -382,7 +382,7 @@ interface "Serialization" (function (_ENV)
             return true
         else
             -- Check if the custom struct have base struct
-            local btype = GetBaseStruct(oType)
+            local btype = __Base__:GetStructAttribute(oType)
             return btype and IsSerializableType(btype) or false
         end
     end
