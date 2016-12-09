@@ -6,7 +6,7 @@
 --========================================================--
 
 --========================================================--
-_ENV = Module     "System.Threading"                 "1.0.2"
+_ENV = Module     "System.Threading"                 "1.1.0"
 --========================================================--
 
 namespace "System"
@@ -14,104 +14,120 @@ namespace "System"
 __Doc__[[Used for threading control]]
 __Final__() __Sealed__()
 interface "Threading" (function(_ENV)
-    __Sealed__()
-    enum "ThreadStatus" {
-        "running",
-        "suspended",
-        "normal",
-        "dead",
-    }
+    ------------------------------------------------------
+    -- Thread Pool
+    ------------------------------------------------------
+    THREAD_POOL_MAX = 100
 
-    THREAD_POOL_SIZE = 100
+    THREAD_PROC_INIT = 1
+    THREAD_PROC_CALLFUNC = 2
+    THREAD_PROC_RECYCLING = 3
 
-    -- This func means the function call is finished successful, so, we need send the running thread back to the pool
-    local function retValueAndRecycle(...) THREAD_POOL( running() ) return ... end
-
-    local function callFunc(func, ...) return retValueAndRecycle( func(...) ) end
-
-    local function newRycThread(pool, func)
-        while pool == THREAD_POOL and type(func) == "function" do pool, func = yield( callFunc ( func, yield() ) ) end
-    end
-
-    THREAD_POOL = setmetatable({}, {
-        __call = function(self, value)
-            if value then
-                -- re-use the thread or use resume to kill
-                if #self < THREAD_POOL_SIZE then tinsert(self, value) else resume(value) end
+    THREAD_POOL = {}
+    THREAD_STATUS = setmetatable({}, {__mode="k"})
+    THREAD_ARG_PROC = setmetatable({}, {
+        __index = function(self, cnt)
+            local body = {}
+            local args = ""
+            if cnt > 0 then
+                for i = 1, cnt do body[i] = "arg" .. i end
+                args = tblconcat(body, ",")
+                wipe(body)
+                tinsert(body, "local yield = ...")
+                tinsert(body, ("return function(iter,func,%s)"):format(args))
+                tinsert(body, ("return func(%s,yield(iter))"):format(args))
             else
-                -- Keep safe from unexpected resume
-                while not value or status(value) == "dead" do value = tremove(self) or create(newRycThread) end
-                return value
+                tinsert(body, "local yield = ...")
+                tinsert(body, "return function(iter,func)")
+                tinsert(body, "return func(yield(iter))")
             end
-        end,
-    })
 
-    local function chkValue(flag, msg, ...)
-        if flag then
-            return msg, ...
-        else
-            return error(msg, 2)
+            tinsert(body, "end")
+
+            body = tblconcat(body, "\n")
+
+            self[cnt] = loadstring(body)(yield)
+
+            return self[cnt]
         end
+    })
+
+    local function reCycleAndRet(iter, ...)
+        if #THREAD_POOL < THREAD_POOL_MAX then
+            tinsert(THREAD_POOL, iter)
+            THREAD_STATUS[iter] = THREAD_PROC_RECYCLING
+        else
+            THREAD_STATUS[iter] = nil
+        end
+        yield(...)
     end
 
-    ITER_POOL_SIZE = 100
+    local function callIterFunc(iter, func, ...)
+        local cnt = select("#", ...)
+        THREAD_STATUS[iter] = THREAD_PROC_CALLFUNC
+        reCycleAndRet(iter, THREAD_ARG_PROC[cnt](iter, func, ...))
+    end
 
-    ITER_CACHE = setmetatable({}, { __mode = "k" })
-    ITER_POOL = setmetatable({}, {
-        __call = function(self, value)
-            if value then
-                if #self < ITER_POOL_SIZE then
-                    tinsert(self, value)
-                    value.Thread = nil
-                else
-                    ITER_CACHE[value] = nil
-                end
-            else
-                value = tremove(self) or Thread()
+    local function newIterator()
+        local iter = tremove(THREAD_POOL)
 
-                if not ITER_CACHE[value] then
-                    ITER_CACHE[value] = true
-                end
-
-                return value
+        while iter do
+            if THREAD_STATUS[iter] == THREAD_PROC_RECYCLING then
+                iter()
             end
-        end,
-    })
+            if THREAD_STATUS[iter] == THREAD_PROC_INIT then
+                return iter
+            end
+
+            iter = tremove(THREAD_POOL)
+        end
+
+        local iter = wrap(
+            function( iter )
+                while true do
+                    THREAD_STATUS[iter] = THREAD_PROC_INIT
+                    callIterFunc(iter, yield())
+                end
+            end
+        )
+
+        iter(iter)
+
+        return iter
+    end
 
     ------------------------------------------------------
     -- Static Methods
     ------------------------------------------------------
     __Doc__[[
-        <desc>Call the function in a thread from the thread pool</desc>
-        <param name="func">the function or thread used to be call</param>
-        <param name="...">the parameters</param>
-        <return>the return value of the func</return>
-    ]]
-    __Arguments__{ System.Thread, { IsList = true, Nilable = true } }
-    function ThreadCall(func, ...)
-        if status(func) == "suspended" then
-            return chkValue( resume(func, ...) )
-        end
-    end
+        <desc>Used to make call function as thread</desc>
+        <param name="func" type="function">the function contains yield instructions</param>
+        <param name="...">The arguments</param>
+        <usage>
+            function a(...)
+                return coroutine.running(), ...
+            end
 
+            print(Threading.ThreadCall(a, 1, 2, 3))
+
+            -- Oupput
+            -- thread: 00F95100 1   2   3
+        </usage>
+    ]]
     __Arguments__{ Function, { IsList = true, Nilable = true } }
     function ThreadCall(func, ...)
-        local th = THREAD_POOL()
-
-        -- Register the function
-        resume(th, THREAD_POOL, func)
-
-        -- Call and return the result
-        return chkValue( resume(th, ...) )
+        local iter = newIterator()
+        return iter(func)(...)
     end
 
     __Doc__[[
         <desc>Used to make iterator from functions</desc>
         <param name="func" type="function">the function contains yield instructions</param>
+        <param name="...">The arguments</param>
         <usage>
             function a(start, endp)
                 for i = start, endp do
-                    yield(i, "i_"..i)
+                    coroutine.yield(i, "i_"..i)
                 end
             end
 
@@ -121,163 +137,39 @@ interface "Threading" (function(_ENV)
             -- 1       i_1
             -- 2       i_2
             -- 3       i_3
+
+            -- Also can be used as
+            for k, v in Threading.Iterator(a, 1, 3) do print(k, v) end
         </usage>
     ]]
-    __Arguments__{ Function }
-    function Iterator(func)
-        return ThreadCall(function()
-            local th = ITER_POOL()
-
-            return func( th:Yield( th ) )
-        end)
+    __Arguments__{ Function, { IsList = true, Nilable = true } }
+    function Iterator(func, ...)
+        local iter = newIterator()
+        return iter(func, ...)
     end
 
     ------------------------------------------------------
-    -- System.Threading.Thread
+    -- Sub-Features
     ------------------------------------------------------
-    __Doc__[[
-        Thread object is used to control lua coroutines.
-        Thread object can be created with a default function that will be convert to coroutine, also can create a empty Thread object.
-        Thread object can use 'Thread' property to receive function, coroutine, other Thread object as it's control coroutine.
-        Thread object can use 'Resume' method to resume coroutine like 'obj:Resume(arg1, arg2, arg3)'. Also can use 'obj(arg1, arg2, arg3)' for short.
-        In the Thread object's controling function, can use the System.Threading's method to control the coroutine.
-    ]]
-    __Sealed__()
-    class "Thread" (function(_ENV)
-        inherit "Object"
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method + AttributeTargets.ObjectMethod, RunOnce = true}
+    __Sealed__() __Unique__()
+    class "__Thread__" (function(_ENV)
+        extend "IAttribute"
 
-        _MainThread = running() or 0
-
-        local function chkValue(self, flag, ...)
-            if flag then
-                if ITER_CACHE[self] and select('#', ...) == 0 then
-                    ITER_POOL(self)
-                end
-                return ...
-            else
-                if ITER_CACHE[self]  then
-                    ITER_POOL(self)
-                end
-
-                local value = ...
-
-                if value then
-                    error(value, 2)
-                else
-                    error(..., 2)
-                end
-            end
+        function __Thread__(self)
+            local del = __Delegate__(ThreadCall)
+            del.Priorty = AttributePriorty.Lower
         end
+    end)
 
-        ------------------------------------------------------
-        -- Event
-        ------------------------------------------------------
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Event + AttributeTargets.Method + AttributeTargets.ObjectMethod, RunOnce = true}
+    __Sealed__() __Unique__()
+    class "__Iterator__" (function(_ENV)
+        extend "IAttribute"
 
-        ------------------------------------------------------
-        -- Method
-        ------------------------------------------------------
-        __Doc__[[
-            <desc>Resume the thread</desc>
-            <param name="...">any arguments passed to the thread</param>
-            <return name="..."> any return values from the thread</return>
-        ]]
-        function Resume(self, ...)
-            if self.Thread then
-                if running() == self.Thread then
-                    return ...
-                else
-                    return chkValue( self, resume(self.Thread, ...) )
-                end
-            elseif running() ~= _MainThread then
-                self.Thread = running()
-                return ...
-            end
-        end
-
-        __Doc__[[
-            <desc>Yield the thread</desc>
-            <param name="...">return arguments</param>
-        ]]
-        function Yield(self, ...)
-            local co = running()
-
-            if co ~= _MainThread then
-                self.Thread = co
-
-                return yield(...)
-            end
-        end
-
-        __Doc__[[
-            <desc>Whether the thread is running</desc>
-            <return type="boolean">true if the thread is running</return>
-        ]]
-        function IsRunning(self)
-            local co = self.Thread
-            return co and (status(co) == "running" or status(co) == "normal") or false
-        end
-
-        __Doc__[[
-            <desc>Whether the thread is suspended</desc>
-            <return type="boolean">true if the thread is suspended</return>
-        ]]
-        function IsSuspended(self)
-            return self.Thread and status(self.Thread) == "suspended" or false
-        end
-
-        __Doc__[[
-            <desc>Whether the thread is dead</desc>
-            <return type="boolean">true if the thread is dead</return>
-        ]]
-        function IsDead(self)
-            return not self.Thread or status(self.Thread) == "dead" or false
-        end
-
-        ------------------------------------------------------
-        -- Property
-        ------------------------------------------------------
-        __Doc__[[Get the thread's status]]
-        property "Status" {
-            Get = function(self)
-                if self.Thread then
-                    return status(self.Thread)
-                else
-                    return "dead"
-                end
-            end,
-            Type = ThreadStatus,
-        }
-
-        __Doc__[[Get the thread object's coroutine or set a new function/coroutine to it]]
-        property "Thread" {
-            Field = "__Thread",
-            Set = function(self, th)
-                if type(th) == "function" then
-                    self.__Thread = create(th)
-                elseif type(th) == "thread" then
-                    self.__Thread = th
-
-                elseif th and Reflector.ObjectIsClass(th, Threading.Thread) then
-                    self.__Thread = th.Thread
-                else
-                    self.__Thread = nil
-                end
-            end,
-        }
-
-        ------------------------------------------------------
-        -- Constructor
-        ------------------------------------------------------
-        __Arguments__( System.Thread + Function )
-        function Thread(self, func)
-            self.Thread = func
-        end
-
-        ------------------------------------------------------
-        -- __call for class instance
-        ------------------------------------------------------
-        function __call(self, ...)
-            return Resume(self, ...)
+        function __Iterator__(self)
+            local del = __Delegate__(Iterator)
+            del.Priorty = AttributePriorty.Lower
         end
     end)
 end)

@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2016/12/01                                      --
--- Version          :   r162                                            --
+-- Last Update Date :   2016/12/09                                      --
+-- Version          :   r164                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -3743,6 +3743,8 @@ do
         oper = info.MetaTable.___newindex
         if oper then return oper(self, key, value) end
 
+        if info.NoAutoSet then error("The object is readonly.", 2) end
+
         rawset(self, key, value)
     end
 
@@ -3821,6 +3823,7 @@ do
 
     FLAG_NEWIDX_ENOBJATTR = 2^0
     FLAG_NEWIDX_METANEWIDX = 2^1
+    FLAG_NEWINDEX_NOAUTOSET = 2^2
 
     function GenerateMetaNewIndex(info)
         local metaToken = 0
@@ -3835,6 +3838,10 @@ do
         if info.MetaTable.___newindex then
             metaToken = TurnOnFlags(FLAG_NEWIDX_METANEWIDX, metaToken)
             tinsert(upValues, info.MetaTable.___newindex)
+        end
+
+        if info.NoAutoSet then
+            metaToken = TurnOnFlags(FLAG_NEWINDEX_NOAUTOSET, metaToken)
         end
 
         -- Building
@@ -3880,8 +3887,10 @@ do
             if ValidateFlags(FLAG_NEWIDX_METANEWIDX, metaToken) then
                 tinsert(gHeader, "metaNewIndex")
                 tinsert(gbody, [[return metaNewIndex(self, key, value)]])
-            else
+            elseif not ValidateFlags(FLAG_NEWINDEX_NOAUTOSET, metaToken) then
                 tinsert(gbody, [[rawset(self, key, value)]])
+            else
+                tinsert(gbody, [[error("The object is readonly.", 2)]])
             end
 
             tinsert(gbody, [[end]])
@@ -7322,6 +7331,7 @@ do
 
                         arg.Name = "..."
                     end
+                    self.IsList = true
                 else
                     error(_Error_Header .. _Error_NotList:format(i))
                 end
@@ -7509,16 +7519,18 @@ do
             local cache = _ThreadArgs()
 
             -- Cache first
-            if count == 1 then
-                cache[1] = select(1 + base, ...)
-            elseif count == 2 then
-                cache[1], cache[2] = select(1 + base, ...)
-            elseif count == 3 then
-                cache[1], cache[2], cache[3] = select(1 + base, ...)
-            elseif count == 4 then
-                cache[1], cache[2], cache[3], cache[4] = select(1 + base, ...)
-            elseif count > 0 then
-                for i = 1, count do cache[i] = select(i + base, ...) end
+            if count > 0 then
+                if count == 1 then
+                    cache[1] = select(1 + base, ...)
+                elseif count == 2 then
+                    cache[1], cache[2] = select(1 + base, ...)
+                elseif count == 3 then
+                    cache[1], cache[2], cache[3] = select(1 + base, ...)
+                elseif count == 4 then
+                    cache[1], cache[2], cache[3], cache[4] = select(1 + base, ...)
+                else
+                    for i = 1, count do cache[i] = select(i + base, ...) end
+                end
             end
 
             local coverLoads = overLoads
@@ -7566,45 +7578,66 @@ do
 
                         -- Optional
                         if matched then
-                            for i = info.MinArgs + 1, count >= argsCount and count or argsCount do
-                                local arg = info[i] or info[argsCount]
-                                local value = cache[i]
+                            if info.IsList then
+                                local arg = info[argsCount]
+                                for i = info.MinArgs + 1, count do
+                                    local value = cache[i]
 
-                                if value == nil then
-                                    -- No check
-                                    if arg.Default ~= nil then value = CloneObj(arg.Default, true) end
-                                elseif arg.Type then
-                                    -- Validate the value
-                                    value = GetValidatedValue(arg.Type, value)
+                                    if value == nil then
+                                        -- No check
+                                        if arg.Default ~= nil then value = CloneObj(arg.Default, true) end
+                                    elseif arg.Type then
+                                        -- Validate the value
+                                        value = GetValidatedValue(arg.Type, value)
+                                    end
+
+                                    cache[i] = value
                                 end
+                            else
+                                for i = info.MinArgs + 1, argsCount do
+                                    local arg = info[i]
+                                    local value = cache[i]
 
-                                cache[i] = value
+                                    if value == nil then
+                                        -- No check
+                                        if arg.Default ~= nil then value = CloneObj(arg.Default, true) end
+                                    elseif arg.Type then
+                                        -- Validate the value
+                                        value = GetValidatedValue(arg.Type, value)
+                                    end
 
-                                if i > maxCnt then maxCnt = i end
+                                    cache[i] = value
+
+                                    if i > maxCnt then maxCnt = i end
+                                end
                             end
                         end
 
                         if base == 1 then
-                            if maxCnt == 1 then
+                            if maxCnt == 0 then
+                                return info.Method( object )
+                            elseif maxCnt == 1 then
                                 return info.Method( object, cache[1] )
                             elseif maxCnt == 2 then
                                 return info.Method( object, cache[1], cache[2] )
                             elseif maxCnt == 3 then
                                 return info.Method( object, cache[1], cache[2], cache[3] )
-                            elseif maxCnt == 4 then
-                                return info.Method( object, cache[1], cache[2], cache[3], cache[4] )
+                            --elseif maxCnt == 4 then
+                            --    return info.Method( object, cache[1], cache[2], cache[3], cache[4] )
                             else
                                 return info.Method( object, unpack(cache, 1, maxCnt) )
                             end
                         else
-                            if maxCnt == 1 then
+                            if maxCnt == 0 then
+                                return info.Method()
+                            elseif maxCnt == 1 then
                                 return info.Method( cache[1] )
                             elseif maxCnt == 2 then
                                 return info.Method( cache[1], cache[2] )
                             elseif maxCnt == 3 then
                                 return info.Method( cache[1], cache[2], cache[3] )
-                            elseif maxCnt == 4 then
-                                return info.Method( cache[1], cache[2], cache[3], cache[4] )
+                            --elseif maxCnt == 4 then
+                            --    return info.Method( cache[1], cache[2], cache[3], cache[4] )
                             else
                                 return info.Method( unpack(cache, 1, maxCnt) )
                             end
@@ -8591,13 +8624,13 @@ do
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
     __Sealed__() __Unique__()
-    class "__ObjectMethodAttributeEnabled__" (function(_ENV)
+    class "__ObjMethodAttr__" (function(_ENV)
         extend "IAttribute"
 
-        doc "__ObjectMethodAttributeEnabled__" [[
+        doc "__ObjMethodAttr__" [[
             The class's objects can use attribute to it's self-only methods, just like the methods defined in the class.
 
-                __ObjectMethodAttributeEnabled__{ Inheritable = false }
+                __ObjMethodAttr__{ Inheritable = false }
                 class "A" {}
 
                 obj = A()
@@ -8634,7 +8667,7 @@ do
         end
 
         function IsClassAttributeDefined(cls, target)
-            if cls ~= __ObjectMethodAttributeEnabled__ then return false end
+            if cls ~= __ObjMethodAttr__ then return false end
             local info = _NSInfo[target]
             if info then return info.EnableObjMethodAttr, info.InheritEnableObjMethodAttr end
             return false
@@ -8644,7 +8677,7 @@ do
         -- Constructor
         ------------------------------------------------------
         __Arguments__{}
-        function __ObjectMethodAttributeEnabled__(self)
+        function __ObjMethodAttr__(self)
             self.Inheritable = false
         end
     end)
@@ -8711,6 +8744,45 @@ do
         __Arguments__{ Function }
         function __EventChangeHandler__(self, value)
             self.Handler = value
+        end
+    end)
+
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+    __Sealed__() __Unique__()
+    class "__NoAutoSet__" (function(_ENV)
+        extend "IAttribute"
+
+        doc "__NoAutoSet__" [[
+            The class's object can only assign value to it's properties or event handlers.
+
+                __NoAutoSet__()
+                class "A" (function(_ENV)
+                    event "OnNameChanged"
+                    property "Name" { Type = String }
+                end)
+
+                obj = A()
+
+                -- Okay
+                obj.Name = "Ann"
+                obj.OnNameChanged = print
+
+                -- Error, it can't be set
+                obj.Other = 123
+        ]]
+
+        ------------------------------------------------------
+        -- Method
+        ------------------------------------------------------
+        function ApplyAttribute(self, target)
+            _NSInfo[target].NoAutoSet = true
+            GenerateMetaTable(_NSInfo[target])
+        end
+
+        function IsClassAttributeDefined(cls, target)
+            if cls ~= __NoAutoSet__ then return false end
+            local info = _NSInfo[target]
+            return info and info.NoAutoSet or false
         end
     end)
 

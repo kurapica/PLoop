@@ -1,3 +1,9 @@
+2016/12/09
+    `System.__NoAutoSet__` attribute is added, used to block the assignment to the object directly.
+
+2016/12/04
+    Rename `__ObjectMethodAttributeEnabled__` to `__ObjMethodAttr__` for simple using.
+
 2016/12/01
     The attribute has *Priority* and *SubLevel* property now, they are used to decided the order of the attribute's applied process.
 
