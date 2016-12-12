@@ -6,16 +6,41 @@
 --========================================================--
 
 --========================================================--
-_ENV = Module     "System.Recycle"                   "1.0.0"
+_ENV = Module     "System.Recycle"                   "1.1.0"
 --========================================================--
 
 namespace "System"
 
 __Doc__[[
-    Recycle object is used as an object factory and manager.
-    Recycle's constructor receive a class as it's first argument, the class would be used to generate new object to be recycle.
-    The other arugments for the constructor is passed to the class's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
-    After the recycle object is created as recycleObject, can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
+    Recycle is used as an object factory and recycle manager.
+
+    Recycle's constructor receive a class or struct as it's first argument, the class|struct would be used to generate a new object for recycling.
+    The other arugments for the constructor is passed to the class|struct's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
+
+    After the recycle object is created as 'recycleObject', you can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
+
+        ry = Recycle( class { print }, "Name%d" )
+
+        -- table: 00FA96B0  Name1
+        o = ry()
+        -- table: 00F4B730  Name2
+        o = ry()
+
+    Also you can give the recycle object a "New" method used to generate the new object if the creation of the recycled object is too complex like :
+
+        -- The class would print all arguments when its object created
+        ry = Recycle( class { print } )
+
+        function ry:New()
+            -- Add a count for it
+            self.Cnt = (self.Cnt or 0) + 1
+            return self.Type(self.Cnt)
+        end
+
+        -- Only one object would be created
+        o = ry()
+        ry(o)
+        o = ry()
 ]]
 __Sealed__()
 class "Recycle" (function(_ENV)
@@ -62,6 +87,15 @@ class "Recycle" (function(_ENV)
     ------------------------------------------------------
     -- Method
     ------------------------------------------------------
+    __Doc__[[ Create a new recycled object, should be overwrited.]]
+    function New(self)
+        if not self.Type then
+            return {}
+        else
+            return self.Type(parseArgs(self))
+        end
+    end
+
     __Doc__[[
         <desc>Push object in recycle bin</desc>
         <param name="object">the object that put in</param>
@@ -80,36 +114,23 @@ class "Recycle" (function(_ENV)
         <return name="object">the object that pop out</return>
     ]]
     function Pop(self)
-        -- give out item
-        if #self > 0 then
-            local ret = tremove(self, #self)
+        local ret = tremove(self)
 
-            OnPop(self, ret)
-
-            return ret
+        if not ret then
+            ret = self:New()
+            OnInit(self, ret)
         end
 
-        -- create new
-        if not self.Type then
-            local ret = {}
+        OnPop(self, ret)
 
-            OnPop(self, ret)
-
-            return ret
-        else
-            local obj = self.Type(parseArgs(self))
-
-            OnInit(self, obj)
-
-            OnPop(self, obj)
-
-            return obj
-        end
+        return ret
     end
 
     ------------------------------------------------------
     -- Property
     ------------------------------------------------------
+    __Doc__[[The recycled object's type]]
+    property "Type" { Type = Struct + Class }
 
     ------------------------------------------------------
     -- Constructor
@@ -118,6 +139,7 @@ class "Recycle" (function(_ENV)
         <param name="class" type="class">the class used to generate objects</param>
         <param name="...">the arguments that transform to the class's constructor</param>
     ]]
+    __Arguments__{ Struct + Class, { IsList = true, Nilable = true } }
     function Recycle(self, cls, ...)
         if type(cls) == "string" then cls = Reflector.GetNameSpaceForName(cls) end
 
