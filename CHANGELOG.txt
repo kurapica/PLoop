@@ -1,3 +1,6 @@
+2016/12/14
+    Fix System.Recycle to be a pure table manager.
+
 2016/12/09
     `System.__NoAutoSet__` attribute is added, used to block the assignment to the object directly.
 

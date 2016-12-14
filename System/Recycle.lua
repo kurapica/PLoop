@@ -141,13 +141,14 @@ class "Recycle" (function(_ENV)
     ]]
     __Arguments__{ Struct + Class, { IsList = true, Nilable = true } }
     function Recycle(self, cls, ...)
-        if type(cls) == "string" then cls = Reflector.GetNameSpaceForName(cls) end
-
         if cls and (Reflector.IsClass(cls) or Reflector.IsStruct(cls)) then
             self.Type = cls
             self.Arguments = select('#', ...) > 0 and {...}
         end
     end
+
+    __Arguments__{ }
+    function Recycle(self) end
 
     ------------------------------------------------------
     -- __call
