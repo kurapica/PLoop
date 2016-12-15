@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2016/12/09                                      --
--- Version          :   r164                                            --
+-- Last Update Date :   2016/12/15                                      --
+-- Version          :   r165                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -6292,6 +6292,7 @@ do
                                 -- The method may be wrapped in the apply operation
                                 if ret and ret ~= target and type(ret) == "function" then
                                     target = ret
+                                    arg1 = target
                                 end
                             end
                         --end
@@ -6320,6 +6321,7 @@ do
                                     -- The method may be wrapped in the apply operation
                                     if ret and ret ~= target and type(ret) == "function" then
                                         target = ret
+                                        arg1 = target
                                     end
                                 end
                             --end
@@ -7753,7 +7755,8 @@ do
         ------------------------------------------------------
         -- Property
         ------------------------------------------------------
-        property "Priorty" { Type = AttributePriorty, Default = AttributePriorty.Lowest }
+        property "Priorty" { Type = AttributePriorty, Default = AttributePriorty.Lower }
+        property "SubLevel" { Type = Number, Default = -9999}
     end)
 
     -- More usable attributes
