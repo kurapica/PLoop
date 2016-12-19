@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2016/12/15                                      --
--- Version          :   r165                                            --
+-- Last Update Date :   2016/12/20                                      --
+-- Version          :   r166                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -5859,36 +5859,6 @@ do
             end
         end
     end)
-
-    ------------------------------------------------------
-    -- System.Object
-    ------------------------------------------------------
-    class "Object" (function(_ENV)
-        doc "Object" [[The root class of other classes. Object class contains several methodes for common use.]]
-
-        ------------------------------------------------------
-        -- Method
-        ------------------------------------------------------
-        doc "GetClass" [[
-            <desc>Get the class type of the object</desc>
-            <return type="class">the object's class</return>
-        ]]
-        GetClass = Reflector.GetObjectClass
-
-        doc "IsClass" [[
-            <desc>Check if the object is an instance of the class</desc>
-            <param name="class"></param>
-            <return type="boolean">true if the object is an instance of the class</return>
-        ]]
-        IsClass = Reflector.ObjectIsClass
-
-        doc "IsInterface" [[
-            <desc>Check if the object is extend from the interface</desc>
-            <param name="interface"></param>
-            <return type="boolean">true if the object is extend from the interface</return>
-        ]]
-        IsInterface = Reflector.ObjectIsInterface
-    end)
 end
 
 ------------------------------------------------------
@@ -8813,9 +8783,6 @@ do
         __Sealed__:ApplyAttribute(Reflector)
         __Final__:ApplyAttribute(Reflector, AttributeTargets.Interface)
 
-        -- System.Object
-        __Sealed__:ApplyAttribute(Object)
-
         -- Event
         __Sealed__() __Final__() __WeakObject__"k"
         class (Event) {}
@@ -8854,8 +8821,6 @@ do
     __Sealed__()
     __Doc__[[Used to create an hierarchical environment with class system settings, like : Module "Root.ModuleA" "v72"]]
     class "Module" (function(_ENV)
-        inherit "Object"
-
         _Module = {}
         _ModuleInfo = setmetatable({}, WEAK_KEY)
 

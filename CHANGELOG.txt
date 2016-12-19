@@ -1,3 +1,6 @@
+2016/12/20
+    System.Object is removed from Core, there is no need to provide a root class in PLoop system. The framework should do it by themselves.
+
 2016/12/15
     Change the `System.__Arguments__`'s Priorty to lower and SubLevel to -9999, since it'd change the returned function, the lowest is used for attributes that won't change the contents(like register).
 
