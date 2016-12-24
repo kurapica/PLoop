@@ -5498,7 +5498,7 @@ do
         ]]
         function HasEvent(ns, evt)
             local info = _NSInfo[ns]
-            return info and info.Cache and getmetatable(info.Cache[evt]) or false
+            return info and info.Cache and getmetatable(info.Cache[evt]) and true or false
         end
 
         doc "GetStructType" [[

@@ -6,7 +6,7 @@
 --========================================================--
 
 --========================================================--
-_ENV = Module     "System.Collections.ObjectArray"   "0.0.1"
+_ENV = Module     "System.Collections.ObjectArray"   "1.0.0"
 --========================================================--
 
 namespace "System.Collections"
@@ -25,56 +25,85 @@ __Doc__[[
         -- The array won't check the object's Type for simple using
         ar = ObjectArray(A, A("Ann"), A("Ben"), A("Coco"))
 
-        -- The arguments are the object and other event arguments
-        function ar:OnNameChanged(obj, new, old)
+        -- You can set event handler to all objects by assign it to the array
+        function ar:OnNameChanged(new, old)
             print( ("%s -> %s"):format(old, new)  )
         end
     </usage>
 ]]
-__SimpleClass__() __Sealed__()
+__SimpleClass__() __Sealed__() __ObjMethodAttr__()
 class "ObjectArray" (function(_ENV)
     inherit "List"
+
+    _ArrayTypeMap   = setmetatable({}, {__mode="k"})
+    _ArrayEventMap  = setmetatable({}, {__mode="k"})
 
     ----------------------------------------------
     ------------------- Helper -------------------
     ----------------------------------------------
     local GetValidatedValue = System.Reflector.GetValidatedValue
+    local HasEvent          = System.Reflector.HasEvent
 
-
-    ----------------------------------------------
-    -------------------- Event -------------------
-    ----------------------------------------------
-
+    local function checkNewObj(self, obj)
+        if self.ObjectType then
+            local obj = GetValidatedValue(self.ObjectType, obj)
+            if obj == nil then
+                error("ObjectArray:Insert([index, ]object) - object should be type of " .. tostring(self.ObjectType), 3)
+            end
+            if _ArrayEventMap[self] then
+                for k, v in pairs(_ArrayEventMap[self]) do
+                    obj[k] = v
+                end
+            end
+        end
+        return obj
+    end
 
     ----------------------------------------------
     ------------------- Method -------------------
     ----------------------------------------------
+    __Arguments__{ Integer, Any }
+    function Insert(self, idx, obj)
+        return Super.Insert(self, idx, checkNewObj(self, obj))
+    end
 
+    __Arguments__{ Any }
+    function Insert(self, obj)
+        return Super.Insert(self, checkNewObj(self, obj))
+    end
 
     ----------------------------------------------
     ------------------ Property ------------------
     ----------------------------------------------
     __Doc__[[The object type of the array, it'll remove unvalid items when changed.]]
-    __Handler__(function(self, otype)
-        if otype then
-            for i = self.Count, 1, -1 do
-                local val = GetValidatedValue(otype, self[i])
+    property "ObjectType" {
+        Type = AnyType,
+        Set  = function(self, otype)
+            if otype then
+                for i = self.Count, 1, -1 do
+                    local val = GetValidatedValue(otype, self[i])
 
-                if val == nil then
-                    self:RemoveByIndex(i)
-                else
-                    self[i] = val
+                    if val == nil then
+                        self:RemoveByIndex(i)
+                    else
+                        self[i] = val
+                    end
                 end
             end
-        end
-    end)
-    property "ObjectType" { Type = AnyType }
+            _ArrayTypeMap[self] = otype
+        end,
+        Get  = function(self)
+            return _ArrayTypeMap[self]
+        end,
+    }
 
 
     ----------------------------------------------
     ------------------ Dispose -------------------
     ----------------------------------------------
     function Dispose(self)
+        _ArrayTypeMap[self]  = nil
+        _ArrayEventMap[self] = nil
     end
 
     ----------------------------------------------
@@ -92,11 +121,13 @@ class "ObjectArray" (function(_ENV)
     ----------------------------------------------
     __Arguments__{ String, Callable }
     function __newindex(self, key, value)
-        print(key, value)
-    end
+        if self.ObjectType and HasEvent(self.ObjectType, key) then
+            _ArrayEventMap[self] = _ArrayEventMap[self] or {}
+            _ArrayEventMap[self][key] = value
 
-    __Arguments__{ PositiveInteger, Any }
-    function __newindex(self, key, value)
-        print(key, value)
+            self:Each(key, value)
+        else
+            error("The object array's type don't have an event named " .. key, 2)
+        end
     end
 end)

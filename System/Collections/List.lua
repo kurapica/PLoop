@@ -82,7 +82,7 @@ class "List" (function (_ENV)
     function List(self, count, initValue)
         local ins = self.Insert
         for i = 1, count do
-            ins(self, initValue())
+            ins(self, initValue(i))
         end
     end
 
@@ -93,6 +93,14 @@ class "List" (function (_ENV)
             for i = 1, count do ins(self, initValue) end
         else
             for i = 1, count do ins(self, i) end
+        end
+    end
+
+    __Arguments__{ RawTable }
+    function List(self, tbl)
+        local ins = self.Insert
+        for _, v in ipairs(tbl) do
+            ins(self, v)
         end
     end
 
