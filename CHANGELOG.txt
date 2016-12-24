@@ -1,3 +1,26 @@
+2016/12/24
+    System.Collections.ObjectArray is finished, used to handle a group of same type objects, can be used to bind event handlers to all objects. The System.Collections.ObjectArray is object method attribute enabled, so it's useful to bind attribute for event handlers :
+
+        import "System"
+        import "System.Threading"
+        import "System.Collections"
+
+        class "Person" { Name = { Type = String, Event = "OnNameChanged" } }
+
+        oArr = ObjectArray(Person, Person{ Name = "Ann" })
+
+        -- Bind event handler to the array's object
+        __Thread__()
+        function oArr:OnNameChanged(new, old)
+            print(old , "->", new)
+        end
+
+        oArr:Insert(Person{ Name = "AAA"} )
+
+        -- Set all object's name to None
+        oArr:Each("Name", "None")
+
+
 2016/12/20
     System.Object is removed from Core, there is no need to provide a root class in PLoop system. The framework should do it by themselves.
 
