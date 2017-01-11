@@ -1,3 +1,6 @@
+2017/01/11
+    The System.Module is marked with `__ObjMethodAttr__{ Inheritable = true }`.
+
 2016/12/24
     System.Collections.ObjectArray is finished, used to handle a group of same type objects, can be used to bind event handlers to all objects. The System.Collections.ObjectArray is object method attribute enabled, so it's useful to bind attribute for event handlers :
 

@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2016/12/20                                      --
--- Version          :   r166                                            --
+-- Last Update Date :   2017/01/11                                      --
+-- Version          :   r167                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -8818,7 +8818,7 @@ do
     _ModuleKeyWord.enum = enum
     _ModuleKeyWord.struct = struct
 
-    __Sealed__()
+    __Sealed__() __ObjMethodAttr__{ Inheritable = true }
     __Doc__[[Used to create an hierarchical environment with class system settings, like : Module "Root.ModuleA" "v72"]]
     class "Module" (function(_ENV)
         _Module = {}
