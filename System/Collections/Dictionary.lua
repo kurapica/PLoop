@@ -23,25 +23,14 @@ interface "IDictionary" { Iterable }
 -----------------------
 -- Dictionary
 -----------------------
-__Sealed__()
+__Sealed__() __SimpleClass__()
 class "Dictionary" (function (_ENV)
     extend "IDictionary"
 
     -----------------------
-    -- Property
-    -----------------------
-    property "Items" { Type = RawTable, Default = function(self) return {} end }
-
-    -----------------------
     -- Method
     -----------------------
-    GetIterator = function(self) return pairs(self.Items) end
-
-    __Doc__[[Add an key-value pair to the dicationary]]
-    function Add(self, key, value) self.Items[key] = value end
-
-    __Doc__[[Remove an key from the dicationary]]
-    function Remove(self, key) self.Items[key] = nil end
+    GetIterator = pairs
 
     -----------------------
     -- Constructor
@@ -49,16 +38,13 @@ class "Dictionary" (function (_ENV)
     __Arguments__{ }
     function Dictionary(self) end
 
-    __Arguments__{ RawTable }
-    function Dictionary(self, tbl) self.Items = tbl end
-
     __Arguments__{ RawTable, RawTable }
     function Dictionary(self, lstKey, lstValue)
         local iter, o, idx, value = ipairs(lstValue)
         for _, key in ipairs(lstKey) do
             idx, value = iter(o, idx)
             if idx then
-                self:Add(key, value)
+                rawset(self, key, value)
             else
                 break
             end
@@ -66,7 +52,11 @@ class "Dictionary" (function (_ENV)
     end
 
     __Arguments__{ IDictionary }
-    function Dictionary(self, dict) for key, value in lst:GetIterator() do self:Add(key, value) end end
+    function Dictionary(self, dict)
+        for key, value in lst:GetIterator() do
+            rawset(self, key, value)
+        end
+    end
 
     __Arguments__{ IList, IList }
     function Dictionary(self, lstKey, lstValue)
@@ -74,7 +64,7 @@ class "Dictionary" (function (_ENV)
         for _, key in lstKey:GetIterator() do
             idx, value = iter(o, idx)
             if idx then
-                self:Add(key, value)
+                rawset(self, key, value)
             else
                 break
             end
@@ -180,28 +170,6 @@ interface "IDictionary" (function (_ENV)
     ---------------------------
     -- Final Method
     ---------------------------
-    __Doc__[[Get the ListStreamWorker of keys]]
-    function Keys(self)
-        return ListStreamWorker( Threading.Iterator(function()
-            local index = 0
-            for key in self:GetIterator() do
-                index = index + 1
-                yield(index, key)
-            end
-        end) )
-    end
-
-    __Doc__[[Get the ListStreamWorker of values]]
-    function Values(self)
-        return ListStreamWorker( Threading.Iterator(function()
-            local index = 0
-            for _, value in self:GetIterator() do
-                index = index + 1
-                yield(index, value)
-            end
-        end) )
-    end
-
     __Doc__[[Combine the key-value pairs to get a result]]
     __Arguments__{ Callable, Argument(Any, true) }
     function Reduce(self, func, init)
@@ -212,4 +180,33 @@ interface "IDictionary" (function (_ENV)
     __Doc__[[Call the function for each element or set property's value for each element]]
     __Arguments__{ Callable, Argument(Any, true, nil, nil, true)  }
     function Each(self, func, ...) for key, value in self:GetIterator() do func(key, value, ...) end end
+
+    ---------------------------
+    -- List - Property
+    ---------------------------
+    __Doc__[[Get a list stream worker of the dictionary's keys]]
+    property "Keys" {
+        Get = function (self)
+            return ListStreamWorker( Threading.Iterator(function()
+                local index = 0
+                for key in self:GetIterator() do
+                    index = index + 1
+                    yield(index, key)
+                end
+            end) )
+        end
+    }
+
+    __Doc__[[Get a list stream worker of the dictionary's values]]
+    property "Values" {
+        Get = function (self)
+            return ListStreamWorker( Threading.Iterator(function()
+                local index = 0
+                for _, value in self:GetIterator() do
+                    index = index + 1
+                    yield(index, value)
+                end
+            end) )
+        end
+    }
 end)

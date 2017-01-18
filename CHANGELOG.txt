@@ -1,3 +1,11 @@
+2017/01/18
+    Re-design the System.Collections.Dictionary. It's a simple class now, and method Keys & Values is defined as property. You can use it like :
+
+        o = Dictionary (List(10, "x=>string.char(x+64)"), List(10, "x=>x^2"))
+
+        o:Map("x,y=>y/2").Values:Each(print)
+
+
 2017/01/11
     The System.Module is marked with `__ObjMethodAttr__{ Inheritable = true }`.
 

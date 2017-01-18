@@ -96,14 +96,6 @@ class "List" (function (_ENV)
         end
     end
 
-    __Arguments__{ RawTable }
-    function List(self, tbl)
-        local ins = self.Insert
-        for _, v in ipairs(tbl) do
-            ins(self, v)
-        end
-    end
-
     __Arguments__{ { Type = Any, IsList = true } }
     function List(self, ...)
         local ins = self.Insert
