@@ -1,3 +1,25 @@
+2017/01/23
+    The List and Dictionary add support for iterators, works like :
+
+        import "System"
+        import "System.Collections"
+
+        a = {
+            Ann = 1,
+            Ben = 2,
+            King = 3,
+        }
+
+        dict = Dictionary(pairs(a))
+
+        dict.Keys:Each(print)
+
+        lst = List(Reflector.GetMethods(List))
+
+        -- Print the methods's name
+        lst:Each(print)
+
+
 2017/01/18
     Re-design the System.Collections.Dictionary. It's a simple class now, and method Keys & Values is defined as property. You can use it like :
 

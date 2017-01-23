@@ -6,7 +6,7 @@
 --========================================================--
 
 --========================================================--
-_ENV = Module     "System.Collections.List"          "1.0.0"
+_ENV = Module     "System.Collections.List"          "1.0.1"
 --========================================================--
 
 namespace "System.Collections"
@@ -73,8 +73,12 @@ class "List" (function (_ENV)
     __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
     function List(self, iter, obj, idx)
         local ins = self.Insert
-        for idx, item in iter(obj, idx) do
-            ins(self, item)
+        for key, item in iter, obj, idx do
+            if item ~= nil then
+                ins(self, item)
+            else
+                ins(self, key)
+            end
         end
     end
 

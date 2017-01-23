@@ -6,7 +6,7 @@
 --========================================================--
 
 --========================================================--
-_ENV = Module     "System.Collections.Dictionary"    "1.0.0"
+_ENV = Module     "System.Collections.Dictionary"    "1.1.1"
 --========================================================--
 
 namespace "System.Collections"
@@ -68,6 +68,13 @@ class "Dictionary" (function (_ENV)
             else
                 break
             end
+        end
+    end
+
+    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
+    function Dictionary(self, iter, obj, idx)
+        for key, value in iter, obj, idx do
+            rawset(self, key, value)
         end
     end
 end)
