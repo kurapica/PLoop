@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/01/11                                      --
--- Version          :   r167                                            --
+-- Last Update Date :   2017/02/18                                      --
+-- Version          :   r168                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -8975,6 +8975,15 @@ do
                 return noiter
             end
             return lst
+        end
+
+        __Doc__[[Clear global defined functions for a new version, since the object method attributes can't be applied if those function existed]]
+        function ClearGlobalMethods(self)
+            for k, v in pairs(self) do
+                if type(v) == "function" then
+                    self[k] = nil
+                end
+            end
         end
 
         ------------------------------------------------------

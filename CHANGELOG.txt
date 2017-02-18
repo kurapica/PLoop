@@ -1,3 +1,6 @@
+2017/02/18
+    The System.Module has a new method - ClearGlobalMethods, used to clear the global defined functions, the when a new version is existed, the object method attribtues can't be applied if those functions existed.
+
 2017/01/23
     The List and Dictionary add support for iterators, works like :
 
