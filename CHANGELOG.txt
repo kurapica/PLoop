@@ -1,3 +1,21 @@
+2017/02/19
+    Fix the error message for System.Reflector.Validate :
+
+        struct "Point"
+            x = Number
+            y = Number
+            z = Point
+        endstruct "Point"
+
+        function Test(v)
+            -- Type, value[, name[, prefix[, stacklevel]]]
+            v = Reflector.Validate(Point, v, "v", "Test(v) - ", 2)
+        end
+
+        -- Test(v) - v.z.x must be a number, got boolean.
+        Test({x = 1, y = 2, z = { x= false, y = 2}})
+
+
 2017/02/18
     The System.Module has a new method - ClearGlobalMethods, used to clear the global defined functions, the when a new version is existed, the object method attribtues can't be applied if those functions existed.
 
