@@ -37,25 +37,18 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/02/19                                      --
--- Version          :   r169                                            --
+-- Last Update Date :   2017/02/26                                      --
+-- Version          :   r170                                            --
 --======================================================================--
 
 ------------------------------------------------------
 ---------------- Private Environment -----------------
 ------------------------------------------------------
 do
-    local _G            = _G
-    local rawset        = rawset
+    local _G, rawset    = _G, rawset
     local _PLoopEnv     = setmetatable({}, {
-        __index = function(self,  key)
-            local value = _G[key]
-            if value ~= nil then
-                rawset(self, key, value)
-                return value
-            end
-        end,
-        __metatable = true
+        __index         = function(self, k) local v = _G[k] if v ~= nil then rawset(self, k, v) return v end end,
+        __metatable     = true,
     })
     _PLoopEnv._PLoopEnv = _PLoopEnv
 
@@ -234,7 +227,8 @@ do
     end
 
     -- Cache
-    CACHE_TABLE         = setmetatable({}, {__call = function(self, key) if key then if getmetatable(key) == nil then wipe(key) tinsert(self, key) end else return tremove(self) or {} end end})
+    MAX_CACHE_COUNT     = 20
+    CACHE_TABLE         = setmetatable({}, {__call = function(self, t) if t then if getmetatable(t) == nil and #self < MAX_CACHE_COUNT then wipe(t) tinsert(self, t) end else return tremove(self) or {} end end})
 
     -- Clone
     local function deepCloneObj(obj, cache)
@@ -1280,17 +1274,7 @@ end
 ------------------- Cache System ---------------------
 ------------------------------------------------------
 do
-    Verb2Adj = {
-        "(.+)(ed)$",
-        "(.+)(able)$",
-        "(.+)(ing)$",
-        "(.+)(ive)$",
-        "(.+)(ary)$",
-        "(.+)(al)$",
-        "(.+)(ous)$",
-        "(.+)(ior)$",
-        "(.+)(ful)$",
-    }
+    Verb2Adj = { "(.+)(ed)$", "(.+)(able)$", "(.+)(ing)$", "(.+)(ive)$", "(.+)(ary)$", "(.+)(al)$", "(.+)(ous)$", "(.+)(ior)$", "(.+)(ful)$" }
 
     function ParseAdj(str, useIs)
         local noun, adj = str:match("^(.-)(%u%l+)$")
@@ -1719,15 +1703,9 @@ do
     end
 
     function RefreshCache(ns)
-        local info = _NSInfo[ns]
-        local iCache = info.Cache
-
-        -- Clear Ctor
-        if info.Type == TYPE_CLASS then info.Ctor = nil end
-
-        -- Cache For Interface
-        local cache = CACHE_TABLE()
-        local cache4Interface = CACHE_TABLE()
+        local info              = _NSInfo[ns]
+        local cache             = CACHE_TABLE()
+        local cache4Interface   = CACHE_TABLE()
 
         if info.SuperClass then CloneInterfaceCache(cache4Interface, _NSInfo[info.SuperClass].Cache4Interface, cache) end
         if info.ExtendInterface then
@@ -1736,15 +1714,18 @@ do
         end
 
         CACHE_TABLE(cache)
+        cache = info.Cache4Interface
         if next(cache4Interface) then
             info.Cache4Interface = cache4Interface
         else
             info.Cache4Interface = nil
             CACHE_TABLE(cache4Interface)
         end
+        if cache then CACHE_TABLE(cache) end
 
-        -- Cache for all
-        wipe(iCache)
+        -- Cache for all features
+        local iCache            = CACHE_TABLE()
+
         if info.SuperClass then CloneWithOverride(iCache, _NSInfo[info.SuperClass].Cache) end
         if info.ExtendInterface then for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(iCache, _NSInfo[IF].Cache) end end
 
@@ -2088,7 +2069,6 @@ do
         -- AutoCache
         if info.SuperClass and _NSInfo[info.SuperClass].AutoCache and not info.AutoCache then
             info.AutoCache = true
-            GenerateMetaTable(info)
         end
 
         -- Simple Class Check(No Constructor, No Property)
@@ -2145,6 +2125,17 @@ do
                 end
             end
             info.IsOneReqMethod = isOneReqMethod
+        end
+
+        -- Reset the cache
+        cache = info.Cache
+        info.Cache = iCache
+        if cache then CACHE_TABLE(cache) end
+
+        -- Regenerate MetaTable
+        if info.Type == TYPE_CLASS then
+            GenerateMetaTable(info)
+            info.Ctor = nil
         end
 
         -- Refresh branch
@@ -2445,7 +2436,6 @@ do
         local info = _NSInfo[cls]
         info.EnableObjMethodAttr = true
         info.InheritEnableObjMethodAttr = true
-        GenerateMetaTable(info)
 
         if info.ChildClass then
             for _, scls in ipairs(info.ChildClass) do
@@ -2516,7 +2506,6 @@ do
 
         -- Update child's meta-method
         if isMeta then
-            if rkey:match("^___") then GenerateMetaTable(info) end
             return UpdateMeta4Children(key, info.ChildClass, oldValue, storage[rkey])
         end
     end
@@ -4177,17 +4166,21 @@ do
             }]], 2)
         end
 
-        info.Enum = info.Enum or {}
-
-        wipe(info.Enum)
+        local cache = CACHE_TABLE()
 
         for i, v in pairs(set) do
             if type(i) == "string" then
-                info.Enum[strupper(i)] = v
+                cache[strupper(i)] = v
             elseif type(v) == "string" then
-                info.Enum[strupper(v)] = v
+                cache[strupper(v)] = v
             end
         end
+
+        local old = info.Enum
+        info.Enum = cache
+        if old then CACHE_TABLE(old) end
+
+        info.MaxValue = nil
 
         if ATTRIBUTE_INSTALLED then
             local ok, ret = pcall(ConsumePreparedAttributes, info.Owner, AttributeTargets.Enum)
@@ -4195,16 +4188,20 @@ do
         end
 
         -- Cache
-        info.Cache = info.Cache or {}
-        wipe(info.Cache)
-        for k, v in pairs(info.Enum) do info.Cache[v] = k end
+        cache = CACHE_TABLE()
+        for k, v in pairs(info.Enum) do cache[v] = k end
 
+        old = info.Cache
+        info.Cache = cache
+        if old then CACHE_TABLE(old) end
+
+        -- Default
         if info.Default ~= nil then
             local default = info.Default
 
             if type(default) == "string" and info.Enum[strupper(default)] then
                 info.Default = info.Enum[strupper(default)]
-            elseif info.Cache[default] == nil then
+            elseif cache[default] == nil then
                 info.Default = nil
             end
         end
@@ -4213,16 +4210,12 @@ do
     function GetShortEnumInfo(cls)
         if _NSInfo[cls] then
             local str
-
             for n in pairs(_NSInfo[cls].Enum) do
                 if str and #str > 30 then str = str .. " | ..." break end
-
                 str = str and (str .. " | " .. n) or n
             end
-
             return str or ""
         end
-
         return ""
     end
 
@@ -4249,9 +4242,6 @@ do
         if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The enum is sealed, can't be re-defined.", stack) end
 
         info.Type = TYPE_ENUM
-        info.Enum = nil
-        info.Cache = nil
-        info.MaxValue = nil
 
         if type(definition) == "table" then
             BuildEnum(info, definition)
@@ -4386,57 +4376,63 @@ do
     end
 
     -- Some struct object may ref to each others, that would crash the validation
-    _ValidatedCache = setmetatable({}, WEAK_ALL)
+    _ValidatedCache = setmetatable({}, {
+        __index= function(self, k) local v = setmetatable({}, WEAK_ALL) rawset(self, k, v) return v end,
+        __mode = "k",
+    })
 
     function ValidateStruct(strt, value, onlyValidate)
         local info = _NSInfo[strt]
         local sType = info.SubType
+        local tValidatedCache = _ValidatedCache[running() or 0]
 
         if sType ~= STRUCT_TYPE_CUSTOM then
-            if type(value) ~= "table" then wipe(_ValidatedCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
-            if getmetatable(value) ~= nil then wipe(_ValidatedCache) return error(("%s must be a table without meta-table."):format("%s")) end
+            if tValidatedCache[value] then return value end  -- No twice validation for one table
 
-            if _ValidatedCache[value] then return value end
+            if type(value) ~= "table" then wipe(tValidatedCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
+            if getmetatable(value) ~= nil then wipe(tValidatedCache) return error(("%s must be a table without meta-table."):format("%s")) end
 
-            if not _ValidatedCache[1] then _ValidatedCache[1] = value end
-            _ValidatedCache[value] = true
+            if not tValidatedCache[1] then tValidatedCache[1] = value end
+            tValidatedCache[value] = true
 
-            if sType == STRUCT_TYPE_MEMBER then
-                if info.Members then
-                    for _, mem in ipairs(info.Members) do
-                        local name = mem.Name
-                        local default = mem.Default
-                        local val = value[name]
+            if sType == STRUCT_TYPE_MEMBER and info.Members then
+                for _, mem in ipairs(info.Members) do
+                    local name = mem.Name
+                    local default = mem.Default
+                    local val = value[name]
 
-                        if val == nil then
-                            if default ~= nil then
-                                if not onlyValidate then
-                                    -- Deep clone to make sure no change on default value
-                                    val = CloneObj(default, true)
-                                end
-                            elseif mem.Require then
-                                wipe(_ValidatedCache)
-                                return error(("%s.%s can't be nil."):format("%s", name))
+                    if val == nil then
+                        if default ~= nil then
+                            if not onlyValidate then
+                                -- Deep clone to make sure no change on default value
+                                val = CloneObj(default, true)
                             end
-                        else
-                            val = Validate4Type(mem.Type, val, name, nil, nil, onlyValidate)
+                        elseif mem.Require then
+                            wipe(tValidatedCache)
+                            return error(("%s.%s can't be nil."):format("%s", name))
                         end
-
-                        if not onlyValidate then value[name] = val end
+                    else
+                        local flag
+                        flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
+                        if not flag then
+                            wipe(tValidatedCache)
+                            return error(strtrim(val:match(":%d+:%s*(.-)$") or val))
+                        end
                     end
+
+                    if not onlyValidate then value[name] = val end
                 end
             elseif sType == STRUCT_TYPE_ARRAY and info.ArrayElement then
-                local flag, ret
                 local ele = info.ArrayElement.Type
 
                 if ele then
                     for i, v in ipairs(value) do
-                        flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
+                        local flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
 
                         if flag then
                             if not onlyValidate then value[i] = ret end
                         else
-                            wipe(_ValidatedCache)
+                            wipe(tValidatedCache)
                             return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]"))
                         end
                     end
@@ -4455,8 +4451,8 @@ do
             local flag, ret = pcall(info.Validator, value)
 
             if not flag then
-                wipe(_ValidatedCache)
-                error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
+                wipe(tValidatedCache)
+                return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
             end
         end
 
@@ -4464,14 +4460,14 @@ do
             local flag, ret = pcall(info.Initializer, value)
 
             if not flag then
-                wipe(_ValidatedCache)
-                error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
+                wipe(tValidatedCache)
+                return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
             end
 
             if sType == STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
         end
 
-        if sType ~= STRUCT_TYPE_CUSTOM and _ValidatedCache[1] == value then wipe(_ValidatedCache) end
+        if value and tValidatedCache[1] == value then wipe(tValidatedCache) end
 
         return value
     end
@@ -4582,7 +4578,6 @@ do
         info.Validator = nil
         info.Method = nil
         info.FeatureModifier = nil
-        info.Modifier = nil
         info.BaseStruct = nil
 
         -- Clear Attribute
@@ -7775,7 +7770,7 @@ do
         end
     end)
 
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
     __Sealed__() __Unique__()
     class "__AutoCache__" (function(_ENV)
         extend "IAttribute"
@@ -7783,7 +7778,6 @@ do
 
         function ApplyAttribute(self, target, targetType, owner, name)
             _NSInfo[target].AutoCache = true
-            GenerateMetaTable(_NSInfo[target])
         end
 
         function IsClassAttributeDefined(cls, target)
@@ -8595,7 +8589,7 @@ do
         end
     end)
 
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
     __Sealed__() __Unique__()
     class "__ObjMethodAttr__" (function(_ENV)
         extend "IAttribute"
@@ -8635,7 +8629,6 @@ do
                 SaveInheritEnableObjMethodAttr(target)
             else
                 _NSInfo[target].EnableObjMethodAttr = true
-                GenerateMetaTable(_NSInfo[target])
             end
         end
 
@@ -8720,7 +8713,7 @@ do
         end
     end)
 
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
     __Sealed__() __Unique__()
     class "__NoAutoSet__" (function(_ENV)
         extend "IAttribute"
@@ -8749,7 +8742,6 @@ do
         ------------------------------------------------------
         function ApplyAttribute(self, target)
             _NSInfo[target].NoAutoSet = true
-            GenerateMetaTable(_NSInfo[target])
         end
 
         function IsClassAttributeDefined(cls, target)
@@ -8848,6 +8840,55 @@ do
 
         local function noiter() end
 
+        local function compareVer(old, new)
+            old = old and old:match("^.-(%d+[%d%.]*).-$")
+            old = old and old:match("^(.-)[%.]*$")
+
+            if not old or old == "" then return true end
+
+            local ty = type(new)
+            if ty == "number" then
+                new = tostring(new)
+            elseif ty == "string" then
+                new = new:match("^.-(%d+[%d%.]*).-$")
+                new = new and new:match("^(.-)[%.]*$")
+            else
+                new = nil
+            end
+
+            if not new or new == "" then return false end
+
+            local f1 = old:gmatch("%d+")
+            local f2 = new:gmatch("%d+")
+
+            local v1 = f1 and f1()
+            local v2 = f2 and f2()
+
+            local pass = false
+
+            while true do
+                v1 = tonumber(v1)
+                v2 = tonumber(v2)
+
+                if not v1 then
+                    if v2 then pass = true end
+                    break
+                elseif not v2 then
+                    break
+                elseif v1 < v2 then
+                    pass = true
+                    break
+                elseif v1 > v2 then
+                    break
+                end
+
+                v1 = f1()
+                v2 = f2()
+            end
+
+            return pass
+        end
+
         ------------------------------------------------------
         -- Event
         ------------------------------------------------------
@@ -8867,73 +8908,7 @@ do
 
             if not info then error("The module is disposed", 2) end
 
-            -- Check version
-            if type(version) == "number" then
-                version = tostring(version)
-            elseif type(version) == "string" then
-                version = strtrim(version)
-
-                if version == "" then version = nil end
-            end
-
-            if type(version) == "string" then
-                local number = version:match("^.-(%d+[%d%.]*).-$")
-
-                if number then
-                    number = number:match("^(.-)[%.]*$")
-
-                    if info.Version then
-                        local onumber = info.Version:match("^.-(%d+[%d%.]*).-$")
-
-                        if onumber then
-                            onumber = onumber:match("^(.-)[%.]*$")
-
-                            local f1 = onumber:gmatch("%d+")
-                            local f2 = number:gmatch("%d+")
-
-                            local v1 = f1 and f1()
-                            local v2 = f2 and f2()
-
-                            local pass = false
-
-                            while true do
-                                v1 = tonumber(v1)
-                                v2 = tonumber(v2)
-
-                                if not v1 then
-                                    if v2 then pass = true end
-                                    break
-                                elseif not v2 then
-                                    break
-                                elseif v1 < v2 then
-                                    pass = true
-                                    break
-                                elseif v1 > v2 then
-                                    break
-                                end
-
-                                v1 = f1 and f1()
-                                v2 = f2 and f2()
-                            end
-
-                            -- Clear
-                            while f1 and f1() do end
-                            while f2 and f2() do end
-
-                            -- Check falg
-                            if pass then
-                                return true
-                            end
-                        else
-                            return true
-                        end
-                    else
-                        return true
-                    end
-                end
-            end
-
-            return false
+            return compareVer(info.Version, version)
         end
 
         __Doc__[[
@@ -9164,81 +9139,22 @@ do
 
             if not info then error("The module is disposed", stack) end
 
-            -- Check version
-            if type(version) == "number" then
-                version = tostring(version)
-            elseif type(version) == "string" then
-                version = strtrim(version)
-
-                if version == "" then version = nil end
-            end
-
             if type(version) == "function" then
                 ClearPreparedAttributes()
                 if not FAKE_SETFENV then setfenv(version, self) return version() end
                 return version(self)
-            elseif type(version) == "string" then
-                local number = version:match("^.-(%d+[%d%.]*).-$")
-
-                if number then
-                    number = number:match("^(.-)[%.]*$")
-
-                    if info.Version then
-                        local onumber = info.Version:match("^.-(%d+[%d%.]*).-$")
-
-                        if onumber then
-                            onumber = onumber:match("^(.-)[%.]*$")
-
-                            local f1 = onumber:gmatch("%d+")
-                            local f2 = number:gmatch("%d+")
-
-                            local v1 = f1 and f1()
-                            local v2 = f2 and f2()
-
-                            local pass = false
-
-                            while true do
-                                v1 = tonumber(v1)
-                                v2 = tonumber(v2)
-
-                                if not v1 then
-                                    if v2 then pass = true end
-                                    break
-                                elseif not v2 then
-                                    break
-                                elseif v1 < v2 then
-                                    pass = true
-                                    break
-                                elseif v1 > v2 then
-                                    break
-                                end
-
-                                v1 = f1 and f1()
-                                v2 = f2 and f2()
-                            end
-
-                            -- Clear
-                            while f1 and f1() do end
-                            while f2 and f2() do end
-
-                            -- Check falg
-                            if pass then
-                                info.Version = version
-                            else
-                                error("The version must be greater than the current version of the module.", stack)
-                            end
-                        else
-                            info.Version = version
-                        end
-                    else
-                        info.Version = version
-                    end
-                else
-                    error("The version string should contain version numbers like 'Ver 1.2323.13'.", stack)
-                end
-            elseif info.Version then
-                error("An available version is need for the module.", stack)
             end
+
+            -- Check version
+            if not compareVer(info.Version, version) then
+                error("Not valid version or there is an equal or bigger version existed", stack)
+            end
+
+            version = version and tostring(version)
+            version = version and strtrim(version)
+            if version == "" then version = nil end
+
+            info.Version = version
 
             if not FAKE_SETFENV then setfenv(stack, self) end
 
