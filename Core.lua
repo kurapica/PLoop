@@ -2156,6 +2156,7 @@ do
             info.Members = nil
             info.ArrayElement = info[0]
             if cache then CACHE_TABLE(cache) end
+        elseif info[1] then
             info.SubType = STRUCT_TYPE_MEMBER
 
             local members = CACHE_TABLE()
