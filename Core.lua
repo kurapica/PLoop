@@ -2149,46 +2149,32 @@ do
     function RefreshStruct(strt)
         local info = _NSInfo[strt]
 
-        if info.SubType == STRUCT_TYPE_MEMBER and (not info.Members or #(info.Members) == 0) then
-            info.SubType = STRUCT_TYPE_CUSTOM
+        if info[0] then
+            info.SubType = STRUCT_TYPE_ARRAY
+
+            local cache = info.Members
             info.Members = nil
-        end
+            info.ArrayElement = info[0]
+            if cache then CACHE_TABLE(cache) end
+            info.SubType = STRUCT_TYPE_MEMBER
 
-        -- validate default value if existed
-        if info.Default ~= nil then
-            if info.SubType ~= STRUCT_TYPE_CUSTOM then
-                info.Default = nil
-            elseif not pcall(ValidateStruct, info.Owner, info.Default) then
-                info.Default = nil
-            end
-        end
+            local members = CACHE_TABLE()
 
-        if info.SubType == STRUCT_TYPE_ARRAY then
-            local ele = info.ArrayElement
-
-            if ele and ele.Predefined then
-                for k, v in pairs(ele.Predefined) do
-                    if k:lower() == "type" and IsNameSpace(v) and _NSInfo[v].Type then
-                        ele.Type = v
-                        break
-                    end
-                end
-                ele.Predefined = nil
-            end
-        elseif info.SubType == STRUCT_TYPE_MEMBER then
-            for _, mem in ipairs(info.Members) do
+            for _, mem in ipairs(info) do
                 if mem.Predefined then
                     for k, v in pairs(mem.Predefined) do
-                        k = k:lower()
+                        if type(k) == "string" then
+                            k = k:lower()
 
-                        if k == "type" then
-                            if IsNameSpace(v) and _NSInfo[v].Type then
-                                mem.Type = v
+                            if k == "type" then
+                                if IsNameSpace(v) and _NSInfo[v].Type then
+                                    mem.Type = v
+                                end
+                            elseif k == "default" then
+                                mem.Default = v
+                            elseif k == "require" then
+                                mem.Require = true
                             end
-                        elseif k == "default" then
-                            mem.Default = v
-                        elseif k == "require" then
-                            mem.Require = true
                         end
                     end
 
@@ -2205,7 +2191,26 @@ do
                         end
                     end
                 end
+
+                members[mem.Name] = mem
+                tinsert(members, mem)
             end
+
+            local cache = info.Members
+            info.Members = members
+            info.ArrayElement = nil
+            if cache then CACHE_TABLE(cache) end
+        else
+            info.SubType = STRUCT_TYPE_CUSTOM
+
+            if info.Default ~= nil and not pcall(ValidateStruct, info.Owner, info.Default) then
+                info.Default = nil
+            end
+
+            local cache = info.Members
+            info.Members = nil
+            info.ArrayElement = nil
+            if cache then CACHE_TABLE(cache) end
         end
     end
 end
@@ -2731,40 +2736,35 @@ do
             end
         end
 
-        -- Save member
-        local memInfo = { Name = key }
-
-        -- Validate the value
-        if IsNameSpace(value) and _NSInfo[value].Type then value = { Type = value } end
-
-        if type(value) ~= "table" then return error([[Usage: member "Name" { -- Field Definition }]]) end
-
-        memInfo.Predefined = value
-
-        -- Check the struct type
+        -- Check if is array element type
         if tonumber(key) then
-            if info.SubType ~= STRUCT_TYPE_ARRAY then
-                info.SubType = STRUCT_TYPE_ARRAY
-                info.Members = nil
-            end
-        elseif info.SubType ~= STRUCT_TYPE_MEMBER then
-            info.SubType = STRUCT_TYPE_MEMBER
-            info.ArrayElement = nil
-        end
+            if info[0] then return error("The array's element type is already set.") end
+            if info[1] then return error("The struct has member settings.") end
 
-        if info.SubType == STRUCT_TYPE_MEMBER then
-            -- Insert member
-            info.Members = info.Members or {}
-            for _, v in ipairs(info.Members) do if v.Name == key then return error(("struct member '%s' already existed."):format(key)) end end
-            tinsert(info.Members, memInfo)
-            info.Members[key] = memInfo
+            if IsNameSpace(value) and _NSInfo[value].Type then
+                info[0] = value
+            end
+        else
+            if info[0] then return error("The struct is an element arry type.") end
+
+            for i, s in ipairs(info) do
+                if s.Name == key then
+                    error("The struct already has a member named " .. key)
+                end
+            end
+
+            if IsNameSpace(value) and _NSInfo[value].Type then value = { Type = value } end
+            if type(value) ~= "table" then return error([[Usage: member "Name" { -- Field Definition }]]) end
+
+            -- Prepare the table
+            local memberInfo = { Name = key, Predefined = value }
 
             if ATTRIBUTE_INSTALLED then
-                local ok, ret = pcall(ConsumePreparedAttributes, memInfo, AttributeTargets.Member, info.Owner, key)
+                local ok, ret = pcall(ConsumePreparedAttributes, memberInfo, AttributeTargets.Member, info.Owner, key)
                 if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
             end
-        elseif info.SubType == STRUCT_TYPE_ARRAY then
-            info.ArrayElement = memInfo
+
+            tinsert(info, memberInfo)
         end
     end
 
@@ -4422,8 +4422,8 @@ do
 
                     if not onlyValidate then value[name] = val end
                 end
-            elseif sType == STRUCT_TYPE_ARRAY and info.ArrayElement then
-                local ele = info.ArrayElement.Type
+            elseif sType == STRUCT_TYPE_ARRAY then
+                local ele = info.ArrayElement
 
                 if ele then
                     for i, v in ipairs(value) do
@@ -4570,15 +4570,13 @@ do
         -- Check if the struct is final
         if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then error("The struct is sealed, can't be re-defined.", stack) end
 
-        info.Type = TYPE_STRUCT
-        info.SubType = STRUCT_TYPE_MEMBER
-        info.Members = nil
-        info.Default = nil
-        info.ArrayElement = nil
-        info.Validator = nil
-        info.Method = nil
-        info.FeatureModifier = nil
-        info.BaseStruct = nil
+        if not info.Type then
+            info.Type = TYPE_STRUCT
+            info.SubType = STRUCT_TYPE_MEMBER
+        else
+            -- Clear the defintions
+            for i = #info, 0, -1 do info[i] = nil end
+        end
 
         -- Clear Attribute
         if ATTRIBUTE_INSTALLED then
@@ -5513,7 +5511,7 @@ do
         ]]
         function GetStructArrayElement(ns)
             local info = _NSInfo[ns]
-            return info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement and info.ArrayElement.Type or nil
+            return info and info.Type == TYPE_STRUCT and info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement or nil
         end
 
         doc "HasStructMember" [[
@@ -5589,8 +5587,8 @@ do
                 if info.SubType == STRUCT_TYPE_MEMBER and info.Members then
                     local mem = info.Members[part]
                     if mem then return mem.Type, mem.Default, mem.Require end
-                elseif info.SubType == STRUCT_TYPE_ARRAY and info.ArrayElement then
-                    return info.ArrayElement.Type
+                elseif info.SubType == STRUCT_TYPE_ARRAY then
+                    return info.ArrayElement
                 end
             end
         end
@@ -7247,7 +7245,7 @@ do
                     elseif info.SubType == STRUCT_TYPE_ARRAY and dtype == "table" then
                         local ret = tostring(ns) .. "( "
 
-                        local sty = info.ArrayElement.Type
+                        local sty = info.ArrayElement
 
                         for i, v in ipairs(data) do
                             v = serialize(v, sty)
@@ -7793,99 +7791,6 @@ do
         "ARRAY",
         "CUSTOM"
     }
-
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true, BeforeDefinition = true}
-    __Sealed__() __Unique__()
-    class "__StructType__" (function(_ENV)
-        extend "IAttribute"
-
-        doc "__StructType__" [[Mark the struct's type, default 'Member']]
-
-        ------------------------------------------------------
-        -- Method
-        ------------------------------------------------------
-        function ApplyAttribute(self, target, targetType)
-            if Reflector.IsStruct(target) then
-                local info = _NSInfo[target]
-
-                if self.Type == StructType.Member then
-                    -- use member list, default type
-                    info.SubType = STRUCT_TYPE_MEMBER
-                    info.ArrayElement = nil
-                elseif self.Type == StructType.Array then
-                    -- user array list
-                    info.SubType = STRUCT_TYPE_ARRAY
-                    info.Members = nil
-                else
-                    -- else all custom
-                    info.SubType = STRUCT_TYPE_CUSTOM
-                    info.Members = nil
-                    info.ArrayElement = nil
-                end
-            end
-        end
-
-        ------------------------------------------------------
-        -- Property
-        ------------------------------------------------------
-        doc "Type" [[The struct's type]]
-        property "Type" { Type = StructType }
-
-        ------------------------------------------------------
-        -- Constructor
-        ------------------------------------------------------
-        __Arguments__{ StructType }
-        function __StructType__(self, type)
-            self.Type = type
-        end
-
-        __Arguments__{ }
-        function __StructType__(self)
-            self.Type = StructType.Member
-        end
-    end)
-
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true}
-    __Sealed__()
-    class "__StructOrder__" (function(_ENV)
-        extend "IAttribute"
-
-        doc "__StructOrder__" [[Rearrange the struct member's order]]
-
-        ------------------------------------------------------
-        -- Method
-        ------------------------------------------------------
-        function ApplyAttribute(self, target, targetType)
-            local info = _NSInfo[target]
-
-            if info.SubType == StructType.Member and info.Members then
-                local cache = CACHE_TABLE()
-
-                for i, mem in ipairs(info.Members) do tinsert(cache, mem.Name) cache[mem.Name] = mem end
-                wipe(info.Members)
-
-                for i, name in ipairs(self) do if cache[name] then tinsert(info.Members, cache[name]) cache[name] = nil end end
-                for i, name in ipairs(cache) do if cache[name] then tinsert(info.Members, cache[name]) end end
-
-                CACHE_TABLE(cache)
-            end
-        end
-
-        ------------------------------------------------------
-        -- Constructor
-        ------------------------------------------------------
-        __Arguments__ { String }
-        function __StructOrder__(self, name)
-            tinsert(self, name)
-        end
-
-        function __call(self, name)
-            if type(name) == "string" then
-                tinsert(self, name)
-            end
-            return self
-        end
-    end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
     __Sealed__() __Unique__()
