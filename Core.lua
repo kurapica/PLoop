@@ -66,9 +66,9 @@ do
 
     LUA_VERSION         = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1
 
-    WEAK_KEY            = {__mode = "k"}
-    WEAK_VALUE          = {__mode = "v"}
-    WEAK_ALL            = {__mode = "kv"}
+    WEAK_KEY            = { __mode = "k"  }
+    WEAK_VALUE          = { __mode = "v"  }
+    WEAK_ALL            = { __mode = "kv" }
 
     TYPE_CLASS          = "Class"
     TYPE_ENUM           = "Enum"
@@ -415,26 +415,17 @@ end
 --------------- NameSpace & ClassAlias ---------------
 ------------------------------------------------------
 do
-    PROTYPE_NAMESPACE = newproxy(true)
-    PROTYPE_CLASSALIAS = newproxy(true)
+    PROTYPE_NAMESPACE   = newproxy(true)
+    PROTYPE_CLASSALIAS  = newproxy(true)
 
-    _NSInfo = setmetatable({ [PROTYPE_NAMESPACE] = { Owner = PROTYPE_NAMESPACE } }, {
-        __index = function(self, key)
-            if type(key) == "string" then
-                key = GetNameSpace(PROTYPE_NAMESPACE, key)
-                return key and rawget(self, key)
-            end
-        end,
-        __mode = "k",
-    })
-
-    _AliasMap = setmetatable({}, WEAK_ALL)
+    _NSInfo             = setmetatable({ [PROTYPE_NAMESPACE] = { Owner = PROTYPE_NAMESPACE } }, { __index = function(self, key) if type(key) == "string" then key = GetNameSpace(PROTYPE_NAMESPACE, key) return key and rawget(self, key) end end, __mode = "k" })
+    _AliasMap           = setmetatable({}, WEAK_ALL)
 
     -- metatable for namespaces
-    _MetaNS = getmetatable(PROTYPE_NAMESPACE)
     do
-        local _UnmStruct = {}
-        local _MixedStruct = {}
+        local _MetaNS       = getmetatable(PROTYPE_NAMESPACE)
+        local _UnmStruct    = {}
+        local _MixedStruct  = {}
 
         _MetaNS.__call = function(self, ...)
             local info = _NSInfo[self]
@@ -858,8 +849,9 @@ do
     end
 
     -- metatable for super alias
-    _MetaSA = getmetatable(PROTYPE_CLASSALIAS)
     do
+        local _MetaSA   = getmetatable(PROTYPE_CLASSALIAS)
+
         _MetaSA.__call = function(self, obj, ...)
             -- Init the class object
             local info = _AliasMap[self]
@@ -1099,7 +1091,6 @@ do
         end
 
         --if not ret:match("%(Optional%)$") then ret = ret .. "(Optional)" end
-
         if mainName and ret:find("%%s") then ret = ret:gsub("%%s[_%w]*", mainName) end
 
         error(ret, stack or 2)
@@ -2744,13 +2735,15 @@ do
 
             if IsNameSpace(value) and _NSInfo[value].Type then
                 info[0] = value
+            else
+                return error("The array element's type is not valid.")
             end
         else
             if info[0] then return error("The struct is an element arry type.") end
 
             for i, s in ipairs(info) do
                 if s.Name == key then
-                    error("The struct already has a member named " .. key)
+                    return error("The struct already has a member named " .. key)
                 end
             end
 
@@ -2762,7 +2755,7 @@ do
 
             if ATTRIBUTE_INSTALLED then
                 local ok, ret = pcall(ConsumePreparedAttributes, memberInfo, AttributeTargets.Member, info.Owner, key)
-                if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                if not ok then return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
             end
 
             tinsert(info, memberInfo)
