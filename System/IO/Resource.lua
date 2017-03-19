@@ -27,7 +27,7 @@ class "__ResourceLoader__" (function (_ENV)
     _ResourceLoader = {}
 
     __Doc__[[The suffix of the file.]]
-    property "Suffix" { Type = String }
+    property "Suffix" { Type = NEString }
 
     __Static__()
     __Doc__[[Get the resource loader for specific suffix]]
@@ -43,14 +43,14 @@ class "__ResourceLoader__" (function (_ENV)
         end
     end
 
-    __Arguments__{ String }
+    __Arguments__{ NEString }
     function __ResourceLoader__(self, name) self.Suffix = name end
 end)
 
 __Final__() __Sealed__() __Abstract__()
 class "Resource" (function (_ENV)
-    _ResourcePathMap = {}
-    _ResourceMapInfo = setmetatable({}, {__mode="kv"})
+    _ResourcePathMap = setmetatable({}, { __index= function(self, p) return FileLoadInfo(p) end })
+    _ResourceMapInfo = setmetatable({}, { __mode = "kv" })
 
     local preparePath
 
@@ -63,16 +63,13 @@ class "Resource" (function (_ENV)
     ----------------------------------
     -- FileLoadInfo
     ----------------------------------
-    __AutoCache__()
-    FileLoadInfo = class {
-        -- Constructor
-        function (self, path)
-            self.Path = path
+    FileLoadInfo = struct {
+        Path = NEString,
+
+        __init = function(self)
             self.ReloadWhenModified = Resource.ReloadWhenModified
-            _ResourcePathMap[path] = self
+            _ResourcePathMap[self.Path] = self
         end,
-        -- Meta-method
-        __exist = function(path) return _ResourcePathMap[path] end,
     }
 
     function FileLoadInfo:AddRelatedPath(info)
@@ -199,13 +196,12 @@ class "Resource" (function (_ENV)
     __Static__()
     function LoadResource(path)
         if type(path) ~= "string" then return end
-        path = preparePath(path)
-
-        local ok, res = pcall(FileLoadInfo.Load, FileLoadInfo(path))
+        return _ResourcePathMap[preparePath(path)]:Load()
+        --[[local ok, res = pcall(FileLoadInfo.Load, FileLoadInfo(path))
 
         if ok then return res end
 
-        Error("[System.IO.Resource][Load Fail] %s - %s", path, res)
+        Error("[System.IO.Resource][Load Fail] %s - %s", path, res)--]]
     end
 
     __Doc__[[Get the resource's path]]
@@ -214,19 +210,19 @@ class "Resource" (function (_ENV)
 
     __Doc__[[Add the related path for reload checking]]
     __Static__()
-    __Arguments__{ String, String }
+    __Arguments__{ NEString, NEString }
     function AddRelatedPath(path, related)
-        local info = _ResourcePathMap[preparePath(path)]
+        local info = rawget(_ResourcePathMap, preparePath(path))
         if info then
-            info:AddRelatedPath(FileLoadInfo(preparePath(related)))
+            info:AddRelatedPath(_ResourcePathMap[preparePath(related)])
         end
     end
 
     __Doc__[[Mark the path reload when modified]]
     __Static__()
-    __Arguments__{ String }
+    __Arguments__{ NEString }
     function SetReloadRequired(path)
-        FileLoadInfo(preparePath(path)).ReloadWhenModified = true
+        _ResourcePathMap[preparePath(path)].ReloadWhenModified = true
     end
 end)
 

@@ -75,3 +75,6 @@ struct "NegtiveInteger" { function(val) assert(val < 0, "%s must be less than ze
 
 __Sealed__() __Base__(Integer) __Default__(0)
 struct "NaturalNumber"  { function(val) assert(val >= 0, "%s must be natural number.") end }
+
+__Sealed__() __Base__(String)
+struct "NEString" 		{ function(val) assert(strtrim(val) ~= "", "%s can't be an empty string.") end, __init = function(val) return strtrim(val) end }

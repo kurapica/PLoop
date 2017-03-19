@@ -1,5 +1,10 @@
+2017/03/19
+    Property handler will recieve the defaut value as new value if set to nil.
+
 2017/03/01
     Re-design the cache system for struct, interface and class, attribute __StructType__ & __StructOrder__ are removed.
+
+    struct System.NEString is added to validate for not empty string.
 
 2017/02/19
     Fix the error message for System.Reflector.Validate :

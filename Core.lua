@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/02/26                                      --
--- Version          :   r170                                            --
+-- Last Update Date :   2017/03/19                                      --
+-- Version          :   r171                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -1642,6 +1642,7 @@ do
                     if ValidateFlags(FLAG_SET_DEFAULT, propToken) then
                         tinsert(gHeader, "default")
                         tinsert(gbody, [[if old == nil then old = default end]])
+                        tinsert(gbody, [[if value == nil then value = default end]])
                     end
 
                     tinsert(gbody, [[if old == value then return end]])
@@ -3691,6 +3692,9 @@ do
                                 rawset(self, "__PLoop_WeakFields", container)
                             end
                         end
+
+                        -- Check new value
+                        if value == nil then value = default end
 
                         -- Check old value
                         local old = rawget(container, operTar)
