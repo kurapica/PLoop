@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/03/19                                      --
--- Version          :   r171                                            --
+-- Last Update Date :   2017/03/20                                      --
+-- Version          :   r172                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -3337,7 +3337,6 @@ do
         __call = "__call",          -- a()
         __gc = "__gc",              -- dispose a
         __tostring = "__tostring",  -- tostring(a)
-        __exist = "__exist",        -- ClassName(...)   -- return object if existed
         __idiv = "__idiv",          -- // floor division
         __band = "__band",          -- & bitwise and
         __bor = "__bor",            -- | bitwise or
@@ -3345,6 +3344,9 @@ do
         __bnot = "__bnot",          -- ~ bitwise unary not
         __shl = "__shl",            -- << bitwise left shift
         __shr = "__shr",            -- >> bitwise right shift
+        -- Ploop only meta-methods
+        __exist = "__exist",        -- return object if existed
+        __new = "__new",            -- create the object table by itself(so not provided by the system)
     }
 
     --------------------------------------------------
@@ -3986,16 +3988,30 @@ do
         end
 
         -- Check if this class has __exist so no need to create again.
-        if info.MetaTable.__exist then
-            local ok, obj = pcall(info.MetaTable.__exist, ...)
-
+        local meta = info.MetaTable.__exist
+        if meta then
+            local ok, obj = pcall(meta, ...)
             if ok and getmetatable(obj) == info.Owner then return obj end
         end
 
         -- Create new object
         local obj
 
-        if select('#', ...) == 1 then
+        -- Create new table as the object(for some special using, its provided by the class)
+        meta = info.MetaTable.__new
+        if meta then
+            local ok, ret = pcall(meta, ...)
+            if ok and type(ret) == "table" then
+                ok, ret = pcall(setmetatable, ret, info.MetaTable)
+                if ok then
+                    obj = ret
+                    Class1Obj(info, obj, ...)
+                end
+            end
+        end
+
+        -- Check for simple class
+        if not obj and select('#', ...) == 1 then
             -- Save memory cost for simple class
             local init = ...
             if type(init) == "table" and getmetatable(init) == nil then
@@ -4014,15 +4030,15 @@ do
                     end
                     if noConflict then
                         obj = setmetatable(init, info.MetaTable)
-
                         Class1Obj(info, obj)
                     end
                 end
             end
         end
+
+        -- Default creation
         if not obj then
             obj = setmetatable({}, info.MetaTable)
-
             Class1Obj(info, obj, ...)
         end
 
@@ -7314,7 +7330,7 @@ do
                 overLoads.HasSelf = true
                 if overLoads.TargetType == AttributeTargets.Method then
                     if Reflector.IsInterface(overLoads.Owner) and IsFinalFeature(overLoads.Owner) then overLoads.HasSelf = false end
-                    if overLoads.Name == "__exist" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+                    if overLoads.Name == "__exist" or overLoads.Name == "__new" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
                 end
             end
 
@@ -7428,7 +7444,7 @@ do
                 overLoads.HasSelf = true
                 if overLoads.TargetType == AttributeTargets.Method then
                     if Reflector.IsInterface(overLoads.Owner) and IsFinalFeature(overLoads.Owner) then overLoads.HasSelf = false end
-                    if overLoads.Name == "__exist" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+                    if overLoads.Name == "__exist" or overLoads.Name == "__new" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
                 end
             end
 
@@ -7471,7 +7487,7 @@ do
                 overLoads.HasSelf = true
                 if overLoads.TargetType == AttributeTargets.Method then
                     if Reflector.IsInterface(overLoads.Owner) and IsFinalFeature(overLoads.Owner) then overLoads.HasSelf = false end
-                    if overLoads.Name == "__exist" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
+                    if overLoads.Name == "__exist" or overLoads.Name == "__new" or __Static__:IsMethodAttributeDefined(overLoads.Owner, overLoads.Name) then overLoads.HasSelf = false end
                 end
             end
 

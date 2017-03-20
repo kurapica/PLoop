@@ -1,3 +1,27 @@
+2017/03/20
+    A new meta-method '__new' added for class, used to generate the table used as the object based on the arguments.
+
+        import "System"
+
+        class "A" (function(_ENV)
+            property "Name" { Type = String }
+
+            function A(self, name, t)
+                self.Name = name
+            end
+
+            __Arguments__{ String, Table }
+            function __new(name, t)
+                return t  -- So the t will be used as the object
+            end
+        end)
+
+        o = {}
+        obj = A("ann", o)
+
+        -- true
+        print(o == obj)
+
 2017/03/19
     Property handler will recieve the defaut value as new value if set to nil.
 
