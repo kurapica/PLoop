@@ -22,7 +22,7 @@ do
 	strbyte         = string.byte
 	strchar         = string.char
 	strrep          = string.rep
-	strsub          = string.gsub
+	strgsub         = string.gsub
 	strupper        = string.upper
 	strlower        = string.lower
 	strtrim         = strtrim or function(s) return (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
