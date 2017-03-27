@@ -1808,8 +1808,10 @@ do
         -- Cache for Property
         -- Validate the properties
         if info.Property then
-            local autoProp = ValidateFlags(MD_AUTO_PROPERTY, info.Modifier)
-            local hasNoStatic = false
+            local autoProp      = ValidateFlags(MD_AUTO_PROPERTY, info.Modifier)
+            local hasNoStatic   = false
+            local newEvent      = false
+            local newMethod     = false
             for name, prop in pairs(info.Property) do
                 if prop.Predefined then
                     local set = prop.Predefined
@@ -2007,7 +2009,7 @@ do
                     end
 
                     -- Validate the Event
-                    if type(prop.Event) == "string" then
+                    if type(prop.Event) == "string" and not prop.IsStatic then
                         local evt = iCache[prop.Event]
                         if getmetatable(evt) then
                             prop.Event = evt
@@ -2020,10 +2022,12 @@ do
                             iCache[ename] = evt
                             prop.Event = evt
 
-                            iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken)
+                            newEvent = true
                         else
                             prop.Event = nil
                         end
+                    else
+                        prop.Event = nil
                     end
 
                     -- Validate the Handler
@@ -2116,6 +2120,8 @@ do
                             iCache[getName] = info.Method[getName]
                             iCache[setName] = info.Method[setName]
 
+                            newMethod = true
+
                             prop.GetMethod = getName
                             prop.SetMethod = setName
 
@@ -2132,6 +2138,8 @@ do
             --- self property
             CloneWithOverride(iCache, info.Property, true)
             if hasNoStatic then iToken = TurnOnFlags(FLAG_HAS_PROPERTY, iToken) end
+            if newEvent then iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken) end
+            if newMethod then iToken = TurnOnFlags(FLAG_HAS_METHOD, iToken) end
         end
 
         -- AutoCache
