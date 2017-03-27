@@ -1,3 +1,23 @@
+2017/03/27
+    Re-design the meta-table's generation for class objects based on brach pediction. Improve the speed to access object features.
+
+    As a special example, if one class has only methods defined, it's `__index` meta-method will be a cache table for those methods and the `__newindex` would be nil, so it won't suffer any performance loss.
+
+    To achieve it, several features are re-deisgned :
+
+        * The `__index` defined in the class can be table now, if the class has no other featuers, the table will be used as the object's `__index` meta-method directly.
+
+                class "A" (function(_ENV)
+                    __index = { Info = print }
+                end)
+
+                A():Info()
+
+            If you access the __index through the class(like A.__index), you'll only get a copy, so take an attention.
+
+        * The Dispose method is no longer can be used for all objects, only class has Dispose defined(include its super class and extended interfaces) can access it. Otherwise, most objects no need to be Disposed since lua can collect them.
+
+
 2017/03/20
     A new meta-method '__new' added for class, used to generate the table used as the object based on the arguments.
 

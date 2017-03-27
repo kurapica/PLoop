@@ -1,5 +1,5 @@
 --======================================================================--
--- Copyright (c) 2011-2016 WangXH <kurapica125@outlook.com>             --
+-- Copyright (c) 2011-2017 WangXH <kurapica125@outlook.com>             --
 --                                                                      --
 -- Permission is hereby granted, free of charge, to any person          --
 -- obtaining a copy of this software and associated Documentation       --
@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/03/20                                      --
--- Version          :   r172                                            --
+-- Last Update Date :   2017/03/26                                      --
+-- Version          :   r173                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -96,6 +96,9 @@ do
 
     -- Import env field
     IMPORT_ENV_FIELD    = "__PLOOP_IMPORT_ENV"
+
+    -- Special __index table filed
+    INDEX_TABLE_FIELD   = "__PLOOP_INDEX_TABLE"
 
     -- Attribute System
     ATTRIBUTE_INSTALLED = false
@@ -373,7 +376,7 @@ do
 
     --  ValidateFlags
     function ValidateFlags(checkValue, targetValue)
-        if not targetValue then return false end
+        if not targetValue or checkValue > targetValue then return false end
         targetValue = targetValue % (2 * checkValue)
         return (targetValue - targetValue % checkValue) == checkValue
     end
@@ -381,6 +384,13 @@ do
     function TurnOnFlags(checkValue, targetValue)
         if not ValidateFlags(checkValue, targetValue) then
             return checkValue + (targetValue or 0)
+        end
+        return targetValue
+    end
+
+    function TurnOffFlags(checkValue, targetValue)
+        if ValidateFlags(checkValue, targetValue) then
+            return targetValue - checkValue
         end
         return targetValue
     end
@@ -484,7 +494,14 @@ do
                 elseif iType == TYPE_CLASS or iType == TYPE_INTERFACE then
                     if iType == TYPE_CLASS then
                         -- Meta-method
-                        if _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
+                        if _KeyMeta[key] then
+                            local v = info.MetaTable[_KeyMeta[key]]
+                            if key == "__index" and type(v) == "table" and getmetatable(v) == nil then
+                                return CloneObj(v, true)
+                            else
+                                return v
+                            end
+                        end
 
                         if key == "Super" then
                             info = _NSInfo[info.SuperClass]
@@ -667,7 +684,14 @@ do
                 elseif iType == TYPE_CLASS or iType == TYPE_INTERFACE then
                     if iType == TYPE_CLASS then
                         -- Meta-method
-                        if _KeyMeta[key] then return info.MetaTable[_KeyMeta[key]] end
+                        if _KeyMeta[key] then
+                            local v = info.MetaTable[_KeyMeta[key]]
+                            if key == "__index" and type(v) == "table" and getmetatable(v) == nil then
+                                return CloneObj(v, true)
+                            else
+                                return v
+                            end
+                        end
 
                         if key == "Super" then
                             info = _NSInfo[info.SuperClass]
@@ -865,7 +889,12 @@ do
             if ret then
                 return ret
             elseif _KeyMeta[key] then
-                return info.MetaTable[_KeyMeta[key]]
+                local v = info.MetaTable[_KeyMeta[key]]
+                if key == "__index" and type(v) == "table" and getmetatable(v) == nil then
+                    return CloneObj(v, true)
+                else
+                    return v
+                end
             else
                 ret = info.Cache[key] or info.Method and info.Method[key]
                 if type(ret) == "function" then return ret end
@@ -1480,7 +1509,9 @@ do
                 tinsert(gHeader, "name")
             end
 
-            gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            if #gHeader > 0 then
+                gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            end
             _PropGetBuilder[propToken] = loadInEnv(tblconcat(gbody, "\n"), tostring(propToken))
             CACHE_TABLE(gHeader)
             CACHE_TABLE(gbody)
@@ -1683,7 +1714,9 @@ do
                 tinsert(gHeader, "name")
             end
 
-            gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            if #gHeader > 0 then
+                gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            end
             _PropSetBuilder[propToken] = loadInEnv(tblconcat(gbody, "\n"), tostring(propToken))
             CACHE_TABLE(gHeader)
             CACHE_TABLE(gbody)
@@ -1694,10 +1727,18 @@ do
         return rs
     end
 
+    -- Feature Token For class & interface
+    FLAG_HAS_METHOD       = 2^0
+    FLAG_HAS_PROPERTY     = 2^1
+    FLAG_HAS_EVENT        = 2^2
+
     function RefreshCache(ns)
         local info              = _NSInfo[ns]
         local cache             = CACHE_TABLE()
         local cache4Interface   = CACHE_TABLE()
+        local iCache            = CACHE_TABLE()
+        local iToken            = 0
+        local installDispose    = false
 
         if info.SuperClass then CloneInterfaceCache(cache4Interface, _NSInfo[info.SuperClass].Cache4Interface, cache) end
         if info.ExtendInterface then
@@ -1715,29 +1756,60 @@ do
         end
         if cache then CACHE_TABLE(cache) end
 
-        -- Cache for all features
-        local iCache            = CACHE_TABLE()
+        if info.SuperClass then
+            local sinfo = _NSInfo[info.SuperClass]
+            CloneWithOverride(iCache, sinfo.Cache)
 
-        if info.SuperClass then CloneWithOverride(iCache, _NSInfo[info.SuperClass].Cache) end
-        if info.ExtendInterface then for _, IF in ipairs(info.ExtendInterface) do CloneWithoutOverride(iCache, _NSInfo[IF].Cache) end end
+            if sinfo.Cache[DISPOSE_METHOD] then installDispose = true end
+
+            if ValidateFlags(FLAG_HAS_METHOD, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_METHOD, iToken) end
+            if ValidateFlags(FLAG_HAS_PROPERTY, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_PROPERTY, iToken) end
+            if ValidateFlags(FLAG_HAS_EVENT, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken) end
+        end
+
+        if info.ExtendInterface then
+            for _, IF in ipairs(info.ExtendInterface) do
+                local sinfo = _NSInfo[IF]
+                CloneWithoutOverride(iCache, sinfo.Cache)
+
+                if sinfo[DISPOSE_METHOD] then installDispose = true end
+
+                if ValidateFlags(FLAG_HAS_METHOD, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_METHOD, iToken) end
+                if ValidateFlags(FLAG_HAS_PROPERTY, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_PROPERTY, iToken) end
+                if ValidateFlags(FLAG_HAS_EVENT, sinfo.FeatureToken) then iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken) end
+            end
+        end
 
         -- Cache for event
-        if info.Event then CloneWithOverride(iCache, info.Event) end
+        if info.Event then
+            CloneWithOverride(iCache, info.Event)
+            iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken)
+        end
 
         -- Cache for Method
         if info.Method then
+            local hasNoStatic = false
             for key, value in pairs(info.Method) do
                 -- No static methods
                 if not (info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[key])) then
+                    hasNoStatic = true
                     iCache[key] = value
                 end
             end
+            if hasNoStatic then iToken = TurnOnFlags(FLAG_HAS_METHOD, iToken) end
+        end
+
+        -- Cache the Dispose
+        if info.Type == TYPE_CLASS and (info[DISPOSE_METHOD] or installDispose) then
+            iCache[DISPOSE_METHOD] = DisposeObject
+            iToken = TurnOnFlags(FLAG_HAS_METHOD, iToken)
         end
 
         -- Cache for Property
         -- Validate the properties
         if info.Property then
             local autoProp = ValidateFlags(MD_AUTO_PROPERTY, info.Modifier)
+            local hasNoStatic = false
             for name, prop in pairs(info.Property) do
                 if prop.Predefined then
                     local set = prop.Predefined
@@ -2052,10 +2124,12 @@ do
                         end
                     end
                 end
+                if not prop.IsStatic then hasNoStatic = true end
             end
 
             --- self property
             CloneWithOverride(iCache, info.Property, true)
+            if hasNoStatic then iToken = TurnOnFlags(FLAG_HAS_PROPERTY, iToken) end
         end
 
         -- AutoCache
@@ -2065,20 +2139,7 @@ do
 
         -- Simple Class Check(No Constructor, No Property)
         if info.Type == TYPE_CLASS then
-            local isSimpleClass = true
-
-            if info.Constructor or info.Property or (info.SuperClass and not _NSInfo[info.SuperClass].IsSimpleClass) then
-                isSimpleClass = false
-            elseif info.ExtendInterface then
-                for _, IF in ipairs(info.ExtendInterface) do
-                    if _NSInfo[IF].Property then
-                        isSimpleClass = false
-                        break
-                    end
-                end
-            end
-
-            info.IsSimpleClass = isSimpleClass or nil
+            info.IsSimpleClass = (not (info.Constructor or ValidateFlags(FLAG_HAS_PROPERTY, iToken) or (info.SuperClass and not _NSInfo[info.SuperClass].IsSimpleClass))) and true or nil
         end
 
         -- One-required method interface check
@@ -2122,6 +2183,7 @@ do
         -- Reset the cache
         cache = info.Cache
         info.Cache = iCache
+        info.FeatureToken = iToken
         if cache then CACHE_TABLE(cache) end
 
         -- Regenerate MetaTable
@@ -2477,7 +2539,7 @@ do
         elseif _KeyMeta[key] and info.Type == TYPE_CLASS then
             -- Meta-method
             if ValidateFlags(MD_SEALED_FEATURE, info.Modifier) then return error(("%s is sealed, can't set the meta-method."):format(tostring(info.Owner))) end
-            isMeta = true
+            isMeta = key
             rkey = _KeyMeta[key]
             storage = info.MetaTable
             oldValue = storage[rkey]
@@ -2494,7 +2556,7 @@ do
             storage = info.Method
         end
 
-        if ATTRIBUTE_INSTALLED then
+        if ATTRIBUTE_INSTALLED and not (isMeta == "__index" and type(value) == "table") then
             local ok, ret = pcall(ConsumePreparedAttributes, value, isConstructor and AttributeTargets.Constructor or AttributeTargets.Method, info.Owner, key)
             if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
             storage[rkey] = ret or value
@@ -2772,7 +2834,9 @@ do
         elseif key == STRUCT_INIT_METHOD and info.Type == TYPE_STRUCT and type(value) ~= "function" then
             return error(("'%s' must be a function as the initializer."):format(key))
         elseif _KeyMeta[key] and type(value) ~= "function" and info.Type == TYPE_CLASS then
-            return error(("'%s' must be a function as meta-method."):format(key))
+            if not (key == "__index" and type(value) == "table") then
+                return error(("'%s' must be a function as meta-method."):format(key))
+            end
         end
 
         -- Save feature
@@ -2821,7 +2885,9 @@ do
                     return SaveStructMember(info, key, value)
                 end
             elseif vType == "table" then
-                if info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
+                if info.Type == TYPE_CLASS and key == "__index" then
+                    return SaveMethod(info, key, value)
+                elseif info.Type == TYPE_CLASS or info.Type == TYPE_INTERFACE then
                     return SaveProperty(info, key, value)
                 elseif info.Type == TYPE_STRUCT then
                     return SaveStructMember(info, key, value)
@@ -3455,7 +3521,12 @@ do
             -- Check meta-methods
             if _KeyMeta[key] then
                 value = info.MetaTable[_KeyMeta[key]]
-                if value then return value end
+                if type(value) == "table" and getmetatable(value) == nil then
+                    if value ~= rawget(self, INDEX_TABLE_FIELD) then
+                        value = CloneObj(value, true)
+                    end
+                end
+                return value
             end
 
             -- Check Base
@@ -3507,6 +3578,10 @@ do
             if _KeyWord4ClsEnv:GetKeyword(self, key) then error(("'%s' is a keyword."):format(key), 2) end
 
             if key == info.Name or key == DISPOSE_METHOD or _KeyMeta[key] or (type(key) == "string" and type(value) == "function") then
+                if key == "__index" and type(value) == "table" then
+                    rawset(self, INDEX_TABLE_FIELD, value)
+                end
+
                 local ok, msg = pcall(SaveFeature, info, key, value)
                 if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 2) end
                 return
@@ -3545,10 +3620,6 @@ do
 
     function Class_Index(self, key)
         local info = _NSInfo[getmetatable(self)]
-
-        -- Dispose Method
-        if key == "Dispose" then return DisposeObject end
-
         local Cache = info.Cache
 
         local oper = Cache[key]
@@ -3634,7 +3705,13 @@ do
 
         -- Custom index metametods
         oper = info.MetaTable.___index
-        if oper then return oper(self, key) end
+        if oper then
+            if type(oper) == "function" then
+                return oper(self, key)
+            elseif type(oper) == "table" then
+                return oper[key]
+            end
+        end
     end
 
     function Class_NewIndex(self, key, value)
@@ -3739,21 +3816,40 @@ do
 
     _MetaIndexBuilder = {}
 
-    FLAG_INDEX_AUTOCACHE = 2^0
-    FLAG_INDEX_METAINDEX = 2^1
+    FLAG_HAS_AUTOCACHE    = 2^3
+    FLAG_HAS_INDEXFUNC    = 2^4
+    FLAG_HAS_INDEXTBL     = 2^5
+    FLAG_HAS_NEWINDEX     = 2^6
+    FLAG_HAS_ENOBJATTR    = 2^7
+    FLAG_HAS_NOAUTOSET    = 2^8
 
     function GenerateMetaIndex(info)
-        local metaToken = 0
-        local upValues = CACHE_TABLE()
+        local metaToken = info.FeatureToken or 0
 
-        tinsert(upValues, info.Cache)
-
-        if info.AutoCache then
-            metaToken = TurnOnFlags(FLAG_INDEX_AUTOCACHE, metaToken)
+        if info.AutoCache and ValidateFlags(FLAG_HAS_METHOD, metaToken) then
+            metaToken = TurnOnFlags(FLAG_HAS_AUTOCACHE, metaToken)
         end
 
         if info.MetaTable.___index then
-            metaToken = TurnOnFlags(FLAG_INDEX_METAINDEX, metaToken)
+            if type(info.MetaTable.___index) == "function" then
+                metaToken = TurnOnFlags(FLAG_HAS_INDEXFUNC, metaToken)
+            else
+                metaToken = TurnOnFlags(FLAG_HAS_INDEXTBL, metaToken)
+            end
+        end
+
+        -- Check if no need to generate the __index meta-method
+        if metaToken == 0 then return nil end
+        if metaToken == FLAG_HAS_METHOD then return info.Cache end
+        if metaToken == FLAG_HAS_INDEXFUNC or metaToken == FLAG_HAS_INDEXTBL then return info.MetaTable.___index end
+
+        local upValues  = CACHE_TABLE()
+
+        if ValidateFlags(FLAG_HAS_METHOD, metaToken) or ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+            tinsert(upValues, info.Cache)
+        end
+
+        if ValidateFlags(FLAG_HAS_INDEXFUNC, metaToken) or ValidateFlags(FLAG_HAS_INDEXTBL, metaToken) then
             tinsert(upValues, info.MetaTable.___index)
         end
 
@@ -3762,43 +3858,65 @@ do
             local gHeader = CACHE_TABLE()
             local gbody = CACHE_TABLE()
 
-            tinsert(gHeader, "Cache")
-
             tinsert(gbody, "") -- Remain for closure values
             tinsert(gbody, [[return function(self, key)]])
 
-            tinsert(gbody, [[if key == "Dispose" then return DisposeObject end]])
+            if ValidateFlags(FLAG_HAS_METHOD, metaToken) or ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                tinsert(gHeader, "Cache")
 
-            tinsert(gbody, [[local oper = Cache[key] ]])
-            tinsert(gbody, [[if oper then]])
+                tinsert(gbody, [[local oper = Cache[key] ]])
+                tinsert(gbody, [[if oper then]])
 
-            -- Method
-            tinsert(gbody, [[if type(oper) == "function" then]])
-            if ValidateFlags(FLAG_INDEX_AUTOCACHE, metaToken) then
-                tinsert(gbody, [[rawset(self, key, oper)]])
+                -- Method
+                if ValidateFlags(FLAG_HAS_METHOD, metaToken) then
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                        tinsert(gbody, [[if type(oper) == "function" then]])
+                    end
+                    if ValidateFlags(FLAG_HAS_AUTOCACHE, metaToken) then
+                        tinsert(gbody, [[    rawset(self, key, oper)]])
+                    end
+                        tinsert(gbody, [[    return oper]])
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                        tinsert(gbody, [[end]])
+                    end
+                end
+
+                -- Event
+                if ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                        tinsert(gbody, [[if getmetatable(oper) then]])
+                    end
+                        tinsert(gbody, [[    local handler = rawget(oper, self)]])
+                        tinsert(gbody, [[    if not handler then handler = EventHandler(oper, self) end]])
+                        tinsert(gbody, [[    return handler]])
+
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                        tinsert(gbody, [[end]])
+                    end
+                end
+
+                -- Property
+                if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                    tinsert(gbody, [[return oper.RawGet(self)]])
+                end
+
+                tinsert(gbody, [[end]])
             end
-            tinsert(gbody, [[return oper]])
 
-            -- Event
-            tinsert(gbody, [[elseif getmetatable(oper) then]])
-            tinsert(gbody, [[local handler = rawget(oper, self)]])
-            tinsert(gbody, [[if not handler then handler = EventHandler(oper, self) end]])
-            tinsert(gbody, [[return handler]])
-
-            -- Property
-            tinsert(gbody, [[else return oper.RawGet(self) end]])
-
-            tinsert(gbody, [[end]])
-
-            if ValidateFlags(FLAG_INDEX_METAINDEX, metaToken) then
+            if ValidateFlags(FLAG_HAS_INDEXFUNC, metaToken) then
                 tinsert(gHeader, "metaIndex")
                 tinsert(gbody, [[return metaIndex(self, key)]])
+            elseif ValidateFlags(FLAG_HAS_INDEXTBL, metaToken) then
+                tinsert(gHeader, "metaIndex")
+                tinsert(gbody, [[return metaIndex[key] ]])
             end
 
             tinsert(gbody, [[end]])
 
-            gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
-            _MetaIndexBuilder[metaToken] = loadInEnv(tblconcat(gbody, "\n"), tostring(metaToken))
+            if #gHeader > 0 then
+                gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            end
+            _MetaIndexBuilder[metaToken] = loadInEnv(tblconcat(gbody, "\n"), "Class_Index_"..tostring(metaToken))
             CACHE_TABLE(gHeader)
             CACHE_TABLE(gbody)
         end
@@ -3810,73 +3928,93 @@ do
 
     _MetaNewIndexBuilder = {}
 
-    FLAG_NEWIDX_ENOBJATTR = 2^0
-    FLAG_NEWIDX_METANEWIDX = 2^1
-    FLAG_NEWINDEX_NOAUTOSET = 2^2
-
     function GenerateMetaNewIndex(info)
-        local metaToken = 0
-        local upValues = CACHE_TABLE()
-
-        tinsert(upValues, info.Cache)
+        local metaToken = TurnOffFlags(FLAG_HAS_METHOD, info.FeatureToken or 0)
 
         if info.EnableObjMethodAttr then
-            metaToken = TurnOnFlags(FLAG_NEWIDX_ENOBJATTR, metaToken)
+            metaToken = TurnOnFlags(FLAG_HAS_ENOBJATTR, metaToken)
         end
 
         if info.MetaTable.___newindex then
-            metaToken = TurnOnFlags(FLAG_NEWIDX_METANEWIDX, metaToken)
-            tinsert(upValues, info.MetaTable.___newindex)
+            metaToken = TurnOnFlags(FLAG_HAS_NEWINDEX, metaToken)
         end
 
         if info.NoAutoSet then
-            metaToken = TurnOnFlags(FLAG_NEWINDEX_NOAUTOSET, metaToken)
+            metaToken = TurnOnFlags(FLAG_HAS_NOAUTOSET, metaToken)
+        end
+
+        if metaToken == 0 then return nil end
+        if metaToken == FLAG_HAS_NEWINDEX then return info.MetaTable.___newindex end
+
+        local upValues = CACHE_TABLE()
+
+        if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+            tinsert(upValues, info.Cache)
+        end
+
+        if ValidateFlags(FLAG_HAS_NEWINDEX, metaToken) then
+            tinsert(upValues, info.MetaTable.___newindex)
         end
 
         -- Building
         if not _MetaNewIndexBuilder[metaToken] then
             local gHeader = CACHE_TABLE()
-            local gbody = CACHE_TABLE()
-
-            tinsert(gHeader, "Cache")
+            local gbody   = CACHE_TABLE()
 
             tinsert(gbody, "") -- Remain for closure values
             tinsert(gbody, [[return function(self, key, value)]])
 
-            tinsert(gbody, [[local oper = Cache[key] ]])
-
-            if ValidateFlags(FLAG_NEWIDX_ENOBJATTR, metaToken) then
+            if ValidateFlags(FLAG_HAS_ENOBJATTR, metaToken) then
                 -- Object method
                 tinsert(gbody, [[if type(value) == "function" and HasPreparedAttribute() then]])
-                tinsert(gbody, [[local ok, ret = pcall(ConsumePreparedAttributes, value, AttributeTargets.ObjectMethod, self, key)]])
-                tinsert(gbody, [[if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret), 2) end]])
-                tinsert(gbody, [[value = ret or value]])
+                tinsert(gbody, [[    local ok, ret = pcall(ConsumePreparedAttributes, value, AttributeTargets.ObjectMethod, self, key)]])
+                tinsert(gbody, [[    if not ok then error(strtrim(ret:match(":%d+:%s*(.-)$") or ret), 2) end]])
+                tinsert(gbody, [[    value = ret or value]])
                 tinsert(gbody, [[end]])
             end
 
-            tinsert(gbody, [[if type(oper) == "table" then]])
+            if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) or ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                tinsert(gHeader, "Cache")
+                tinsert(gbody, [[local oper = Cache[key] ]])
 
-            -- Event
-            tinsert(gbody, [[if getmetatable(oper) then]])
-                tinsert(gbody, [[local handler = rawget(oper, self)]])
-                tinsert(gbody, [[if not handler then]])
-                tinsert(gbody, [[if value == nil then return end]])
-                tinsert(gbody, [[handler = EventHandler(oper, self)]])
+                tinsert(gbody, [[if type(oper) == "table" then]])
+
+                -- Event
+                if ValidateFlags(FLAG_HAS_EVENT, metaToken) then
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                        tinsert(gbody, [[if getmetatable(oper) then]])
+                    end
+                            tinsert(gbody, [[local handler = rawget(oper, self)]])
+                            tinsert(gbody, [[if not handler then]])
+                            tinsert(gbody, [[    if value == nil then return end]])
+                            tinsert(gbody, [[    handler = EventHandler(oper, self)]])
+                            tinsert(gbody, [[end]])
+                            tinsert(gbody, [[if value == nil or type(value) == "function" then]])
+                            tinsert(gbody, [[    handler.Handler = value]])
+                            tinsert(gbody, [[    return]])
+                            tinsert(gbody, [[elseif type(value) == "table" then]])
+                            tinsert(gbody, [[    return handler:Copy(value)]])
+                            tinsert(gbody, [[else]])
+                            tinsert(gbody, [[    error("Can't set this value to the event handler.", 2)]])
+                            tinsert(gbody, [[end]])
+
+                    if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                        tinsert(gbody, [[end]])
+                    end
+                end
+
+                -- Property
+                if ValidateFlags(FLAG_HAS_PROPERTY, metaToken) then
+                    tinsert(gbody, [[return oper.RawSet(self, value)]])
+                end
+
                 tinsert(gbody, [[end]])
-                tinsert(gbody, [[if value == nil or type(value) == "function" then]])
-                tinsert(gbody, [[handler.Handler = value return]])
-                tinsert(gbody, [[elseif type(value) == "table" then return handler:Copy(value)]])
-                tinsert(gbody, [[else error("Can't set this value to the event handler.", 2) end]])
+            end
 
-            -- Property
-            tinsert(gbody, [[else return oper.RawSet(self, value) end]])
-
-            tinsert(gbody, [[end]])
-
-            if ValidateFlags(FLAG_NEWIDX_METANEWIDX, metaToken) then
+            if ValidateFlags(FLAG_HAS_NEWINDEX, metaToken) then
                 tinsert(gHeader, "metaNewIndex")
                 tinsert(gbody, [[return metaNewIndex(self, key, value)]])
-            elseif not ValidateFlags(FLAG_NEWINDEX_NOAUTOSET, metaToken) then
+            elseif not ValidateFlags(FLAG_HAS_NOAUTOSET, metaToken) then
                 tinsert(gbody, [[rawset(self, key, value)]])
             else
                 tinsert(gbody, [[error("The object is readonly.", 2)]])
@@ -3884,8 +4022,10 @@ do
 
             tinsert(gbody, [[end]])
 
-            gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
-            _MetaNewIndexBuilder[metaToken] = loadInEnv(tblconcat(gbody, "\n"), tostring(metaToken))
+            if #gHeader > 0 then
+                gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            end
+            _MetaNewIndexBuilder[metaToken] = loadInEnv(tblconcat(gbody, "\n"), "Class_NewIndex_"..tostring(metaToken))
             CACHE_TABLE(gHeader)
             CACHE_TABLE(gbody)
         end
@@ -3902,6 +4042,10 @@ do
         meta.__metatable = info.Owner
         meta.__index = SAVE_MEMORY and Class_Index or GenerateMetaIndex(info)
         meta.__newindex = SAVE_MEMORY and Class_NewIndex or GenerateMetaNewIndex(info)
+
+        if info.Name == "A" then
+            print(info.Name, "[__index]", meta.__index or "nil", "[__newindex]", meta.__newindex or "nil")
+        end
     end
 
     function ValidateClass(info, stack)
@@ -6109,7 +6253,9 @@ do
             __call = function(self, cache)
                 if cache then
                     for attr in pairs(cache) do
-                        if getmetatable(attr) then attr:Dispose() end
+                        if getmetatable(attr) then
+                            DisposeObject(attr)
+                        end
                     end
                     wipe(cache)
                     tinsert(self, cache)
@@ -6122,7 +6268,7 @@ do
         function DisposeAttributes(config)
             if type(config) ~= "table" then return end
             if getmetatable(config) then
-                return config:Dispose()
+                return DisposeObject(config)
             else
                 for _, attr in pairs(config) do DisposeAttributes(attr) end
                 return wipe(config)
@@ -6254,25 +6400,18 @@ do
                         -- ok, ret = pcall(config.ApplyAttribute, config, arg1, arg2, arg3, arg4)
                         ret = config.ApplyAttribute(config, arg1, arg2, arg3, arg4)
 
-                        --if not ok then
-                        --    print(ret)
+                        if usage and not usage.Inherited and usage.RunOnce then
+                            DisposeObject(config)
+                            config = nil
+                        end
 
-                        --    config:Dispose()
-                        --    config = nil
-                        --else
-                            if usage and not usage.Inherited and usage.RunOnce then
-                                config:Dispose()
-                                config = nil
+                        if isMethod then
+                            -- The method may be wrapped in the apply operation
+                            if ret and ret ~= target and type(ret) == "function" then
+                                target = ret
+                                arg1 = target
                             end
-
-                            if isMethod then
-                                -- The method may be wrapped in the apply operation
-                                if ret and ret ~= target and type(ret) == "function" then
-                                    target = ret
-                                    arg1 = target
-                                end
-                            end
-                        --end
+                        end
                     else
                         hasAfter = true
                     end
@@ -6283,25 +6422,19 @@ do
                         local usage = GetAttributeUsage(getmetatable(config[i]))
 
                         if not halt or (not atLast and usage and usage.BeforeDefinition) or (atLast and (not usage or not usage.BeforeDefinition)) then
-                            --ok, ret = pcall(config[i].ApplyAttribute, config[i], arg1, arg2, arg3, arg4)
                             ret = config[i].ApplyAttribute(config[i], arg1, arg2, arg3, arg4)
 
-                            --if not ok then
-                            --    tremove(config, i):Dispose()
-                            --    print(ret)
-                            --else
-                                if usage and not usage.Inherited and usage.RunOnce then
-                                    tremove(config, i):Dispose()
-                                end
+                            if usage and not usage.Inherited and usage.RunOnce then
+                                DisposeObject(tremove(config, i))
+                            end
 
-                                if isMethod then
-                                    -- The method may be wrapped in the apply operation
-                                    if ret and ret ~= target and type(ret) == "function" then
-                                        target = ret
-                                        arg1 = target
-                                    end
+                            if isMethod then
+                                -- The method may be wrapped in the apply operation
+                                if ret and ret ~= target and type(ret) == "function" then
+                                    target = ret
+                                    arg1 = target
                                 end
-                            --end
+                            end
                         else
                             hasAfter = true
                         end
@@ -6338,7 +6471,7 @@ do
 
         function ClearPreparedAttributes(noDispose)
             local prepared = _PreparedAttributes()
-            if not noDispose then for _, attr in ipairs(prepared) do attr:Dispose() end end
+            if not noDispose then for _, attr in ipairs(prepared) do DisposeObject(attr) end end
             wipe(prepared)
         end
 
@@ -6447,12 +6580,12 @@ do
                         if getmetatable(pconfig) then
                             if not ValidateAttributeUsable(prepared, pconfig) then
                                 SaveTargetAttributes(target, targetType, nil)
-                                pconfig:Dispose()
+                                DisposeObject(pconfig)
                             end
                         else
                             for i = #pconfig, 1, -1 do
                                 if not ValidateAttributeUsable(prepared, pconfig[i]) then
-                                    tremove(pconfig, i):Dispose()
+                                    DisposeObject(tremove(pconfig, i))
                                 end
                             end
 
