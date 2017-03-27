@@ -2019,6 +2019,8 @@ do
                             info.Event[ename] = evt
                             iCache[ename] = evt
                             prop.Event = evt
+
+                            iToken = TurnOnFlags(FLAG_HAS_EVENT, iToken)
                         else
                             prop.Event = nil
                         end
