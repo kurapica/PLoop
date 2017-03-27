@@ -4044,10 +4044,6 @@ do
         meta.__metatable = info.Owner
         meta.__index = SAVE_MEMORY and Class_Index or GenerateMetaIndex(info)
         meta.__newindex = SAVE_MEMORY and Class_NewIndex or GenerateMetaNewIndex(info)
-
-        if info.Name == "A" then
-            print(info.Name, "[__index]", meta.__index or "nil", "[__newindex]", meta.__newindex or "nil")
-        end
     end
 
     function ValidateClass(info, stack)
