@@ -37,8 +37,8 @@
 -- Author           :   kurapica125@outlook.com                         --
 -- URL              :   http://github.com/kurapica/PLoop                --
 -- Create Date      :   2011/02/03                                      --
--- Last Update Date :   2017/03/26                                      --
--- Version          :   r173                                            --
+-- Last Update Date :   2017/03/29                                      --
+-- Version          :   r174                                            --
 --======================================================================--
 
 ------------------------------------------------------
@@ -99,6 +99,10 @@ do
 
     -- Special __index table filed
     INDEX_TABLE_FIELD   = "__PLOOP_INDEX_TABLE"
+
+    -- Struct Special Index
+    STRT_START_VALID    = 10001
+    STRT_START_INIT     = 20001
 
     -- Attribute System
     ATTRIBUTE_INSTALLED = false
@@ -1074,7 +1078,7 @@ do
         local flag, ret
 
         if iType == TYPE_STRUCT then
-            flag, ret = pcall(ValidateStruct, oType, value, onlyValidate)
+            flag, ret = pcall(info.RawValidate, info, value, onlyValidate)
 
             if flag then if onlyValidate then return value else return ret end end
 
@@ -1135,7 +1139,7 @@ do
         local flag, ret
 
         if iType == TYPE_STRUCT then
-            flag, ret = pcall(ValidateStruct, oType, value, onlyValidate)
+            flag, ret = pcall(info.RawValidate, info, value, onlyValidate)
 
             if flag then if onlyValidate then return value else return ret end end
         elseif iType == TYPE_ENUM then
@@ -2268,7 +2272,7 @@ do
         else
             info.SubType = STRUCT_TYPE_CUSTOM
 
-            if info.Default ~= nil and not pcall(ValidateStruct, info.Owner, info.Default) then
+            if info.Default ~= nil and not pcall(info.RawValidate, info, info.Default) then
                 info.Default = nil
             end
 
@@ -2277,6 +2281,60 @@ do
             info.ArrayElement = nil
             if cache then CACHE_TABLE(cache) end
         end
+
+        if info.BaseStruct and _NSInfo[info.BaseStruct].SubType ~= info.SubType then
+            info.BaseStruct = nil
+        end
+
+        -- Save validator and initializer
+        local i = STRT_START_VALID
+        while info[i] do info[i] = nil i = i + 1 end
+        i = STRT_START_INIT
+        while info[i] do info[i] = nil i = i + 1 end
+
+        if info.BaseStruct then
+            local binfo = _NSInfo[info.BaseStruct]
+
+            i = STRT_START_VALID
+            while binfo[i] do info[i] = binfo[i] i = i + 1 end
+            info[i] = info.Validator
+
+            i = STRT_START_INIT
+            while binfo[i] do info[i] = binfo[i] i = i + 1 end
+            info[i] = info.Initializer
+        else
+            info[STRT_START_VALID] = info.Validator
+            info[STRT_START_INIT]  = info.Initializer
+        end
+
+        -- Cache methods
+        if info.Method or (info.BaseStruct and _NSInfo[info.BaseStruct].Cache) then
+            local cache = CACHE_TABLE()
+            if info.BaseStruct and _NSInfo[info.BaseStruct].Cache then
+                for k, v in pairs(_NSInfo[info.BaseStruct].Cache) do
+                    cache[k] = v
+                end
+            end
+
+            if info.Method then
+                for k, v in pairs(info.Method) do
+                    if not(info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[k])) then
+                        cache[k] = v
+                    end
+                end
+            end
+
+            if not next(cache) then CACHE_TABLE(cache) cache = nil end
+            local temp = info.Cache
+            info.Cache = cache
+            if temp then CACHE_TABLE(temp) end
+        else
+            local temp = info.Cache
+            info.Cache = nil
+            if temp then CACHE_TABLE(temp) end
+        end
+
+        info.RawValidate = SAVE_MEMORY and ValidateStruct or GenerateRawValidate(info)
     end
 end
 
@@ -2803,14 +2861,31 @@ do
 
         -- Check if is array element type
         if tonumber(key) then
-            if info[0] then return error("The array's element type is already set.") end
-            if info[1] then return error("The struct has member settings.") end
-
-            if IsNameSpace(value) and _NSInfo[value].Type then
-                info[0] = value
-            else
+            if not (IsNameSpace(value) and _NSInfo[value].Type) then
                 return error("The array element's type is not valid.")
             end
+
+            if info[0] then
+                local pass = false
+                if info[0] == value then
+                    pass = true
+                elseif Reflector.IsStruct(value) then
+                    local base = __Base__:GetStructAttribute(value)
+                    while base and base ~= info[0] do base = __Base__:GetStructAttribute(base) end
+                    if base == info[0] then pass = true end
+                elseif Reflector.IsClass(value) then
+                    if Reflector.IsInterface(info[0]) and Reflector.IsExtendedInterface(value, info[0]) then pass = true end
+                    if Reflector.IsClass(info[0]) and Reflector.IsSuperClass(value, info[0]) then pass = true end
+                elseif Reflector.IsInterface(value) then
+                    if Reflector.IsInterface(info[0]) and Reflector.IsExtendedInterface(value, info[0]) then pass = true end
+                end
+
+                if not pass then return error("The array's element type is already set.") end
+            elseif info[1] then
+                return error("The struct has member settings.")
+            end
+
+            info[0] = value
         else
             if info[0] then return error("The struct is an element arry type.") end
 
@@ -4427,7 +4502,7 @@ do
     _KeyWord4StrtEnv = _KeywordAccessor()
 
     STRUCT_TYPE_MEMBER = "MEMBER"
-    STRUCT_TYPE_ARRAY = "ARRAY"
+    STRUCT_TYPE_ARRAY  = "ARRAY"
     STRUCT_TYPE_CUSTOM = "CUSTOM"
 
     -- metatable for struct's env
@@ -4540,112 +4615,307 @@ do
     end
 
     -- Some struct object may ref to each others, that would crash the validation
-    _ValidatedCache = setmetatable({}, {
-        __index= function(self, k) local v = setmetatable({}, WEAK_ALL) rawset(self, k, v) return v end,
-        __mode = "k",
-    })
+    _ValidatedCache = setmetatable({}, { __index= function(self, k) local v = setmetatable({}, WEAK_ALL) rawset(self, k, v) return v end, __mode = "k" })
 
-    function ValidateStruct(strt, value, onlyValidate)
-        local info = _NSInfo[strt]
-        local sType = info.SubType
-        local tValidatedCache = _ValidatedCache[running() or 0]
+    function ValidateStruct(info, value, onlyValidate)
+        local sType  = info.SubType
+        local vCache = _ValidatedCache[running() or 0]
 
         if sType ~= STRUCT_TYPE_CUSTOM then
-            if tValidatedCache[value] then return value end  -- No twice validation for one table
+            if vCache[value] then return value end  -- No twice validation for one table
 
-            if type(value) ~= "table" then wipe(tValidatedCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
-            if getmetatable(value) ~= nil then wipe(tValidatedCache) return error(("%s must be a table without meta-table."):format("%s")) end
+            if type(value) ~= "table" then wipe(vCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
+            if getmetatable(value) ~= nil then wipe(vCache) return error(("%s must be a table without meta-table."):format("%s")) end
 
-            if not tValidatedCache[1] then tValidatedCache[1] = value end
-            tValidatedCache[value] = true
+            if not vCache[1] then vCache[1] = value end
+            vCache[value] = true
 
-            if sType == STRUCT_TYPE_MEMBER and info.Members then
-                for _, mem in ipairs(info.Members) do
-                    local name = mem.Name
-                    local default = mem.Default
-                    local val = value[name]
+            if sType == STRUCT_TYPE_MEMBER then
+                local flag
+                if onlyValidate then
+                    for _, mem in ipairs(info.Members) do
+                        local name = mem.Name
+                        local val = value[name]
 
-                    if val == nil then
-                        if default ~= nil then
-                            if not onlyValidate then
-                                -- Deep clone to make sure no change on default value
-                                val = CloneObj(default, true)
-                            end
-                        elseif mem.Require then
-                            wipe(tValidatedCache)
-                            return error(("%s.%s can't be nil."):format("%s", name))
-                        end
-                    else
-                        local flag
-                        flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
-                        if not flag then
-                            wipe(tValidatedCache)
-                            return error(strtrim(val:match(":%d+:%s*(.-)$") or val))
+                        if val == nil then
+                            if mem.Default == nil and mem.Require then wipe(vCache) return error(("%s.%s can't be nil."):format("%s", name)) end
+                        else
+                            flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
+                            if not flag then wipe(vCache) return error(strtrim(val:match(":%d+:%s*(.-)$") or val)) end
                         end
                     end
+                else
+                    for _, mem in ipairs(info.Members) do
+                        local name = mem.Name
+                        local val = value[name]
 
-                    if not onlyValidate then value[name] = val end
+                        if val == nil then
+                            local default = mem.Default
+                            if default ~= nil then
+                                -- Deep clone to make sure no change on default value
+                                val = CloneObj(default, true)
+                            elseif mem.Require then
+                                wipe(vCache)
+                                return error(("%s.%s can't be nil."):format("%s", name))
+                            end
+                        else
+                            flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
+                            if not flag then wipe(vCache) return error(strtrim(val:match(":%d+:%s*(.-)$") or val)) end
+                        end
+
+                        value[name] = val
+                    end
                 end
             elseif sType == STRUCT_TYPE_ARRAY then
                 local ele = info.ArrayElement
 
-                if ele then
+                if onlyValidate then
                     for i, v in ipairs(value) do
                         local flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
-
-                        if flag then
-                            if not onlyValidate then value[i] = ret end
-                        else
-                            wipe(tValidatedCache)
-                            return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]"))
-                        end
+                        if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]")) end
+                    end
+                else
+                    for i, v in ipairs(value) do
+                        local flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
+                        if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]")) end
+                        value[i] = ret
                     end
                 end
             end
-        elseif info.BaseStruct then
-            -- Validate with the base struct
-            if onlyValidate then
-                ValidateStruct(info.BaseStruct, value, onlyValidate)
-            else
-                value = ValidateStruct(info.BaseStruct, value, onlyValidate)
+        end
+
+        -- Call Validator
+        local i = STRT_START_VALID
+
+        while info[i] do
+            local flag, ret = pcall(info[i], value)
+            if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+            i = i + 1
+        end
+
+        if not onlyValidate then
+            i = STRT_START_INIT
+
+            while info[i] do
+                local flag, ret = pcall(info[i], value)
+                if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                if sType == STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
+                i = i + 1
+            end
+
+            if info.Cache and type(value) == "table" then
+                for k, v in pairs(info.Cache) do
+                    if value[k] == nil then value[k] = v end
+                end
             end
         end
 
-        if info.Validator then
-            local flag, ret = pcall(info.Validator, value)
-
-            if not flag then
-                wipe(tValidatedCache)
-                return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
-            end
-        end
-
-        if not onlyValidate and info.Initializer then
-            local flag, ret = pcall(info.Initializer, value)
-
-            if not flag then
-                wipe(tValidatedCache)
-                return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret))
-            end
-
-            if sType == STRUCT_TYPE_CUSTOM and ret ~= nil then value = ret end
-        end
-
-        if value and tValidatedCache[1] == value then wipe(tValidatedCache) end
+        if sType ~= STRUCT_TYPE_CUSTOM and vCache[1] == value then wipe(vCache) end
 
         return value
     end
 
-    function CopyStructMethods(info, obj)
-        if info.Method and type(obj) == "table" then
-            for k, v in pairs(info.Method) do
-                if obj[k] == nil and not(info.FeatureModifier and ValidateFlags(MD_STATIC_FEATURE, info.FeatureModifier[k])) then
-                    obj[k] = v
-                end
+    FLAG_STRT_CUSTOM    = 2^0
+    FLAG_STRT_MEMBER    = 2^1
+    FLAG_STRT_ARRAY     = 2^2
+    FLAG_STRT_SVALID    = 2^3
+    FLAG_STRT_MVALID    = 2^4
+    FLAG_STRT_SINIT     = 2^5
+    FLAG_STRT_MINIT     = 2^6
+    FLAG_STRT_METHOD    = 2^7
+
+    _RawValidateBuilder = {}
+
+    function GenerateRawValidate(info)
+        local sToken    = 0
+        local upValues  = CACHE_TABLE()
+
+        if info.SubType == STRUCT_TYPE_CUSTOM then
+            sToken = TurnOnFlags(FLAG_STRT_CUSTOM, sToken)
+        elseif info.SubType == STRUCT_TYPE_MEMBER then
+            sToken = TurnOnFlags(FLAG_STRT_MEMBER, sToken)
+        else
+            sToken = TurnOnFlags(FLAG_STRT_ARRAY, sToken)
+        end
+
+        if info[STRT_START_VALID] then
+            if info[STRT_START_VALID + 1] then
+                local i = STRT_START_VALID + 1
+                while info[i + 1] do i = i + 1 end
+                sToken = TurnOnFlags(FLAG_STRT_MVALID, sToken)
+                tinsert(upValues, i)
+            else
+                sToken = TurnOnFlags(FLAG_STRT_SVALID, sToken)
             end
         end
 
-        return obj
+        if info[STRT_START_INIT] then
+            if info[STRT_START_INIT + 1] then
+                local i = STRT_START_INIT + 1
+                while info[i + 1] do i = i + 1 end
+                sToken = TurnOnFlags(FLAG_STRT_MINIT, sToken)
+                tinsert(upValues, i)
+            else
+                sToken = TurnOnFlags(FLAG_STRT_SINIT, sToken)
+            end
+        end
+
+        if info.Cache then
+            sToken = TurnOnFlags(FLAG_STRT_METHOD, sToken)
+        end
+
+        -- Building
+        if not _RawValidateBuilder[sToken] then
+            local gHeader = CACHE_TABLE()
+            local gbody   = CACHE_TABLE()
+
+            tinsert(gbody, "") -- Remain for closure values
+            tinsert(gbody, [[return function(info, value, onlyValidate)]])
+
+            if ValidateFlags(FLAG_STRT_MEMBER, sToken) or ValidateFlags(FLAG_STRT_ARRAY, sToken) then
+                tinsert(gbody, [[
+                    local vCache = _ValidatedCache[running() or 0]
+                    if vCache[value] then return value end
+                    if type(value) ~= "table" then wipe(vCache) return error(("%s must be a table, got %s."):format("%s", type(value))) end
+                    if getmetatable(value) ~= nil then wipe(vCache) return error(("%s must be a table without meta-table."):format("%s")) end
+
+                    if not vCache[1] then vCache[1] = value end
+                    vCache[value] = true
+                ]])
+            end
+
+            -- Validation for member and array
+            if ValidateFlags(FLAG_STRT_MEMBER, sToken) then
+                tinsert(gbody, [[
+                    local flag
+                    if onlyValidate then
+                        for _, mem in ipairs(info.Members) do
+                            local name = mem.Name
+                            local val = value[name]
+
+                            if val == nil then
+                                if mem.Default == nil and mem.Require then wipe(vCache) return error(("%s.%s can't be nil."):format("%s", name)) end
+                            else
+                                flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
+                                if not flag then wipe(vCache) return error(strtrim(val:match(":%d+:%s*(.-)$") or val)) end
+                            end
+                        end
+                    else
+                        for _, mem in ipairs(info.Members) do
+                            local name = mem.Name
+                            local val = value[name]
+
+                            if val == nil then
+                                local default = mem.Default
+                                if default ~= nil then
+                                    -- Deep clone to make sure no change on default value
+                                    val = CloneObj(default, true)
+                                elseif mem.Require then
+                                    wipe(vCache)
+                                    return error(("%s.%s can't be nil."):format("%s", name))
+                                end
+                            else
+                                flag, val = pcall(Validate4Type, mem.Type, val, name, nil, nil, onlyValidate)
+                                if not flag then wipe(vCache) return error(strtrim(val:match(":%d+:%s*(.-)$") or val)) end
+                            end
+
+                            value[name] = val
+                        end
+                    end
+                ]])
+            elseif ValidateFlags(FLAG_STRT_ARRAY, sToken) then
+                tinsert(gbody, [[
+                    local ele = info.ArrayElement
+                    if onlyValidate then
+                        for i, v in ipairs(value) do
+                            local flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
+                            if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]")) end
+                        end
+                    else
+                        for i, v in ipairs(value) do
+                            local flag, ret = pcall(Validate4Type, ele, v, "Element", nil, nil, onlyValidate)
+                            if not flag then wipe(vCache) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret):gsub("%%s[_%w]+", "%%s["..i.."]")) end
+                            value[i] = ret
+                        end
+                    end
+                ]])
+            end
+
+            -- Custom Validation
+            if ValidateFlags(FLAG_STRT_SVALID, sToken) then
+                tinsert(gbody, [[
+                    local flag, ret = pcall(info[]]..STRT_START_VALID..[[], value)
+                    if not flag then wipe(_ValidatedCache[running() or 0]) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                ]])
+            elseif ValidateFlags(FLAG_STRT_MVALID, sToken) then
+                tinsert(gHeader, "nvalidator")
+                tinsert(gbody, [[
+                    for i = ]] .. STRT_START_VALID .. [[, nvalidator do
+                        local flag, ret = pcall(info[i], value)
+                        if not flag then wipe(_ValidatedCache[running() or 0]) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                    end
+                ]])
+            end
+
+            if ValidateFlags(FLAG_STRT_SINIT, sToken) or ValidateFlags(FLAG_STRT_MINIT, sToken) or ValidateFlags(FLAG_STRT_METHOD, sToken) then
+                tinsert(gbody, [[if not onlyValidate then]])
+
+                -- Custom Initializer
+                if ValidateFlags(FLAG_STRT_SINIT, sToken) then
+                    tinsert(gbody, [[
+                        local flag, ret = pcall(info[]].. STRT_START_INIT ..[[], value)
+                        if not flag then wipe(_ValidatedCache[running() or 0]) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                    ]])
+                    if ValidateFlags(FLAG_STRT_CUSTOM, sToken) then
+                        tinsert(gbody, [[if ret ~= nil then value = ret end]])
+                    end
+                elseif ValidateFlags(FLAG_STRT_MINIT, sToken) then
+                    tinsert(gHeader, "ninitializer")
+                    tinsert(gbody, [[
+                        for i = ]] .. STRT_START_INIT .. [[, ninitializer do
+                            local flag, ret = pcall(info[i], value)
+                            if not flag then wipe(_ValidatedCache[running() or 0]) return error(strtrim(ret:match(":%d+:%s*(.-)$") or ret)) end
+                    ]])
+                    if ValidateFlags(FLAG_STRT_CUSTOM, sToken) then
+                        tinsert(gbody, [[if ret ~= nil then value = ret end]])
+                    end
+                    tinsert(gbody, [[end]])
+                end
+
+                if ValidateFlags(FLAG_STRT_METHOD, sToken) then
+                    tinsert(gbody, [[
+                        if type(value) == "table" then
+                            for k, v in pairs(info.Cache) do
+                                if value[k] == nil then value[k] = v end
+                            end
+                        end
+                    ]])
+                end
+
+                tinsert(gbody, [[end]])
+            end
+
+            if ValidateFlags(FLAG_STRT_MEMBER, sToken) or ValidateFlags(FLAG_STRT_ARRAY, sToken) then
+                tinsert(gbody, [[if vCache[1] == value then wipe(vCache) end]])
+            end
+
+            tinsert(gbody, [[return value]])
+            tinsert(gbody, [[end]])
+
+            if #gHeader > 0 then
+                gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
+            end
+            if #info.Name == 1 then
+                --print("--------------\n", info.Name, sToken, "\n", tblconcat(gbody, "\n"))
+            end
+            _RawValidateBuilder[sToken] = loadInEnv(tblconcat(gbody, "\n"), "Struct_Validate_"..tostring(sToken))
+            CACHE_TABLE(gHeader)
+            CACHE_TABLE(gbody)
+        end
+
+        local rs = _RawValidateBuilder[sToken](unpack(upValues))
+        CACHE_TABLE(upValues)
+        return rs
     end
 
     function Struct2Obj(info, ...)
@@ -4658,10 +4928,8 @@ do
         if not ( count == 1 and type(initTable) == "table" and getmetatable(initTable) == nil ) then initTable = nil end
 
         if initTable then
-            local ok, value = pcall(ValidateStruct, strt, initTable)
-
-            if ok then return CopyStructMethods(info, value) end
-
+            local ok, value = pcall(info.RawValidate, info, initTable)
+            if ok then return value end
             initErrMsg = value
         end
 
@@ -4671,44 +4939,32 @@ do
 
             if info.Members then for i, n in ipairs(info.Members) do ret[n.Name] = select(i, ...) end end
 
-            local ok, value = pcall(ValidateStruct, strt, ret)
+            local ok, value = pcall(info.RawValidate, info, ret)
+            if ok then return value end
+            value = initErrMsg or value
+            value = strtrim(value:match(":%d+:%s*(.-)$") or value)
+            value = value:gsub("%%s%.", ""):gsub("%%s", "")
 
-            if ok then
-                return CopyStructMethods(info, value)
-            else
-                value = initErrMsg or value
-                value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-                value = value:gsub("%%s%.", ""):gsub("%%s", "")
-
-                local args = ""
-                for i, n in ipairs(info.Members) do
-                    if i == 1 then args = n.Name else args = args..", "..n.Name end
-                end
-                --if args:find("%[") then args = args.."]" end
-                error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
-            end
+            local args = ""
+            for i, n in ipairs(info.Members) do if i == 1 then args = n.Name else args = args..", "..n.Name end end
+            error(("Usage : %s(%s) - %s"):format(tostring(strt), args, value), 3)
         elseif info.SubType == STRUCT_TYPE_ARRAY then
             local ret = {}
 
             for i = 1, select('#', ...) do ret[i] = select(i, ...) end
 
-            local ok, value = pcall(ValidateStruct, strt, ret)
+            local ok, value = pcall(info.RawValidate, info, ret)
+            if ok then return value end
 
-            if ok then
-                return CopyStructMethods(info, value)
-            else
-                value = initErrMsg or value
-                value = strtrim(value:match(":%d+:%s*(.-)$") or value)
-                value = value:gsub("%%s%.", ""):gsub("%%s", "")
-                error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
-            end
+            value = initErrMsg or value
+            value = strtrim(value:match(":%d+:%s*(.-)$") or value)
+            value = value:gsub("%%s%.", ""):gsub("%%s", "")
+            error(("Usage : %s(...) - %s"):format(tostring(strt), value), 3)
         else
             -- For custom struct
-            local ok, value = pcall(ValidateStruct, strt, (...))
-
-            if not ok then error(strtrim(value:match(":%d+:%s*(.-)$") or value):gsub("%%s", "[".. info.Name .."]"), 3) end
-
-            return value
+            local ok, value = pcall(info.RawValidate, info, (...))
+            if ok then return value end
+            error(strtrim(value:match(":%d+:%s*(.-)$") or value):gsub("%%s", "[".. info.Name .."]"), 3)
         end
     end
 
@@ -4740,7 +4996,9 @@ do
         else
             -- Clear the defintions
             for i = #info, 0, -1 do info[i] = nil end
+            info.BaseStruct = nil
         end
+        info.RawValidate = ValidateStruct
 
         -- Clear Attribute
         if ATTRIBUTE_INSTALLED then
@@ -4911,7 +5169,7 @@ do
 
     struct "Callable" {
         function (value)
-            if type(value) == "string" then return ValidateStruct(Lambda, value, true) end
+            if type(value) == "string" then return _NSInfo[Lambda]:RawValidate(value, true) end
             assert(Reflector.IsCallable(value), "%s isn't callable.")
         end,
         [STRUCT_INIT_METHOD] = function(value)
@@ -7984,7 +8242,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Interface + AttributeTargets.Method + AttributeTargets.Property + AttributeTargets.Member, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Require__" (function(_ENV)
         extend "IAttribute"
 
@@ -8071,7 +8329,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Synthesize__" (function(_ENV)
         extend "IAttribute"
 
@@ -8117,7 +8375,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Event__" (function(_ENV)
         extend "IAttribute"
 
@@ -8156,7 +8414,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Handler__" (function(_ENV)
         extend "IAttribute"
 
@@ -8191,7 +8449,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Struct + AttributeTargets.Enum + AttributeTargets.Property + AttributeTargets.Member, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Default__" (function(_ENV)
         extend "IAttribute"
 
@@ -8273,8 +8531,7 @@ do
         end
     end)
 
-    __Default__( "Assign" )
-    __Flags__()
+    __Flags__() __Default__( "Assign" )
     enum "Setter" {
         Assign = 0, -- set directly
         "Clone",    -- Clone struct or object of ICloneable
@@ -8284,8 +8541,7 @@ do
         "Weak",     -- Weak value
     }
 
-    __Default__( "Origin" )
-    __Flags__()
+    __Flags__() __Default__( "Origin" )
     enum "Getter" {
         Origin = 0,
         "Clone",
@@ -8293,7 +8549,7 @@ do
     }
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Setter__" (function(_ENV)
         extend "IAttribute"
 
@@ -8348,7 +8604,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Property, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Getter__" (function(_ENV)
         extend "IAttribute"
 
@@ -8399,7 +8655,7 @@ do
     end)
 
     __AttributeUsage__{RunOnce = true, BeforeDefinition = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__Doc__" (function(_ENV)
         extend "IAttribute"
 
@@ -8596,8 +8852,8 @@ do
         end
     end)
 
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true}
-    __Sealed__() __Unique__()
+    __AttributeUsage__{AttributeTarget = AttributeTargets.Struct, RunOnce = true, BeforeDefinition = true}
+    __Sealed__()
     class "__Base__" (function(_ENV)
         extend "IAttribute"
         doc "__Base__" [[Give the struct a base struct type, so the value must match the base struct type before validate it.]]
@@ -8613,11 +8869,21 @@ do
         ------------------------------------------------------
         function ApplyAttribute(self, target, targetType)
             if self.Base then
-                assert(_NSInfo[target].SubType == STRUCT_TYPE_CUSTOM and
-                        _NSInfo[self.Base].SubType == STRUCT_TYPE_CUSTOM,
-                        "System.__Base__ attribute can only be applied to custom struct type.")
+                local info = _NSInfo[target]
+                local binfo= _NSInfo[self.Base]
 
-                _NSInfo[target].BaseStruct = self.Base
+                info.SubType = binfo.SubType
+
+                if info.SubType == STRUCT_TYPE_MEMBER then
+                    -- Copy the members
+                    for i, mem in ipairs(binfo.Members) do
+                        info[i] = CloneObj(mem)
+                    end
+                elseif info.SubType == STRUCT_TYPE_ARRAY then
+                    info[0] = binfo.ArrayElement
+                end
+
+                info.BaseStruct = self.Base
             end
         end
 
@@ -8648,7 +8914,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, BeforeDefinition = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__ObjMethodAttr__" (function(_ENV)
         extend "IAttribute"
 
@@ -8707,7 +8973,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__WeakObject__" (function(_ENV)
         extend "IAttribute"
         doc "__WeakObject__" [[Mark the class' object as weak tables.]]
@@ -8743,7 +9009,7 @@ do
     end)
 
     __AttributeUsage__{AttributeTarget = AttributeTargets.Event, RunOnce = true}
-    __Sealed__() __Unique__()
+    __Sealed__()
     class "__EventChangeHandler__" (function(_ENV)
         extend "IAttribute"
         doc "__EventChangeHandler__" [[Assign a method to handle the event handler's changing.]]
