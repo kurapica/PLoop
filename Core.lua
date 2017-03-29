@@ -4905,9 +4905,6 @@ do
             if #gHeader > 0 then
                 gbody[1] = "local " .. tblconcat(gHeader, ",") .. "=..."
             end
-            if #info.Name == 1 then
-                --print("--------------\n", info.Name, sToken, "\n", tblconcat(gbody, "\n"))
-            end
             _RawValidateBuilder[sToken] = loadInEnv(tblconcat(gbody, "\n"), "Struct_Validate_"..tostring(sToken))
             CACHE_TABLE(gHeader)
             CACHE_TABLE(gbody)
