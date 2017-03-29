@@ -1,3 +1,6 @@
+2017/03/29
+    Re-design the struct's validation, increase the performace about 10%-30%. `System.__Base__ attribtue` can b used on all struct types. See wiki for more details.
+
 2017/03/27
     Re-design the meta-table's generation for class objects based on brach pediction. Improve the speed to access object features.
 
