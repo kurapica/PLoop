@@ -1665,7 +1665,7 @@ do
     local _CtorMap  = {}
 
     -- FEATURE MODIFIER
-    local MD_SEAL   = 2^0   -- SEALED
+    local MD_SEAL   = 2^0       -- SEALED
 
     -- FIELD INDEX
     local FD_MOD    = -1        -- FIELD MODIFIER
@@ -1674,8 +1674,9 @@ do
     local FD_BASE   = -4        -- FIELD BASE STRUCT
     local FD_VALID  = -5        -- FIELD VALIDATION
     local FD_CTOR   = -6        -- FIELD CONSTRUCTOR
-    local FD_EMSG   = -7        -- FIELD ERROR MESSAGE
-    local FD_VCACHE = -8        -- FIELD VALIDATION CACHE
+    local FD_NAME   = -7        -- FEILD OWNER NAME
+    local FD_EMSG   = -8        -- FIELD ERROR MESSAGE
+    local FD_VCACHE = -9        -- FIELD VALIDATION CACHE
 
     local FD_ARRAY  =  0        -- FIELD ARRAY ELEMENT
     local FD_ARRVLD =  2        -- FIELD ARRAY ELEMENT VALIDATION
@@ -1691,17 +1692,18 @@ do
     local MFD_ASFT  =  5        -- MEMBER FIELD AS DEFAULT FACTORY
     local MFD_REQ   =  0        -- MEMBER FIELD REQUIRE
 
-    local FL_CUSTOM = 2^0
-    local FL_MEMBER = 2^1
-    local FL_ARRAY  = 2^2
-    local FL_SVALID = 2^3
-    local FL_MVALID = 2^4
-    local FL_SINIT  = 2^5
-    local FL_MINIT  = 2^6
-    local FL_METHOD = 2^7
-    local FL_VCACHE = 2^8
-    local FL_MLFDRQ = 2^9
-    local FL_FSTTYP = 2^10
+    -- TYPE FLAGS
+    local FL_CUSTOM = 2^0       -- CUSTOM STRUCT FLAG
+    local FL_MEMBER = 2^1       -- MEMBER STRUCT FLAG
+    local FL_ARRAY  = 2^2       -- ARRAY  STRUCT FLAG
+    local FL_SVALID = 2^3       -- SINGLE VALID  FLAG
+    local FL_MVALID = 2^4       -- MULTI  VALID  FLAG
+    local FL_SINIT  = 2^5       -- SINGLE INIT   FLAG
+    local FL_MINIT  = 2^6       -- MULTI  INIT   FLAG
+    local FL_OBJMTD = 2^7       -- OBJECT METHOD FLAG
+    local FL_VCACHE = 2^8       -- VALID  CACHE  FLAG
+    local FL_MLFDRQ = 2^9       -- MULTI  FIELD  REQUIRE FLAG
+    local FL_FSTTYP = 2^10      -- FIRST  MEMBER TYPE    FLAG
 
     local MTD_INIT  = "__init"
     local MTD_BASE  = "__base"
@@ -1827,7 +1829,7 @@ do
         end
 
         if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
-            token   = turnOnFlags(FL_METHOD, token)
+            token   = turnOnFlags(FL_OBJMTD, token)
             tinsert(upval, info[FD_OBJMTD])
         end
 
@@ -1926,14 +1928,14 @@ do
                 tinsert(header, "svalid")
                 tinsert(body, [[
                     local msg = svalid(value)
-                    if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_EMSG .. [[]) end
+                    if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_NAME .. [[]) end
                 ]])
             elseif validateFlags(FL_MVALID, token) then
                 tinsert(header, "mvalid")
                 tinsert(body, [[
                     for i = ]] .. FD_STVLD .. [[, mvalid do
                         local msg = info[i](value)
-                        if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_EMSG .. [[]) end
+                        if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_NAME .. [[]) end
                     end
                 ]])
             end
@@ -1963,7 +1965,7 @@ do
                 end
             end
 
-            if validateFlags(FL_METHOD, token) then
+            if validateFlags(FL_OBJMTD, token) then
                 tinsert(header, "methods")
                 if validateFlags(FL_CUSTOM, token) then
                     tinsert(body, [[if type(value) == "table" then]])
@@ -2343,6 +2345,7 @@ do
                 local ninfo     = _Cache()
 
                 ninfo[FD_MOD]   = info and info[FD_MOD]
+                ninfo[FD_NAME]  = tostring(target)
 
                 _BDInfo[target] = ninfo
 
@@ -2457,7 +2460,7 @@ do
                 elseif ninfo[FD_ARRAY] then
                     ninfo[FD_EMSG]  = ("Usage: %s(...) - "):format(tostring(target))
                 else
-                    ninfo[FD_EMSG]  = tostring(target)
+                    ninfo[FD_EMSG]  = ("[%s]"):format(tostring(target))
                 end
 
                 generateValidator(ninfo)
