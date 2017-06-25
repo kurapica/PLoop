@@ -56,6 +56,9 @@ class "List" (function (_ENV)
     __Doc__[[Remove an item from the tail or the given index]]
     RemoveByIndex = tremove
 
+    __Doc__[[Clear the list]]
+    function Clear(self) for i = self.Count, 1, -1 do self[i] = nil end end
+
     -----------------------
     -- Constructor
     -----------------------

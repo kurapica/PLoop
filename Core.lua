@@ -149,6 +149,8 @@ do
     wrap                = coroutine.wrap
     yield               = coroutine.yield
 
+    unpack              = table.unpack or unpack
+
     -- Check For lua 5.2
     newproxy            = newproxy or
         (function ()
