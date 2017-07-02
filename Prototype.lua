@@ -59,8 +59,9 @@ do
     strupper            = string.upper
     strlower            = string.lower
     strtrim             = function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
-    wipe                = function(t) for k in pairs(t) do t[k] = nil end return t end
 
+    wipe                = function(t) for k in pairs(t) do t[k] = nil end return t end
+    unpack              = table.unpack or unpack
     tblconcat           = table.concat
     tinsert             = table.insert
     tremove             = table.remove
@@ -372,6 +373,8 @@ do
             return getmetatable(ns).ValidateValue
         end
     end
+
+    function iterEmpty() end
 end
 
 -------------------------------------------------------------------------------
@@ -500,7 +503,7 @@ end
 --      The flags that represents the types of the target features.          --
 --                                                                           --
 -- * Inheritable                                                             --
---      Whether the attribute is iheritable.                                 --
+--      Whether the attribute is inheritable.                                --
 --                                                                           --
 -- * ApplyPhase                                                              --
 --      The apply phase of the attribute: 1 - Before the definition of the   --
@@ -2292,8 +2295,8 @@ do
                     if name == "" then error("Usage: Usage: struct.AddMethod(structure, name, func[, stack]) - The name can't be empty.", stack) end
                     if type(func) ~= "function" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - the func must be a function.", stack) end
 
-                    if not def and info[name] then
-                        error(("The %s's definition is finished, the method can't be override."):format(tostring(target)), stack)
+                    if not def and struct.GetMethod(target, name) then
+                        error(("The %s's definition is finished, the method can't be overridden."):format(tostring(target)), stack)
                     end
 
                     attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD)
@@ -2541,30 +2544,118 @@ do
 
             ["GetMethod"]       = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name]
+                return info and type(name) == "string" and (info[name] or (info[FD_OBJMTD] and info[FD_OBJMTD][name])) or nil
+            end;
+
+            ["GetObjectMethod"] = function(target, name)
+                local info      = getTargetInfo(target)
+                return info and type(name) == "string" and info[FD_OBJMTD] and info[FD_OBJMTD][name] or nil
+            end;
+
+            ["GetStaticMethod"] = function(target, name)
+                local info      = getTargetInfo(target)
+                local method    = info and type(name) == "string" and info[name]
+                return method and not info[FD_OBJMTD][name] and method or nil
+            end;
+
+            ["GetTypeMethod"]   = function(target, name)
+                local info      = getTargetInfo(target)
+                return info and type(name) == "string" and info[name] or nil
             end;
 
             ["GetMethods"]      = function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local objM  = info[FD_OBJMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
 
-                        for k, v in pairs(info) do
-                            if type(k) == "string" then
-                                cache[k] = not objM[k]
-                            end
-                        end
+                        for k, v in pairs(info) do if type(k) == "string" then cache[k] = v end end
+                        if info[FD_OBJMTD] then for k, v in pairs(infop[FD_OBJMTD]) do cache[k] = v end end
 
                         return cache
                     else
-                        return function(self, name)
-                            local name = next(info, name)
-                            while name and type(name) ~= "string" do name = next(info, name) end
-                            if name then return name, not objM[name] end
+                        local t = true
+                        local m = info[FD_OBJMTD]
+                        return function(self, n)
+                            local v
+                            if t then
+                                n, v = next(info, n)
+                                while n and type(n) ~= "string" do n, v = next(info, n) end
+                                if n then return n, v end
+                                if not m then return end
+                                n = nil
+                                t = false
+                            end
+                            n, v = next(m, n)
+                            while n and info[n] do n, v = next(m, n) end
+                            return n, v
                         end, target
                     end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetObjectMethods"]= function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        if info[FD_OBJMTD] then for k, v in pairs(infop[FD_OBJMTD]) do cache[k] = v end end
+
+                        return cache
+                    else
+                        local m = info[FD_OBJMTD]
+                        return function(self, n) return next(m, n) end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetStaticMethods"]= function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    local m     = info[FD_OBJMTD]
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        for k, v in pairs(info) do if type(k) == "string" and not m[k] then cache[k] = v end end
+
+                        return cache
+                    else
+                        return function(self, n)
+                            local v
+                            n, v  = next(info, n)
+                            while n and (type(n) ~= "string" or m[n]) do n, v = next(info, n) end
+                            return n, v
+                        end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetTypeMethods"]  = function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        for k, v in pairs(info) do if type(k) == "string" then cache[k] = v end end
+
+                        return cache
+                    else
+                        return function(self, n)
+                            local v
+                            n, v = next(info, n)
+                            while n and type(n) ~= "string" do n, v = next(info, n) end
+                            return n, v
+                        end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
                 end
             end;
 
@@ -2730,14 +2821,8 @@ do
     tstruct         = Prototype.NewPrototype(tnamespace, {
         __index     = function(self, name)
             if type(name) == "string" then
-                -- Access methods
                 local info  = _StrtInfo[self]
-                local val   = info and info[name]
-
-                if val then return val end
-
-                -- Access child-namespaces
-                return namespace.GetNameSpace(self, name)
+                return info and (info[name] or (info[FD_OBJMTD] and info[FD_OBJMTD][name])) or namespace.GetNameSpace(self, name)
             end
         end,
         __newindex  = function(self, key, value)
@@ -2863,9 +2948,6 @@ do
     local _CLInfo   = setmetatable({}, WEAK_KEY)
     local _BDInfo   = Prototype.NewObject(threadCache)
 
-    local _IFFtrs   = {}
-    local _CLFtrs   = {}
-
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0
     local MD_FINAL  = 2^1
@@ -2874,12 +2956,14 @@ do
     local MD_ATPROP = 2^4
     local MD_REQ    = 2^5
 
-    local FD_MOD    = 0         -- FIELD MODIFIER
-    local FD_SUPER  = 1         -- FIELD SUPER CLASS
-    local FD_EXTDS  = 2         -- FIELD EXTENDS INTERFACES
-    local FD_OBJMTD = 3         -- FIELD OBJECT METHODS
-    local FD_TPFTR  = 4         -- FIELD TYPE FEATURES(Props, Events)
-    local FD_OBJFTR = 5         -- FIELD OBJECT TYPE FEATURES
+    local FD_MOD    =  0        -- FIELD MODIFIER
+    local FD_SUPER  = -1        -- FIELD SUPER CLASS
+    local FD_STEXT  =  1        -- FIELD EXTEND INTERFACE START INDEX(so we can use unpack on it)
+    local FD_OBJMTD = -2        -- FIELD OBJECT METHODS
+    local FD_CTEXT  = -3        -- FIELD EXTEND INTERFACE COUNT
+    local FD_TYPFTR = -4        -- FIELD TYPE FEATURES(Props, Events)
+    local FD_OBJFTR = -5        -- FIELD OBJECT TYPE FEATURES
+    local FD_NEWFTR = -6        -- FIELD NEW TYPE FEATURES
 
     local function getTargetInfo(target)
         local info  = _BDInfo[target]
@@ -2887,67 +2971,91 @@ do
     end
 
     local function getSuperMethod(info, name)
+        if info[FD_SUPER] then
+            local m = class.GetMethod(info[FD_SUPER], name)
+            if m then return not class.IsStaticMethod(info[FD_SUPER], name) and m or nil end
+        end
 
+        local idx   = FD_STEXT
+        while info[idx] do
+            local m = interface.GetMethod(info[idx], name)
+            if m then return not interface.IsStaticMethod(info[idx], name) and m or nil end
+            idx = idx + 1
+        end
+    end
+
+    local function addMethod(tType, target, name, func, stack)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        local info, def = getTargetInfo(target)
+
+        if info then
+            if type(name) ~= "string" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
+            name = strtrim(name)
+            if name == "" then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
+            if type(func) ~= "function" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
+
+            if not def and tType.GetMethod(target, name) then
+                error(("The %s's definition is finished, the method can't be overridden."):format(tostring(target)), stack)
+            end
+
+            attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD)
+            func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, getSuperMethod(info, name))
+
+            local isStatic = info[name] and not info[FD_OBJMTD][name]
+            local hasMethod= info[FD_OBJMTD] and next(info[FD_OBJMTD])
+
+            info[name] = func
+
+            if not isStatic then
+                info[FD_OBJMTD] = info[FD_OBJMTD] or _Cache()
+                info[FD_OBJMTD][name] = func
+            end
+
+            attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
+
+            if not def and not hasMethod then
+                -- Need re-generate meta-method
+            end
+        else
+            error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The type is missing."):format(tostring(tType), tostring(tType)), stack)
+        end
+    end
+
+    local function addTypeFeature(tType, target, ftype, name, definition, stack)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        local info, def = getTargetInfo(target)
+
+        if info then
+            if Prototype.Validate(ftype) then error( ("Usage: %s.AddTypeFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid."):format(tostring(tType), tostring(tType)), stack) end
+            if type(name) ~= "string" then error( ("Usage: %s.AddTypeFeature(%s, featureType, name[, definition][, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
+            name    = strtrim(name)
+            if name == "" then error(("Usage: Usage: %s.AddTypeFeature(%s, featureType, name[, definition][, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
+            if not def then error(("The %s's definition is finished, the type feature can't be added."):format(tostring(target)), stack) end
+
+            local f = ftype.New(target, name, definition, stack + 1)
+
+            if f then
+                info[FD_TYPFTR]         = info[FD_TYPFTR] or _Cache()
+                info[FD_TYPFTR][name]   = f
+
+                info[FD_NEWFTR]         = info[FD_NEWFTR] or _Cache()
+                info[FD_NEWFTR][name]   = true
+            end
+        else
+            error(("Usage: %s.AddTypeFeature(%s, featureType, name[, definition][, stack]) - The type is missing."):format(tostring(tType), tostring(tType)), stack)
+        end
     end
 
     interface       = Prototype.NewPrototype {
         __index     = {
             ["AddMethod"]       = function(target, name, func, stack)
-                local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
-
-                if info then
-                    local tartp = getmetatable(target)
-                    if type(name) ~= "string" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the name must be a string."):format(tostring(tartp), tostring(tartp)), stack) end
-                    name = strtrim(name)
-                    if name == "" then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The name can't be empty."):format(tostring(tartp), tostring(tartp)), stack) end
-                    if type(func) ~= "function" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tartp), tostring(tartp)), stack) end
-
-                    if not def and info[name] then
-                        error(("The %s's definition is finished, the method can't be override."):format(tostring(target)), stack)
-                    end
-
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD)
-                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
-
-                    local isStatic = info[name] and not info[FD_OBJMTD][name]
-
-                    info[name]  = func
-
-                    if not isStatic then
-                        info[FD_OBJMTD] = info[FD_OBJMTD] or _Cache()
-                        info[FD_OBJMTD][name] = func
-                    end
-
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
-
-                    if not def then
-                        -- Need re-generate validator and ctor
-                    end
-                else
-                    error("Usage: class|interface.AddMethod(type, name, func[, stack]) - The type is missing.", stack)
-                end
+                addMethod(interface, target, name, func, stack)
             end;
 
             ["AddTypeFeature"]  = function(target, ftype, name, definition, stack)
-                local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
-
-                if info then
-                    local tartp = getmetatable(target)
-                    if not def then error(("The %s's definition is finished, can't add new type feature."):format(tostring(target)), stack) end
-                    if not (tartp == interface and _IFFtrs or _CLFtrs)[ftype] then error(("Usage: %s.AddTypeFeature(%s, featuretype, name[, definition][, stack]) - The featuretype is not valid."):format(tostring(tartp), tostring(tartp)), stack) end
-                    if type(name) ~= "string" then error(("Usage: %s.AddTypeFeature(%s, featuretype, name[, definition][, stack]) - The name must be a string."):format(tostring(tartp), tostring(tartp)), stack) end
-                    name = strtrim(name)
-                    if name == "" then error(("Usage: %s.AddTypeFeature(%s, featuretype, name[, definition][, stack]) - The name can't be empty."):format(tostring(tartp), tostring(tartp)), stack) end
-                    if info[FD_TPFTR] and info[FD_TPFTR][name] and getmetatable(info[FD_TPFTR][name]) ~= ftype then error(("Usage: %s.AddTypeFeature(%s, featuretype, name[, definition][, stack]) - The name is used by other features."):format(tostring(tartp), tostring(tartp)), stack) end
-
-                    info[FD_TPFTR] = info[FD_TPFTR] or _Cache()
-
-                    info[FD_TPFTR][name] = ftype:New(name, definition, stack + 1)
-                else
-                    error("Usage: class|interface.AddTypeFeature(type, featuretype, name[, definition][, stack]) - The type is missing.", stack)
-                end
+                addTypeFeature(interface, target, ftype, name, definition, stack)
             end;
 
             ["BeginDefinition"] = function(target, stack)
@@ -2986,30 +3094,118 @@ do
 
             ["GetMethod"]       = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name]
+                return info and type(name) == "string" and (info[name] or (info[FD_OBJMTD] and info[FD_OBJMTD][name])) or nil
+            end;
+
+            ["GetObjectMethod"] = function(target, name)
+                local info      = getTargetInfo(target)
+                return info and type(name) == "string" and info[FD_OBJMTD] and info[FD_OBJMTD][name] or nil
+            end;
+
+            ["GetStaticMethod"] = function(target, name)
+                local info      = getTargetInfo(target)
+                local method    = info and type(name) == "string" and info[name]
+                return method and not info[FD_OBJMTD][name] and method or nil
+            end;
+
+            ["GetTypeMethod"]   = function(target, name)
+                local info      = getTargetInfo(target)
+                return info and type(name) == "string" and info[name] or nil
             end;
 
             ["GetMethods"]      = function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local objM  = info[FD_OBJMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
 
-                        for k, v in pairs(info) do
-                            if type(k) == "string" then
-                                cache[k] = not objM[k]
-                            end
-                        end
+                        for k, v in pairs(info) do if type(k) == "string" then cache[k] = v end end
+                        if info[FD_OBJMTD] then for k, v in pairs(infop[FD_OBJMTD]) do cache[k] = v end end
 
                         return cache
                     else
-                        return function(self, name)
-                            local name = next(info, name)
-                            while name and type(name) ~= "string" do name = next(info, name) end
-                            if name then return name, not objM[name] end
+                        local t = true
+                        local m = info[FD_OBJMTD]
+                        return function(self, n)
+                            local v
+                            if t then
+                                n, v = next(info, n)
+                                while n and type(n) ~= "string" do n, v = next(info, n) end
+                                if n then return n, v end
+                                if not m then return end
+                                n = nil
+                                t = false
+                            end
+                            n, v = next(m, n)
+                            while n and info[n] do n, v = next(m, n) end
+                            return n, v
                         end, target
                     end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetObjectMethods"]= function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        if info[FD_OBJMTD] then for k, v in pairs(infop[FD_OBJMTD]) do cache[k] = v end end
+
+                        return cache
+                    else
+                        local m = info[FD_OBJMTD]
+                        return function(self, n) return next(m, n) end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetStaticMethods"]= function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    local m     = info[FD_OBJMTD]
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        for k, v in pairs(info) do if type(k) == "string" and not m[k] then cache[k] = v end end
+
+                        return cache
+                    else
+                        return function(self, n)
+                            local v
+                            n, v  = next(info, n)
+                            while n and (type(n) ~= "string" or m[n]) do n, v = next(info, n) end
+                            return n, v
+                        end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
+                end
+            end;
+
+            ["GetTypeMethods"]  = function(target, cache)
+                local info      = getTargetInfo(target)
+                if info then
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+
+                        for k, v in pairs(info) do if type(k) == "string" then cache[k] = v end end
+
+                        return cache
+                    else
+                        return function(self, n)
+                            local v
+                            n, v = next(info, n)
+                            while n and type(n) ~= "string" do n, v = next(info, n) end
+                            return n, v
+                        end, target
+                    end
+                elseif not cache then
+                    return iterEmpty, target
                 end
             end;
 
@@ -3021,6 +3217,13 @@ do
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getTargetInfo(target)
                 return info and type(name) == "string" and info[name] and not info[FD_OBJMTD][name]
+            end;
+
+            ["IsStaticFeature"] = function(target, name)
+                local info      = getTargetInfo(target)
+                local feature   = info and type(name) == "string" and info[name]
+                local ftype     = feature and getmetatable(feature)
+                return ftype and ftype.IsStatic(feature) or false
             end;
 
             ["SetSealed"]       = function(target, stack)
@@ -3050,7 +3253,6 @@ do
                     error("Usage: struct.SetStaticMethod(structure, name[, stack]) - The structure type is missing.", stack)
                 end
             end;
-
         },
         __newindex  = readOnly,
         __concat    = typeconcat,
@@ -3176,19 +3378,6 @@ do
 
     typefeature     = Prototype.NewPrototype {
         __index     = {
-            ["Register"]        = function(self, type)
-                if type then
-                    if type == class then
-                        if not _CLFtrs[self] then tinsert(_CLFtrs, self) _CLFtrs[self] = true end
-                    elseif type == interface then
-                        if not _IFFtrs[self] then tinsert(_IFFtrs, self) _IFFtrs[self] = true end
-                    end
-                else
-                    if not _CLFtrs[self] then tinsert(_CLFtrs, self) _CLFtrs[self] = true end
-                    if not _IFFtrs[self] then tinsert(_IFFtrs, self) _IFFtrs[self] = true end
-                end
-            end;
-
             ["New"]             = function(self, name, definition, stack)
             end;
         },
@@ -3219,9 +3408,6 @@ do
             end
         end;
     })
-
-    -- Register to class & interface
-    event:Register()
 end
 
 -------------------------------------------------------------------------------
