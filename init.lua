@@ -1,5 +1,5 @@
 -- Core
-require "PLoop.Core"
+local root = require "PLoop.Core"
 
 -- System
 require "PLoop.System.System"
@@ -38,3 +38,5 @@ end
 -- System.Serialization
 require "PLoop.System.Serialization.LuaFormatProvider"
 require "PLoop.System.Serialization.StringFormatProvider"
+
+return root

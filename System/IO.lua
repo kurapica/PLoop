@@ -69,7 +69,7 @@ interface "IO" (function (_ENV)
             return function (%s)
                 local f = popen(%s, "r")
                 if ftype(f) == "file" then
-                    f:flush()
+                    --f:flush()
                     local ct = f:read("*all")
                     f:close()
                     if ct then
@@ -180,7 +180,7 @@ interface "IO" (function (_ENV)
             -- Check for windows
             local f = popen("echo %OS%", "r")
             if f then
-                f:flush()
+                --f:flush()
                 local ct = f:lines()()
                 if ct and ct:match("^%w+") then
                     OS_TYPE = OSType.Windows
@@ -191,7 +191,7 @@ interface "IO" (function (_ENV)
             -- Check for unix
             f = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
             if f then
-                f:flush()
+                --f:flush()
                 local ct = f:lines()()
                 f:close()
                 if ct then ct = ct:match("^%w+") end

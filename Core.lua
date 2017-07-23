@@ -437,6 +437,8 @@ do
     _NSInfo             = setmetatable({ [PROTYPE_NAMESPACE] = { Owner = PROTYPE_NAMESPACE } }, { __index = function(self, key) if type(key) == "string" then key = GetNameSpace(PROTYPE_NAMESPACE, key) return key and rawget(self, key) end end, __mode = "k" })
     _AliasMap           = setmetatable({}, WEAK_ALL)
 
+    _DebugMap           = setmetatable({}, WEAK_KEY)
+
     -- metatable for namespaces
     do
         local _MetaNS       = getmetatable(PROTYPE_NAMESPACE)
@@ -450,6 +452,7 @@ do
             if iType == TYPE_CLASS then
                 -- Create Class object, using ret avoid tail call error stack
                 local ret = Class2Obj(info, ...)
+                _DebugMap[ret] = debug.getinfo(2)
                 return ret
             elseif iType == TYPE_STRUCT then
                 -- Create Struct
@@ -5124,7 +5127,7 @@ do
     ------------------------------------------------------
     struct "Boolean"    { false, [STRUCT_INIT_METHOD] = function (value) return value and true or false end }
     struct "BooleanNil" { [STRUCT_INIT_METHOD] = function (value) return value and true or false end }
-    struct "RawBoolean" { false, function (value) if type(value) ~= "boolean" then error(("%s must be a boolean, got %s."):format("%s", type(value))) end end }
+    struct "RawBoolean" { function (value) if type(value) ~= "boolean" then error(("%s must be a boolean, got %s."):format("%s", type(value))) end end }
     struct "String"     { function (value) if type(value) ~= "string" then error(("%s must be a string, got %s."):format("%s", type(value))) end end }
     struct "Number"     { 0, function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
     struct "NumberNil"  { function (value) if type(value) ~= "number" then error(("%s must be a number, got %s."):format("%s", type(value))) end end }
@@ -6800,7 +6803,7 @@ do
 
                     if usage and usage.AttributeTarget > 0 and not ValidateFlags(targetType, usage.AttributeTarget) then
                         ClearPreparedAttributes()
-                        error("Can't apply the " .. tostring(cls) .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
+                        error("Can't apply the " .. tostring(cls) .. "["..(_DebugMap[attr].currentline .. _DebugMap[attr].source) .. "]" .. " attribute to the " .. ParseAttributeTarget(target, targetType, owner, name))
                     elseif ValidateAttributeUsable(usableAttr, attr) then
                         usableAttr[attr] = true
                         tinsert(usableAttr, attr)
@@ -9530,3 +9533,5 @@ do
     Install_OOP = nil
     collectgarbage()
 end
+
+return PROTYPE_NAMESPACE
