@@ -15,9 +15,10 @@ __Final__() __Sealed__() __SimpleClass__()
 class "Date" (function (_ENV)
     extend "ICloneable"
 
-    local date = os.date
-    local time = os.time
-    local diff = os.difftime
+    local date      = os.date
+    local time      = os.time
+    local diff      = os.difftime
+    local offset    = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
 
     local function r2Time(self) self.time = time(self) end
     local function r4Time(self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
@@ -181,15 +182,16 @@ class "Date" (function (_ENV)
         Argument(Integer, nil, nil, "day"),
         Argument(Integer, true, 12, "hour"),
         Argument(Integer, true, 0, "min"),
-        Argument(Integer, true, 0, "sec")
+        Argument(Integer, true, 0, "sec"),
+        Argument(RawBoolean, true, false, "utc")
     }
-    function Date(self, year, month, day, hour, min, sec)
+    function Date(self, year, month, day, hour, min, sec, utc)
         self.year = year
         self.month = month
         self.day = day
         self.hour = hour
         self.min = min
-        self.sec = sec
+        self.sec = utc and (sec + offset) or sec
 
         r2Time(self)
         r4Time(self)

@@ -47,8 +47,11 @@ class "List" (function (_ENV)
     __Doc__[[Insert an item to the list]]
     Insert = tinsert
 
+    __Doc__[[Whether an item existed in the list]]
+    function Contains(self, item) for i, chk in self:GetIterator() do if chk == item then return true end end return false end
+
     __Doc__[[Get the index of the item if it existed in the list]]
-    function Contains(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
+    function IndexOf(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
 
     __Doc__[[Remove an item]]
     function Remove(self, item) local i = self:Contains(item) if i then return self:RemoveByIndex(i) end end

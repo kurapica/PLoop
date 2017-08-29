@@ -7785,6 +7785,7 @@ do
         end
 
         local function getSuperOverLoad(overLoads)
+            if not overLoads.DependOnSuper then return end
             if overLoads.TargetType == AttributeTargets.Constructor then
                 -- Check super class's constructor
                 local info = _NSInfo[_NSInfo[overLoads.Owner].SuperClass]
@@ -7837,7 +7838,7 @@ do
             end
         end
 
-        local function raiseError(overLoads)
+        local function raiseError(overLoads, nomatch)
             -- Check if this is a static method
             if overLoads.HasSelf == nil then
                 overLoads.HasSelf = true
@@ -7876,6 +7877,13 @@ do
             end
 
             local msg = tblconcat(usage, "\n")
+            if #usage == 1 then
+                if nomatch then
+                    msg = msg .. (" - The %d args not match."):format(nomatch)
+                else
+                    msg = msg .." - The args count don't match"
+                end
+            end
             CACHE_TABLE(usage)
 
             error(msg, 4)
@@ -7891,8 +7899,8 @@ do
             end
 
             local base = overLoads.HasSelf and 1 or 0
-            local object = overLoads.HasSelf and ... or nil
             local count = select('#', ...) - base
+            local object = overLoads.HasSelf and ... or nil
 
             local cache = _ThreadArgs()
 
@@ -7915,6 +7923,7 @@ do
             local index = 1
             local info = coverLoads[index]
             local zeroMethod
+            local nomatch = nil
 
             while info do
                 local argsCount = #info
@@ -7934,7 +7943,7 @@ do
                         local value = cache[i]
 
                         -- Required argument can't be nil, Validate the value
-                        if value == nil or (atype and GetValidatedValue(atype, value, true) == nil) then matched = false break end
+                        if value == nil or (atype and GetValidatedValue(atype, value, true) == nil) then matched = false nomatch = i break end
                     end
 
                     -- Optional
@@ -7943,7 +7952,7 @@ do
                             local atype = (info[i] or info[argsCount]).Type
                             local value = cache[i]
 
-                            if value ~= nil and atype and GetValidatedValue(atype, value, true) == nil then matched = false break end
+                            if value ~= nil and atype and GetValidatedValue(atype, value, true) == nil then matched = false nomatch = i break end
                         end
                     end
 
@@ -8052,7 +8061,7 @@ do
             end
 
             -- No match
-            raiseError(overLoads)
+            raiseError(overLoads, nomatch)
         end
 
         ------------------------------------------------------
@@ -8080,6 +8089,7 @@ do
                 TargetType = targetType,
                 Owner = owner,
                 Name = name,
+                DependOnSuper = self.DependOnSuper,
             }
 
             local overLoads = _OverLoad[owner][name]
@@ -8133,6 +8143,7 @@ do
         ------------------------------------------------------
         property "Priorty" { Type = AttributePriorty, Default = AttributePriorty.Lower }
         property "SubLevel" { Type = Number, Default = -9999}
+        property "DependOnSuper" { Type = Boolean, Default = true }
     end)
 
     -- More usable attributes

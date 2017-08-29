@@ -31,6 +31,7 @@
 -- @todo : avoid consume attribute when not needed
 -- @todo : no default value of base structs
 -- @todo : bind debug info with object's creation
+-- @todo : raise error when got nil in definition env
 --===========================================================================--
 
 --===========================================================================--
@@ -47,13 +48,13 @@ newproxy = nil
 -------------------------------------------------------------------------------
 do
     local _G, rawset    = _G, rawset
-    local _PLoopEnv     = setmetatable({}, { __index = function(self, k) local v = _G[k] rawset(self, k, v) return v end, __metatable = true })
+    local _PLoopEnv     = setmetatable({}, { __index = function(self, k) local v = _G[k] if v == nil then error(("Global variable %q can't be found."):format(k), 2) end rawset(self, k, v) return v end, __metatable = true })
     _PLoopEnv._PLoopEnv = _PLoopEnv
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
     -- Common features
-    ipairs              = ipairs{}
-    pairs               = pairs {}
+    ipairs              = ipairs(_PLoopEnv)
+    pairs               = pairs (_PLoopEnv)
 
     strlen              = string.len
     strformat           = string.format
@@ -75,6 +76,7 @@ do
     sort                = table.sort
     floor               = math.floor
     mlog                = math.log
+    mabs                = math.abs
 
     create              = coroutine.create
     resume              = coroutine.resume
@@ -87,13 +89,14 @@ do
     getmetatable        = getmetatable
 
     -- In lua 5.2, the loadstring is deprecated
-    loadstring          = loadstring or load
+    loadstring          = _G.loadstring or load
     loadfile            = loadfile
 
     -- Use false as value so we'll rebuild them in the helper section
-    newproxy            = newproxy or false
-    setfenv             = setfenv or false
-    getfenv             = getfenv or false
+    newproxy            = _G.newproxy or false
+    setfenv             = _G.setfenv or false
+    getfenv             = _G.getfenv or false
+    pcall               = pcall
 end
 
 -------------------------------------------------------------------------------
@@ -114,11 +117,12 @@ do
     ATTRIBUTE_TARGETS_CLASS         = 2^3
     ATTRIBUTE_TARGETS_FUNCTION      = 2^4
     ATTRIBUTE_TARGETS_METHOD        = 2^5
-    ATTRIBUTE_TARGETS_CONSTRUCTOR   = 2^6
-    ATTRIBUTE_TARGETS_EVENT         = 2^7
-    ATTRIBUTE_TARGETS_PROPERTY      = 2^8
-    ATTRIBUTE_TARGETS_MEMBER        = 2^9
-    ATTRIBUTE_TARGETS_NAMESPACE     = 2^10
+    ATTRIBUTE_TARGETS_METAMETHOD    = 2^6
+    ATTRIBUTE_TARGETS_CONSTRUCTOR   = 2^7
+    ATTRIBUTE_TARGETS_EVENT         = 2^8
+    ATTRIBUTE_TARGETS_PROPERTY      = 2^9
+    ATTRIBUTE_TARGETS_MEMBER        = 2^10
+    ATTRIBUTE_TARGETS_NAMESPACE     = 2^11
 
     -- ATTRIBUTE APPLY PHASE
     ATTRIBUTE_APPLYPH_BEFOREDEF     = 2^0
@@ -258,10 +262,10 @@ do
                 return (~checkValue) & (targetValue or 0)
             end
         ]] ()
-    elseif (LUA_VERSION == 5.2 and type(bit32) == "table") or (LUA_VERSION == 5.1 and type(bit) == "table") then
-        local band  = bit32 and bit32.band or bit.band
-        local bor   = bit32 and bit32.bor  or bit.bor
-        local bnot  = bit32 and bit32.bnot or bit.bnot
+    elseif (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
+        local band  = _G.bit32 and bit32.band or bit.band
+        local bor   = _G.bit32 and bit32.bor  or bit.bor
+        local bnot  = _G.bit32 and bit32.bnot or bit.bnot
 
         function validateFlags(checkValue, targetValue)
             return band(checkValue, targetValue or 0) > 0
@@ -523,10 +527,10 @@ end
 --      The method used to apply the attribute to the target feature.        --
 --                                                                           --
 -- * Priorty                                                                 --
---      The attribute's priorty, the bigger the first to be  applied.        --
+--      The attribute's priority, the bigger the first to be  applied.        --
 --                                                                           --
 -- * SubLevel                                                                --
---      The priorty's sublevel, for attributes with same priorty, the bigger --
+--      The priority's sublevel, for attributes with same priority, the bigger --
 --  sublevel the first be applied.                                           --
 --                                                                           --
 -------------------------------------------------------------------------------
@@ -566,7 +570,7 @@ do
         end
 
         local idx       = 1
-        local priorty   = getAttributeInfo(attr, "Priorty", 0, "number")
+        local priority  = getAttributeInfo(attr, "Priorty", 0, "number")
         local sublevel  = getAttributeInfo(attr, "SubLevel", 0, "number")
 
         while list[idx] do
@@ -574,7 +578,7 @@ do
             local pprty = getAttributeInfo(patr, "Priorty", 0, "number")
             local psubl = getAttributeInfo(patr, "SubLevel", 0, "number")
 
-            if priorty > pprty or (priorty == pprty and sublevel > psubl) then break end
+            if priority > pprty or (priority == pprty and sublevel > psubl) then break end
             idx = idx + 1
         end
 
@@ -1290,6 +1294,8 @@ do
     local _EnumInfo = setmetatable({}, WEAK_KEY)
     local _BDInfo   = Prototype.NewObject(threadCache)
 
+    local _ValidMap = {}
+
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0   -- SEALED
     local MD_FLAG   = 2^1   -- FLAGS
@@ -1300,15 +1306,94 @@ do
     local FD_ENUMS  = 1     -- FIELD ENUMERATIONS
     local FD_CACHE  = 2     -- FIELD CACHE : VALUE -> NAME
     local FD_EMSG   = 3     -- FIELD ERROR MESSAGE
-    local FD_DEFT   = 4     -- FIELD DEFAULT
+    local FD_VALID  = 4     -- FIELD VALIDATOR
     local FD_MAXV   = 5     -- FIELD MAX VALUE(FOR FLAGS)
+    local FD_DEFT   = 6     -- FIELD DEFAULT
 
-    -- GLOBAL CASE IGNORED
-    local GL_IGCS   = false
+    -- Flags
+    local FL_FLAG   = 2^0
+    local FL_IGCS   = 2^1
 
     local function getTargetInfo(target)
-        local info = _BDInfo[target]
+        local info  = _BDInfo[target]
         if info then return info, true else return _EnumInfo[target], false end
+    end
+
+    local function generateValidator(info)
+        local token = 0
+        local upval = _Cache()
+
+        tinsert(upval, info[FD_ENUMS])
+        tinsert(upval, info[FD_CACHE])
+        tinsert(upval, info[FD_EMSG])
+
+        if validateFlags(MD_IGCS, info[FD_MOD]) then
+            token   = turnOnFlags(FL_IGCS, token)
+        end
+
+        if validateFlags(MD_FLAG, info[FD_MOD]) then
+            token   = turnOnFlags(FL_FLAG, token)
+            tinsert(upval, info[FD_MAXV])
+        end
+
+        if not _ValidMap[token] then
+            local header    = _Cache()
+            local body      = _Cache()
+
+            tinsert(header, "enums")
+            tinsert(header, "cache")
+            tinsert(header, "emsg")
+
+            tinsert(body, "")   -- Remain for closure values
+            tinsert(body, [[return function(value)]])
+
+            tinsert(body, [[if cache[value] then return value end]])
+
+            tinsert(body, [[local vtype = type(value)]])
+
+            tinsert(body, [[if vtype == "string" then]])
+
+            if validateFlags(FL_IGCS, token) then
+                tinsert(body, [[value = strupper(value)]])
+            end
+
+            tinsert(body, [[
+                value = enums[value]
+                return value, value == nil and emsg or nil
+            ]])
+
+            if validateFlags(FL_FLAG, token) then
+                tinsert(header, "maxv")
+                tinsert(body, [[
+                    elseif vtype == "number" then
+                        if value == 0 then
+                            if cache[0] then return 0 end
+                        elseif floor(value) == value and value > 0 and value <= maxv then
+                            return value
+                        end
+                ]])
+            end
+
+            tinsert(body, [[
+                end
+                return nil, emsg
+            ]])
+
+            tinsert(body, [[end]])
+
+            if #header > 0 then
+                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            end
+
+            _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)
+
+            _Cache(header)
+            _Cache(body)
+        end
+
+        info[FD_VALID] = _ValidMap[token](unpack(upval))
+
+        _Cache(upval)
     end
 
     enum            = Prototype.NewPrototype {
@@ -1324,15 +1409,15 @@ do
                 if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
                 if _BDInfo[target] then error(("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
 
-                local ninfo     = _Cache()
-
-                ninfo[FD_MOD]   = info and info[FD_MOD] or 0
-                ninfo[FD_ENUMS] = _Cache()
-                ninfo[FD_CACHE] = _Cache()
-                ninfo[FD_EMSG]  = "%s must be a value of [" .. tostring(target) .."]."
-                ninfo[FD_DEFT]  = info and info[FD_DEFT]
-
-                _BDInfo[target] = ninfo
+                _BDInfo[target] = {
+                    [FD_MOD  ]  = 0,
+                    [FD_ENUMS]  = {},
+                    [FD_CACHE]  = {},
+                    [FD_EMSG ]  = "%s must be a value of [" .. tostring(target) .."].",
+                    [FD_VALID]  = false,
+                    [FD_MAXV ]  = false,
+                    [FD_DEFT ]  = nil,
+                }
 
                 attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, stack + 1)
             end;
@@ -1361,19 +1446,18 @@ do
                                 if cache[0] then
                                     error(("The %s and %s can't be the same value."):format(k, cache[0]), stack)
                                 else
-                                    cache[0] = k
+                                    cache[0]        = k
                                 end
                             elseif v > 0 then
-                                count = count + 1
+                                count   = count + 1
 
                                 local n = mlog(v) / mlog(2)
                                 if floor(n) == n then
                                     if cache[2^n] then
-                                        error(("The %s and %s can't be the same value."):format(k, cache[n]), stack)
+                                        error(("The %s and %s can't be the same value."):format(k, cache[2^n]), stack)
                                     else
-                                        cache[2^n] = k
-
-                                        if n > max then max = n end
+                                        cache[2^n]  = k
+                                        max         = n > max and n or max
                                     end
                                 else
                                     error(("The %s's value is not a valid flags value(2^n)."):format(k), stack)
@@ -1382,9 +1466,8 @@ do
                                 error(("The %s's value is not a valid flags value(2^n)."):format(k), stack)
                             end
                         else
-                            count = count + 1
-
-                            enums[k] = -1
+                            count       = count + 1
+                            enums[k]    = -1
                         end
                     end
 
@@ -1412,18 +1495,13 @@ do
                     end
                 end
 
+                generateValidator(ninfo)
+
                 -- Check Default
                 if ninfo[FD_DEFT] ~= nil then
-                    local default   = ninfo[FD_DEFT]
-                    ninfo[FD_DEFT]  = nil
-
-                    if ninfo[FD_CACHE][default] then
-                        ninfo[FD_DEFT] = default
-                    elseif type(default) == "string" and ninfo[FD_ENUMS][strupper(default)] then
-                        ninfo[FD_DEFT] = ninfo[FD_ENUMS][strupper(default)]
-                    elseif validateFlags(MD_FLAG, ninfo[FD_MOD]) and type(default) == "number" and floor(default) == default and
-                        ((default == 0 and ninfo[FD_CACHE][0]) or (default > 0 and default <= ninfo[FD_MAXV])) then
-                        ninfo[FD_DEFT] = default
+                    ninfo[FD_DEFT]  = ninfo[FD_VALID](ninfo[FD_DEFT])
+                    if ninfo[FD_DEFT] == il then
+                        error(ninfo[FD_EMSG]:format("The default"), stack)
                     end
                 end
 
@@ -1443,22 +1521,18 @@ do
             ["GetEnumValues"]   = function(target, cache)
                 local info      = _EnumInfo[target]
                 if info then
-                    info        = info[FD_ENUMS]
                     if cache then
                         return tblclone(info[FD_ENUMS], type(cache) == "table" and wipe(cache) or _Cache())
                     else
+                        info    = info[FD_ENUMS]
                         return function(self, key) return next(info, key) end, target
                     end
                 end
             end;
 
             ["IsCaseIgnored"]   = function(target)
-                if target == enum then
-                    return GL_IGCS
-                else
-                    local info  = getTargetInfo(target)
-                    return info and validateFlags(MD_IGCS, info[FD_MOD]) or false
-                end
+                local info  = getTargetInfo(target)
+                return info and validateFlags(MD_IGCS, info[FD_MOD]) or false
             end;
 
             ["IsFlagsEnum"]     = function(target)
@@ -1491,7 +1565,7 @@ do
                                         if validateFlags(ckv, value) then ret[ecache[ckv]] = ckv end
                                         ckv = ckv * 2
                                     end
-                                elseif value == 0 then
+                                elseif value == 0 and ecache[0] then
                                     ret[ecache[0]] = 0
                                 end
                             end
@@ -1511,7 +1585,7 @@ do
                                 end
                             end
                         else
-                            return function() end, target
+                            return fakefunc, target
                         end
                     else
                         return ecache[value]
@@ -1545,22 +1619,30 @@ do
                         end
                     end
 
-                    info[FD_ENUMS][strupper(key)] = value
+                    if validateFlags(MD_IGCS, info[FD_MOD]) then
+                        info[FD_ENUMS][strupper(key)] = value
+                    else
+                        info[FD_ENUMS][key] = value
+                    end
                 else
                     error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid.", stack)
                 end
             end;
 
             ["SetCaseIgnored"]  = function(target, stack)
-                if target == enum then GL_IGCS = true return end
-
                 local info, def = getTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
                     if not validateFlags(MD_IGCS, info[FD_MOD]) then
                         if not def then error(("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                        info[FD_MOD] = turnOnFlags(MD_IGCS, info[FD_MOD])
+                        info[FD_MOD]    = turnOnFlags(MD_IGCS, info[FD_MOD])
+
+                        local enums     = info[FD_ENUMS]
+                        local nenums    = _Cache()
+                        for k, v in pairs, enums do nenums[strupper(k)] = v end
+                        info[FD_ENUMS]  = nenums
+                        _Cache(enums)
                     end
                 else
                     error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid.", stack)
@@ -1597,17 +1679,7 @@ do
             ["ValidateValue"]   = function(target, value)
                 local info  = _EnumInfo[target]
                 if info then
-                    if info[FD_CACHE][value] then return value end
-                    local vtype = type(value)
-                    if vtype == "string" then
-                        if GL_IGCS or info[FD_MOD] >= MD_IGCS then value = strupper(value) end
-                        value = info[FD_ENUMS][value]
-                        return value, value == nil and info[FD_EMSG] or nil
-                    elseif info[FD_MAXV] and vtype == "number" and floor(value) == value and value >= 0 and value <= info[FD_MAXV] then
-                        if value == 0 then if info[FD_CACHE][0] then return 0 end return nil, info[FD_EMSG] end
-                        return value
-                    end
-                    return nil, info[FD_EMSG]
+                    return info[FD_VALID](value)
                 else
                     error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid.", 2)
                 end
@@ -1691,25 +1763,25 @@ do
 
     -- FIELD INDEX
     local FD_MOD    = -1        -- FIELD MODIFIER
-    local FD_OBJMTD = -2        -- FIELD OBJECT METHODS
+    local FD_TYPMTD = -2        -- FIELD OBJECT METHODS
     local FD_DEFT   = -3        -- FEILD DEFAULT
     local FD_BASE   = -4        -- FIELD BASE STRUCT
-    local FD_VALID  = -5        -- FIELD VALIDATION
+    local FD_VALID  = -5        -- FIELD VALIDATOR
     local FD_CTOR   = -6        -- FIELD CONSTRUCTOR
     local FD_NAME   = -7        -- FEILD OWNER NAME
     local FD_EMSG   = -8        -- FIELD ERROR MESSAGE
-    local FD_VCACHE = -9        -- FIELD VALIDATION CACHE
+    local FD_VCACHE = -9        -- FIELD VALIDATOR CACHE
 
     local FD_ARRAY  =  0        -- FIELD ARRAY ELEMENT
-    local FD_ARRVLD =  2        -- FIELD ARRAY ELEMENT VALIDATION
+    local FD_ARRVLD =  2        -- FIELD ARRAY ELEMENT VALIDATOR
     local FD_STMEM  =  1        -- FIELD START INDEX OF MEMBER
-    local FD_STVLD  =  10000    -- FIELD START INDEX OF VALIDATION
+    local FD_STVLD  =  10000    -- FIELD START INDEX OF VALIDATOR
     local FD_STINI  =  20000    -- FIELD START INDEX OF INITIALIZE
 
     -- MEMBER FIELD INDEX
     local MFD_NAME  =  1        -- MEMBER FIELD NAME
     local MFD_TYPE  =  2        -- MEMBER FIELD TYPE
-    local MFD_VALD  =  3        -- MEMBER FIELD TYPE VALIDATION
+    local MFD_VALD  =  3        -- MEMBER FIELD TYPE VALIDATOR
     local MFD_DEFT  =  4        -- MEMBER FIELD DEFAULT
     local MFD_ASFT  =  5        -- MEMBER FIELD AS DEFAULT FACTORY
     local MFD_REQ   =  0        -- MEMBER FIELD REQUIRE
@@ -1740,8 +1812,9 @@ do
 
     local function getBuilderValue(self, name)
         -- Access methods
-        local info = getTargetInfo(typebuilder.GetBuilderOwner(self))
-        if info and info[name] then return info[name], true end
+        local info  = getTargetInfo(typebuilder.GetBuilderOwner(self))
+        local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
+        if m then return m, true end
         return getValueFromBuidler(self, name)
     end
 
@@ -1851,9 +1924,14 @@ do
             end
         end
 
-        if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
-            token   = turnOnFlags(FL_OBJMTD, token)
-            tinsert(upval, info[FD_OBJMTD])
+        if info[FD_TYPMTD] then
+            for k, v in pairs, info[FD_TYPMTD] do
+                if v then
+                    token   = turnOnFlags(FL_OBJMTD, token)
+                    tinsert(upval, info[FD_TYPMTD])
+                    break
+                end
+            end
         end
 
         -- Build the validator generator
@@ -1996,7 +2074,7 @@ do
 
                 tinsert(body, [[
                     for k, v in pairs, methods do
-                        if value[k] == nil then value[k] = v end
+                        if v and value[k] == nil then value[k] = v end
                     end
                 ]])
 
@@ -2323,7 +2401,7 @@ do
 
                     local sfunc
 
-                    if info[FD_BASE] then
+                    if info[FD_BASE] and not info[name] then
                         if not struct.IsStaticMethod(info[FD_BASE], name) then
                             sfunc = struct.GetMethod(info[FD_BASE], name)
                         end
@@ -2331,14 +2409,14 @@ do
 
                     func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, sfunc)
 
-                    local isStatic = info[name] and not (info[FD_OBJMTD] and info[FD_OBJMTD][name])
-                    local hasMethod= info[FD_OBJMTD] and next(info[FD_OBJMTD])
+                    local hasMethod= false
+                    if not def and info[FD_TYPMTD] then for k, v in pairs, info[FD_TYPMTD] do if v then hasMethod = true break end end end
 
-                    info[name]  = func
-
-                    if not isStatic then
-                        info[FD_OBJMTD] = info[FD_OBJMTD] or _Cache()
-                        info[FD_OBJMTD][name] = func
+                    if not info[name] then
+                        info[FD_TYPMTD] = info[FD_TYPMTD] or _Cache()
+                        info[FD_TYPMTD][name] = func
+                    else
+                        info[name]  = func
                     end
 
                     attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
@@ -2363,12 +2441,10 @@ do
                 if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
                 if _BDInfo[target] then error(("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
 
-                local ninfo     = _Cache()
-
-                ninfo[FD_MOD]   = info and info[FD_MOD]
-                ninfo[FD_NAME]  = tostring(target)
-
-                _BDInfo[target] = ninfo
+                _BDInfo[target] = {
+                    [FD_MOD ]   = 0,
+                    [FD_NAME]   = tostring(target),
+                }
 
                 attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_STRUCT, stack + 1)
             end;
@@ -2464,8 +2540,21 @@ do
                     ninfo[idx]      = ninit
 
                     -- Clone the methods
-                    if binfo[FD_OBJMTD] then
-                        ninfo[FD_OBJMTD] = tblclone(binfo[FD_OBJMTD], ninfo[FD_OBJMTD] or _Cache())
+                    if binfo[FD_TYPMTD] then
+                        nobjmtd     = ninfo[FD_TYPMTD] or _Cache()
+
+                        for k, v in pairs, binfo[FD_TYPMTD] do
+                            if v and nobjmtd[k] == nil then
+                                nobjmtd[k]  = v
+                            end
+                        end
+
+                        if next(nobjmtd) then
+                            ninfo[FD_TYPMTD] = nobjmtd
+                        else
+                            ninfo[FD_TYPMTD] = nil
+                            _Cache(nobjmtd)
+                        end
                     end
                 end
 
@@ -2562,22 +2651,16 @@ do
             end;
 
             ["GetMethod"]       = function(target, name)
-                local info      = getTargetInfo(target)
-                return info and type(name) == "string" and (info[name] or (info[FD_OBJMTD] and info[FD_OBJMTD][name])) or nil
+                local info, def = getTargetInfo(target)
+                return info and type(name) == "string" and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or nil
             end;
 
             ["GetObjectMethod"] = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[FD_OBJMTD] and info[FD_OBJMTD][name] or nil
+                return info and type(name) == "string" and info[FD_TYPMTD] and info[FD_TYPMTD][name] or nil
             end;
 
             ["GetStaticMethod"] = function(target, name)
-                local info      = getTargetInfo(target)
-                local method    = info and type(name) == "string" and info[name]
-                return method and not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) and method or nil
-            end;
-
-            ["GetTypeMethod"]   = function(target, name)
                 local info      = getTargetInfo(target)
                 return info and type(name) == "string" and info[name] or nil
             end;
@@ -2585,30 +2668,18 @@ do
             ["GetMethods"]      = function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
+                    local objm  = info[FD_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        for k, v in pairs, info do if type(k) == "string" then cache[k] = v end end
-                        if info[FD_OBJMTD] then for k, v in pairs, info[FD_OBJMTD] do cache[k] = v end end
-
+                        if objm then for k, v in pairs, objm do cache[k] = v or info[k] end end
                         return cache
-                    else
-                        local t = true
-                        local m = info[FD_OBJMTD]
+                    elseif objm then
                         return function(self, n)
-                            local v
-                            if t then
-                                n, v = next(info, n)
-                                while n and type(n) ~= "string" do n, v = next(info, n) end
-                                if n then return n, v end
-                                if not m then return end
-                                n = nil
-                                t = false
-                            end
-                            n, v = next(m, n)
-                            while n and info[n] do n, v = next(m, n) end
-                            return n, v
+                            local m, v = next(objm, n)
+                            if m then return m, v or info[m] end
                         end, target
+                    else
+                        return fakefunc, target
                     end
                 elseif not cache then
                     return fakefunc, target
@@ -2618,19 +2689,19 @@ do
             ["GetObjectMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
+                    local objm  = info[FD_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        if info[FD_OBJMTD] then for k, v in pairs, info[FD_OBJMTD] do cache[k] = v end end
-
+                        for k, v in pairs, objm do if v then cache[k] = v end end
                         return cache
+                    elseif objm then
+                        return function(self, n)
+                            local m, v = next(objm, n)
+                            while m and not v do m, v = next(objm, m) end
+                            return m, v
+                        end, target
                     else
-                        local m = info[FD_OBJMTD]
-                        if m then
-                            return function(self, n) return next(m, n) end, target
-                        else
-                            return fakefunc, target
-                        end
+                        return fakefunc, target
                     end
                 elseif not cache then
                     return fakefunc, target
@@ -2640,42 +2711,19 @@ do
             ["GetStaticMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local m     = info[FD_OBJMTD]
+                    local objm  = info[FD_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        for k, v in pairs, info do if type(k) == "string" and not (m and m[k]) then cache[k] = v end end
-
+                        for k, v in pairs, objm do if not v then cache[k] = info[k] end end
                         return cache
-                    else
+                    elseif objm then
                         return function(self, n)
-                            local v
-                            n, v  = next(info, n)
-                            while n and (type(n) ~= "string" or (m and m[n])) do n, v = next(info, n) end
-                            return n, v
+                            local m, v = next(objm, n)
+                            while m and v do m, v = next(objm, m) end
+                            if m then return m, info[m] end
                         end, target
-                    end
-                elseif not cache then
-                    return fakefunc, target
-                end
-            end;
-
-            ["GetTypeMethods"]  = function(target, cache)
-                local info      = getTargetInfo(target)
-                if info then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        for k, v in pairs, info do if type(k) == "string" then cache[k] = v end end
-
-                        return cache
                     else
-                        return function(self, n)
-                            local v
-                            n, v = next(info, n)
-                            while n and type(n) ~= "string" do n, v = next(info, n) end
-                            return n, v
-                        end, target
+                        return fakefunc, target
                     end
                 elseif not cache then
                     return fakefunc, target
@@ -2709,7 +2757,7 @@ do
 
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name] and not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) and true or false
+                return info and type(name) == "string" and info[name] and true or false
             end;
 
             ["SetArrayElement"] = function(target, eleType, stack)
@@ -2804,9 +2852,12 @@ do
                     name = strtrim(name)
                     if name == "" then error("Usage: Usage: struct.SetStaticMethod(structure, name) - The name can't be empty.", stack) end
                     if not def then error(("Usage: struct.SetStaticMethod(structure, name) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if not info[name] then error(("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q."):format(tostring(target), name), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q."):format(tostring(target), name), stack) end
 
-                    if info[FD_OBJMTD] then info[FD_OBJMTD][name] = nil end
+                    if info[name] == nil then
+                        info[name] = info[FD_TYPMTD][name]
+                        info[FD_TYPMTD][name] = false
+                    end
                 else
                     error("Usage: struct.SetStaticMethod(structure, name[, stack]) - The structure is not valid.", stack)
                 end
@@ -2858,7 +2909,7 @@ do
         __index     = function(self, name)
             if type(name) == "string" then
                 local info  = _StrtInfo[self]
-                return info and (info[name] or (info[FD_OBJMTD] and info[FD_OBJMTD][name])) or getNameSpace(self, name)
+                return info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or getNameSpace(self, name)
             end
         end,
         __newindex  = function(self, key, value)
@@ -2980,15 +3031,20 @@ end
 --                             interface & class                             --
 -------------------------------------------------------------------------------
 do
-    local _ICInfo   = setmetatable({}, WEAK_KEY)        -- Interface & class info
-    local _CLDInfo  = {}                                -- Children Map
-    local _BDInfo   = Prototype.NewObject(threadCache)  -- Type Builder Info
+    local _ICInfo   = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
+    local _CLDInfo  = {}                                -- CHILDREN MAP
+    local _ThisMap  = setmetatable({}, WEAK_ALL)        -- THIS FOR CLASS
+    local _SuperMap = setmetatable({}, WEAK_ALL)        -- SUPER FOR CLASS & INTERFACE
+    local _ObjMap   = setmetatable({}, WEAK_KEY)        -- OBJECT -> CLASS INFO MAP
+    local _BDInfo   = Prototype.NewObject(threadCache)  -- TYPE BUILDER INFO
+    local _SuperObj = Prototype.NewObject(threadCache)  -- SUPER OBJECT CACHE
 
     local getValueFromBuidler   = typebuilder.GetValueFromBuidler
     local getNameSpace          = namespace.GetNameSpace
 
     local _IndexMap = {}
     local _NewIdxMap= {}
+    local _CtorMap  = {}
 
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0           -- SEALED TYPE
@@ -2997,32 +3053,45 @@ do
     local MD_ATCACHE= 2^3           -- AUTO CACHE CLASS
     local MD_OBJMDAT= 2^4           -- ENABLE OBJECT METHOD ATTRIBUTE
     local MD_NRAWSET= 2^5           -- NO RAW SET FOR OBJECTS
+    local MD_ASSPCLS= 2^6           -- AS A SIMPLE CLASS
+    local MD_KPOBJUP= 2^7           -- KEEP UPDATING OBJECT WITH NEW FEATURES
 
+    -- FIELDS
     local FD_MOD    = -1            -- FIELD MODIFIER
     local FD_SUPCLS =  0            -- FIELD SUPER CLASS
     local FD_STEXT  =  1            -- FIELD EXTEND INTERFACE START INDEX(so we can use unpack on it)
-    local FD_CTOR   = -2            -- FIELD INITIALIZER | CONSTRUCTOR
+    local FD_INIT   = -2            -- FIELD INITIALIZER
     local FD_DISPOSE= -3            -- FIELD DISPOSE
-    local FD_OBJMTD = -4            -- FIELD OBJECT METHODS
-    local FD_TYPFTR = -5            -- FILED OBJECT TYPE FEATURES
-    local FD_OBJFTR = -6            -- FIELD OBJECT ALL TYPE FEATURES
-    local FD_STAFTR = -7            -- FIELD STATIC TYPE FEATURES
-    local FD_REQFTR = -8            -- FIELD REQUIR FEATURES
-    local FD_REQCLS = -9            -- FIELD REQUIR CLASS FOR INTERFACE
-    local FD_NEWFTR =-10            -- FIELD TYPE FEATURES(Props, Events)
-    local FD_PROTOT =-11            -- FIELD PROTOTYPE FOR CLASS
-    local FD_METAMD =-12            -- FIELD META-METHODS(TYPE ONLY)
-    local FD_OBJMET =-13            -- FIELD OBJECT META-METHODS(FULL FROM EXTEND INTERFACE & SUPER CLASS)
+    local FD_TYPFTR = -4            -- FILED TYPE FEATURES
+    local FD_TYPMTD = -5            -- FIELD TYPE METHODS
+    local FD_TYPMTM = -6            -- FIELD TYPE META-METHODS
+    local FD_INHRTP = -7            -- FIELD INHERITANCE PRIORITY
+    local FD_STAFTR = -8            -- FIELD STATIC TYPE FEATURES
+    local FD_OBJFTR = -9            -- FIELD OBJECT FEATURES
+    local FD_OBJMTD =-10            -- FIELD OBJECT METHODS
+    local FD_OBJMTM =-11            -- FIELD OBJECT META-METHODS
+    local FD_REQCLS =-12            -- FIELD REQUIR CLASS FOR INTERFACE
+    local FD_ONEVRM =-13            -- FIELD WHETHER ONE VIRTUAL-METHOD INTERFACE
+    local FD_ANYMSCL=-14            -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FD_SIMPCLS=-15            -- FIELD CLASS IS A SIMPLE CLASS
+    local FD_SUPINFO=-16            -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FD_SUPCACH=-17            -- FIELD SUPER CACHE
+    local FD_ALTHIS =-18            -- FIELD ALIAS THIS (CONSTRUCTOR)
+    local FD_ALSUPER=-19            -- FIELD ALIAS SUPER (CONSTRUCTOR, METHODS FROM SUPER CLASS & EXTENDED INTERFACES)
+    local FD_NEWFTR =-20            -- FIELD TYPE NEW FEATURES
 
-    local FD_ONEREQ =-13            -- FIELD WHETHER ONE REQUIRED-METHOD INTERFACE
-    local FD_SIMPCLS=-14            -- FIELD WHETHER SIMPLE CLASS
+    -- Ctor & Dispose
+    local FD_CTOR   = 10^4          -- FIELD THE CONSTRUCTOR
+    local FD_CLINIT = FD_CTOR + 1   -- FEILD THE CLASS INITIALIZER
+    local FD_ENDISP = FD_CTOR - 1   -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
+    local FD_STINIT = FD_CLINIT + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
 
-    local FD_ANYMSCL=-15            -- Anonymous Class for interface
+    -- Inheritance priority
+    local IP_FINAL  =  1
+    local IP_NORMAL =  0
+    local IP_VIRTUAL= -1
 
-    local FD_RLCTOR = 10^4          -- FIELD THE REAL CONSTRUCTOR(MAY BE SUPER CLASS'S)
-    local FD_ENDISP = FD_RLCTOR - 1 -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
-    local FD_STINIT = FD_RLCTOR + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
-
+    -- Flags for object accessing
     local FL_OBJMTD = 2^0           -- HAS OBJECT METHOD
     local FL_OBJFTR = 2^1           -- HAS OBJECT FEATURE
     local FL_ATCACH = 2^2           -- IS  AUTO CACHE
@@ -3032,14 +3101,28 @@ do
     local FL_OBJATR = 2^6           -- ENABLE OBJECT METHOD ATTRIBUTE
     local FL_NRAWST = 2^7           -- ENABLE NO RAW SET
 
+    -- Flags for constructor
+    local FL_EXTOBJ = 2^2           -- HAS __exist
+    local FL_NEWOBJ = 2^3           -- HAS __new
+    local FL_SIMCLS = 2^4           -- SIMPLE CLASS
+    local FL_ASSIMP = 2^5           -- AS SIMPLE CLASS
+    local FL_HSCLIN = 2^6           -- HAS CLASS INITIALIZER
+    local FL_HASIFS = 2^7           -- NEED CALL INTERFACE'S INITIALIZER
+    local FL_MAPOBJ = 2^8           -- MAP THE OBJECT TO INFO
+
     -- Meta-Methods
     local MTD_EXIST = "__exist"
     local MTD_NEW   = "__new"
     local MTD_INDEX = "__index"
     local MTD_NEWIDX= "__newindex"
+    local MTD_META  = "__metatable"
 
     -- Dispose Method
     local MTD_DISPOB= "Dispose"
+
+    -- Super & This
+    local AL_SUPER  = "Super"
+    local AL_THIS   = "This"
 
     local META_KEYS = {
         __add       = "__add",      -- a + b
@@ -3074,138 +3157,141 @@ do
         __new       = "__new",      -- return a raw table as the object
     }
 
-    -- Tools
+    -- Helpers
     local function getTargetInfo(target)
         local info  = _BDInfo[target]
         if info then return info, true else return _ICInfo[target], false end
     end
 
+    local function getSuperInfo(info, target)
+        return info[FD_SUPINFO] and info[FD_SUPINFO][target] or _BDInfo[target] or _ICInfo[target]
+    end
+
+    local function getSuperInfos(info, reverse)
+        if reverse then
+            if info[FD_SUPCLS] then
+                local scache    = _Cache()
+                local scls      = info[FD_SUPCLS]
+                while scls do
+                    tinsert(scache, scls)
+                    scls        = getSuperInfo(info, scls)[FD_SUPCLS]
+                end
+
+                local scnt      = #scache - FD_STEXT + 1
+                return function(root, idx)
+                    if idx >= FD_STEXT then
+                        local extif = root[idx]
+                        return idx - 1, getSuperInfo(info, extif), extif
+                    elseif scnt + idx > 0 then
+                        local scls  = scache[scnt + idx]
+                        return idx - 1, getSuperInfo(info, scls), scls
+                    end
+                    _Cache(scache)
+                end, info, #info
+            else
+                return function(root, idx)
+                    if idx >= FD_STEXT then
+                        local extif = root[idx]
+                        return idx - 1, getSuperInfo(info, extif), extif
+                    end
+                end, info, #info
+            end
+        else
+            return function(root, idx)
+                if type(idx) == "table" then
+                    local scls  = idx[FD_SUPCLS]
+                    if scls then
+                        idx     = getSuperInfo(info, scls)
+                        return idx, idx, scls
+                    end
+                    idx         = FD_STEXT - 1
+                end
+                idx             = idx + 1
+                local extif     = root[idx]
+                if extif then return idx, getSuperInfo(info, extif), extif end
+            end, info, info
+        end
+    end
+
+    local function getSuperOnPriorty(info, name, get)
+        local minpriority, norpriority
+        for _, sinfo in getSuperInfos(info) do
+            local m     = get(sinfo, name)
+            if m then
+                local priority = sinfo[FD_INHRTP] and sinfo[FD_INHRTP][name] or IP_NORMAL
+                if priority == IP_FINAL   then return m end
+                if priority == IP_VIRTUAL then
+                    minpriority = minpriority or m
+                else
+                    norpriority = norpriority or m
+                end
+            end
+        end
+        return norpriority or minpriority
+    end
+
     local function getSuperMethod(info, name)
-        if info[FD_SUPCLS] then
-            local m = class.GetMethod(info[FD_SUPCLS], name)
-            if m then return not class.IsStaticMethod(info[FD_SUPCLS], name) and m or nil end
-        end
-
-
-        for _, extif in ipairs, info, FD_STEXT - 1 do
-            local m = interface.GetMethod(extif, name)
-            if m then return not interface.IsStaticMethod(extif, name) and m or nil end
-        end
+        return getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPMTD] and sinfo[FD_TYPMTD][name] end)
     end
 
-    local function getSuperFeature(info, ftype, name)
-        if info[FD_SUPCLS] then
-            local sinfo = getTargetInfo(info[FD_SUPCLS])
-            if sinfo[FD_STAFTR] and sinfo[FD_STAFTR][name] then return nil end
-            if sinfo[FD_OBJFTR] and sinfo[FD_OBJFTR][name] then return ftype.Validate(sinfo[FD_OBJFTR][name]) end
-        end
-
-        for _, extif in ipairs, info, FD_STEXT - 1 do
-            local sinfo = getTargetInfo(extif)
-            if sinfo[FD_STAFTR] and sinfo[FD_STAFTR][name] then return nil end
-            if sinfo[FD_OBJFTR] and sinfo[FD_OBJFTR][name] then return ftype.Validate(sinfo[FD_OBJFTR][name]) end
-        end
+    local function getSuperFeature(info, name, ftype)
+        local feature   = getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPFTR] and sinfo[FD_TYPFTR][name] end)
+        return feature and (not ftype and feature or ftype.Validate(feature)) or nil
     end
 
-    local function isExtend(target, extendIF)
-        local info  = getTargetInfo(target)
+    local function getSuperMetaMethod(info, name)
+        return getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPMTM] and sinfo[FD_TYPMTM][META_KEYS[name]] end)
+    end
+
+    -- Finish Type Building
+    local function generateSuperInfo(info, lst, cache)
         if info then
-            if info[FD_SUPCLS] and isExtend(info[FD_SUPCLS], extendIF) then return true end
-
-            for _, extif in ipairs, info, FD_STEXT - 1 do
-                if target == extendIF or isExtend(extif, extendIF) then return true end
+            local scls      = info[FD_SUPCLS]
+            if scls then
+                local sinfo = getTargetInfo(scls)
+                generateSuperInfo(sinfo, lst, cache)
+                if cache then cache[scls] = sinfo end
             end
-        end
-        return false
-    end
 
-    local function hasOnly1ReqMethod(info, reqMethod)
-        if info[FD_OBJMTD] then
-            for name, val in pairs, info[FD_OBJMTD] do
-                if val == true then
-                    if reqMethod then return false end
-                    reqMethod = name
+            for i = #info, FD_STEXT, -1 do
+                local extif = info[i]
+                if not lst[extif] then
+                    lst[extif]  = true
+
+                    local sinfo = getTargetInfo(extif)
+                    generateSuperInfo(sinfo, lst, cache)
+                    if cache then cache[extif] = sinfo end
+                    tinsert(lst, extif)
                 end
             end
         end
 
-        for _, extif in ipairs, info, FD_STEXT - 1 do
-            reqMethod = hasOnly1ReqMethod(getTargetInfo(extif), reqMethod)
-            if reqMethod == false then return false end
-        end
-
-        return reqMethod
+        return lst, cache
     end
 
-    local function saveCacheFromSuper(info, super, meta)
-        local sinfo = getTargetInfo(super)
-        if not sinfo then return end
+    local function generateCacheOnPriorty(source, target, objpri, inhrtp, super)
+        for k, v in pairs, source do
+            if v then
+                local priority  = inhrtp and inhrtp[k] or IP_NORMAL
+                if priority >= (objpri[k] or IP_VIRTUAL) then
+                    if super and target[k] and not super[k] then
+                        super[k]= target[k]
+                    end
 
-        -- Cache methods
-        if sinfo[FD_OBJMTD] then
-            local cache = info[FD_OBJMTD] or _Cache()
-            for k, v in pairs, sinfo[FD_OBJMTD] do
-                if v ~= true and not info[k] then
-                    cache[k] = v
+                    objpri[k]   = priority
+                    target[k]   = v
                 end
             end
-            if next(cache) then
-                info[FD_OBJMTD] = cache
-            else
-                info[FD_OBJMTD] = nil
-                _Cache(cache)
-            end
-        end
-
-        -- Cache features
-        if sinfo[FD_OBJFTR] then
-            local cache = info[FD_OBJFTR] or _Cache()
-            for k, v in pairs, sinfo[FD_OBJFTR] do
-                if not (info[FD_TYPFTR] and info[FD_TYPFTR][k] or info[FD_NEWFTR] and info[FD_NEWFTR][k]) then
-                    cache[k] = v
-                end
-            end
-            if next(cache) then
-                info[FD_OBJFTR] = cache
-            else
-                info[FD_OBJFTR] = nil
-                _Cache(cache)
-            end
-        end
-
-        if meta then tblclone(sinfo[FD_METAMD], meta, false, true) end
-    end
-
-    local function generateSuperCache(info, icache, scache)
-        local scls  = info[FD_SUPCLS]
-        if scls then
-            tinsert(scache, scls)
-            generateSuperCache(getTargetInfo(scls), icache, scache)
-        end
-
-        for i = #info, FD_STEXT, -1 do
-            local sif       = info[i]
-            generateSuperCache(getTargetInfo(sif), icache)
-
-            if not icache[sif] then
-                icache[sif]  = true
-                tinsert(icache, sif)
-            end
         end
     end
 
-    local function generateMetaIndex(info, meta)
+    local function generateMetaIndex(info)
         local token = 0
         local upval = _Cache()
-        local index = META_KEYS[MTD_INDEX]
+        local meta  = info[FD_OBJMTM]
 
         if validateFlags(MD_ATCACHE, info[FD_MOD]) then
             token   = turnOnFlags(FL_ATCACH, token)
-        end
-
-        if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
-            token   = turnOnFlags(FL_OBJMTD, token)
-            tinsert(upval, info[FD_OBJMTD])
         end
 
         if info[FD_OBJFTR] and next(info[FD_OBJFTR]) then
@@ -3213,21 +3299,26 @@ do
             tinsert(upval, info[FD_OBJFTR])
         end
 
-        if meta[index] then
-            if type(meta[index]) == "function" then
+        if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
+            token   = turnOnFlags(FL_OBJMTD, token)
+            tinsert(upval, info[FD_OBJMTD])
+        end
+
+        if meta[MTD_INDEX] then
+            if type(meta[MTD_INDEX]) == "function" then
                 token = turnOnFlags(FL_IDXFUN, token)
             else
                 token = turnOnFlags(FL_IDXTBL, token)
             end
-            tinsert(upval, meta[index])
+            tinsert(upval, meta[MTD_INDEX])
         end
 
         -- No __index generated
-        if token == 0 then return end
+        if token == 0                               then meta[MTD_INDEX] = nil      return _Cache(upval) end
         -- Use the object method cache directly
-        if token == FL_OBJMTD then meta[MTD_INDEX] = info[FD_OBJMTD] return _Cache(upval) end
+        if token == FL_OBJMTD                       then meta[MTD_INDEX] = objmtd   return _Cache(upval) end
         -- Use the custom __index directly
-        if token == FL_IDXFUN or token == FL_IDXTBL then meta[MTD_INDEX] = meta[index] return _Cache(upval) end
+        if token == FL_IDXFUN or token == FL_IDXTBL then                            return _Cache(upval) end
 
         if not _IndexMap[token] then
             local header    = _Cache()
@@ -3235,6 +3326,14 @@ do
 
             tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[return function(self, key)]])
+
+            if validateFlags(FL_OBJFTR, token) then
+                tinsert(header, "features")
+                tinsert(body, [[
+                    local ftr = features[key]
+                    if ftr then return ftr:Get(self) end
+                ]])
+            end
 
             if validateFlags(FL_OBJMTD, token) then
                 tinsert(header, "methods")
@@ -3251,13 +3350,6 @@ do
                 ]])
             end
 
-            if validateFlags(FL_OBJFTR, token) then
-                tinsert(header, "features")
-                tinsert(body, [[
-                    local ftr = features[key]
-                    if ftr then return ftr:Get(self) end
-                ]])
-            end
 
             if validateFlags(FL_IDXFUN, token) then
                 tinsert(header, "_index")
@@ -3283,16 +3375,16 @@ do
         _Cache(upval)
     end
 
-    local function generateMetaNewIndex(info, meta)
+    local function generateMetaNewIndex(info)
         local token = 0
         local upval = _Cache()
-        local nwidx = META_KEYS[MTD_NEWIDX]
+        local meta  = info[FD_OBJMTM]
 
-        if validateFlags(MD_OBJMDAT, token) then
+        if validateFlags(MD_OBJMDAT, info[FD_MOD]) then
             token   = turnOnFlags(FL_OBJATR, token)
         end
 
-        if validateFlags(MD_NRAWSET, token) then
+        if validateFlags(MD_NRAWSET, info[FD_MOD]) then
             token   = turnOnFlags(FL_NRAWST, token)
         end
 
@@ -3301,15 +3393,15 @@ do
             tinsert(upval, info[FD_OBJFTR])
         end
 
-        if meta[nwidx] then
+        if meta[MTD_NEWIDX] then
             token   = turnOnFlags(FL_NEWIDX, token)
-            tinsert(upval, meta[nwidx])
+            tinsert(upval, meta[MTD_NEWIDX])
         end
 
         -- No __newindex generated
-        if token == 0 then return end
+        if token == 0         then meta[MTD_NEWIDX] = nil   return _Cache(upval) end
         -- Use the custom __newindex directly
-        if token == FL_NEWIDX then meta[MTD_NEWIDX] = meta[nwidx] return _Cache(upval) end
+        if token == FL_NEWIDX then                          return _Cache(upval) end
 
         if not _NewIdxMap[token] then
             local header    = _Cache()
@@ -3322,7 +3414,7 @@ do
                 tinsert(header, "feature")
                 tinsert(body, [[
                     local ftr = feature[key]
-                    if ftr then return ftr:Set(self, value) end
+                    if ftr then ftr:Set(self, value, 3) return end
                 ]])
             end
 
@@ -3370,155 +3462,506 @@ do
         _Cache(upval)
     end
 
-    -- Shared APIS
-    local function addExtend(tType, owner, extendIF, stack)
-        local info, def = getTargetInfo(owner)
-        stack = (type(stack) == "number" and stack or 2) + 1
-
-        if info then
-            if not interface.Validate(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - the extendinterface must be an interface."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
-            if interface.IsFinal(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s is marked as final, can't be extended."):format(tostring(tType), tostring(tType), tostring(extendIF)), stack) end
-
-            -- Check if already extended
-            if interface.IsSubType(owner, extendIF) then return end
-
-            -- Check the extend interface's require class
-            local reqcls = interface.GetRequireClass(extendIF)
-
-            if class.Validate(owner) then
-                if reqcls and not class.IsSubType(owner, reqcls) then
-                    error(("Usage: class.AddExtend(class, extendinterface[, stack]) - The class must be %s's sub-class."):format(tostring(reqcls)), stack)
-                end
-            elseif interface.IsSubType(extendIF, owner) then
-                error("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The extendinterface is a sub type of the interface.", stack)
-            elseif reqcls then
-                local rcls = interface.GetRequireClass(owner)
-
-                if rcls then
-                    if class.IsSubType(reqcls, rcls) then
-                        interface.SetRequireClass(owner, reqcls, stack + 1)
-                    elseif not class.IsSubType(rcls, reqcls) then
-                        error(("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The interface's require class must be %s's sub-class."):format(tostring(reqcls)), stack)
-                    end
-                else
-                    interface.SetRequireClass(owner, reqcls, stack + 1)
-                end
-            end
-
-            -- Add the extend interface
-            local i = FD_STEXT
-            local j = FD_STEXT
-            local n = info[i]
-
-            info[j] = extendIF
-            j       = j + 1
-
-            while n do
-                i = i + 1
-
-                -- Release the old one since the new extend interface has already extended it
-                if interface.IsSubType(extendIF, n) then
-                    Lock(n)
-
-                    local children = _CLDInfo[n]
-                    for k, v in ipairs, children, 0 do
-                        if v == owner then tremove(children, k) break end
-                    end
-
-                    Release(n)
-
-                    n = info[i]
-                else
-                    info[j], n = n, info[i]
-                    j = j + 1
-                end
-            end
-
-            for k = j, i - 1 do info[k] = nil end
-
-            -- Register to the extended interface
-            Lock(_CLDInfo)
-
-            _CLDInfo[extendIF] = _CLDInfo[extendIF] or {}
-            tinsert(_CLDInfo[extendIF], owner)
-
-            Release(_CLDInfo)
-
-            saveCacheFromSuper(info, extendIF)
-        else
-            error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
-        end
+    local function loadInitTable(obj, initTable)
+        for name, value in pairs(initTable) do obj[name] = value end
     end
 
-    local function addFeature(tType, owner, ftype, name, definition, stack)
-        stack = (type(stack) == "number" and stack or 2) + 1
+    local function generateConstructor(target, info)
+        local token = 0
+        local upval = _Cache()
+        local meta  = info[FD_OBJMTM]
 
-        local info, def = getTargetInfo(owner)
+        if validateFlags(MD_ABSCLS, info[FD_MOD]) then
+            local msg = ("The %s is abstract, can't be used to create objects."):format(tostring(target))
+            info[FD_CTOR] = function() error(msg, 3) end
+            return _Cache(upval)
+        end
 
-        if info then
-            if not Prototype.Validate(ftype) then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid."):format(tostring(tType), tostring(tType)), stack) end
-            if type(name) ~= "string" then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name    = strtrim(name)
-            if name == "" then error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if META_KEYS[name] then error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s is a meta-method name, can't be used as feature."):format(tostring(tType), tostring(tType), name), stack) end
-            if not def then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
+        tinsert(upval, info)
+        tinsert(upval, meta)
+        tinsert(upval, target)
 
-            local f = ftype.BeginDefinition(owner, name, definition, getSuperFeature(info, ftype, name), stack + 1)
+        if not validateFlags(MD_KPOBJUP, info[FD_MOD]) then
+            token   = turnOnFlags(FL_MAPOBJ, token)
+            tinsert(upval, _ObjMap)
+        end
 
-            if f then
-                info[FD_NEWFTR]         = info[FD_NEWFTR] or _Cache()
-                info[FD_NEWFTR][name]   = f
+        if meta[MTD_EXIST] then
+            token   = turnOnFlags(FL_EXTOBJ, token)
+            tinsert(upval, meta[MTD_EXIST])
+        end
+
+        if meta[MTD_NEW] then
+            token   = turnOnFlags(FL_NEWOBJ, token)
+            tinsert(upval, meta[MTD_NEW])
+        end
+
+        if info[FD_SIMPCLS] then
+            token   = turnOnFlags(FL_SIMCLS, token)
+        elseif validateFlags(MD_ASSPCLS, info[FD_MOD]) then
+            token   = turnOnFlags(FL_ASSIMP, token)
+
+            if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
+                token   = turnOnFlags(FL_OBJMTD, token)
+                tinsert(upval, info[FD_OBJMTD])
+            end
+
+            if info[FD_OBJFTR] and next(info[FD_OBJFTR]) then
+                token   = turnOnFlags(FL_OBJFTR, token)
+                tinsert(upval, info[FD_OBJFTR])
+            end
+        end
+
+        if info[FD_CLINIT] then
+            token   = turnOnFlags(FL_HSCLIN, token)
+            tinsert(upval, info[FD_CLINIT])
+        else
+            tinsert(upval, loadInitTable)
+        end
+
+        if info[FD_STINIT] then
+            token   = turnOnFlags(FL_HASIFS, token)
+            local i = FD_STINIT
+            while info[i + 1] do i = i + 1 end
+            tinsert(upval, i)
+        end
+
+        if not _CtorMap[token] then
+            local header    = _Cache()
+            local body      = _Cache()
+
+            tinsert(header, "_info")
+            tinsert(header, "_meta")
+            tinsert(header, "_class")
+
+            if validateFlags(FL_MAPOBJ, token) then
+                tinsert(header, "_ObjMap")
+            end
+
+            tinsert(body, "")   -- Remain for closure values
+            tinsert(body, [[return function(...)]])
+
+            tinsert(body, [[local obj]])
+
+            if validateFlags(FL_EXTOBJ, token) then
+                tinsert(header, "_exist")
+
+                tinsert(body, [[
+                    obj = _exist(...)
+                    if obj then
+                        local cls = getmetatable(obj)
+                        if cls == _class or class.IsSubType(cls, _class) then
+                            return obj
+                        end
+                    end
+                ]])
+            end
+
+            if validateFlags(FL_NEWOBJ, token) then
+                tinsert(header, "_new")
+
+                tinsert(body, [[
+                    obj = _new(...)
+                    if type(obj) == "table" then
+                        local ok, ret = pcall(setmetatable, obj, _meta)
+                        if not ok then error(("The %s's __new meta-method doesn't provide a valid table as object."):format(tostring(_class)), 3) end
+                    else
+                        obj = nil
+                    end
+                ]])
+            end
+
+            if validateFlags(FL_SIMCLS, token) or validateFlags(FL_ASSIMP, token) or not validateFlags(FL_HSCLIN, token) then
+                tinsert(body, [[
+                    local init = nil
+                    if select("#", ...) == 1 then
+                        init = select(1, ...)
+                        if type(init) == "table" and getmetatable(init) == nil then
+                            if not obj then
+                ]])
+
+                if validateFlags(FL_SIMCLS, token) then
+                    tinsert(body, [[obj = setmetatable(init, _meta) init = false]])
+                elseif validateFlags(FL_ASSIMP, token) then
+                    tinsert(body, [[local noconflict = true]])
+
+                    if validateFlags(FL_OBJMTD, token) then
+                        tinsert(header, "_mtd")
+                        tinsert(body, [[
+                            for k in pairs, _mtd do
+                                local tk = type(init[k])
+                                if tk and tk ~= "function" then
+                                    noconflict = false break
+                                end
+                            end
+                        ]])
+                    end
+
+                    if validateFlags(FL_OBJFTR, token) then
+                        tinsert(header, "_ftr")
+                        tinsert(body, [[
+                            for k in pairs, _ftr do
+                                if init[k] ~= nil then
+                                    noconflict = false break
+                                end
+                            end
+                        ]])
+                    end
+
+                    tinsert(body, [[if noconflict then obj = setmetatable(init, _meta) init = false end]])
+                end
+
+                tinsert(body, [[
+                            end
+                        else
+                            init = nil
+                        end
+                    end
+                ]])
+            end
+
+            tinsert(body, [[obj = obj or setmetatable({}, _meta)]])
+
+            if validateFlags(FL_HSCLIN, token) then
+                tinsert(header, "_ctor")
+
+                if validateFlags(FL_SIMCLS, token) or validateFlags(FL_ASSIMP, token) then
+                    tinsert(body, [[
+                        if init == false then
+                            _ctor(obj)
+                        else
+                            _ctor(obj, ...)
+                        end
+                    ]])
+                else
+                    tinsert(body, [[_ctor(obj, ...)]])
+                end
             else
-                error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The feature's creation failed."):format(tostring(tType), tostring(tType)), stack)
+                tinsert(header, "_loadInitTable")
+
+                tinsert(body, [[
+                    if init then
+                        local ok, msg = pcall(_loadInitTable, obj, init)
+                        if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+                    end
+                ]])
             end
+
+            if validateFlags(FL_HASIFS, token) then
+                tinsert(header, "_max")
+
+                tinsert(body, [[
+                    for i = ]] .. FD_STINIT .. [[, _max do
+                        _info[i](obj)
+                    end
+                ]])
+            end
+
+            if validateFlags(FL_MAPOBJ, token) then
+                tinsert(body, [[_ObjMap[obj] = _info]])
+            end
+
+            tinsert(body, [[
+                    return obj
+                end
+            ]])
+
+            if #header > 0 then
+                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            end
+
+            _CtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)
+
+            _Cache(header)
+            _Cache(body)
+        end
+
+        info[FD_CTOR] = _CtorMap[token](unpack(upval))
+        _Cache(upval)
+    end
+
+    local function generateTypeCaches(target, info)
+        local objpri    = _Cache()
+        local objmeta   = _Cache()
+        local objftr    = _Cache()
+        local objmtd    = _Cache()
+        local super     = _Cache()
+
+        for _, sinfo in getSuperInfos(info, true) do
+            local inhrtp= sinfo[FD_INHRTP]
+
+            if sinfo[FD_TYPMTM] then
+                generateCacheOnPriorty(sinfo[FD_TYPMTM], objmeta, objpri, inhrtp)
+            end
+
+            if sinfo[FD_TYPFTR] then
+                generateCacheOnPriorty(sinfo[FD_TYPFTR], objftr, objpri, inhrtp)
+            end
+
+            if sinfo[FD_TYPMTD] then
+                generateCacheOnPriorty(sinfo[FD_TYPMTD], objmtd, objpri, inhrtp)
+            end
+        end
+
+        local inhrtp    = info[FD_INHRTP]
+        if info[FD_TYPMTM] then
+            generateCacheOnPriorty(info[FD_TYPMTM], objmeta, objpri, inhrtp, super)
+        end
+
+        if info[FD_TYPFTR] then
+            generateCacheOnPriorty(info[FD_TYPFTR], objftr, objpri, inhrtp, super)
+        end
+
+        if info[FD_TYPMTD] then
+           generateCacheOnPriorty(info[FD_TYPMTD], objmtd, objpri, inhrtp, super)
+        end
+
+        if interface.Validate(target) then
+            -- Check one virtual method
+            local onevtm
+            for k, v in pairs, objmtd do
+                if objpri[k] == IP_VIRTUAL then
+                    if not onevtm then
+                        onevtm  = k
+                    else
+                        onevtm  = false
+                        break
+                    end
+                end
+            end
+            info[FD_ONEVRM] = onevtm or nil
         else
-            error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The is not valid."):format(tostring(tType), tostring(tType)), stack)
+            if not validateFlags(MD_ABSCLS, info[FD_MOD]) then
+                objmeta[MTD_META]   = target
+
+                info[FD_OBJMTM]     = objmeta
+                info[FD_OBJFTR]     = objftr
+                info[FD_OBJMTD]     = objmtd
+
+                generateMetaIndex(info)
+                generateMetaNewIndex(info)
+            end
+            generateConstructor(target, info)
+        end
+
+        if next(super) then
+            info[FD_SUPCACH]    = super
+        else
+            _Cache(super)
         end
     end
 
-    local function addMethod(tType, owner, name, func, stack)
-        stack = (type(stack) == "number" and stack or 2) + 1
+    -- Shared APIS
+    local function checkInfoWithName(tType, target, name, allowDefined)
+        local info, def = getTargetInfo(target)
+        if not info then return nil, nil, ("The %s is not valid."):format(tostring(tType)) end
+        if not allowDefined and not def then return info, nil, ("The %s's definition is finished."):format(tostring(target)) end
+        if type(name) ~= "string" then return info, nil, "The name must be a string." end
+        name = strtrim(name)
+        if name == "" then return info, nil, "The name can't be empty." end
+        return info, name, nil, def
+    end
 
-        local info, def = getTargetInfo(owner)
-
-        if info then
-            if type(name) ~= "string" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name = strtrim(name)
-            if name == "" then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if META_KEYS[name] then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The %s is a meta-method name, can't be used as method."):format(tostring(tType), tostring(tType), name), stack) end
-            if type(func) ~= "function" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
-
-            if not def and tType.GetMethod(owner, name) then
-                error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The %s's definition is finished, the method can't be overridden."):format(tostring(tType), tostring(tType), tostring(owner)), stack)
+    local function reDefineChildren(target, stack)
+        local children  = _CLDInfo[target]
+        if children then
+            for _, child in ipairs, children, 0 do
+                if not _BDInfo[child] then  -- Not in defintion mode
+                    if interface.Validate(child) then
+                        attribute.SuspendConsume()
+                        interface.BeginDefinition(child, stack + 1)
+                        attribute.ResumeConsume()
+                        interface.EndDefinition(child, stack + 1)
+                    else
+                        attribute.SuspendConsume()
+                        class.BeginDefinition(child, stack + 1)
+                        attribute.ResumeConsume()
+                        class.EndDefinition(child, stack + 1)
+                    end
+                end
             end
-
-            attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
-            func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, owner, name, getSuperMethod(info, name))
-
-            local isStatic = info[name] and not (info[FD_OBJMTD] and info[FD_OBJMTD][name])
-
-            info[name] = func
-
-            if not isStatic then
-                info[FD_OBJMTD] = info[FD_OBJMTD] or _Cache()
-                info[FD_OBJMTD][name] = func
-            end
-
-            attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, owner, name)
-
-            if not def then
-                -- Need re-generate meta-method
-            end
-        else
-            error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The is not valid."):format(tostring(tType), tostring(tType)), stack)
         end
     end
 
-    local function addMetaMethod(tType, owner, name, func, stack)
+    local function dispatchNewMethod(target, name, func)
+        local children  = _CLDInfo[target]
+        if children then
+            for _, child in ipairs, children, 0 do
+                local cinfo = getTargetInfo(child)
+
+                if (cinfo[FD_TYPMTD] == nil or cinfo[FD_TYPMTD][name] == nil) and getSuperMethod(cinfo, name) == func then
+                    if cinfo[FD_OBJMTD] then cinfo[FD_OBJMTD][name] = func
+                    dispatchNewMethod(child, name, func)
+                end
+            end
+        end
+    end
+
+    local function beginDefinition(target, stack)
+        if not _BDInfo[0] then
+            Lock(interface)
+            _BDInfo[0] = target
+            return true
+        end
+        return false
+    end
+
+    local function endDefinition(target, stack, noChildUpdate)
+        -- Update children
+        if not noChildUpdate then reDefineChildren(target, stack + 1) end
+
+        if _BDInfo[0] == target then
+            _BDInfo[0] = nil
+            Release(interface)
+        end
+    end
+
+    local function addSuperType(info, target, supType)
+        local isIF          = interface.Validate(supType)
+
+        -- Clear _CLDInfo for old extend interfaces
+        for i = #info, FD_STEXT, -1 do
+            local extif     = info[i]
+
+            if interface.IsSubType(supType, extif) then
+                for k, v in ipairs, _CLDInfo[extif], 0 do
+                    if v == target then tremove(_CLDInfo[extif], k) break end
+                end
+            end
+
+            if isIF then info[i + 1] = extif end
+        end
+
+        if isIF then
+            info[FD_STEXT]  = supType
+        else
+            info[FD_SUPCLS] = supType
+        end
+
+        -- Register the _CLDInfo
+        _CLDInfo[supType]   = _CLDInfo[supType] or {}
+        tinsert(_CLDInfo[supType], target)
+
+        -- Re-generate the interface order list
+        local lstIF         = generateSuperInfo(info, _Cache())
+        local idxIF         = FD_STEXT + #lstIF
+
+        for i, extif in ipairs, lstIF, 0 do
+            info[idxIF - i] = extif
+        end
+        _Cache(lstIF)
+    end
+
+    local function addExtend(tType, target, extendIF, stack)
+        local info, _, msg  = checkInfoWithName(tType, target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        local info, def = getTargetInfo(owner)
+        if not info then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+
+        if not interface.Validate(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - the extendinterface must be an interface."):format(tostring(tType), tostring(tType)), stack) end
+        if interface.IsFinal(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s is marked as final, can't be extended."):format(tostring(tType), tostring(tType), tostring(extendIF)), stack) end
+
+        -- Check if already extended
+        if interface.IsSubType(target, extendIF) then return end
+
+        -- Check the extend interface's require class
+        local reqcls = interface.GetRequireClass(extendIF)
+
+        if class.Validate(target) then
+            if reqcls and not class.IsSubType(target, reqcls) then
+                error(("Usage: class.AddExtend(class, extendinterface[, stack]) - The class must be %s's sub-class."):format(tostring(reqcls)), stack)
+            end
+        elseif interface.IsSubType(extendIF, target) then
+            error("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The extendinterface is a sub type of the interface.", stack)
+        elseif reqcls then
+            local rcls = interface.GetRequireClass(target)
+
+            if rcls then
+                if class.IsSubType(reqcls, rcls) then
+                    interface.SetRequireClass(target, reqcls, stack + 1)
+                elseif not class.IsSubType(rcls, reqcls) then
+                    error(("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The interface's require class must be %s's sub-class."):format(tostring(reqcls)), stack)
+                end
+            else
+                interface.SetRequireClass(target, reqcls, stack + 1)
+            end
+        end
+
+        -- Add the extend interface
+        addSuperType(info, target, extendIF)
+    end
+
+    local function addFeature(tType, target, ftype, name, definition, stack)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        if msg then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+
+        if not Prototype.Validate(ftype) then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid."):format(tostring(tType), tostring(tType)), stack) end
+        if META_KEYS[name] or name == MTD_DISPOB then error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s can't be used as feature name."):format(tostring(tType), tostring(tType), name), stack) end
+
+        local f = ftype.BeginDefinition(target, name, definition, getSuperFeature(info, name, ftype), stack + 1)
+
+        if f then
+            info[FD_TYPFTR]         = info[FD_TYPFTR] or _Cache()
+            info[FD_TYPFTR][name]   = f
+
+            info[FD_NEWFTR]         = info[FD_NEWFTR] or _Cache()
+            info[FD_NEWFTR][name]   = true
+        else
+            error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The feature's creation failed."):format(tostring(tType), tostring(tType)), stack)
+        end
+    end
+
+    local function addMethod(tType, target, name, func, stack)
+        local info, name, msg, def  = checkInfoWithName(tType, target, name, true)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        if msg then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+
+        if META_KEYS[name] or name == MTD_DISPOB then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The %s can't be used as method name."):format(tostring(tType), tostring(tType), name), stack) end
+        if type(func) ~= "function" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
+
+        if not def then
+            if info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil or info[FD_OBJMTD] and info[FD_OBJMTD][name] then
+                error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The %s's definition is finished, a method already existed with the name %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
+            elseif info[FD_TYPFTR] and info[FD_TYPFTR][name] ~= nil or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
+                error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The %s's definition is finished, a feature already existed with the name %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
+            end
+
+            beginDefinition(target, stack + 1)
+
+            if info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil or info[FD_OBJMTD] and info[FD_OBJMTD][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name] ~= nil or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
+                endDefinition(target, stack + 1, true)
+                return
+            end
+        end
+
+        local nStatic   = not info[name]
+
+        attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
+        func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, nStatic and getSuperMethod(info, name) or nil)
+
+        if nStatic then
+            info[FD_TYPMTD] = info[FD_TYPMTD] or _Cache()
+            info[FD_TYPMTD][name] = func
+        else
+            info[name]      = func
+        end
+
+        attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
+
+        if not def then
+            if info[FD_OBJMTD] then info[FD_OBJMTD][name] = func end
+            dispatchNewMethod(target, name, func)
+            endDefinition(target, stack + 1, true)
+        end
+    end
+
+    local function addMetaMethod(tType, target, name, func, stack)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        local info, def = getTargetInfo(target)
 
         if info then
             if type(name) ~= "string" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
@@ -3530,18 +3973,23 @@ do
 
             if name ~= MTD_INDEX and tfunc ~= "function" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
             if name == MTD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
+            if not def then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
 
             if tfunc == "function" then
-                attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
-                func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, owner, name)
+                attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, stack + 1)
+                func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
             end
 
-            info[FD_METAMD]                     = info[FD_METAMD] or _Cache()
-            info[FD_METAMD][META_KEYS[name]]    = func
+            info[FD_TYPMTM]                     = info[FD_TYPMTM] or _Cache()
+            info[FD_TYPMTM][name]               = func
+            if name ~= META_KEYS[name] then
+                info[FD_TYPMTM][META_KEYS[name]]= func
+            end
 
-            if tfunc == "function" then
-                attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, owner, name)
+            if tfunc == "table" then
+                info[FD_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
+            elseif tfunc == "function" then
+                attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
             end
         else
             error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The is not valid."):format(tostring(tType), tostring(tType)), stack)
@@ -3549,12 +3997,12 @@ do
     end
 
     local function setDispose(tType, target, func, stack)
-        local info, def = getTargetInfo(owner)
+        local info, def = getTargetInfo(target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
         if info then
             if type(func) ~= "function" then error(("Usage: %s.SetDispose(%s, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetDispose(%s, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
+            if not def then error(("Usage: %s.SetDispose(%s, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
 
             info[FD_DISPOSE] = func
         else
@@ -3567,7 +4015,7 @@ do
         stack = (type(stack) == "number" and stack or 2) + 1
 
         if info then
-            if not def then error(("Usage: %s.%s(%s[, stack]) - The %s's definition is finished."):format(tostring(tType), methodName, tostring(tType), tostring(owner)), stack) end
+            if not def then error(("Usage: %s.%s(%s[, stack]) - The %s's definition is finished."):format(tostring(tType), methodName, tostring(tType), tostring(target)), stack) end
             if not validateFlags(flag, info[FD_MOD]) then
                 info[FD_MOD] = turnOnFlags(flag, info[FD_MOD])
             end
@@ -3576,20 +4024,20 @@ do
         end
     end
 
-    local function setStaticFeature(tType, owner, name, stack)
-        local info, def = getTargetInfo(owner)
+    local function setStaticFeature(tType, target, name, stack)
+        local info, def = getTargetInfo(target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
         if info then
             if type(name) ~= "string" then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
             name = strtrim(name)
             if name == "" then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
+            if not def then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
             if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
                 if info[FD_STAFTR] and info[FD_STAFTR][name] or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's %q's definition is finished, can't set as static."):format(tostring(tType), tostring(tType), tostring(owner), name), stack)
+                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's %q's definition is finished, can't set as static."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
                 else
-                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s has no feature named %q."):format(tostring(tType), tostring(tType), tostring(owner), name), stack)
+                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s has no feature named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
                 end
             end
 
@@ -3600,42 +4048,70 @@ do
         end
     end
 
-    local function setStaticMethod(tType, owner, name, stack)
-        local info, def = getTargetInfo(owner)
+    local function setStaticMethod(tType, target, name, stack)
+        local info, def = getTargetInfo(target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
         if info then
             if type(name) ~= "string" then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
             name = strtrim(name)
             if name == "" then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(owner)), stack) end
-            if not info[name] then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s has no method named %q."):format(tostring(tType), tostring(tType), tostring(owner), name), stack) end
-            if info[FD_OBJMTD] and info[FD_OBJMTD][name] == true then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %q is a require method."):format(tostring(tType), tostring(tType), name), stack) end
+            if not def then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
+            if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s has no method named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack) end
+            if info[FD_TYPMTD][name] == true then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %q is a require method."):format(tostring(tType), tostring(tType), name), stack) end
 
-            if info[FD_OBJMTD] then info[FD_OBJMTD][name] = nil end
+            if info[name] == nil then
+                info[name] = info[FD_TYPMTD][name]
+                info[FD_TYPMTD][name] = false
+            end
         else
             error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
         end
     end
 
-    local function dispatchNewFeatures(owner, stack)
-        local info = getTargetInfo(owner)
+    local function setVirtualMethod(tType, target, name, stack)
+        local info, def = getTargetInfo(target)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        if info then
+            if type(name) ~= "string" then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
+            name = strtrim(name)
+            if name == "" then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
+            if not def then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
+            if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s has no method named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack) end
+            if info[FD_TYPMTD][name] == true then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %q is a require method."):format(tostring(tType), tostring(tType), name), stack) end
+
+            if info[name] == nil then
+                info[name] = info[FD_TYPMTD][name]
+                info[FD_TYPMTD][name] = false
+            end
+        else
+            error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
+        end
+    end
+
+    local function setVirtualFeature(tType, target, name, stack)
+    end
+
+    local function setVirtualMetaMethod(tType, target, name, stack)
+    end
+
+    -- Buidler helpers
+    local function dispatchNewFeatures(target, stack)
+        local info = getTargetInfo(target)
 
         if info[FD_NEWFTR] then
             info[FD_TYPFTR] = info[FD_TYPFTR] or _Cache()
 
             for name, ftr in pairs, info[FD_NEWFTR] do
                 local ftype = getmetatable(ftr)
-                ftype.EndDefinition(ftr, owner, name, stack + 1)
+                ftype.EndDefinition(ftr, target, name, stack + 1)
 
                 info[FD_TYPFTR][name]       = ftr
 
                 if ftype.IsStatic(ftr) then
                     info[FD_STAFTR]         = info[FD_STAFTR] or _Cache()
                     info[FD_STAFTR][name]   = ftr
-                elseif ftype.IsRequire(ftr) then
-                    info[FD_REQFTR]         = info[FD_REQFTR] or _Cache()
-                    info[FD_REQFTR][name]   = ftr
                 else
                     info[FD_OBJFTR]         = info[FD_OBJFTR] or _Cache()
                     info[FD_OBJFTR][name]   = ftr
@@ -3644,6 +4120,63 @@ do
 
             _Cache(info[FD_NEWFTR])
             info[FD_NEWFTR] = nil
+        end
+    end
+
+    local function getIfBuilderValue(self, name)
+        -- Access methods
+        local info = getTargetInfo(typebuilder.GetBuilderOwner(self))
+        if info and info[name] then return info[name], true end
+        return getValueFromBuidler(self, name)
+    end
+
+    local function getClsBuilderValue(self, name)
+        -- Access methods
+        local info = getTargetInfo(typebuilder.GetBuilderOwner(self))
+        if info and info[name] then return info[name], true end
+        return getValueFromBuidler(self, name)
+    end
+
+    local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
+        local tkey  = type(key)
+        local tval  = type(value)
+
+        stack       = stack + 1
+
+        if tkey == "string" and not tonumber(key) then
+            if tval == "function" then
+                if key == MTD_INIT then
+                    struct.SetInitializer(owner, value, stack)
+                    return true
+                elseif key == namespace.GetNameSpaceName(owner, true) then
+                    struct.SetValidator(owner, value, stack)
+                    return true
+                else
+                    struct.AddMethod(owner, key, value, stack)
+                    return true
+                end
+            elseif namespace.IsFeatureType(value) then
+                if key == MTD_BASE then
+                    struct.SetBaseStruct(owner, value, stack)
+                else
+                    struct.AddMember(owner, key, { Type = value }, stack)
+                end
+                return true
+            elseif tval == "table" and notnewindex then
+                struct.AddMember(owner, key, value, stack)
+                return true
+            end
+        elseif tkey == "number" then
+            if tval == "function" then
+                struct.SetValidator(owner, value, stack)
+            elseif namespace.IsFeatureType(value) then
+                struct.SetArrayElement(owner, value, stack)
+            elseif tval == "table" then
+                struct.AddMember(owner, value, stack)
+            else
+                struct.SetDefault(owner, value, stack)
+            end
+            return true
         end
     end
 
@@ -3672,11 +4205,23 @@ do
                 if not target then error("Usage: interface.BeginDefinition(interface[, stack]) - interface not existed", stack) end
 
                 local info      = _ICInfo[target]
-
                 if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: interface.BeginDefinition(interface[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
                 if _BDInfo[target] then error(("Usage: interface.BeginDefinition(interface[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
 
-                local ninfo     = tblclone(info, _Cache(), true)
+                -- Only one thread can be allowed to define class or interface
+                beginDefinition(target, stack + 1)
+
+                local ninfo     = _Cache()
+
+                ninfo[FD_SUPCACH] = false
+                ninfo[FD_OBJFTR]  = false
+                ninfo[FD_OBJMTD]  = false
+                ninfo[FD_OBJMTM]  = false
+                tblclone(info, ninfo, true)
+                ninfo[FD_SUPCACH] = nil
+                ninfo[FD_OBJFTR]  = nil
+                ninfo[FD_OBJMTD]  = nil
+                ninfo[FD_OBJMTM]  = nil
 
                 _BDInfo[target] = ninfo
 
@@ -3691,40 +4236,36 @@ do
 
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, nil, nil, nil, unpack(ninfo, FD_STEXT))
 
-                local meta      = _Cache()
-
                 -- End new type feature's definition
                 dispatchNewFeatures(target, stack + 1)
-                for i = #ninfo, FD_STEXT, -1 do saveCacheFromSuper(ninfo, ninfo[i], meta) end
-                if ninfo[FD_METAMD] then tblclone(ninfo[FD_METAMD], meta, false, true) end
 
-                _BDInfo[target] = nil
+                -- Re-generate the extended interfaces order list
+                local lst, spc  = generateSuperInfo(ninfo, _Cache())
+                local idxIF     = FD_STEXT + #lst
 
-                -- Save the object meta-methods
-                if next(meta) then
-                    ninfo[FD_OBJMET]    = meta
-                else
-                    ninfo[FD_OBJMET]    = nil
-                    _Cache(meta)
-                    meta                = nil
+                for i, extif in ipairs, lst, 0 do
+                    ninfo[idxIF - i]= extif
                 end
 
-                -- Check if only one required method
-                local reqMethod = hasOnly1ReqMethod(ninfo)
-                if reqMethod then
-                    ninfo[FD_ONEREQ]    = reqMethod
-                else
-                    ninfo[FD_ONEREQ]    = nil
-                end
+                _Cache(lst)
 
-                -- Generate new __index if it's a table
-                if meta and type(meta[META_KEYS[MTD_INDEX]]) == "table" then
-                    local _index        = meta[META_KEYS[MTD_INDEX]]
-                    meta[META_KEYS[MTD_INDEX]] = function(self, key) return _index[key] end
-                end
+                -- Check require methods and features
+                -- Generate the super cache
+
+
+
+                local onlyreq       = nil
+                for k, v in pairs, getUniqueReqMethod(ninfo) do if onlyreq then onlyreq = nil break else onlyreq = k end end
+                ninfo[FD_ONEVRM]    = onlyreq
+
+                -- End interface's definition
+                _BDInfo[target]     = nil
 
                 -- Save as new interface's info
-                _ICInfo[target]   = ninfo
+                _ICInfo[target]     = ninfo
+
+                -- Release the lock, so other threads can be used to define interface or class
+                endDefinition(target, stack + 1)
 
                 attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_INTERFACE)
 
@@ -3736,13 +4277,14 @@ do
                 if info then
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-                        for _, extif in ipairs, info, FD_STEXT - 1 do tinsert(cache, extif) end
+                        for i   = #info, FD_STEXT, -1 do tinsert(cache, info[i]) end
                         return cache
                     else
-                        local m = FD_RLCTOR / 10    -- Just large enough
+                        local m = #info
+                        local u = m - FD_STEXT
                         return function(self, n)
-                            if type(n) == "number" and n >= 0 and n < m then
-                                local v = info[n + FD_STEXT]
+                            if type(n) == "number" and n >= 0 and n <= u then
+                                local v = info[m - n]
                                 if v then return n + 1, v end
                             end
                         end, target, 0
@@ -3755,42 +4297,30 @@ do
             ["GetFeature"]      = function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local feature = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name] or info[FD_OBJFTR] and info[FD_OBJFTR][name]
-                    return feature and getmetatable(feature).GetFeature(feature)
+                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    return featr and getmetatable(featr).GetFeature(featr)
                 end
             end;
 
             ["GetObjectFeature"]= function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local feature = def and info[FD_NEWFTR] and info[FD_NEWFTR][name]
-                    if feature then
-                        if getmetatable(feature).IsStatic(feature) then return nil end
-                    else
-                        feature = info[FD_OBJFTR] and info[FD_OBJFTR][name]
+                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    if featr then
+                        local t = getmetatable(featr)
+                        if not t.IsStatic(featr) then return t.GetFeature(featr) end
                     end
-                    return feature and getmetatable(feature).GetFeature(feature)
                 end
             end;
 
             ["GetStaticFeature"]= function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local feature = def and info[FD_NEWFTR] and info[FD_NEWFTR][name]
-                    if feature then
-                        if not getmetatable(feature).IsStatic(feature) then return nil end
-                    else
-                        feature = info[FD_STAFTR] and info[FD_STAFTR][name]
+                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    if featr then
+                        local t = getmetatable(featr)
+                        if t.IsStatic(featr) then return t.GetFeature(featr) end
                     end
-                    return feature and getmetatable(feature).GetFeature(feature)
-                end
-            end;
-
-            ["GetTypeFeature"]  = function(target, name)
-                local info, def = getTargetInfo(target)
-                if info and type(name) == "string" then
-                    local feature = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
-                    return feature and getmetatable(feature).GetFeature(feature)
                 end
             end;
 
@@ -3801,16 +4331,13 @@ do
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
 
                         if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do cache[k] = getmetatable(v).GetFeature(v) end end
-                        if info[FD_STAFTR] then for k, v in pairs, info[FD_STAFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
-                        if info[FD_OBJFTR] then for k, v in pairs, info[FD_OBJFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
+                        if info[FD_TYPFTR] then for k, v in pairs, info[FD_TYPFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
 
                         return cache
                     else
                         local nf = def and info[FD_NEWFTR]
-                        local sf = info[FD_STAFTR]
-                        local of = info[FD_OBJFTR]
+                        local tf = info[FD_TYPFTR]
                         local bnf= nf
-                        local bsf= sf
                         return function(self, n)
                             local v
                             if nf then
@@ -3818,15 +4345,9 @@ do
                                 if v then return n, getmetatable(v).GetFeature(v) end
                                 nf, n   = nil
                             end
-                            if sf then
-                                n, v    = next(sf, n)
-                                while n and bnf and bnf[n] do n, v = next(sf, n) end
-                                if v then return n, getmetatable(v).GetFeature(v) end
-                                sf, n   = nil
-                            end
-                            if of then
-                                n, v    = next(of, n)
-                                while n and (bnf and bnf[n] or bsf and bsf[n]) do n, v = next(of, n) end
+                            if tf then
+                                n, v    = next(tf, n)
+                                while n and bnf and bnf[n] do n, v = next(tf, n) end
                                 if v then return n, getmetatable(v).GetFeature(v) end
                             end
                         end, target
@@ -3843,12 +4364,12 @@ do
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
 
                         if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do if not getmetatable(v).IsStatic(v) then cache[k] = getmetatable(v).GetFeature(v) end end end
-                        if info[FD_OBJFTR] then for k, v in pairs, info[FD_OBJFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
+                        if info[FD_TYPFTR] then for k, v in pairs, info[FD_TYPFTR] do if not cache[k] and not getmetatable(v).IsStatic(v) then cache[k] = getmetatable(v).GetFeature(v) end end end
 
                         return cache
                     else
                         local nf = def and info[FD_NEWFTR]
-                        local of = info[FD_OBJFTR]
+                        local tf = info[FD_TYPFTR]
                         local bnf= nf
                         return function(self, n)
                             local v
@@ -3858,9 +4379,9 @@ do
                                 if v then return n, getmetatable(v).GetFeature(v) end
                                 nf, n   = nil
                             end
-                            if of then
-                                n, v    = next(of, n)
-                                while n and bnf and bnf[n] do n, v = next(of, n) end
+                            if tf then
+                                n, v    = next(tf, n)
+                                while n and (bnf and bnf[n] or getmetatable(v).IsStatic(v)) do n, v = next(tf, n) end
                                 if v then return n, getmetatable(v).GetFeature(v) end
                             end
                         end, target
@@ -3904,59 +4425,21 @@ do
                 end
             end;
 
-            ["GetTypeFeatures"] = function(target, cache)
-                local info      = getTargetInfo(target)
-                if info then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do cache[k] = getmetatable(v).GetFeature(v) end end
-                        if info[FD_TYPFTR] then for k, v in pairs, info[FD_TYPFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
-
-                        return cache
-                    else
-                        local nf = def and info[FD_NEWFTR]
-                        local sf = info[FD_TYPFTR]
-                        local bnf= nf
-                        return function(self, n)
-                            local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                if v then return n, getmetatable(v).GetFeature(v) end
-                                nf, n   = nil
-                            end
-                            if sf then
-                                n, v    = next(sf, n)
-                                while n and bnf and bnf[n] do n, v = next(sf, n) end
-                                if v then return n, getmetatable(v).GetFeature(v) end
-                            end
-                        end, target
-                    end
-                elseif not cache then
-                    return fakefunc, target
-                end
-            end;
-
             ["GetMethod"]       = function(target, name)
                 local info, def = getTargetInfo(target)
-                return info and type(name) == "string" and (info[name] or info[FD_OBJMTD] and info[FD_OBJMTD][name]) or nil
+                return info and type(name) == "string" and info[name] or nil
             end;
 
             ["GetObjectMethod"] = function(target, name)
                 local info      = getTargetInfo(target)
-                local method    = info and type(name) == "string" and info[FD_OBJMTD] and info[FD_OBJMTD][name] or nil
-                return method  == true and info[name] or method
+                local method    = info and type(name) == "string" and info[name]
+                return method and info[FD_TYPMTD] and info[FD_TYPMTD][name] and method or nil
             end;
 
             ["GetStaticMethod"] = function(target, name)
                 local info      = getTargetInfo(target)
                 local method    = info and type(name) == "string" and info[name]
-                return method and not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) and method or nil
-            end;
-
-            ["GetTypeMethod"]   = function(target, name)
-                local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name] or nil
+                return method and not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) and method or nil
             end;
 
             ["GetMethods"]      = function(target, cache)
@@ -3964,28 +4447,14 @@ do
                 if info then
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
                         for k, v in pairs, info do if type(k) == "string" then cache[k] = v end end
-                        if info[FD_OBJMTD] then for k, v in pairs, info[FD_OBJMTD] do if not cache[k] then cache[k] = v end end end
-
                         return cache
                     else
-                        local nf = info
-                        local of = info[FD_OBJMTD]
-                        local bnf= nf
                         return function(self, n)
                             local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                while n and type(n) ~= "string" do n, v = next(nf, n) end
-                                if v then return n, v end
-                                nf, n   = nil
-                            end
-                            if of then
-                                n, v    = next(of, n)
-                                while n and bnf and bnf[n] do n, v = next(of, n) end
-                                if v then return n, v end
-                            end
+                            n, v    = next(info, n)
+                            while n and type(n) ~= "string" do n, v = next(info, n) end
+                            if v then return n, v end
                         end, target
                     end
                 elseif not cache then
@@ -3996,21 +4465,20 @@ do
             ["GetObjectMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
+                    local obm   = info[FD_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        if info[FD_OBJMTD] then for k, v in pairs, info[FD_OBJMTD] do cache[k] = v == true and info[k] or v end end
-
+                        if obm then for k, v in pairs, info do if obm[k] then cache[k] = v end end end
                         return cache
-                    else
-                        local of = info[FD_OBJMTD]
+                    elseif obm then
                         return function(self, n)
                             local v
-                            if of then
-                                n, v    = next(of, n)
-                                if v then return n, v == true and info[n] or v end
-                            end
+                            n, v    = next(info, n)
+                            while n and not obm[n] do n, v = next(info, n) end
+                            if v then return n, v end
                         end, target
+                    else
+                        return fakefunc, target
                     end
                 elseif not cache then
                     return fakefunc, target
@@ -4020,47 +4488,17 @@ do
             ["GetStaticMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
+                    local obm   = info[FD_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        for k, v in pairs, info do if type(k) == "string" and not (info[FD_OBJMTD] and info[FD_OBJMTD][k]) then cache[k] = v end end
-
+                        for k, v in pairs, info do if type(k) == "string" and not (obm and obm[k]) then cache[k] = v end end
                         return cache
                     else
-                        local nf = info
-                        local of = info[FD_OBJMTD]
                         return function(self, n)
                             local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                while n and (type(n) ~= "string" or of and of[n]) do n, v = next(nf, n) end
-                                if v then return n, v end
-                            end
-                        end, target
-                    end
-                elseif not cache then
-                    return fakefunc, target
-                end
-            end;
-
-            ["GetTypeMethods"]  = function(target, cache)
-                local info      = getTargetInfo(target)
-                if info then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
-
-                        for k, v in pairs, info do if type(k) == "string" then cache[k] = v end end
-
-                        return cache
-                    else
-                        local nf = info
-                        return function(self, n)
-                            local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                while n and type(n) ~= "string" do n, v = next(nf, n) end
-                                if v then return n, v end
-                            end
+                            n, v    = next(info, n)
+                            while n and (type(n) ~= "string" or obm and obm[n]) do n, v = next(info, n) end
+                            if v then return n, v end
                         end, target
                     end
                 elseif not cache then
@@ -4074,7 +4512,10 @@ do
             end;
 
             ["IsSubType"]       = function(target, extendIF)
-                return interface.Validate(extendIF) and (target == extendIF or isExtend(target, extendIF)) or false
+                if target == extendIF then return true end
+                local info = getTargetInfo(target)
+                if info then for _, extif in ipairs, info, FD_STEXT - 1 do if extif == extendIF then return true end end end
+                return false
             end;
 
             ["IsFinal"]         = function(target)
@@ -4095,7 +4536,12 @@ do
 
             ["IsRequireMethod"] = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name] and info[FD_OBJMTD] and info[FD_OBJMTD][name] == true or false
+                return info and type(name) == "string" and info[name] and info[FD_TYPMTD] and info[FD_TYPMTD][name] == true or false
+            end;
+
+            ["IsRequireMetaMethod"] = function(target, name)
+                local info      = getTargetInfo(target)
+                return info and type(name) == "string" and info[FD_TYPMTM] and info[FD_TYPMTM][name] == true or false
             end;
 
             ["IsStaticFeature"] = function(target, name)
@@ -4106,11 +4552,15 @@ do
 
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name] and not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) and true or false
+                return info and type(name) == "string" and info[name] and not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) and true or false
             end;
 
             ["SetFinal"]        = function(target, stack)
                 setModifiedFlag(interface, target, MD_FINAL, "SetFinal", stack)
+            end;
+
+            ["SetDispose"]      = function(target, func, stack)
+                setDispose(interface, target, func, stack)
             end;
 
             ["SetInitializer"]  = function(target, func, stack)
@@ -4120,14 +4570,10 @@ do
                 if info then
                     if not def then error(("Usage: interface.SetInitializer(interface, initializer[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: interface.SetInitializer(interface, initializer) - The initializer must be a function.", stack) end
-                    info[FD_CTOR] = func
+                    info[FD_INIT] = func
                 else
                     error("Usage: interface.SetInitializer(interface, initializer[, stack]) - The interface is not valid.", stack)
                 end
-            end;
-
-            ["SetDispose"]      = function(target, func, stack)
-                setDispose(interface, target, func, stack)
             end;
 
             ["SetRequireClass"] = function(target, cls, stack)
@@ -4149,44 +4595,61 @@ do
             end;
 
             ["SetRequireFeature"]= function(target, name)
-                local info, def = getTargetInfo(owner)
+                local info, def = getTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
                     if type(name) ~= "string" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - the name must be a string.", stack) end
                     name = strtrim(name)
                     if name == "" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's definition is finished."):format(tostring(owner)), stack) end
+                    if not def then error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
                     if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
                         if info[FD_STAFTR] and info[FD_STAFTR][name] or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's %q's definition is finished, can't set as require."):format(tostring(owner), name), stack)
+                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's %q's definition is finished, can't set as require."):format(tostring(target), name), stack)
                         else
-                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s has no feature named %q."):format(tostring(owner), name), stack)
+                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s has no feature named %q."):format(tostring(target), name), stack)
                         end
                     end
 
                     local feature = info[FD_NEWFTR][name]
-                    getmetatable(feature).SetStatic(feature, stack + 1)
+                    getmetatable(feature).SetRequire(feature, stack + 1)
                 else
                     error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The interface is not valid.", stack)
                 end
             end;
 
             ["SetRequireMethod"]= function(target, name, stack)
-                local info, def = getTargetInfo(owner)
+                local info, def = getTargetInfo(target)
                 stack = (type(stack) == "number" and stack or 2) + 1
 
                 if info then
                     if type(name) ~= "string" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - the name must be a string.", stack) end
                     name = strtrim(name)
                     if name == "" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s's definition is finished."):format(tostring(owner)), stack) end
-                    if not info[name] then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s has no method named %q."):format(tostring(owner), name), stack) end
-                    if not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %q is a static method."):format(name), stack) end
+                    if not def then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if not info[name] then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s has no method named %q."):format(tostring(target), name), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %q is a static method."):format(name), stack) end
 
-                    info[FD_OBJMTD][name] = true
+                    info[FD_TYPMTD][name] = true
                 else
                     error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The interface is not valid.", stack)
+                end
+            end;
+
+            ["SetRequireMetaMethod"] = function(target, name, stack)
+                local info, def = getTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 2) + 1
+
+                if info then
+                    if type(name) ~= "string" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - the name must be a string.", stack) end
+                    name = strtrim(name)
+                    if name == "" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The name can't be empty.", stack) end
+                    if not def then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if not info[name] then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s has no method named %q."):format(tostring(target), name), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %q is a static method."):format(name), stack) end
+
+                else
+                    error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The interface is not valid.", stack)
                 end
             end;
 
@@ -4203,7 +4666,10 @@ do
             end;
 
             ["ValidateValue"]   = function(extendIF, value)
-                return interface.IsSubType(getmetatable(value), extendIF) or false
+                local cls       = getmetatable(value)
+                local info      = cls and getTargetInfo(cls)
+                if info then return info[FD_SUPINFO] and info[FD_SUPINFO][extendIF] and true or false end
+                return false
             end;
 
             ["Validate"]        = function(target)
@@ -4231,22 +4697,425 @@ do
         end,
     }
 
+    class           = Prototype.NewPrototype {
+        __index     = {
+            ["AddExtend"]       = function(target, extendinterface, stack)
+                addExtend(class, target, extendinterface, stack)
+            end;
+
+            ["AddFeature"]      = function(target, ftype, name, definition, stack)
+                addFeature(class, target, ftype, name, definition, stack)
+            end;
+
+            ["AddMetaMethod"]   = function(target, name, func, stack)
+                addMetaMethod(class, target, name, func, stack)
+            end;
+
+            ["AddMethod"]       = function(target, name, func, stack)
+                addMethod(class, target, name, func, stack)
+            end;
+
+            ["BeginDefinition"] = function(target, stack)
+                stack = type(stack) == "number" and stack or 2
+
+                target          = interface.Validate(target)
+                if not target then error("Usage: class.BeginDefinition(class[, stack]) - class not existed", stack) end
+
+                local info      = _ICInfo[target]
+
+                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
+                if _BDInfo[target] then error(("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
+
+                -- Only one thread can be allowed to define class or interface
+                beginDefinition(target, stack + 1)
+
+                local ninfo     = _Cache()
+
+                ninfo[FD_SUPCACH]   = false
+                ninfo[FD_SUPINFO]   = false
+                ninfo[FD_OBJMTD]    = false
+                ninfo[FD_OBJFTR]    = false
+                ninfo[FD_OBJMTM]    = false
+                tblclone(info, ninfo, true)
+                ninfo[FD_SUPINFO]   = nil
+                ninfo[FD_SUPCACH]   = nil
+                ninfo[FD_OBJMTD]    = nil
+                ninfo[FD_OBJFTR]    = nil
+                ninfo[FD_OBJMTM]    = nil
+
+                _BDInfo[target] = ninfo
+
+                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_CLASS, stack + 1)
+            end;
+
+            ["EndDefinition"]   = function(target, stack)
+                local ninfo     = _BDInfo[target]
+                if not ninfo then return end
+
+                stack = type(stack) == "number" and stack or 2
+
+                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, nil, unpack(ninfo, ninfo[FD_SUPCLS] and FD_SUPCLS or FD_STEXT))
+
+                -- End new type feature's definition
+                dispatchNewFeatures(target, stack + 1)
+
+                -- The init & dispose link for extended interfaces & super classes
+                local initIdx   = FD_STINIT
+                local dispIdx   = FD_ENDISP
+
+                if validateFlags(MD_ABSCLS, ninfo[FD_MOD]) then
+                    local lst   = generateSuperInfo(ninfo, _Cache())
+                    local idxIF = FD_STEXT + #lst
+
+                    for i, extif in ipairs, lst, 0 do
+                        ninfo[idxIF - i]= extif
+                    end
+
+                    _Cache(lst)
+
+                    ninfo[FD_SIMPCLS]   = nil
+                    ninfo[FD_SUPINFO]   = nil
+                    ninfo[FD_CTOR ]   = nil
+                    ninfo[FD_CLINIT ]   = nil
+
+                    if ninfo[FD_TYPMTD] then ninfo[FD_TYPMTD][MTD_DISPOB] = nil end
+                else
+                    -- Interface Order List, Super info cache
+                    local lst, spc  = generateSuperInfo(ninfo, _Cache(), _Cache())
+
+                    -- New meta table
+                    local meta      = _Cache()
+                    local rlCtor    = nil
+                    local idxIF     = FD_STEXT + #lst
+
+                    -- Save Dispose for super classes
+                    for _, sinfo in ipairs, spc, 0 do
+                        if sinfo[FD_DISPOSE] then
+                            ninfo[dispIdx]  = sinfo[FD_DISPOSE]
+                            dispIdx         = dispIdx - 1
+                        end
+                    end
+
+                    -- Save class's dispose
+                    if ninfo[FD_DISPOSE] then
+                        ninfo[dispIdx]  = ninfo[FD_DISPOSE]
+                        dispIdx         = dispIdx - 1
+                    end
+
+                    -- Save Initializer & Dispose for extended interfaces
+                    for i, extif in ipairs, lst, 0 do
+                        ninfo[idxIF - i]= extif
+
+                        local sinfo     = spc[extif]
+                        saveFeatureFromSuper(ninfo, sinfo, meta)
+
+                        if sinfo[FD_INIT] then
+                            ninfo[initIdx]  = sinfo[FD_INIT]
+                            initIdx         = initIdx + 1
+                        end
+
+                        if sinfo[FD_DISPOSE] then
+                            ninfo[dispIdx]  = sinfo[FD_DISPOSE]
+                            dispIdx         = dispIdx - 1
+                        end
+                    end
+
+                    _Cache(lst)
+
+                    -- Save features from super classes
+                    for i, sinfo in ipairs, spc, 0 do
+                        rlCtor  = sinfo[FD_INIT] or rlCtor
+                        saveFeatureFromSuper(ninfo, sinfo, meta)
+                    end
+
+                    -- Clear super classes info
+                    if not next(spc) then _Cache(spc) spc = nil end
+
+                    -- Saving informations
+                    tblclone(ninfo[FD_TYPMTM], meta, false, true)
+                    ninfo[FD_CLINIT]    = ninfo[FD_INIT] or rlCtor
+                    ninfo[FD_SIMPCLS]   = not (ninfo[FD_CLINIT] or ninfo[FD_OBJFTR]) or nil
+                    ninfo[FD_SUPINFO]   = spc
+                    if ninfo[FD_OBJFTR] and not next(ninfo[FD_OBJFTR]) then _Cache(ninfo[FD_OBJFTR]) ninfo[FD_OBJFTR]= nil end
+
+                    -- Always have a dispose method
+                    local FD_STDISP     = dispIdx + 1
+                    ninfo[FD_TYPMTD]    = ninfo[FD_TYPMTD] or _Cache()
+                    ninfo[FD_TYPMTD][MTD_DISPOB] = function(self)
+                        for i = FD_STDISP, FD_ENDISP do ninfo[i](self) end
+                        rawset(wipe(self), "Disposed", true)
+                    end
+
+                    generateMetaIndex   (ninfo, meta)
+                    generateMetaNewIndex(ninfo, meta)
+                    meta[MTD_META]    = target
+
+                    generateConstructor(ninfo, meta)
+                end
+
+                -- Clear non-used init & dispose
+                while ninfo[initIdx] do ninfo[initIdx] = nil initIdx = initIdx + 1 end
+                while ninfo[dispIdx] do ninfo[dispIdx] = nil dispIdx = dispIdx - 1 end
+
+                -- Finish the definition
+                _BDInfo[target] = nil
+
+                -- Save as new class's info
+                _ICInfo[target]   = ninfo
+
+                -- Release the lock to allow other threads continue to define class or interface
+                endDefinition(target, stack + 1)
+
+                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_CLASS)
+
+                return target
+            end;
+
+            ["GetExtends"]      = interface.GetExtends;
+
+            ["GetFeature"]      = interface.GetFeature;
+
+            ["GetObjectFeature"]= interface.GetObjectFeature;
+
+            ["GetStaticFeature"]= interface.GetStaticFeature;
+
+            ["GetFeatures"]     = interface.GetFeatures;
+
+            ["GetObjectFeatures"] = interface.GetObjectFeatures;
+
+            ["GetStaticFeatures"] = interface.GetStaticFeatures;
+
+            ["GetMethod"]       = interface.GetMethod;
+
+            ["GetObjectMethod"] = interface.GetObjectMethod;
+
+            ["GetStaticMethod"] = interface.GetStaticMethod;
+
+            ["GetMethods"]      = interface.GetMethods;
+
+            ["GetObjectMethods"]= interface.GetObjectMethods;
+
+            ["GetStaticMethods"]= interface.GetStaticMethods;
+
+            ["GetSuperClass"]   = function(target)
+                local info      = getTargetInfo(target)
+                return info and info[FD_SUPCLS]
+            end;
+
+            ["IsSubType"]       = function(target, supertype)
+                if target == supertype then return true end
+                local info = getTargetInfo(target)
+                if info then
+                    local sinfo = info[FD_SUPINFO]
+                    if sinfo then return sinfo[supertype] and true or false end
+
+                    if class.Validate(supertype) then
+                        while info and info[FD_SUPCLS] ~= supertype do
+                            info= getTargetInfo(info[FD_SUPCLS])
+                        end
+                        if info then return true end
+                    else
+                        for _, extif in ipairs, info, FD_STEXT - 1 do if extif == supertype then return true end end
+                    end
+                end
+                return false
+            end;
+
+            ["IsAbstract"]      = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_ABSCLS, info[FD_MOD]) or false
+            end;
+
+            ["IsAutoCache"]     = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_ATCACHE, info[FD_MOD]) or false
+            end;
+
+            ["IsFinal"]         = interface.IsFinal;
+
+            ["IsObjectKeepUpdating"] = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_KPOBJUP, info[FD_MOD]) or false
+            end;
+
+            ["IsObjMethodAttrEnabled"] = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_OBJMDAT, info[FD_MOD]) or false
+            end;
+
+            ["IsRawSetBlocked"] = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_NRAWSET, info[FD_MOD]) or false
+            end;
+
+            ["IsSealed"]        = interface.IsSealed;
+
+            ["IsSimpleClass"]   = function(target)
+                local info      = getAttributeInfo(target)
+                return info and (info[FD_SIMPCLS] or validateFlags(MD_ASSPCLS, info[FD_MOD])) or false
+            end;
+
+            ["IsStaticFeature"] = interface.IsStaticFeature;
+
+            ["IsStaticMethod"]  = interface.IsStaticMethod;
+
+            ["SetAbstract"]     = function(target, stack)
+                setModifiedFlag(class, target, MD_ABSCLS, "SetAbstract", stack)
+            end;
+
+            ["SetAutoCache"]    = function(target, stack)
+                setModifiedFlag(class, target, MD_ATCACHE, "SetAutoCache", stack)
+            end;
+
+            ["SetAsSimpleClass"]= function(target, stack)
+                setModifiedFlag(class, target, MD_ASSPCLS, "SetAsSimpleClass", stack)
+            end;
+
+            ["SetConstructor"]  = function(target, func, stack)
+                local info, def = getTargetInfo(target)
+                stack = type(stack) == "number" and stack or 2
+
+                if info then
+                    if not def then error(("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function.", stack) end
+
+                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, stack + 1)
+                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, nil, target, name)
+
+                    info[FD_INIT] = func
+
+                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, nil, target, name)
+                else
+                    error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid.", stack)
+                end
+            end;
+
+            ["SetDispose"]      = function(target, func, stack)
+                setDispose(class, target, func, stack)
+            end;
+
+            ["SetFinal"]        = function(target, stack)
+                setModifiedFlag(class, target, MD_FINAL, "SetFinal", stack)
+            end;
+
+            ["SetObjectKeepUpdating"] = function(target, stack)
+                setModifiedFlag(class, target, MD_KPOBJUP, "SetObjectKeepUpdating", stack)
+            end;
+
+            ["SetObjMethodAttrEnabled"] = function(target, stack)
+                setModifiedFlag(class, target, MD_OBJMDAT, "SetObjMethodAttrEnabled", stack)
+            end;
+
+            ["SetRawSetBlocked"]= function(target, stack)
+                setModifiedFlag(class, target, MD_NRAWSET, "SetRawSetBlocked", stack)
+            end;
+
+            ["SetSealed"]       = function(target, stack)
+                setModifiedFlag(class, target, MD_SEAL, "SetSealed", stack)
+            end;
+
+            ["SetSuperClass"]   = function(target, cls, stack)
+                stack = type(stack) == "number" and stack or 2
+
+                if not class.Validate(target) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the class is not valid.", stack) end
+
+                local info, def = getTargetInfo(target)
+
+                if info then
+                    if not class.Validate(cls) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the superclass must be a class.", stack) end
+                    if not def then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s' definition is finished."):format(tostring(target)), stack) end
+                    if info[FD_SUPCLS] and info[FD_SUPCLS] ~= cls then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s already has a super class."):format(tostring(target)), stack) end
+
+                    if info[FD_SUPCLS] then return end
+
+                    addSuperType(info, target, cls)
+                else
+                    error("Usage: class.SetSuperClass(class, superclass[, stack]) - The class is not valid.", stack)
+                end
+            end;
+
+            ["SetStaticFeature"]= function(target, name, stack)
+                setStaticFeature(class, target, name, stack)
+            end;
+
+            ["SetStaticMethod"] = function(target, name, stack)
+                setStaticMethod(class, target, name, stack)
+            end;
+
+            ["ValidateValue"]   = function(cls, value)
+                local ocls      = getmetatable(value)
+                if not ocls     then return false end
+                if ocls == cls  then return true end
+                local info      = _ObjMap[value] or getTargetInfo(ocls)
+                return info and info[FD_SUPINFO] and info[FD_SUPINFO][cls] and true or false
+            end;
+
+            ["Validate"]        = function(target)
+                return getmetatable(target) == class and getTargetInfo(target) and target or nil
+            end;
+        },
+        __newindex  = readOnly,
+        __concat    = typeconcat,
+        __tostring  = function() return "class" end,
+        __call      = function(self, ...)
+            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(class, tclass, ...)
+            if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created.", stack) end
+
+            class.BeginDefinition(target, stack + 1)
+
+            local builder = typebuilder.NewBuilder(classbuilder, target, env)
+
+            if definition then
+                builder(definition, stack + 1)
+                return target
+            else
+                if not keepenv then setfenv(stack, builder) end
+                return builder
+            end
+        end,
+    }
+
     tinterface      = Prototype.NewPrototype(tnamespace, {
-        __index     = function(self, name)
-            if type(name) == "string" then
+        __index     = function(self, key)
+            if type(key) == "string" then
                 -- Access methods
                 local info  = _ICInfo[self]
                 if info then
-                    if META_KEYS[name] then
-                        val = info[FD_METAMD] and info[FD_METAMD][name]
-                    else
-                        val = info[name] or info[FD_OBJMTD] and info[FD_OBJMTD][name]
-                    end
+                    -- Meta-methods
+                    local oper  = META_KEYS[key]
+                    if oper then return info[FD_TYPMTM] and info[FD_TYPMTM][oper] or nil end
+
+                    -- Static or object methods
+                    oper  = info[key]
+                    if oper then return oper end
+
+                    -- Static features
+                    oper  = info[FD_STAFTR] and info[FD_STAFTR][key]
+                    if oper then return oper:Get(self) end
                 end
 
                 -- Access child-namespaces
-                return val or getNameSpace(self, name)
+                return getNameSpace(self, key)
             end
+        end,
+        __newindex  = function(self, key, value)
+            if type(key) == "string" then
+                local info  = _ICInfo[self]
+
+                if info then
+                    -- Static features
+                    local oper  = info[FD_STAFTR] and info[FD_STAFTR][key]
+                    if oper then oper:Set(self, value) return end
+
+                    -- Try add methods
+                    if type(value) == "function" then
+                        interface.AddMethod(self, key, value, 3)
+                        return
+                    end
+                end
+            end
+
+            error(("The %s is readonly."):format(tostring(self)), 2)
         end,
         __call      = function(self, init)
             local info  = _ICInfo[self]
@@ -4257,8 +5126,8 @@ do
             end
 
             if type(init) == "function" then
-                if not info[FD_ONEREQ] then error(("Usage: %s(init) - the interface isn't an one method required interface."):format(tostring(self)), 2) end
-                init    = { [info[FD_ONEREQ]] = init }
+                if not info[FD_ONEVRM] then error(("Usage: %s(init) - the interface isn't an one method required interface."):format(tostring(self)), 2) end
+                init    = { [info[FD_ONEVRM]] = init }
             end
 
             if init and type(init) ~= "table" then error(("Usage: %s(init) - the init can only be lambda expression, function or table."):format(tostring(self)), 2) end
@@ -4266,12 +5135,10 @@ do
             local aycls = info[FD_ANYMSCL]
 
             if not aycls then
-                Lock(self)
-
-                aycls   = class( { self }, true)
-
-                Release(self)
-
+                local r = getUniqueReqMethod(info)
+                for k in pairs, r do r[k] = fakefunc end
+                r[1]    = self
+                aycls   = class(r, true)
                 info[FD_ANYMSCL] = aycls
             end
 
@@ -4279,6 +5146,89 @@ do
         end,
         __metatable = interface,
     })
+
+    tclass          = Prototype.NewPrototype(tinterface, {
+        __newindex  = function(self, key, value)
+            if type(key) == "string" then
+                local info  = _ICInfo[self]
+
+                if info then
+                    -- Static features
+                    local oper  = info[FD_STAFTR] and info[FD_STAFTR][key]
+                    if oper then oper:Set(self, value) return end
+
+                    -- Try add methods
+                    if type(value) == "function" then
+                        class.AddMethod(self, key, value, 3)
+                        return
+                    end
+                end
+            end
+
+            error(("The %s is readonly."):format(tostring(self)), 2)
+        end,
+        __call      = function(self, ...)
+            local info  = _ICInfo[self]
+            local obj   = info[FD_CTOR](...)
+            return obj
+        end,
+        __metatable = class,
+    })
+
+    tSuperInterface = Prototype.NewPrototype {
+        __index     = function(self, key)
+            local t = type(key)
+
+            if t == "string" then
+                local obj = _SuperObj[self]
+                if obj then
+                    _SuperObj[self] = nil
+                    local info  = _ObjMap[obj] or getTargetInfo(getmetatable(obj))
+                    if not info then error("Usage: Super[obj].Method(obj, [...]) - Can't figure out the obj's class.", 2) end
+                    return getSuperMethod(info, key, _SuperMap[self])
+                else
+                    local info  = _ICInfo[_SuperMap[self]]
+                    if not info then error("Usage: Super.Method(obj, [...]) - Can't figure out the type that the super represent.", 2) end
+                    local f     = info[FD_SUPCACH][key]
+                    if not f then
+                        if META_KEYS[key] then
+                            f   = getSuperMetaMethod(info, key)
+                        else
+                            f   = getSuperMethod(info, key) or getSuperFeature(info, key)
+                        end
+                        info[FD_SUPCACH][key] = f
+                    end
+                    if type(f) ~= "function" then error(("No method named %q can be find in Super."):format(key), 2) end
+                    return f
+                end
+            elseif t == "table" then
+                _SuperObj[self] = key
+                return self
+            end
+        end,
+        __newindex  = function(self, key, value)
+            if type(key) == "string" then
+                local obj = _SuperObj[self]
+                if not obj then error("Usage: Super[obj].PropA = value", 2) end
+                _SuperObj[self] = nil
+            end
+        end,
+        __metatable = interface,
+    }
+
+    tSuperClass     = Prototype.NewPrototype (tSuperInterface, {
+        __call      = function(self, obj, ...)
+
+        end,
+        __metatable = class,
+    })
+
+    tThisClass      = Prototype.NewPrototype {
+        __call      = function(self, obj, ...)
+
+        end,
+        __metatable = class,
+    }
 
     interfacebuilder= Prototype.NewPrototype {
         __index     = function(self, key)
@@ -4326,356 +5276,6 @@ do
             return owner
         end,
     }
-
-    class           = Prototype.NewPrototype {
-        __index     = {
-            ["AddExtend"]       = function(target, extendinterface, stack)
-                addExtend(class, target, extendinterface, stack)
-            end;
-
-            ["AddFeature"]      = function(target, ftype, name, definition, stack)
-                addFeature(class, target, ftype, name, definition, stack)
-            end;
-
-            ["AddMetaMethod"]   = function(target, name, func, stack)
-                addMetaMethod(class, target, name, func, stack)
-            end;
-
-            ["AddMethod"]       = function(target, name, func, stack)
-                addMethod(class, target, name, func, stack)
-            end;
-
-            ["BeginDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
-
-                target          = interface.Validate(target)
-                if not target then error("Usage: class.BeginDefinition(class[, stack]) - class not existed", stack) end
-
-                local info      = _ICInfo[target]
-
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
-                if _BDInfo[target] then error(("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
-
-                local ninfo     = tblclone(info, _Cache(), true)
-
-                _BDInfo[target] = ninfo
-
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_CLASS, stack + 1)
-            end;
-
-            ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _BDInfo[target]
-                if not ninfo then return end
-
-                stack = type(stack) == "number" and stack or 2
-
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, nil, unpack(ninfo, ninfo[FD_SUPCLS] and FD_SUPCLS or FD_STEXT))
-
-                -- End new type feature's definition
-                local meta      = _Cache()
-
-                dispatchNewFeatures(target, stack + 1)
-                for i = #ninfo, FD_STEXT, -1 do saveCacheFromSuper(ninfo, ninfo[i], meta) end
-                if ninfo[FD_SUPCLS] then saveCacheFromSuper(ninfo, ninfo[FD_SUPCLS], meta) end
-                if ninfo[FD_METAMD] then tblclone(ninfo[FD_METAMD], meta, false, true) end
-
-                _BDInfo[target] = nil
-
-                -- Generate the init & dispose link for extended interfaces & super classes
-                local icache    = _Cache()
-                local scache    = _Cache()
-                generateSuperCache(ninfo, icache, scache)
-
-                local initIdx   = FD_STINIT
-                local dispIdx   = FD_ENDISP
-
-                ninfo[FD_RLCTOR]= ninfo[FD_CTOR]
-
-                for i, extif in ipairs, icache do
-                    local sinfo = getTargetInfo(extif)
-                    if sinfo[FD_CTOR] then
-                        ninfo[initIdx]  = sinfo[FD_CTOR]
-                        initIdx         = initIdx + 1
-                    end
-                    if sinfo[FD_DISPOSE] then
-                        ninfo[dispIdx]  = sinfo[FD_DISPOSE]
-                        dispIdx         = dispIdx - 1
-                    end
-                end
-
-                for i, scls in ipairs, scache do
-                    local sinfo = getTargetInfo(scls)
-
-                    if not ninfo[FD_RLCTOR] then
-                        ninfo[FD_RLCTOR]= sinfo[FD_RLCTOR]
-                    end
-
-                    if sinfo[FD_DISPOSE] then
-                        ninfo[dispIdx]  = sinfo[FD_DISPOSE]
-                        dispIdx         = dispIdx - 1
-                    end
-                end
-
-                while ninfo[initIdx] do ninfo[initIdx] = nil initIdx = initIdx + 1 end
-                while ninfo[dispIdx] do ninfo[dispIdx] = nil dispIdx = dispIdx - 1 end
-
-                _Cache(icache)
-                _Cache(scache)
-
-                -- Whether the class is a simple class
-                if ninfo[FD_CTOR] or ninfo[FD_OBJFTR] and next(ninfo[FD_OBJFTR]) or ninfo[FD_SUPCLS] and not getTargetInfo(ninfo[FD_SUPCLS])[FD_SIMPCLS] then
-                    ninfo[FD_SIMPCLS]   = nil
-                else
-                    ninfo[FD_SIMPCLS]   = true
-                end
-
-                -- Whether the class need Dispose method
-                if ninfo[FD_ENDISP] then
-                    ninfo[FD_OBJMTD]    = ninfo[FD_OBJMTD] or _Cache()
-                    ninfo[FD_OBJMTD][MTD_DISPOB] = function(self)
-                        local dispIdx   = FD_ENDISP
-                        local disfunc   = ninfo[dispIdx]
-
-                        while disfunc do
-                            pcall(disfunc, self)
-
-                            dispIdx     = dispIdx - 1
-                            disfunc     = ninfo[dispIdx]
-                        end
-
-                        wipe(self)
-                        rawset(self, "Disposed", true)
-                    end
-                end
-
-                -- Generate the meta-table for object's prototype
-                if validateFlags(MD_ABSCLS, ninfo[FD_MOD]) then
-                    if next(meta) then
-                        ninfo[FD_OBJMET]= meta
-                    else
-                        ninfo[FD_OBJMET]= nil
-                        _Cache(meta)
-                        meta            = nil
-                    end
-                    ninfo[FD_PROTOT]    = nil
-                else
-                    generateMetaIndex(ninfo, meta)
-                    generateMetaNewIndex(ninfo, meta)
-                    meta.__metatable    = target
-
-                    ninfo[FD_OBJMET]    = meta
-                    ninfo[FD_PROTOT]    = Prototype.NewPrototype(meta)
-                end
-
-                -- Generate new __index if it's a table
-                if meta and type(meta[META_KEYS[MTD_INDEX]]) == "table" then
-                    local _index        = meta[META_KEYS[MTD_INDEX]]
-                    meta[META_KEYS[MTD_INDEX]] = function(self, key) return _index[key] end
-                end
-
-                -- Save as new class's info
-                _ICInfo[target]   = ninfo
-
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_CLASS)
-
-                return target
-            end;
-
-            ["GetExtends"]      = interface.GetExtends;
-
-            ["GetFeature"]      = interface.GetFeature;
-
-            ["GetObjectFeature"]= interface.GetObjectFeature;
-
-            ["GetStaticFeature"]= interface.GetStaticFeature;
-
-            ["GetTypeFeature"]  = interface.GetTypeFeature;
-
-            ["GetFeatures"]     = interface.GetFeatures;
-
-            ["GetObjectFeatures"] = interface.GetObjectFeatures;
-
-            ["GetStaticFeatures"] = interface.GetStaticFeatures;
-
-            ["GetTypeFeatures"] = interface.GetTypeFeatures;
-
-            ["GetMethod"]       = interface.GetMethod;
-
-            ["GetObjectMethod"] = interface.GetObjectMethod;
-
-            ["GetStaticMethod"] = interface.GetStaticMethod;
-
-            ["GetTypeMethod"]   = interface.GetTypeMethod;
-
-            ["GetMethods"]      = interface.GetMethods;
-
-            ["GetObjectMethods"]= interface.GetObjectMethods;
-
-            ["GetStaticMethods"]= interface.GetStaticMethods;
-
-            ["GetTypeMethods"]  = interface.GetTypeMethods;
-
-            ["GetSuperClass"]   = function(target)
-                local info      = getTargetInfo(target)
-                return info and info[FD_SUPCLS]
-            end;
-
-            ["IsSubType"]       = function (target, super)
-                if class.Validate(super) then
-                    while target do
-                        if target == super then return true end
-                        local i = getTargetInfo(target)
-                        target  = i and i[FD_SUPCLS]
-                    end
-                    return false
-                elseif interface.Validate(super) then
-                    return target == super or isExtend(target, super)
-                else
-                    return false
-                end
-            end;
-
-            ["IsAbstract"]      = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_ABSCLS, info[FD_MOD]) or false
-            end;
-
-            ["IsAutoCache"]     = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_ATCACHE, info[FD_MOD]) or false
-            end;
-
-            ["IsRawSetBlocked"] = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_NRAWSET, info[FD_MOD]) or false
-            end;
-
-            ["IsFinal"]         = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_FINAL, info[FD_MOD]) or false
-            end;
-
-            ["IsObjMethodAttrEnabled"] = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_OBJMDAT, info[FD_MOD]) or false
-            end;
-
-            ["IsSealed"]        = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_SEAL, info[FD_MOD]) or false
-            end;
-
-            ["IsStaticFeature"] = function(target, name)
-                local info      = getTargetInfo(target)
-                local feature   = info and (info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name])
-                return feature and getmetatable(feature).IsStatic(feature) or false
-            end;
-
-            ["IsStaticMethod"]  = function(target, name)
-                local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[name] and not (info[FD_OBJMTD] and info[FD_OBJMTD][name]) and true or false
-            end;
-
-            ["SetAbstract"]     = function(target, stack)
-                setModifiedFlag(class, target, MD_ABSCLS, "SetAbstract", stack)
-            end;
-
-            ["SetAutoCache"]    = function(target, stack)
-                setModifiedFlag(class, target, MD_ATCACHE, "SetAutoCache", stack)
-            end;
-
-            ["SetConstructor"]  = function(target, func, stack)
-                local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
-
-                if info then
-                    if not def then error(("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function.", stack) end
-                    info[FD_CTOR] = func
-                else
-                    error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid.", stack)
-                end
-            end;
-
-            ["SetDispose"]      = function(target, func, stack)
-                setDispose(class, target, func, stack)
-            end;
-
-            ["SetFinal"]        = function(target, stack)
-                setModifiedFlag(class, target, MD_FINAL, "SetFinal", stack)
-            end;
-
-            ["SetObjMethodAttrEnabled"] = function(target, stack)
-                setModifiedFlag(class, target, MD_OBJMDAT, "SetObjMethodAttrEnabled", stack)
-            end;
-
-            ["SetRawSetBlocked"]= function(target, stack)
-                setModifiedFlag(class, target, MD_NRAWSET, "SetRawSetBlocked", stack)
-            end;
-
-            ["SetSealed"]       = function(target, stack)
-                setModifiedFlag(class, target, MD_SEAL, "SetSealed", stack)
-            end;
-
-            ["SetSuperClass"]   = function(target, cls, stack)
-                stack = type(stack) == "number" and stack or 2
-
-                if not class.Validate(target) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the class is not valid.", stack) end
-
-                local info, def = getTargetInfo(target)
-
-                if info then
-                    if not class.Validate(cls) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the superclass must be a class.", stack) end
-                    if not def then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s' definition is finished."):format(tostring(target)), stack) end
-                    if info[FD_SUPCLS] and info[FD_SUPCLS] ~= cls then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s already has a super class."):format(tostring(target)), stack) end
-
-                    info[FD_SUPCLS] = cls
-                    saveCacheFromSuper(info, cls)
-                else
-                    error("Usage: class.SetSuperClass(class, superclass[, stack]) - The class is not valid.", stack)
-                end
-            end;
-
-            ["SetStaticFeature"]= function(target, name, stack)
-                setStaticFeature(class, target, name, stack)
-            end;
-
-            ["SetStaticMethod"] = function(target, name, stack)
-                setStaticMethod(class, target, name, stack)
-            end;
-
-            ["ValidateValue"]   = function(cls, value)
-                return class.IsSubType(getmetatable(value), cls) or false
-            end;
-
-            ["Validate"]        = function(target)
-                return getmetatable(target) == class and getTargetInfo(target) and target or nil
-            end;
-        },
-        __newindex  = readOnly,
-        __concat    = typeconcat,
-        __tostring  = function() return "class" end,
-        __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(class, tclass, ...)
-            if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created.", stack) end
-
-            class.BeginDefinition(target, stack + 1)
-
-            local builder = typebuilder.NewBuilder(classbuilder, target, env)
-
-            if definition then
-                builder(definition, stack + 1)
-                return target
-            else
-                if not keepenv then setfenv(stack, builder) end
-                return builder
-            end
-        end,
-    }
-
-    tclass          = Prototype.NewPrototype( tinterface, {
-
-    })
 
     classbuilder    = Prototype.NewPrototype( interfacebuilder, {
 
