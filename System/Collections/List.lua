@@ -442,4 +442,33 @@ interface "IList" (function (_ENV)
             end
         end
     end
+
+    __Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
+    function Any(self, chk, ...)
+        for _, obj in self:GetIterator() do
+            if chk(obj, ...) then return true end
+        end
+        return false
+    end
+
+    __Arguments__{ Callable, Argument(System.Any, true, nil, nil, true) }
+    function All(self, chk, ...)
+        for _, obj in self:GetIterator() do
+            if not chk(obj, ...) then return false end
+        end
+        return true
+    end
+
+    function First(self)
+        for _, obj in self:GetIterator() do
+            return obj
+        end
+    end
+
+    function FirstOrDefault(self, default)
+        for _, obj in self:GetIterator() do
+            return obj
+        end
+        return default
+    end
 end)

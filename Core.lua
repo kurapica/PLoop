@@ -7838,7 +7838,8 @@ do
             end
         end
 
-        local function raiseError(overLoads, nomatch)
+        local function raiseError(overLoads, nomatch, isnull)
+            local coverLoads = overLoads
             -- Check if this is a static method
             if overLoads.HasSelf == nil then
                 overLoads.HasSelf = true
@@ -7879,7 +7880,12 @@ do
             local msg = tblconcat(usage, "\n")
             if #usage == 1 then
                 if nomatch then
-                    msg = msg .. (" - The %d args not match."):format(nomatch)
+                    local arg = coverLoads[1][nomatch]
+                    if isnull then
+                        msg = msg .. (" - The arg [%d]%s must be %s, got nil."):format(nomatch, arg.Name or "", tostring(arg.Type))
+                    else
+                        msg = msg .. (" - The arg [%d]%s must be %s."):format(nomatch, arg.Name or "", tostring(arg.Type))
+                    end
                 else
                     msg = msg .." - The args count don't match"
                 end
@@ -7924,6 +7930,7 @@ do
             local info = coverLoads[index]
             local zeroMethod
             local nomatch = nil
+            local isnull  = false
 
             while info do
                 local argsCount = #info
@@ -7943,7 +7950,7 @@ do
                         local value = cache[i]
 
                         -- Required argument can't be nil, Validate the value
-                        if value == nil or (atype and GetValidatedValue(atype, value, true) == nil) then matched = false nomatch = i break end
+                        if value == nil or (atype and GetValidatedValue(atype, value, true) == nil) then matched = false nomatch = i isnull = (value == nil) break end
                     end
 
                     -- Optional
@@ -8061,7 +8068,7 @@ do
             end
 
             -- No match
-            raiseError(overLoads, nomatch)
+            raiseError(overLoads, nomatch, isnull)
         end
 
         ------------------------------------------------------

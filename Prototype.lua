@@ -27,11 +27,6 @@
 --                                                                           --
 --                   Prototype Lua Object-Oriented System                    --
 --                                                                           --
--- @todo : return the root namespace
--- @todo : avoid consume attribute when not needed
--- @todo : no default value of base structs
--- @todo : bind debug info with object's creation
--- @todo : raise error when got nil in definition env
 --===========================================================================--
 
 --===========================================================================--
@@ -41,141 +36,145 @@
 -- Update Date  :   2017/07/17                                               --
 -- Version      :   a001                                                     --
 --===========================================================================--
-newproxy = nil
 
 -------------------------------------------------------------------------------
 --                          Environment Preparation                          --
 -------------------------------------------------------------------------------
 do
-    local _G, rawset    = _G, rawset
-    local _PLoopEnv     = setmetatable({}, { __index = function(self, k) local v = _G[k] if v == nil then error(("Global variable %q can't be found."):format(k), 2) end rawset(self, k, v) return v end, __metatable = true })
+    local error         = error
+    local strformat     = string.format
+    local strgsub       = string.gsub
+    local _PLoopEnv     = setmetatable(
+        {
+            _G          = _G,
+            LUA_VERSION = tonumber(_VERSION and _VERSION:match("[%d%.]+")) or 5.1,
+
+            -- Weak Mode
+            WEAK_KEY    = { __mode = "k"  },
+            WEAK_VALUE  = { __mode = "v"  },
+            WEAK_ALL    = { __mode = "kv" },
+
+            -- Iterator
+            ipairs      = ipairs(_G),
+            pairs       = pairs (_G),
+            next        = next,
+            select      = select,
+
+            -- String
+            strlen      = string.len,
+            strformat   = string.format,
+            strfind     = string.find,
+            strsub      = string.sub,
+            strbyte     = string.byte,
+            strchar     = string.char,
+            strrep      = string.rep,
+            strgsub     = string.gsub,
+            strupper    = string.upper,
+            strlower    = string.lower,
+            strmatch    = string.match,
+            strgmatch   = string.gmatch,
+            strtrim     = function(s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
+
+            -- Table
+            tblconcat   = table.concat,
+            tinsert     = table.insert,
+            tremove     = table.remove,
+            unpack      = table.unpack or unpack,
+            sort        = table.sort,
+            setmetatable= setmetatable,
+            getmetatable= getmetatable,
+            rawset      = rawset,
+            rawget      = rawget,
+
+            -- Type
+            type        = type,
+            tonumber    = tonumber,
+            tostring    = tostring,
+
+            -- Math
+            floor       = math.floor,
+            mlog        = math.log,
+            mabs        = math.abs,
+
+            -- Coroutine
+            create      = coroutine.create,
+            resume      = coroutine.resume,
+            running     = coroutine.running,
+            status      = coroutine.status,
+            wrap        = coroutine.wrap,
+            yield       = coroutine.yield,
+
+            -- Safe
+            pcall       = pcall,
+            error       = error,
+            print       = print,
+            newproxy    = newproxy or false,
+
+            -- In lua 5.2, the loadstring is deprecated
+            loadstring  = loadstring or load,
+            loadfile    = loadfile,
+
+            -- Debug lib
+            debug       = debug or false,
+            debuginfo   = debug and debug.getinfo or false,
+            getupvalue  = debug and debug.getupvalue or false,
+            traceback   = debug and debug.traceback or false,
+            setfenv     = setfenv or debug and debug.setfenv or false,
+            getfenv     = getfenv or debug and debug.getfenv or false,
+        }, {
+            __index     = function(self, k)
+                error(strformat("Global variable %q can't be found", k), 2)
+            end,
+            __metatable = true
+        }
+    )
     _PLoopEnv._PLoopEnv = _PLoopEnv
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
-    -- Common features
-    ipairs              = ipairs(_PLoopEnv)
-    pairs               = pairs (_PLoopEnv)
-
-    strlen              = string.len
-    strformat           = string.format
-    strfind             = string.find
-    strsub              = string.sub
-    strbyte             = string.byte
-    strchar             = string.char
-    strrep              = string.rep
-    strgsub             = string.gsub
-    strupper            = string.upper
-    strlower            = string.lower
-    strtrim             = function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end
-
-    wipe                = function(t) for k in pairs, t do t[k] = nil end return t end
-    unpack              = table.unpack or unpack
-    tblconcat           = table.concat
-    tinsert             = table.insert
-    tremove             = table.remove
-    sort                = table.sort
-    floor               = math.floor
-    mlog                = math.log
-    mabs                = math.abs
-
-    create              = coroutine.create
-    resume              = coroutine.resume
-    running             = coroutine.running
-    status              = coroutine.status
-    wrap                = coroutine.wrap
-    yield               = coroutine.yield
-
-    setmetatable        = setmetatable
-    getmetatable        = getmetatable
-
-    -- In lua 5.2, the loadstring is deprecated
-    loadstring          = _G.loadstring or load
-    loadfile            = loadfile
-
-    -- Use false as value so we'll rebuild them in the helper section
-    newproxy            = _G.newproxy or false
-    setfenv             = _G.setfenv or false
-    getfenv             = _G.getfenv or false
-    pcall               = pcall
-end
-
--------------------------------------------------------------------------------
---                              CONST VARIABLES                              --
--------------------------------------------------------------------------------
-do
-    LUA_VERSION                     = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1
-
-    WEAK_KEY                        = { __mode = "k"  }
-    WEAK_VALUE                      = { __mode = "v"  }
-    WEAK_ALL                        = { __mode = "kv" }
-
-    -- ATTRIBUTE TARGETS
-    ATTRIBUTE_TARGETS_ALL           = 0
-    ATTRIBUTE_TARGETS_ENUM          = 2^0
-    ATTRIBUTE_TARGETS_STRUCT        = 2^1
-    ATTRIBUTE_TARGETS_INTERFACE     = 2^2
-    ATTRIBUTE_TARGETS_CLASS         = 2^3
-    ATTRIBUTE_TARGETS_FUNCTION      = 2^4
-    ATTRIBUTE_TARGETS_METHOD        = 2^5
-    ATTRIBUTE_TARGETS_METAMETHOD    = 2^6
-    ATTRIBUTE_TARGETS_CONSTRUCTOR   = 2^7
-    ATTRIBUTE_TARGETS_EVENT         = 2^8
-    ATTRIBUTE_TARGETS_PROPERTY      = 2^9
-    ATTRIBUTE_TARGETS_MEMBER        = 2^10
-    ATTRIBUTE_TARGETS_NAMESPACE     = 2^11
-
-    -- ATTRIBUTE APPLY PHASE
-    ATTRIBUTE_APPLYPH_BEFOREDEF     = 2^0
-    ATTRIBUTE_APPLYPH_AFTERDEF      = 2^1
-end
-
--------------------------------------------------------------------------------
---                                  Helper                                   --
--------------------------------------------------------------------------------
-do
     -----------------------------------------------------------------------
-    --                     Cache Manager For Threads                     --
+    --                          Share Function                           --
     -----------------------------------------------------------------------
-    _Cache      = setmetatable({}, {
-        __mode  = "k",
-        __index = function(self, thd)
-            self[thd] = setmetatable({}, WEAK_VALUE)
-            return rawget(self, thd)
-        end,
-        __call  = function(self, tbl)
-            if tbl then
-                return tinsert(self[running() or 0], wipe(tbl))
-            else
-                return tremove(self[running() or 0]) or {}
-            end
-        end,
-    })
+    wipe        = function (t) for k in pairs, t do t[k] = nil end return t end
+    fakefunc    = function () end
+    readOnly    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
+    writeOnly   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
+    typeconcat  = function (a, b) return tostring(a) .. tostring(b) end
+
+    -----------------------------------------------------------------------
+    --                          Debug Function                           --
+    -----------------------------------------------------------------------
+    getCallLine = not debuginfo and fakefunc or
+                    function (stack)
+                        local info = debuginfo((stack or 2) + 1, "lS")
+                        if info then return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?") end
+                    end
 
     -----------------------------------------------------------------------
     --                               Clone                               --
     -----------------------------------------------------------------------
-    local function deepClone(cache, src, tar, override)
-        cache[src] = tar
+    local function deepClone(src, tar, override, cache)
+        if cache then cache[src] = tar end
+
         for k, v in pairs, src do
             if override or tar[k] == nil then
                 if type(v) == "table" and getmetatable(v) == nil then
-                    tar[k] = cache[v] or deepClone(cache, v, {}, override)
+                    tar[k] = cache and cache[v] or deepClone(v, {}, override, cache)
                 else
                     tar[k] = v
                 end
             elseif type(v) == "table" and type(tar[k]) == "table" and getmetatable(v) == nil and getmetatable(tar[k]) == nil then
-                deepClone(cache, v, tar[k], override)
+                deepClone(v, tar[k], override, cache)
             end
         end
         return tar
     end
 
-    function tblclone(src, tar, deep, override)
+    function tblclone(src, tar, deep, override, safe)
         if src then
             if deep then
-                local cache = _Cache()
-                deepClone(cache, src, tar, override)
-                _Cache(cache)
+                local cache = safe and _Cache()
+                deepClone(src, tar, override, cache)   -- no cache for duplicated table
+                if safe then _Cache(cache) end
             else
                 for k, v in pairs, src do
                     if override or tar[k] == nil then tar[k] = v end
@@ -185,43 +184,12 @@ do
         return tar
     end
 
-    function clone(src, deep)
+    function clone(src, deep, safe)
         if type(src) == "table" and getmetatable(src) == nil then
-            return tblclone(src, {}, deep)
+            return tblclone(src, {}, deep, true, safe)
         else
             return src
         end
-    end
-
-    -----------------------------------------------------------------------
-    --                               Equal                               --
-    -----------------------------------------------------------------------
-    local function checkEqual(t1, t2, cache)
-        if t1 == t2 then return true end
-        if type(t1) ~= "table" or type(t2) ~= "table" then return false end
-
-        if cache[t1] == t2 then return true end
-
-        -- They should handle the __eq by themselves, no more checking
-        if getmetatable(t1) ~= nil or getmetatable(t2) ~= nil then return false end
-
-        -- Check fields
-        for k, v in pairs, t1 do if not checkEqual(v, t2[k], cache) then return false end end
-        for k, v in pairs, t2 do if t1[k] == nil then return false end end
-
-        cache[t1] = t2
-
-        return true
-    end
-
-    function isEqual(t1, t2)
-        if t1 == t2 then return true end
-        if type(t1) ~= "table" or type(t2) ~= "table" then return false end
-
-        local cache = _Cache()
-        local result= checkEqual(t1, t2, cache)
-        _Cache(cache)
-        return result
     end
 
     -----------------------------------------------------------------------
@@ -236,7 +204,7 @@ do
             -- print("--------------" .. source .. "-----------")
             -- print(chunk)
             local v, err = loadstring(chunk, source)
-            if v then setfenv(v, env or _PLoopEnv) else print("Loading error", err) end
+            if v then setfenv(v, env or _PLoopEnv) end
             return v, err
         end
     end
@@ -321,15 +289,10 @@ do
         end
     end)()
 
-    readOnly = function() error("This is readonly", 2) end
-
-    typeconcat  = function(a, b) return tostring(a) .. tostring(b) end
-
     -----------------------------------------------------------------------
     --                        Environment Control                        --
     -----------------------------------------------------------------------
     if not setfenv then
-        if not debug and require then pcall(require, "debug") end
         if debug and debug.getinfo and debug.getupvalue and debug.upvaluejoin and debug.getlocal then
             local getinfo       = debug.getinfo
             local getupvalue    = debug.getupvalue
@@ -364,32 +327,83 @@ do
                 end
             end
         else
-            getfenv = function () end
-            setfenv = function () end
+            getfenv = fakefunc
+            setfenv = fakefunc
         end
     end
 
     -----------------------------------------------------------------------
-    --                        Get Info For Types                         --
+    --                      PLOOP PLATFORM SETTINGS                      --
     -----------------------------------------------------------------------
-    function getDefaultValue(ns)
-        local meta = getmetatable(ns)
-        if meta == enum or meta == struct then
-            return meta.GetDefault(ns)
+    PLOOP_PLATFORM_SETTINGS    = (function(default)
+        local settings  = _G.PLOOP_PLATFORM_SETTINGS
+        if type(settings) == "table" then
+            for k, v in pairs, default do
+                local r = settings[k]
+                if r ~= nil then
+                    if type(r) ~= type(v) then error(("The PLOOP_PLATFORM_SETTINGS[%q]'s value must be %s."):format(k, type(v))) end
+                    default[k] = r
+                end
+            end
         end
+        return default
+    end) {
+        -- Debug
+        ATTR_USE_WARN_INSTEAD_ERROR = false,
+
+        -- Environment
+        ENV_ALLOW_GLOBAL_VAR_BE_NIL = true,
+
+        -- Enum
+        ENUM_GLOBAL_IGNORE_CASE     = false,
+
+        -- Log
+        CORE_LOG_LEVEL      = 3,
+        CORE_LOG_HANDLER    = print,
+
+        -- Multi-thread
+        MULTI_OS_THREAD     = false,
+        MULTI_OS_LOCK       = fakefunc,
+        MULTI_OS_RELEASE    = fakefunc,
+    }
+
+    -----------------------------------------------------------------------
+    --                            Main Cache                             --
+    -----------------------------------------------------------------------
+    _Cache          = setmetatable({}, {
+        __call      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
+            function(self, tbl) return tbl and wipe(tbl) or {} end
+            or
+            function(self, tbl) if tbl then return tinsert(self, wipe(tbl)) else return tremove(self) or {} end end,
+        }
+    )
+
+    -----------------------------------------------------------------------
+    --                                Log                                --
+    -----------------------------------------------------------------------
+    local function genreateLogger(prefix, loglvl)
+        local handler = PLOOP_PLATFORM_SETTINGS.CORE_LOG_HANDLER
+        return PLOOP_PLATFORM_SETTINGS.CORE_LOG_LEVEL > loglvl and fakefunc or
+            function(msg, stack, ...)
+                if type(stack) == "number" then
+                    msg = prefix .. strformat(msg, ...) .. (getCallLine(stack + 1) or "")
+                else
+                    msg = prefix .. strformat(msg, stack, ...)
+                end
+                return handler(msg, loglvl)
+            end
     end
 
-    function getValidate(ns)
-        if namespace.IsFeatureType(ns) then
-            return getmetatable(ns).ValidateValue
-        end
-    end
-
-    function fakefunc() end
+    Trace   = genreateLogger("[PLoop:Trace]", 1)
+    Debug   = genreateLogger("[PLoop:Debug]", 2)
+    Info    = genreateLogger("[PLoop:Info]",  3)
+    Warn    = genreateLogger("[PLoop:Warn]",  4)
+    Error   = genreateLogger("[PLoop:Error]", 5)
+    Fatal   = genreateLogger("[PLoop:Fatal]", 6)
 end
 
 -------------------------------------------------------------------------------
---                             Prototype System                              --
+--                                 Prototype                                 --
 --                                                                           --
 --  In the prototype system, there are two type features defined by it :     --
 --                                                                           --
@@ -403,102 +417,43 @@ end
 do
     local _Prototype = setmetatable({}, WEAK_ALL)
 
-    local function newPrototype(super, meta)
-        if not _Prototype[super] then meta, super = super, nil end
-        if type(meta) ~= "table" then meta        = nil        end
-
+    local function savePrototype(name, meta, super)
         local prototype       = newproxy(true)
         local pmeta           = getmetatable(prototype)
         _Prototype[prototype] = pmeta
 
-        if meta then tblclone(meta, pmeta, true, true) end
+        if meta                     then tblclone(meta, pmeta, true, true) end
         if pmeta.__metatable == nil then pmeta.__metatable = prototype end
-        if super then tblclone(_Prototype[super], pmeta, true, false) end
+        if pmeta.__tostring  == nil then pmeta.__tostring  = function() return name end end
+        if super                    then tblclone(_Prototype[super], pmeta, true, false) end
+
+        Trace("The prototype %q is created", 3, name)
 
         return prototype
     end
 
+    local function newPrototype(self, name)
+        name = name or self
+        if type(name) ~= "string" then name = "anonymous" end
+        return function(super, meta)
+            if _Prototype[super] == nil then meta, super = super, nil end
+            if type(meta) ~= "table"    then meta = nil end
+            local prototype = savePrototype(name, meta, super)
+            return prototype
+        end
+    end
+
     -- Root Prototype
-    Prototype = newPrototype {
+    Prototype = newPrototype "Prototype" {
         __index     = {
-            ["NewPrototype"] = newPrototype,
-            ["NewProxy"]     = newproxy,
-            ["NewObject"]    = function(prototype, tbl) return setmetatable(tbl or {}, _Prototype[prototype]) end,
-            ["Validate"]     = function(prototype) return _Prototype[prototype] and prototype or nil end,
+            ["NewProxy"]        = newproxy,
+            ["NewObject"]       = function(prototype, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[prototype]) end,
+            ["ValidateValue"]   = function(prototype, val) return getmetatable(val) == prototype end,
+            ["Validate"]        = function(prototype) return _Prototype[prototype] and prototype or nil end,
         },
-        __newindex  = readOnly,
+        __call                  = newPrototype,
+        __newindex              = readOnly,
     }
-end
-
--------------------------------------------------------------------------------
---                              Tool Prototype                               --
--------------------------------------------------------------------------------
-do
-    -----------------------------------------------------------------------
-    --                         Cache For Threads                         --
-    -----------------------------------------------------------------------
-    local function getCache(self, readonly)
-        local th    = running() or 0
-        local cache = rawget(self, th)
-        if not cache and not readonly then
-            cache = setmetatable({}, WEAK_KEY)
-            rawset(self, th, cache)
-        end
-        return cache
-    end
-
-    threadCache = Prototype:NewPrototype {
-        __mode      = "k",
-        __index     = function(self, key) local c = getCache(self, true) return c and c[key] end,
-        __newindex  = function(self, key, value) getCache(self)[key] = value end,
-        __call      = getCache,
-    }
-end
-
--------------------------------------------------------------------------------
---                               Platform APIs                               --
---                                                                           --
--- There are APIS like lock & release that would be provided by the platform.--
--- Here are some fake or default functions that should be replaced.          --
--------------------------------------------------------------------------------
-do
-    _PlatFormAPI    = {
-        ---------------------------------------------------------------------
-        --                         Thread Lock(Fake)                       --
-        --                                                                 --
-        -- The pure lua run all coroutine in one thread, so normally there --
-        -- is no need to lock & release.                                   --
-        --                                                                 --
-        -- But in some conditions like a web service, there would be many  --
-        -- OS threads running, so we need true lock & release.             --
-        ---------------------------------------------------------------------
-        lock        = function(lockObj, timeout, expiration) return true end;
-        release     = function(lockObj) return true end;
-    }
-
-    local lockCache = Prototype.NewObject(threadCache)
-
-    function Lock(lockObj, timeout, expiration)
-        if lockObj == nil then error("Usage : Lock(lockObj[, timeout[, expiration]]) - the lock object can't be nil.", 2) end
-
-        local cache     = lockCache()
-        if cache[lockObj] then error("Usage : Lock(lockObj[, timeout[, expiration]]) - The lock object is used", 2) end
-        local apis      = _PlatFormAPI
-        cache[lockObj]  = apis
-
-        return apis.lock(lockObj, timeout, expiration)
-    end
-
-    function Release(lockObj)
-        if lockObj == nil then error("Usage : Release(lockObj) - lockObj can't be nil.", 2) end
-
-        local cache     = lockCache()
-        local apis      = cache[lockObj]
-        cache[lockObj]  = nil
-        if apis then
-            return apis.release(lockObj)
-        end
-    end
 end
 
 -------------------------------------------------------------------------------
@@ -526,25 +481,44 @@ end
 -- * ApplyAttribute                                                          --
 --      The method used to apply the attribute to the target feature.        --
 --                                                                           --
--- * Priorty                                                                 --
---      The attribute's priority, the bigger the first to be  applied.        --
+-- * Priority                                                                --
+--      The attribute's priority, the bigger the first to be  applied.       --
 --                                                                           --
 -- * SubLevel                                                                --
---      The priority's sublevel, for attributes with same priority, the bigger --
---  sublevel the first be applied.                                           --
+--      The priority's sublevel, for attributes with same priority, the      --
+--  bigger sublevel the first be applied.                                    --
 --                                                                           --
+-- * Final                                                                   --
+--      Special for attribute usage, attribute usage can't be overridden if  --
+--  true.                                                                    --
 -------------------------------------------------------------------------------
 do
-    -- Save Data for features
+    -----------------------------------------------------------------------
+    --                          CONST VARIABLES                          --
+    -----------------------------------------------------------------------
+    -- ATTRIBUTE TARGETS
+    ATTRIBUTE_TARGETS_ALL           = 0
+
+    -- ATTRIBUTE APPLY PHASE
+    ATTRIBUTE_APPLYPH_BEFOREDEF     = 2^0
+    ATTRIBUTE_APPLYPH_AFTERDEF      = 2^1
+
+    -----------------------------------------------------------------------
+    --                          Attribute Data                           --
+    -----------------------------------------------------------------------
+    local _ATarType = { [ATTRIBUTE_TARGETS_ALL] = "All" }
+    local _ATUseName= {}
     local _AttrInfo = setmetatable({}, WEAK_KEY)
     local _InrtInfo = setmetatable({}, WEAK_KEY)
 
     -- Temporary Cache
-    local _PreAttrs = Prototype.NewObject(threadCache)
-    local _TarAttrs = Prototype.NewObject(threadCache)
-    local _FinAttrs = Prototype.NewObject(threadCache)
-    local _IgnrTars = Prototype.NewObject(threadCache)
+    local _PreAttrs = {}
+    local _TarAttrs = setmetatable({}, WEAK_KEY)
+    local _FinAttrs = setmetatable({}, WEAK_KEY)
+    local _Suspend  = false
+    local _UseWarn  = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
+    -- Helpers
     local function getAttributeUsage(attr)
         local info  = _AttrInfo[getmetatable(attr)]
         return info and info[attribute]
@@ -556,9 +530,9 @@ do
         return default
     end
 
-    local function getAttributeInfo(attr, field, default, chkType)
+    local function getAttributeInfo(attr, field, default, chkType, attrusage)
         local val   = getField(attr, field, nil, chkType)
-        if val == nil then val = getField(getAttributeUsage(attr), field, nil, chkType) end
+        if val == nil then val = getField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
         if val ~= nil then return val end
         return default
     end
@@ -570,12 +544,12 @@ do
         end
 
         local idx       = 1
-        local priority  = getAttributeInfo(attr, "Priorty", 0, "number")
+        local priority  = getAttributeInfo(attr, "Priority", 0, "number")
         local sublevel  = getAttributeInfo(attr, "SubLevel", 0, "number")
 
         while list[idx] do
             local patr  = list[idx]
-            local pprty = getAttributeInfo(patr, "Priorty", 0, "number")
+            local pprty = getAttributeInfo(patr, "Priority", 0, "number")
             local psubl = getAttributeInfo(patr, "SubLevel", 0, "number")
 
             if priority > pprty or (priority == pprty and sublevel > psubl) then break end
@@ -585,68 +559,74 @@ do
         tinsert(list, idx, attr)
     end
 
-    attribute       = Prototype.NewPrototype {
+    attribute       = Prototype "attribute" {
         __index     = {
             -- Apply the registered attributes to the feature
             -- @target          - the target feature
             -- @targetType      - the target's type
-            -- @applyTarget     - the apply target, use the target if nil
+            -- @definition      - the target's definition, so it can be modified
             -- @owner           - the target's owner
             -- @name            - the target's name
             -- @...             - the target's super features, used for inheritance
-            ["ApplyAttributes"] = function(target, targetType, applyTarget, owner, name, ...)
+            ["ApplyAttributes"] = function(target, targetType, definition, owner, name, ...)
                 local tarAttrs  = _TarAttrs[target]
-                if tarAttrs then
-                    _TarAttrs[target] = nil
-                else
-                    tarAttrs    = _Cache()
-                end
-
-                local extAttrs  = tblclone(_AttrInfo[target], _Cache())
-                local extInhrt  = tblclone(_InrtInfo[target], _Cache())
-
-                applyTarget     = applyTarget or target
+                if tarAttrs  then _TarAttrs[target] = nil end
 
                 -- Check inheritance
                 for i = 1, select("#", ...) do
                     local super = select(i, ...)
                     if super and _InrtInfo[super] then
                         for _, sattr in pairs, _InrtInfo[super] do
-                            -- No same type attribute allowed
                             local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
 
                             if aTar == ATTRIBUTE_TARGETS_ALL or validateFlags(targetType, aTar) then
+                                tarAttrs    = tarAttrs or _Cache()
                                 addAttribtue(tarAttrs, sattr, true)
                             end
                         end
                     end
                 end
 
-                local finAttrs  = _Cache()
+                if not tarAttrs then return target end
+
+                local extAttrs  = _AttrInfo[target] and tblclone(_AttrInfo[target], _Cache())
+                local extInhrt  = _InrtInfo[target] and tblclone(_InrtInfo[target], _Cache())
+                local finAttrs
                 local isMethod  = type(target) == "function"
                 local newAttrs  = false
                 local newInhrt  = false
+                local applyTar  = (_ATUseName[targetType] and (name or tostring(target))) or target
 
                 -- Apply the attribute to the target
+                Trace("Starting apply pre-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+
                 for i, attr in ipairs, tarAttrs, 0 do
                     local aType = getmetatable(attr)
-                    local aPhse = getAttributeInfo(attr, "ApplyPhase", ATTRIBUTE_APPLYPH_BEFOREDEF, "number")
-                    local apply = getAttributeInfo(attr, "ApplyAttribute", nil, "function")
-                    local ovrd  = getAttributeInfo(attr, "Overridable", true)
-                    local inhr  = getAttributeInfo(attr, "Inheritable", false)
+                    local ausage= getAttributeUsage(attr)
+                    local aPhse = getAttributeInfo(attr, "ApplyPhase",      ATTRIBUTE_APPLYPH_BEFOREDEF,    "number",   ausage)
+                    local apply = getAttributeInfo(attr, "ApplyAttribute",  nil,                            "function", ausage)
+                    local ovrd  = getAttributeInfo(attr, "Overridable",     true,                           nil,        ausage)
+                    local inhr  = getAttributeInfo(attr, "Inheritable",     false,                          nil,        ausage)
 
                     -- Save for next phase
-                    if validateFlags(ATTRIBUTE_APPLYPH_AFTERDEF, aPhse) then tinsert(finAttrs, attr) end
+                    if validateFlags(ATTRIBUTE_APPLYPH_AFTERDEF, aPhse) then
+                        finAttrs= finAttrs or _Cache()
+                        tinsert(finAttrs, attr)
+                    end
 
                     -- Apply attribute before the definition
-                    if validateFlags(ATTRIBUTE_APPLYPH_BEFOREDEF, aPhse) and (ovrd or (extAttrs[aType] == nil and extInhrt[aType] == nil)) then
+                    if validateFlags(ATTRIBUTE_APPLYPH_BEFOREDEF, aPhse) and
+                        (ovrd or ((extAttrs == nil or extAttrs[aType] == nil) and (extInhrt == nil or extInhrt[aType] == nil))) then
                         if apply then
-                            local ret = apply(attr, applyTarget, targetType, owner, name, ATTRIBUTE_APPLYPH_BEFOREDEF)
+                            Trace("Apply attribute %s", tostring(attr))
+
+                            local ret = apply(attr, applyTar, targetType, definition, owner, name, ATTRIBUTE_APPLYPH_BEFOREDEF)
 
                             if ret ~= nil then
                                 if isMethod and type(ret) == "function" then
-                                    applyTarget = ret
+                                    applyTar        = ret
                                 else
+                                    extAttrs        = extAttrs or _Cache()
                                     extAttrs[aType] = ret
                                     newAttrs        = true
                                 end
@@ -654,100 +634,123 @@ do
                         end
 
                         if inhr then
+                            Trace("Save inherited attribute %s", tostring(attr))
+
+                            extInhrt        = extInhrt or _Cache()
                             extInhrt[aType] = attr
                             newInhrt        = true
                         end
                     end
                 end
 
+                Trace("Finished apply pre-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+
                 _Cache(tarAttrs)
 
+                if isMethod then target = applyTar end
+
                 -- Save the after definition attributes
-                if next(finAttrs) then _FinAttrs[target] = finAttrs else _Cache(finAttrs) end
+                if finAttrs then _FinAttrs[target] = finAttrs end
 
                 -- Save attribute save datas
-                if newAttrs then _AttrInfo[target] = extAttrs else _Cache(extAttrs) end
-                if newInhrt then _InrtInfo[target] = extInhrt else _Cache(extInhrt) end
+                if newAttrs then _AttrInfo[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
+                if newInhrt then _InrtInfo[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
 
-                return isMethod and applyTarget or target
+                return target
             end;
 
             -- Apply the after-definition attributes to the feature
             -- @target          - the target feature
             -- @targetType      - the target's type
-            -- @applyTarget     - the apply target, use the target if nil
             -- @owner           - the target's owner(may be itself)
             -- @name            - the target's name
-            ["ApplyAfterDefine"]= function(target, targetType, applyTarget, owner, name)
+            ["ApplyAfterDefine"]= function(target, targetType, owner, name)
                 local finAttrs  = _FinAttrs[target]
                 if not finAttrs then return else _FinAttrs[target] = nil end
 
-                local extAttrs  = tblclone(_AttrInfo[target], _Cache())
-                local extInhrt  = tblclone(_InrtInfo[target], _Cache())
+                local extAttrs  = _AttrInfo[target] and tblclone(_AttrInfo[target], _Cache())
+                local extInhrt  = _InrtInfo[target] and tblclone(_InrtInfo[target], _Cache())
                 local newAttrs  = false
                 local newInhrt  = false
-
-                applyTarget     = applyTarget or target
+                local applyTar  = (_ATUseName[targetType] and (name or tostring(target))) or target
 
                 -- Apply the attribute to the target
+                Trace("Starting apply post-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+
                 for i, attr in ipairs, finAttrs, 0 do
                     local aType = getmetatable(attr)
-                    local apply = getAttributeInfo(attr, "ApplyAttribute", nil, "function")
-                    local ovrd  = getAttributeInfo(attr, "Overridable", true)
-                    local inhr  = getAttributeInfo(attr, "Inheritable", false)
+                    local ausage= getAttributeUsage(attr)
+                    local apply = getAttributeInfo(attr, "ApplyAttribute",  nil,    "function", ausage)
+                    local ovrd  = getAttributeInfo(attr, "Overridable",     true,   nil,        ausage)
+                    local inhr  = getAttributeInfo(attr, "Inheritable",     false,  nil,        ausage)
 
-                    if ovrd or (extAttrs[aType] == nil and extInhrt[aType] == nil) then
+                    if ovrd or ((extAttrs == nil or extAttrs[aType] == nil) and (extInhrt == nil or extInhrt[aType] == nil)) then
                         if apply then
-                            local ret = apply(attr, applyTarget, targetType, owner, name, ATTRIBUTE_APPLYPH_AFTERDEF)
+                            Trace("Apply attribute %s", tostring(attr))
+
+                            local ret = apply(attr, applyTar, targetType, nil, owner, name, ATTRIBUTE_APPLYPH_AFTERDEF)
 
                             if ret ~= nil and type(ret) ~= "function" then
+                                extAttrs        = extAttrs or _Cache()
                                 extAttrs[aType] = ret
                                 newAttrs        = true
                             end
                         end
 
                         if inhr then
+                            Trace("Save inherited attribute %s", tostring(attr))
+
+                            extInhrt        = extInhrt or _Cache()
                             extInhrt[aType] = attr
                             newInhrt        = true
                         end
                     end
                 end
 
+                Trace("Finished apply post-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+
                 _Cache(finAttrs)
 
                 -- Save attribute save datas
-                if newAttrs then _AttrInfo[target] = extAttrs else _Cache(extAttrs) end
-                if newInhrt then _InrtInfo[target] = extInhrt else _Cache(extInhrt) end
+                if newAttrs then _AttrInfo[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
+                if newInhrt then _InrtInfo[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
             end;
 
             -- Clear all registered attributes
             ["Clear"]           = function()
-                wipe(_PreAttrs())
+                if #_PreAttrs > 0 then
+                    Trace("attribute.Clear() is called", 2)
+                    wipe(_PreAttrs)
+                end
             end;
 
-            ["ConsumeAttributes"] = function(target, targetType, stack)
-                if _IgnrTars[target] then _IgnrTars[target] = nil return end
-                if _IgnrTars[0]      then return end
+            ["ConsumeAttributes"] = function(target, targetType, owner, name, stack)
+                if _Suspend then _Suspend = false return end
+                if #_PreAttrs  == 0 then return end
 
-                local preAttrs  = _PreAttrs()
-                local tarAttrs  = _Cache()
+                local tarAttrs  = _PreAttrs
+                _PreAttrs       = _Cache()
 
-                -- Apply the attribute to the target
-                for i, attr in ipairs, preAttrs, 0 do
+                Trace("Starting consume attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+
+                for i = #tarAttrs, 1, -1 do
+                    local attr  = tarAttrs[i]
                     local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
 
                     if aTar ~= ATTRIBUTE_TARGETS_ALL and not validateFlags(targetType, aTar) then
-                        attribute.Clear() _Cache(tarAttrs)
-                        error(("The %s can't be applied to the feature."):format(tostring(getmetatable(attr))), stack)
+                        if _UseWarn then
+                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                            tremove(tarAttrs, i)
+                        else
+                            _Cache(tarAttrs)
+                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target)), stack)
+                        end
                     end
-
-                    tinsert(tarAttrs, attr)
                 end
 
-                wipe(preAttrs)
+                Trace("Finished consume attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
-                -- Save the after definition attributes
-                if next(tarAttrs) then _TarAttrs[target] = tarAttrs else _Cache(tarAttrs) end
+                _TarAttrs[target] = tarAttrs
             end;
 
             -- Get saved attribute data
@@ -755,40 +758,36 @@ do
             -- @attributeType   - the attribute's type
             ["GetAttributeData"]= function(target, aType)
                 local info      = _AttrInfo[target]
-                return info and clone(info[aType], true)
-            end;
-
-            ["IgnoreTarget"]    = function(target)
-                if target and target ~= 0 then
-                    _IgnrTars[target] = true
-                end
+                return info and clone(info[aType], true, true)
             end;
 
             -- Register the attribute to be used by the next feature
             -- @attr        - The attribute to register.
             -- @noSameType  - Don't register the attribute if there is another attribute with the same type
             ["Register"]        = function(attr, noSameType)
-                local attr      = attribute.Validate(attr)
-                if not attr then error("Usage : attribute.Register(attr) - attr is not a valid attribute.", 2) end
-
-                return addAttribtue(_PreAttrs(), attr, noSameType)
+                local attr      = attribute.ValidateValue(attr)
+                if not attr then error("Usage : attribute.Register(attr) - the attr is not valid", 2) end
+                Trace("New attribute %q is registered", tostring(attr))
+                return addAttribtue(_PreAttrs, attr, noSameType)
             end;
 
             -- Register an attribute type with usage information
-            ["RegisterType"]    = function(aType, usage)
+            ["RegisterAttributeType"] = function(aType, usage)
                 if _AttrInfo[aType] and _AttrInfo[aType][attribute] and _AttrInfo[aType][attribute].Final then return end
 
                 local extAttrs  = tblclone(_AttrInfo[aType], _Cache())
                 local attrusage = _Cache()
 
+                Trace("New attribute type %q is registered", tostring(aType))
+
                 -- Default usage data for attributes
-                attrusage.AttributeTarget   = getField(usage, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
-                attrusage.Inheritable       = getField(usage, "Inheritable", false)
-                attrusage.ApplyPhase        = getField(usage, "ApplyPhase", ATTRIBUTE_APPLYPH_BEFOREDEF, "number")
-                attrusage.Overridable       = getField(usage, "Overridable", true)
-                attrusage.ApplyAttribute    = getField(usage, "ApplyAttribute", nil, "function")
-                attrusage.Priorty           = getField(usage, "Priorty",  0, "number")
-                attrusage.SubLevel          = getField(usage, "SubLevel", 0, "number")
+                attrusage.AttributeTarget   = getField(usage, "AttributeTarget",ATTRIBUTE_TARGETS_ALL,      "number")
+                attrusage.Inheritable       = getField(usage, "Inheritable",    false)
+                attrusage.ApplyPhase        = getField(usage, "ApplyPhase",     ATTRIBUTE_APPLYPH_BEFOREDEF,"number")
+                attrusage.Overridable       = getField(usage, "Overridable",    true)
+                attrusage.ApplyAttribute    = getField(usage, "ApplyAttribute", nil,                        "function")
+                attrusage.Priority          = getField(usage, "Priority",       0,                          "number")
+                attrusage.SubLevel          = getField(usage, "SubLevel",       0,                          "number")
 
                 -- A special data for attribute usage, so the attribute usage won't be overridden
                 attrusage.Final             = getField(usage, "Final", false)
@@ -797,327 +796,410 @@ do
                 _AttrInfo[aType]            = extAttrs
             end;
 
-            ["ResumeConsume"]   = function()
-                _IgnrTars[0]    = false
+            -- Register attribute type with name
+            ["RegisterTargetType"] = function(name, useNameAsApplyTarget)
+                local i             = 2^0
+                while _ATarType[i] do i = i * 2 end
+                _ATarType [i]       = name
+                _ATUseName[i]       = useNameAsApplyTarget and true or nil
+                Trace("New attribute target type %q is registered", name)
+                return i
             end;
 
-            ["SuspendConsume"]  = function()
-                _IgnrTars[0]    = true
+            ["SuspendNextConsume"]  = function()
+                _Suspend = true
             end;
 
             -- Un-register attribute
             ["Unregister"]      = function(attr)
-                local pres      = _PreAttrs()
-                for i, v in ipairs, pres, 0 do
+                for i, v in ipairs, _PreAttrs, 0 do
                     if v == attr then
-                        return tremove(pres, i)
+                        Trace("Attribtue %q is unregistered", tostring(attr))
+                        return tremove(_PreAttrs, i)
                     end
                 end
             end;
 
             -- Validate whether the target is an attribute
-            ["Validate"]        = function(attr)
+            ["ValidateValue"]   = function(attr)
                 return getAttributeUsage(attr) and attr or nil
+            end;
+
+            -- Validate whether the target is an attribute type
+            ["Validate"]        = function(attrtype)
+                local info  = _AttrInfo[attrtype]
+                return info and info[attribute] and attrtype or nil
             end;
         },
         __newindex  = readOnly,
     }
+
+    -----------------------------------------------------------------------
+    --                         ATTRIBUTE TARGETS                         --
+    -----------------------------------------------------------------------
+    -- ATTRIBUTE TARGETS
+    ATTRIBUTE_TARGETS_NAMESPACE     = attribute.RegisterTargetType("Namespace")
+    ATTRIBUTE_TARGETS_ENUM          = attribute.RegisterTargetType("Enum")
+    ATTRIBUTE_TARGETS_STRUCT        = attribute.RegisterTargetType("Struct")
+    ATTRIBUTE_TARGETS_INTERFACE     = attribute.RegisterTargetType("Interface")
+    ATTRIBUTE_TARGETS_CLASS         = attribute.RegisterTargetType("Class")
+    ATTRIBUTE_TARGETS_FUNCTION      = attribute.RegisterTargetType("Function")
+    ATTRIBUTE_TARGETS_METHOD        = attribute.RegisterTargetType("Method")
+    ATTRIBUTE_TARGETS_METAMETHOD    = attribute.RegisterTargetType("Metamethod")
+    ATTRIBUTE_TARGETS_CONSTRUCTOR   = attribute.RegisterTargetType("Constructor")
+    ATTRIBUTE_TARGETS_MEMBER        = attribute.RegisterTargetType("Member", true)
+    ATTRIBUTE_TARGETS_EVENT         = attribute.RegisterTargetType("Event", true)
+    ATTRIBUTE_TARGETS_PROPERTY      = attribute.RegisterTargetType("Property", true)
 end
 
 -------------------------------------------------------------------------------
---                                typebuilder                                --
+--                                environment                                --
+--                                                                           --
+-- The environment is designed to be private environments for codes or type  --
+-- building.                                                                 --
 -------------------------------------------------------------------------------
 do
-    local _BDKeys   = {}                                -- Builder Type info
-    local _BDOwner  = setmetatable({}, WEAK_ALL)        -- Builder -> Owner
-    local _BDEnv    = setmetatable({}, WEAK_KEY)        -- Builder -> Base environment
-    local _BDIDef   = setmetatable({}, WEAK_KEY)        -- Builder -> In definition mode
-    local _TPInfo   = Prototype.NewObject(threadCache)   -- Type   -> Builder(As environment)
+    -----------------------------------------------------------------------
+    --                         Environment Data                          --
+    -----------------------------------------------------------------------
+    local _ENVKeys  = {}    -- Keywords for environment type
+    local _KeyAccess        -- The environment that access the next keyword
+    local _AccessKey        -- The next keyword
 
-    typebuilder  = Prototype.NewPrototype {
-        __index     = {
-            ["EndDefinition"]       = function(builder, stack)
-                _BDIDef[builder]    = nil
+    -- Environment Special Field
+    local ENV_OWN_NS= "__PLOOP_ENV_OWNNS"
+    local ENV_IMP_NS= "__PLOOP_ENV_IMPNS"
+    local ENV_BASE  = "__PLOOP_ENV_BSENV"
+    local ENV_NO_AT = "__PLOOP_ENV_NAUTO"
 
-                if stack and _BDEnv[builder] then setfenv(stack, _BDEnv[builder]) end
+    local _GLNilable= PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
 
-                return _BDOwner[builder]
-            end;
-
-            ["GetBuilderParams"]    = function(builder, ...)
-                local definition, stack
-
-                for i = 1, select('#', ...) do
-                    local v = select(i, ...)
-                    local t = type(v)
-
-                    if t == "number" then
-                        stack = stack or v
-                    elseif t == "string" or t == "table" or t == "function" then
-                        definition  = definition or v
-                    end
-                end
-
-                stack = stack or 2
-
-                if type(definition) == "string" then
-                    local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, _BDEnv[builder] or _G)
-                    if def then
-                        def, msg    = pcall(def)
-                        if def then
-                            definition = msg
-                        else
-                            error(msg, stack + 1)
-                        end
-                    else
-                        error(msg, stack + 1)
-                    end
-                end
-
-                return definition, stack
-            end;
-
-            -- Used for features like property, event, member and namespace
-            ["GetNewFeatureParams"] = function(ftype, ...)
-                local env, name, definition, stack
-                local builder       = _TPInfo[ftype]
-                local owner         = builder and _BDOwner[builder]
-
-                if builder then _TPInfo[ftype] = nil end
-
-                for i = 1, select('#', ...) do
-                    local v = select(i, ...)
-                    local t = type(v)
-
-                    if t == "number" then
-                        stack = stack or v
-                    elseif t == "string" then
-                        name = name or v
-                    elseif t == "table" then
-                        if getmetatable(v) ~= nil or v == _G then
-                            env = env or v
-                        elseif not env then
-                            if name then
-                                definition = definition or v
-                            else
-                                env = env or v
-                            end
-                        else
-                            definition = definition or v
+    local safeAutoCache     = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
+        (PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK == fakefunc and fakefunc or (function()
+            local lock      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK
+            local release   = PLOOP_PLATFORM_SETTINGS.MULTI_OS_RELEASE
+            return function(self, key, value, stack)
+                if value ~= nil and not rawget(self, ENV_NO_AT) then
+                    local result, err = lock(self, 1, 0)
+                    if result then
+                        rawset(self, key, value)
+                        result, err = release(self, result)
+                        if not result then
+                            Error("Auto-cache failed with release%s%s", (stack or 2) + 1, err and " - " or "", err or "")
                         end
                     end
                 end
+            end
+        end)())
+        or function(self, key, value)
+            if value ~= nil and not rawget(self, ENV_NO_AT) then
+                rawset(self, key, value)
+            end
+        end
 
-                stack = stack or 2
+    -- Share Helpers
+    local function getValue(self, key)
+        return self[key]
+    end
 
-                env = env or getfenv(stack + 1) or builder or _G
+    local function getParams(keyword, ...)
+        local env, target, definition, flag, stack
+        local keyvisitor    = keyword and environment.GetKeywordVisitor(keyword)
 
-                return env, name, definition, stack, owner, builder
-            end;
+        for i = 1, select('#', ...) do
+            local v = select(i, ...)
+            local t = type(v)
 
-            -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
-            ["GetNewTypeParams"]    = function(nType, prototype, ...)
-                local env, target, definition, keepenv, stack
-                local builder       = _TPInfo[nType]
-                local owner         = builder and _BDOwner[builder]
-
-                if builder then _TPInfo[nType] = nil end
-
-                for i = 1, select('#', ...) do
-                    local v = select(i, ...)
-                    local t = type(v)
-
-                    if t == "boolean" then
-                        if keepenv == nil then keepenv = v end
-                    elseif t == "number" then
-                        stack = stack or v
-                    elseif t == "function" then
-                        definition = definition or v
-                    elseif t == "string" then
-                        if v:find("^[%w_%.]+$") then
-                            target = target or v
-                        else
-                            definition = definition or v
-                        end
-                    elseif t == "userdata" then
-                        if nType.Validate(v) then
-                            target = target or v
-                        end
-                    elseif t == "table" then
-                        if nType.Validate(v) then
-                            target = target or v
-                        else
-                            -- Check if it's environment or the definition, well it's a little complex
-                            if getmetatable(v) ~= nil or v == _G then
-                                env = env or v
-                            elseif not env then
-                                if target then
-                                    -- env should be given before the target
-                                    definition = definition or v
-                                else
-                                    -- We should check later
-                                    env = env or v
-                                end
-                            else
-                                definition = definition or v
-                            end
-                        end
-                    end
-                end
-
-                stack = stack or 2
-
-                if not definition and env and not target then
-                    -- Anonymous
-                    definition, env = env, nil
-                end
-
-                env = env or getfenv(stack + 1) or builder or _G
-
-                if type(definition) == "string" then
-                    local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
-                    if def then
-                        def, msg    = pcall(def)
-                        if def then
-                            definition = msg
-                        else
-                            error(msg, stack + 1)
-                        end
-                    else
-                        error(msg, stack + 1)
-                    end
-                end
-
-                -- Get or build the target
-                if target then
-                    if type(target) == "string" then
-                        target = namespace.GenerateNameSpace(namespace.GetNameSpaceFromEnv(env), target, prototype)
-                        rawset(env, namespace.GetNameSpaceName(target, true), target)
-                    else
-                        target = namespace.Validate(target)
-                    end
+            if t == "boolean" then
+                if flag == nil then flag = v end
+            elseif t == "number" then
+                stack = stack or v
+            elseif t == "function" then
+                definition = definition or v
+            elseif t == "string" then
+                v   = strtrim(v)
+                if strfind(v, "^%S+$") then
+                    target = target or v
                 else
-                    target = namespace.GenerateNameSpace(nil, nil, prototype)
+                    definition = definition or v
                 end
-
-                return env, target, definition, keepenv or false, stack, owner, builder
-            end;
-
-            ["GetBuilderEnv"]       = function(builder)
-                return _BDEnv[builder]
-            end;
-
-            ["GetBuilderOwner"]     = function(builder)
-                return _BDOwner[builder]
-            end;
-
-            -- Get value for builder(__newindex) : value, cacheable
-            ["GetValueFromBuidler"] = function(builder, name)
-                if type(name) == "string" then
-                    -- Get key features
-                    local info      = _BDKeys[getmetatable(builder)]
-                    local value     = info and info[name]
-                    if value then
-                        _TPInfo[value] = builder   -- so it'd be used as optional environment
-                        return value, false
+            elseif t == "userdata" then
+                if namespace.Validate(v) then
+                    target = target or v
+                end
+            elseif t == "table" then
+                if namespace.Validate(v) then
+                    target = target or v
+                else
+                    -- Check if it's environment or the definition, well it's a little complex
+                    if getmetatable(v) ~= nil or v == _G then
+                        env = env or v
+                    elseif not env then
+                        if target then
+                            -- env should be given before the target
+                            definition = definition or v
+                        else
+                            -- We should check later
+                            env = env or v
+                        end
+                    else
+                        definition = definition or v
                     end
-
-                    -- Get Namespace
-                    value           = namespace.GetImportedFeature(builder, name)
-                    if value then return value, true end
                 end
+            end
+        end
 
-                -- Get value from base environment
-                return (_BDEnv[builder] or _G)[name], true
-            end;
+        stack = stack or 2
 
-            ["InDefineMode"]        = function(builder)
-                return _BDIDef[builder] and true or false
-            end;
+        if not definition and env and not target and (getmetatable(env) == nil and env ~= _G) then
+            -- Anonymous
+            definition, env = env, nil
+        end
 
-            ["NewBuilder"]          = function(btype, owner, env)
-                local builder       = Prototype.Validate(btype) and Prototype.NewObject(btype) or btype
+        env = env or getfenv(stack + 2) or keyvisitor or _G
 
-                _BDOwner[builder]   = owner
-                if owner then
-                    _BDIDef[builder]= true
-                    namespace.SetNameSpaceToEnv(builder, owner)
+        if type(definition) == "string" then
+            local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
+            if def then
+                def, msg    = pcall(def)
+                if def then
+                    definition = msg
+                else
+                    error(msg, stack + 2)
                 end
+            else
+                error(msg, stack + 2)
+            end
+        end
 
-                _BDEnv[builder]     = env
+        return env, target, definition, flag, stack, keyvisitor
+    end
 
-                return builder
+    function GetDefinitionParams(self, ...)
+        local _, _, definition, _, stack = getParams(nil, self, ...)
+        return definition, stack
+    end
+
+    -- Used for features like property, event, member and namespace
+    function GetFeatureParams(ftype, ...)
+        local env, name, definition, _, stack, keyvisitor = getParams(ftype, ...)
+        return env, name, definition, stack, keyvisitor
+    end
+
+    -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
+    function GetTypeParams(nType, prototype, ...)
+        local env, target, definition, flag, stack, visitor = getParams(nType, ...)
+
+        if target then
+            if type(target) == "string" then
+                target = namespace.GenerateNameSpace(environment.GetNameSpace(visitor or env), target, prototype)
+                if visitor then rawset(visitor, namespace.GetNameSpaceName(target, true), target) end
+                if env and env ~= visitor then rawset(env, namespace.GetNameSpaceName(target, true), target) end
+            else
+                target = nType.Validate(target)
+            end
+        else
+            target = namespace.GenerateNameSpace(nil, nil, prototype)
+        end
+
+        return env, target, definition, flag, stack, visitor
+    end
+
+    -- Prototypes
+    environment     = Prototype "environment" {
+        __index     = {
+            ["GetNameSpace"]    = function(env)
+                return type(env) == "table" and rawget(env, ENV_OWN_NS) or nil
             end;
 
-            ["RegisterKeyWord"]     = function(btype, key, keyword)
-                _BDKeys[btype]      = _BDKeys[btype] or _Cache()
+            ["GetParent"]       = function(env)
+                return type(env) == "table" and rawget(env, ENV_BASE) or nil
+            end;
+
+            -- Get value for env, also auto-cache the value to env if auto-cache is toggle on
+            ["GetValue"]        = function(env, name, stack)
+                local value
+                if type(name) == "string" then
+                    -- Check Keywords
+                    local keys      = _ENVKeys[getmetatable(env)]
+                    value           = keys and keys[name]
+                    if value then
+                        _KeyAccess  = env
+                        _AccessKey  = value
+                    else
+                        -- Check namespace
+                        local ns    = rawget(env, ENV_OWN_NS)
+                        if ns then
+                            value   = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
+                        end
+
+                        -- Check imported namespaces
+                        if value == nil then
+                            local imp   = rawget(env, ENV_IMP_NS)
+                            if imp then
+                                for _, sns in ipairs, imp, 0 do
+                                    value   = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
+                                    if value ~= nil then break end
+                                end
+                            end
+                        end
+
+                        -- Check root namespaces
+                        if value == nil then
+                            value   = namespace.GetNameSpace(name)
+                        end
+
+                        -- Check parent
+                        if value == nil then
+                            local parent    = rawget(env, ENV_BASE)
+                            if parent then
+                                if _GLNilable then
+                                    value   = parent[name]
+                                else
+                                    local ok, ret = pcall(getValue, parent, name)
+                                    if not ok or ret == nil then error(("The global variable %q can't be nil."):format(name), (stack or 1) + 1) end
+                                    value   = ret
+                                end
+                            end
+                        end
+
+                        -- Safe Auto-Cache
+                        safeAutoCache(env, name, value, (stack or 1) + 1)
+                    end
+                end
+                return value
+            end;
+
+            ["GetKeywordVisitor"]   = function(keyword)
+                local visitor
+                if _AccessKey == keyword then visitor = _KeyAccess end
+                _KeyAccess          = nil
+                _AccessKey          = nil
+                return visitor
+            end;
+
+            -- Import namespace to env
+            ["ImportNameSpace"] = function(env, ns)
+                ns = namespace.Validate(ns)
+                if type(env) ~= "table" then error("Usage: environment.ImportNameSpace(env, namespace) - the env must be a table", 2) end
+                if not ns then error("Usage: environment.ImportNameSpace(env, namespace) - The namespace is not provided", 2) end
+
+                local imports = rawget(env, ENV_IMP_NS)
+                if not imports then imports = setmetatable({}, WEAK_VALUE) rawset(env, ENV_IMP_NS, imports) end
+                for _, v in ipairs, imports, 0 do if v == ns then return end end
+                tinsert(imports, ns)
+            end;
+
+            ["IsAutoCache"]     = function(env)
+                if type(env) ~= "table" then error("Usage: environment.IsAutoCache(env) - the env must be a table", 2) end
+                return not rawget(env, ENV_NO_AT)
+            end;
+
+            ["RegisterKeyWord"] = function(envtype, key, keyword)
+                if not envtype or (type(envtype) ~= "table" and type(envtype) ~= "userdata") then error("Usage: environment.RegisterKeyWord(envtype, key[, keyword]) - the envtype isn't valid", 2) end
+                _ENVKeys[envtype]   = _ENVKeys[envtype] or {}
+                local keywords      = _ENVKeys[envtype]
+
                 if type(key) == "table" and getmetatable(key) == nil then
                     for k, v in pairs, key do
-                        if type(k) == "string" and not _BDKeys[btype][k] and (type(v) == "function" or type(v) == "userdata" or type(v) == "table") then
-                            _BDKeys[btype][k] = v
-                        end
+                        if type(k) ~= "string" then k = tostring(v) end
+                        if not keywords[k] and v then keywords[k] = v end
                     end
                 else
-                    if type(key) == "string" and not _BDKeys[btype][key] and (type(keyword) == "function" or type(keyword) == "userdata" or type(keyword) == "table") then
-                        _BDKeys[btype][key] = keyword
-                    end
+                    if type(key) ~= "string" then key, keyword= tostring(key), key end
+                    if key and not keywords[key] and keyword then keywords[key] = keyword end
                 end
+            end;
+
+            -- SafeAutoCache(self, key, value[, stack])
+            ["SafeAutoCache"]   = safeAutoCache;
+
+            ["SetAutoCache"]    = function(env, auto)
+                if type(env) ~= "table" then error("Usage: environment.SetAutoCache(env, auto) - the env must be a table", 2) end
+                rawset(env, ENV_NO_AT, not auto or nil)
+            end;
+
+            ["SetNameSpace"]    = function(env, ns)
+                if type(env) ~= "table" then error("Usage: environment.SetNameSpace(env, namespace) - the env must be a table", 2) end
+                rawset(env, ENV_OWN_NS, namespace.Validate(ns))
+            end;
+
+            ["SetParent"]       = function(env, base)
+                if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", 2) end
+                if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", 2) end
+                rawset(env, ENV_BASE, base or nil)
             end;
         },
         __newindex  = readOnly,
     }
+
+    -- Key feature : import "System"
+    import          = function (...)
+        local env, name, _, stack, visitor = GetFeatureParams(import, ...)
+
+        name = namespace.Validate(name)
+        if not env  then error("Usage: import(namespace) - The system can't figure out the environment", stack) end
+        if not name then error("Usage: import(namespace) - The namespace is not provided", stack) end
+
+        if visitor then
+            environment.ImportNameSpace(visitor, name)
+        else
+            namespace.ExportNameSpace(env, name)
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
 --                                 namespace                                 --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                          Namespace Data                           --
+    -----------------------------------------------------------------------
     local _NSTree   = setmetatable({}, WEAK_KEY)
     local _NSName   = setmetatable({}, WEAK_KEY)
-    local _NSMap    = setmetatable({}, WEAK_ALL)
-    local _NSImp    = setmetatable({}, WEAK_KEY)
 
-    local function getFeatureFromNS(ns, name)
-        local nsname = _NSName[ns]
-        if nsname ~= nil then
-            if nsname and nsname:match("[_%w]+$") == name then return ns end
-            return ns[name]
-        end
-    end
+    -- Shortcut
+    local Validate, GetNameSpace
 
-    namespace       = Prototype.NewPrototype {
+    -- Prototype
+    namespace       = Prototype "namespace" {
         __index     = {
             -- Export a namespace and its children to an environment
-            ["ExportNameSpaceToEnv"]= function(env, ns)
-                ns = namespace.Validate(ns)
-                if type(env) ~= "table" then error("Usage: namespace.ExportNameSpaceToEnv(env, namespace) - env must be a table.", 2) end
-                if not ns then error("Usage: namespace.ExportNameSpaceToEnv(env, namespace) - The namespace is not provided.", 2) end
+            ["ExportNameSpace"]     = function(env, ns)
+                ns  = Validate(ns)
+                if type(env) ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace) - the env must be a table", 2) end
+                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace) - The namespace is not provided", 2) end
 
-                local nsname = _NSName[ns]
+                local nsname    = _NSName[ns]
                 if nsname then
-                    nsname = nsname:match("[_%w]+$")
-                    if env[nsname] == nil then env[nsname] = ns end
+                    nsname      = strmatch(nsname, "[^%s%.]+$")
+                    if rawget(env, nsname) == nil then rawset(env, nsname, ns) end
                 end
 
-                if _NSTree[ns] then tblclone(_NSTree[ns], env) end
+                if _NSTree[ns] then
+                    for name, sns in pairs, _NSTree[ns] do
+                        if rawget(env, name) == nil then rawset(env, name, sns) end
+                    end
+                end
             end;
 
             -- Generate namespace by access name(if it is nil, anonymous namespace could be created)
             ["GenerateNameSpace"]   = function(parent, name, prototype)
                 if type(parent) == "string" then name, prototype, parent = parent, name, nil end
-                prototype = Prototype.Validate(prototype) or tnamespace
+                prototype = prototype and Prototype.Validate(prototype) or tnamespace
 
                 if type(name) == "string" then
                     if parent ~= nil then
-                        parent = namespace.Validate(parent)
-                        if not parent then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent must be a namespace.", 2) end
-                        if not _NSName[parent] then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent can't be anonymous.", 2) end
+                        parent = Validate(parent)
+                        if not parent then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent must be a namespace", 2) end
+                        if not _NSName[parent] then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent can't be anonymous", 2) end
                     else
                         parent = ROOT_NAMESPACE
                     end
 
                     local ns    = parent
-                    local iter  = name:gmatch("[_%w]+")
+                    local iter  = strgmatch(name, "[^%s%.]+")
                     local sn    = iter()
 
                     while sn do
@@ -1127,7 +1209,6 @@ do
                         local nxt = iter()
 
                         if not sns then
-                            Lock(ns)
                             sns = _NSTree[ns][sn]
 
                             if not sns then
@@ -1135,130 +1216,93 @@ do
                                 _NSName[sns] = _NSName[ns] and _NSName[ns] .. "." .. sn or sn
                                 _NSTree[ns][sn] = sns
                             end
-
-                            Release(ns)
                         end
 
                         ns, sn = sns, nxt
                     end
 
                     if ns ~= parent then return ns end
-                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string like 'System.Collections.List'.", 2)
+                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string like 'System.Collections.List'", 2)
                 elseif name == nil then
                     local ns = Prototype.NewProxy(prototype)
                     _NSName[ns] = false
                     return ns
                 else
-                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string or nil.", 2)
+                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string or nil", 2)
                 end
             end;
 
             -- Get the namespace by name
             ["GetNameSpace"]        = function(parent, name)
-                if type(parent) == "string" then name, parent = parent, nil end
-                if type(name)   ~= "string" then error("Usage: namespace.GetNameSpace([parent, ]name) - name must be a string.", 2) end
+                if type(parent) == "string" then
+                    name, parent = parent, nil
+                elseif type(name)   ~= "string" then
+                    error("Usage: namespace.GetNameSpace([parent, ]name) - name must be a string", 2)
+                end
                 if parent ~= nil then
-                    parent = namespace.Validate(parent)
-                    if not parent then error("Usage: namespace.GetNameSpace([parent, ]name) - parent must be a namespace.", 2) end
-                    if not _NSName[parent] then error("Usage: namespace.GetNameSpace([parent, ]name) - parent can't be anonymous.", 2) end
+                    parent = Validate(parent)
+                    if not parent then error("Usage: namespace.GetNameSpace([parent, ]name) - parent must be a namespace", 2) end
+                    if not _NSName[parent] then error("Usage: namespace.GetNameSpace([parent, ]name) - parent can't be anonymous", 2) end
                 else
                     parent = ROOT_NAMESPACE
                 end
                 local ns = parent
-                for sn in name:gmatch("[_%w]+") do
+                for sn in strgmatch(name, "[^%s%.]+") do
                     ns = _NSTree[ns] and _NSTree[ns][sn]
                     if not ns then return nil end
                 end
                 return ns ~= parent and ns or nil
             end;
 
-            -- Get the namespace from the environment
-            ["GetNameSpaceFromEnv"] = function(env) return _NSMap[env] end;
-
             -- Get the namespace's name
             ["GetNameSpaceName"]    = function(ns, last)
-                local name = _NSName[namespace.Validate(ns)]
-                if name ~= nil then
-                    return name and (last and name:match("[_%w]+$") or name) or "Anonymous"
-                end
+                local name = _NSName[Validate(ns)]
+                if name ~= nil then return name and (last and strmatch(name, "[^%s%.]+$") or name) or "Anonymous" end
             end;
 
-            -- Fetch feature for the environment based on env's namespace or imported namespace
-            ["GetImportedFeature"]= function(env, name)
-                if type(name) ~= "string" then return end
-
-                local ns = _NSMap[env]
-                if ns then
-                    ns = getFeatureFromNS(ns, name)
-                    if ns ~= nil then return ns end
-                end
-
-                if _NSImp[env] then
-                    for _, ns in ipairs, _NSImp[env], 0 do
-                        ns = getFeatureFromNS(ns, name)
-                        if ns ~= nil then return ns end
-                    end
-                end
-
-                -- Check root namespace
-                return _NSTree[ROOT_NAMESPACE][name]
-            end;
-
-            -- Import namespace to env
-            ["ImportNameSpaceToEnv"]= function(env, ns)
-                ns = namespace.Validate(ns)
-                if type(env) ~= "table" then error("Usage: namespace.ImportNameSpaceToEnv(env, namespace) - env must be a table.", 2) end
-                if not ns then error("Usage: namespace.ImportNameSpaceToEnv(env, namespace) - The namespace is not provided.", 2) end
-
-                local imports = _NSImp[env]
-                if not imports then imports = setmetatable({}, WEAK_VALUE) _NSImp[env] = imports end
-                for _, v in ipairs, imports, 0 do if v == ns then return end end
-                tinsert(imports, ns)
-            end;
-
-            ["IsFeatureType"]       = function(ns)
-                ns = namespace.Validate(ns)
+            ["IsResourceType"]       = function(ns)
+                ns = Validate(ns)
                 return ns and getmetatable(ns) ~= namespace or false
-            end;
-
-            -- Set the namespace to the environment
-            ["SetNameSpaceToEnv"]   = function(env, ns)
-                if type(env) ~= "table" then error("Usage: namespace.SetNameSpaceToEnv(env, namespace) - env must be a table.", 2) end
-                _NSMap[env] = namespace.Validate(ns)
             end;
 
             -- Validate whether the arg is a namespace
             ["Validate"]            = function(ns)
-                if type(ns) == "string" then ns = namespace.GetNameSpace(ns) end
+                if type(ns) == "string" then ns = GetNameSpace(ns) end
                 return _NSName[ns] ~= nil and ns or nil
             end;
         },
-        __concat    = typeconcat,
-        __tostring  = function() return "namespace" end,
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, name, _, stack = typebuilder.GetNewFeatureParams(namespace, ...)
+            local env, name, _, stack, visitor = GetFeatureParams(namespace, ...)
 
-            if not env  then error("Usage: namespace([env, ]name[, stack] - the system can't figure out the environment.", stack) end
-            if not name then error("Usage: namespace([env, ]name[, stack] - name must be a string.", stack) end
+            if not env and not visitor then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the environment", stack) end
 
-            local ns = namespace.GetNameSpace(name)
-            if not ns then
-                -- Only apply attribute to new namespace
-                ns = namespace.GenerateNameSpace(name)
-                if ns then
-                    attribute.ConsumeAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE, stack + 1)
-                    attribute.ApplyAttributes  (ns, ATTRIBUTE_TARGETS_NAMESPACE)
-                    attribute.ApplyAfterDefine (ns, ATTRIBUTE_TARGETS_NAMESPACE)
+            if type(name) == "string" then
+                local ns = GetNameSpace(name)
+                if not ns then
+                    -- Only apply attribute to new namespace
+                    ns = namespace.GenerateNameSpace(name)
+                    if ns then
+                        attribute.ConsumeAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE, nil, nil, stack + 1)
+                        attribute.ApplyAttributes  (ns, ATTRIBUTE_TARGETS_NAMESPACE)
+                        attribute.ApplyAfterDefine (ns, ATTRIBUTE_TARGETS_NAMESPACE)
+                    end
                 end
+                name = ns
             end
 
-            return namespace.SetNameSpaceToEnv(env, ns)
+            environment.SetNameSpace(env, name)
+            return name
         end,
     }
 
-    tnamespace      = Prototype.NewPrototype {
-        __index     = namespace.GetNameSpace,
+    -- Shortcut Assignment
+    Validate        = namespace.Validate
+    GetNameSpace    = namespace.GetNameSpace
+
+    -- default type for namespace
+    tnamespace      = Prototype "tnamespace" {
+        __index     = GetNameSpace,
         __newindex  = readOnly,
         __concat    = typeconcat,
         __tostring  = namespace.GetNameSpaceName,
@@ -1267,32 +1311,18 @@ do
 
     -- Init the root namespace, anonymous namespace can be be collected as garbage
     ROOT_NAMESPACE  = namespace.GenerateNameSpace()
-
-    -- Key feature : import "System"
-    import          = function (...)
-        local env, name, _, stack, _, isbuilder = typebuilder.GetNewFeatureParams(import, ...)
-
-        name = namespace.Validate(name)
-        if not env then error("Usage: import(namespace) - The system can't figure out the environment.", stack) end
-        if not name then error("Usage: import(namespace) - The namespace is not provided.", stack) end
-
-        if isbuilder then
-            namespace.ImportNameSpaceToEnv(env, name)
-        else
-            namespace.ExportNameSpaceToEnv(env, name)
-        end
-    end
-
-    -- Set the namespace as System
-    namespace (_PLoopEnv, "System")
 end
 
 -------------------------------------------------------------------------------
 --                                enumeration                                --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                             Enum Data                             --
+    -----------------------------------------------------------------------
     local _EnumInfo = setmetatable({}, WEAK_KEY)
-    local _BDInfo   = Prototype.NewObject(threadCache)
+    local _BDInfo   = setmetatable({}, WEAK_KEY)
+    local _GLCaseIgn= PLOOP_PLATFORM_SETTINGS.ENUM_GLOBAL_IGNORE_CASE
 
     local _ValidMap = {}
 
@@ -1309,6 +1339,7 @@ do
     local FD_VALID  = 4     -- FIELD VALIDATOR
     local FD_MAXV   = 5     -- FIELD MAX VALUE(FOR FLAGS)
     local FD_DEFT   = 6     -- FIELD DEFAULT
+    local FD_ATTRAP = 7     -- FIELD WHETHER ATTRIBUTE APPLIED
 
     -- Flags
     local FL_FLAG   = 2^0
@@ -1396,30 +1427,30 @@ do
         _Cache(upval)
     end
 
-    enum            = Prototype.NewPrototype {
+    enum            = Prototype "enum" {
         __index     = {
             ["BeginDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack   = type(stack) == "number" and stack or 2
 
-                target          = enum.Validate(target)
-                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - enumeration not existed", stack) end
+                target  = enum.Validate(target)
+                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
 
-                local info      = _EnumInfo[target]
+                local info  = _EnumInfo[target]
 
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
-                if _BDInfo[target] then error(("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
+                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _BDInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _BDInfo[target] = {
-                    [FD_MOD  ]  = 0,
+                    [FD_MOD  ]  = _GLCaseIgn and MD_IGCS or 0,
                     [FD_ENUMS]  = {},
                     [FD_CACHE]  = {},
-                    [FD_EMSG ]  = "%s must be a value of [" .. tostring(target) .."].",
+                    [FD_EMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
                     [FD_VALID]  = false,
                     [FD_MAXV ]  = false,
                     [FD_DEFT ]  = nil,
                 }
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, stack + 1)
+                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -1427,6 +1458,9 @@ do
                 if not ninfo then return end
 
                 stack = type(stack) == "number" and stack or 2
+
+                -- If don't use the enumbuilder
+                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_ENUM)
 
                 _BDInfo[target] = nil
 
@@ -1444,7 +1478,7 @@ do
                         if v then
                             if v == 0 then
                                 if cache[0] then
-                                    error(("The %s and %s can't be the same value."):format(k, cache[0]), stack)
+                                    error(strformat("The %s and %s can't be the same value", k, cache[0]), stack)
                                 else
                                     cache[0]        = k
                                 end
@@ -1454,16 +1488,16 @@ do
                                 local n = mlog(v) / mlog(2)
                                 if floor(n) == n then
                                     if cache[2^n] then
-                                        error(("The %s and %s can't be the same value."):format(k, cache[2^n]), stack)
+                                        error(strformat("The %s and %s can't be the same value", k, cache[2^n]), stack)
                                     else
                                         cache[2^n]  = k
                                         max         = n > max and n or max
                                     end
                                 else
-                                    error(("The %s's value is not a valid flags value(2^n)."):format(k), stack)
+                                    error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
                                 end
                             else
-                                error(("The %s's value is not a valid flags value(2^n)."):format(k), stack)
+                                error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
                             end
                         else
                             count       = count + 1
@@ -1472,7 +1506,7 @@ do
                     end
 
                     -- So the definition would be more precisely
-                    if max >= count then error("The flags enumeration's value can't be greater than 2^(count - 1).", stack) end
+                    if max >= count then error("The flags enumeration's value can't be greater than 2^(count - 1)", stack) end
 
                     -- Auto-gen values
                     local n     = 0
@@ -1500,7 +1534,7 @@ do
                 -- Check Default
                 if ninfo[FD_DEFT] ~= nil then
                     ninfo[FD_DEFT]  = ninfo[FD_VALID](ninfo[FD_DEFT])
-                    if ninfo[FD_DEFT] == il then
+                    if ninfo[FD_DEFT] == nil then
                         error(ninfo[FD_EMSG]:format("The default"), stack)
                     end
                 end
@@ -1522,7 +1556,7 @@ do
                 local info      = _EnumInfo[target]
                 if info then
                     if cache then
-                        return tblclone(info[FD_ENUMS], type(cache) == "table" and wipe(cache) or _Cache())
+                        return tblclone(info[FD_ENUMS], type(cache) == "table" and wipe(cache) or {})
                     else
                         info    = info[FD_ENUMS]
                         return function(self, key) return next(info, key) end, target
@@ -1555,7 +1589,7 @@ do
 
                     if info[FD_MAXV] then
                         if cache then
-                            local ret = type(cache) == "table" and wipe(cache) or _Cache()
+                            local ret = type(cache) == "table" and wipe(cache) or {}
 
                             if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FD_MAXV] then
                                 if value > 0 then
@@ -1598,10 +1632,10 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FD_DEFT] = default
                 else
-                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid.", stack)
+                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -1610,12 +1644,12 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string.", stack) end
+                    if not def then error(strformat("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
                     for k, v in pairs, info[FD_ENUMS] do
                         if v == value then
-                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed.", stack)
+                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack)
                         end
                     end
 
@@ -1625,7 +1659,7 @@ do
                         info[FD_ENUMS][key] = value
                     end
                 else
-                    error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid.", stack)
+                    error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -1635,7 +1669,7 @@ do
 
                 if info then
                     if not validateFlags(MD_IGCS, info[FD_MOD]) then
-                        if not def then error(("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                         info[FD_MOD]    = turnOnFlags(MD_IGCS, info[FD_MOD])
 
                         local enums     = info[FD_ENUMS]
@@ -1645,7 +1679,7 @@ do
                         _Cache(enums)
                     end
                 else
-                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid.", stack)
+                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -1655,11 +1689,11 @@ do
 
                 if info then
                     if not validateFlags(MD_FLAG, info[FD_MOD]) then
-                        if not def then error(("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                         info[FD_MOD] = turnOnFlags(MD_FLAG, info[FD_MOD])
                     end
                 else
-                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid.", stack)
+                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -1672,7 +1706,7 @@ do
                         info[FD_MOD] = turnOnFlags(MD_SEAL, info[FD_MOD])
                     end
                 else
-                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid.", stack)
+                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -1681,7 +1715,7 @@ do
                 if info then
                     return info[FD_VALID](value)
                 else
-                    error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid.", 2)
+                    error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
                 end
             end;
 
@@ -1690,20 +1724,19 @@ do
                 return getmetatable(target) == enum and target or nil
             end;
         },
-        __concat    = typeconcat,
-        __tostring  = function() return "enum" end,
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(enum, tenum, ...)
+            local env, target, definition, keepenv, stack, visitor = GetTypeParams(enum, tenum, ...)
             if not target then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the enum type can't be created.", stack)
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack)
             elseif definition ~= nil and type(definition) ~= "table" then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table.", stack)
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack)
             end
 
             enum.BeginDefinition(target, stack + 1)
 
-            local builder = typebuilder.NewBuilder(enumbuilder, target)
+            local builder = Prototype.NewObject(enumbuilder)
+            environment.SetNameSpace(builder, target)
 
             if definition then
                 builder(definition, stack + 1)
@@ -1714,20 +1747,22 @@ do
         end,
     }
 
-    tenum           = Prototype.NewPrototype(tnamespace, {
+    tenum           = Prototype "tenum" (tnamespace, {
         __index     = enum.ValidateValue,
         __call      = enum.Parse,
         __metatable = enum,
     })
 
-    enumbuilder     = Prototype.NewPrototype {
+    enumbuilder     = Prototype "enumbuilder" {
+        __index     = writeOnly,
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local definition, stack = typebuilder.GetBuilderParams(self, ...)
-            if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing.", stack) end
+            local definition, stack = GetDefinitionParams(self, ...)
+            if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
 
-            local owner = typebuilder.GetBuilderOwner(self)
-            if not owner or not typebuilder.InDefineMode(self) then error("The enum builder is expired.", stack) end
+            local owner = environment.GetNameSpace(self)
+            if not owner then error("The enumeration can't be found", stack) end
+            if not _BDInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
 
             attribute.ApplyAttributes(owner, ATTRIBUTE_TARGETS_ENUM, definition)
 
@@ -1741,7 +1776,6 @@ do
                 end
             end
 
-            typebuilder.EndDefinition(self)
             enum.EndDefinition(owner, stack)
             return owner
         end,
@@ -1752,8 +1786,11 @@ end
 --                                 structure                                 --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                            Struct Data                            --
+    -----------------------------------------------------------------------
     local _StrtInfo = setmetatable({}, WEAK_KEY)
-    local _BDInfo   = Prototype.NewObject(threadCache)
+    local _BDInfo   = setmetatable({}, WEAK_KEY)
 
     local _ValidMap = {}
     local _CtorMap  = {}
@@ -1768,7 +1805,7 @@ do
     local FD_BASE   = -4        -- FIELD BASE STRUCT
     local FD_VALID  = -5        -- FIELD VALIDATOR
     local FD_CTOR   = -6        -- FIELD CONSTRUCTOR
-    local FD_NAME   = -7        -- FEILD OWNER NAME
+    local FD_NAME   = -7        -- FEILD STRUCT NAME
     local FD_EMSG   = -8        -- FIELD ERROR MESSAGE
     local FD_VCACHE = -9        -- FIELD VALIDATOR CACHE
 
@@ -1802,20 +1839,12 @@ do
     local MTD_INIT  = "__init"
     local MTD_BASE  = "__base"
 
-    local getValueFromBuidler   = typebuilder.GetValueFromBuidler
-    local getNameSpace          = namespace.GetNameSpace
+    local getEnvValue   = environment.GetValue
+    local getNameSpace  = namespace.GetNameSpace
 
     local function getTargetInfo(target)
         local info  = _BDInfo[target]
         if info then return info, true else return _StrtInfo[target], false end
-    end
-
-    local function getBuilderValue(self, name)
-        -- Access methods
-        local info  = getTargetInfo(typebuilder.GetBuilderOwner(self))
-        local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
-        if m then return m, true end
-        return getValueFromBuidler(self, name)
     end
 
     local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
@@ -1836,7 +1865,7 @@ do
                     struct.AddMethod(owner, key, value, stack)
                     return true
                 end
-            elseif namespace.IsFeatureType(value) then
+            elseif namespace.IsResourceType(value) then
                 if key == MTD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
                 else
@@ -1850,7 +1879,7 @@ do
         elseif tkey == "number" then
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
-            elseif namespace.IsFeatureType(value) then
+            elseif namespace.IsResourceType(value) then
                 struct.SetArrayElement(owner, value, stack)
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
@@ -1989,7 +2018,7 @@ do
 
                             if val == nil then
                                 if mem[]] .. MFD_REQ .. [[] then
-                                    return nil, ("%s.%s can't be nil."):format("%s", name)
+                                    return nil, strformat("%s.%s can't be nil", "%s", name)
                                 end
 
                                 if mem[]] .. MFD_ASFT .. [[] then
@@ -1999,7 +2028,7 @@ do
                                 end
                             elseif vtype then
                                 val, msg = mem[]] .. MFD_VALD .. [[](vtype, val, false, cache)
-                                if msg then return nil, type(msg) == "string" and msg:gsub("%%s", "%%s" .. "." .. name) or ("%s.%s must be [%s]."):format("%s", name, tostring(vtype)) end
+                                if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s" .. "." .. name) or strformat("%s.%s must be [%s]", "%s", name, tostring(vtype)) end
                             end
 
                             value[name] = val
@@ -2018,7 +2047,7 @@ do
                     else
                         for i, v in ipairs, value, 0 do
                             local ret, msg  = avalid(array, v, false, cache)
-                            if msg then return nil, type(msg) == "string" and msg:gsub("%%s", "%%s[" .. i .. "]") or ("%s[%s] must be [%s]."):format("%s", i, tostring(array)) end
+                            if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s[" .. i .. "]") or strformat("%s[%s] must be [%s]", "%s", i, tostring(array)) end
                             value[i] = ret
                         end
                     end
@@ -2029,14 +2058,14 @@ do
                 tinsert(header, "svalid")
                 tinsert(body, [[
                     local msg = svalid(value)
-                    if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_NAME .. [[]) end
+                    if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FD_NAME .. [[]) end
                 ]])
             elseif validateFlags(FL_MVALID, token) then
                 tinsert(header, "mvalid")
                 tinsert(body, [[
                     for i = ]] .. FD_STVLD .. [[, mvalid do
                         local msg = info[i](value)
-                        if msg then return nil, onlyValid or type(msg) == "string" and msg or ("%s must be [%s]."):format("%s", info[]] .. FD_NAME .. [[]) end
+                        if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FD_NAME .. [[]) end
                     end
                 ]])
             end
@@ -2208,7 +2237,7 @@ do
                             end
                             return ret
                         elseif not fmatch then
-                            error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and msg:gsub("%%s%.?", "") or "the value is not valid."), 3)
+                            error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                         end
                     end
                 ]])
@@ -2255,11 +2284,11 @@ do
 
             if validateFlags(FL_MEMBER, token) or validateFlags(FL_ARRAY, token) then
                 tinsert(body, [[
-                    error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and msg:gsub("%%s%.?", "") or "the value is not valid."), 3)
+                    error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                 ]])
             else
                 tinsert(body, [[
-                    error(msg:gsub("%%s", "the value"), 3)
+                    error(strgsub(msg, "%%s", "the value"), 3)
                 ]])
             end
 
@@ -2281,10 +2310,12 @@ do
     end
 
     -- [ENUM] System.StructType
+    -- Set the namespace as System
+    namespace (_PLoopEnv, "System")
     enum (_PLoopEnv, "StructType", { "MEMBER", "ARRAY", "CUSTOM" })
     enum.SetSealed(StructType)
 
-    struct          = Prototype.NewPrototype {
+    struct          = Prototype "struct" {
         __index     = {
             ["AddMember"]       = function(target, name, definition, stack)
                 local info, def = getTargetInfo(target)
@@ -2301,17 +2332,17 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.AddMember(structure[, name], definition[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(name) ~= "string" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name must be a string.", stack) end
+                    if not def then error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(name) ~= "string" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name can't be empty.", stack) end
-                    if type(definition) ~= "table" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The definition is missing.", stack) end
-                    if info[FD_ARRAY] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is an array structure, can't add member.", stack) end
+                    if name == "" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name can't be empty", stack) end
+                    if type(definition) ~= "table" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The definition is missing", stack) end
+                    if info[FD_ARRAY] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is an array structure, can't add member", stack) end
 
                     local idx = FD_STMEM
                     while info[idx] do
                         if info[idx][MFD_NAME] == name then
-                            error(("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is a existed member with the name : %q."):format(name), stack)
+                            error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is a existed member with the name : %q", name), stack)
                         end
                         idx = idx + 1
                     end
@@ -2319,7 +2350,7 @@ do
                     local minfo = _Cache()
                     minfo[MFD_NAME] = name
 
-                    attribute.ConsumeAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, stack + 1)
+                    attribute.ConsumeAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name, stack + 1)
 
                     local smem  = nil
 
@@ -2341,13 +2372,13 @@ do
                             k = strlower(k)
 
                             if k == "type" then
-                                local tpValid = getValidate(v)
+                                local tpValid = namespace.IsResourceType(v) and getmetatable(v).ValidateValue
 
                                 if tpValid then
                                     minfo[MFD_TYPE] = v
                                     minfo[MFD_VALD] = tpValid
                                 else
-                                    error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The member's type is not valid.", stack)
+                                    error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The member's type is not valid", stack)
                                 end
                             elseif k == "require" and v then
                                 minfo[MFD_REQ]  = true
@@ -2367,19 +2398,19 @@ do
                             elseif type(minfo[MFD_DEFT]) == "function" then
                                 minfo[MFD_ASFT] = true
                             else
-                                error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The default value is not valid.", stack)
+                                error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The default value is not valid", stack)
                             end
                         end
                         if minfo[MFD_DEFT] == nil then
-                            minfo[MFD_DEFT] = getDefaultValue(minfo[MFD_TYPE])
+                            minfo[MFD_DEFT] = getmetatable(minfo[MFD_TYPE]).GetDefault(minfo[MFD_TYPE])
                         end
                     end
 
                     info[idx] = minfo
 
-                    attribute.ApplyAfterDefine(minfo, ATTRIBUTE_TARGETS_MEMBER, definition, target, name)
+                    attribute.ApplyAfterDefine(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name)
                 else
-                    error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2388,16 +2419,16 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if type(name) ~= "string" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The name must be a string.", stack) end
+                    if type(name) ~= "string" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: Usage: struct.AddMethod(structure, name, func[, stack]) - The name can't be empty.", stack) end
-                    if type(func) ~= "function" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The func must be a function.", stack) end
+                    if name == "" then error("Usage: Usage: struct.AddMethod(structure, name, func[, stack]) - The name can't be empty", stack) end
+                    if type(func) ~= "function" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The func must be a function", stack) end
 
                     if not def and struct.GetMethod(target, name) then
-                        error(("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished, the method can't be overridden."):format(tostring(target)), stack)
+                        error(strformat("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished, the method can't be overridden", tostring(target)), stack)
                     end
 
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
+                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name, stack + 1)
 
                     local sfunc
 
@@ -2419,14 +2450,14 @@ do
                         info[name]  = func
                     end
 
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
+                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, target, name)
 
                     if not def and not hasMethod then
                         -- Need re-generate validator
                         generateValidator(info)
                     end
                 else
-                    error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2438,15 +2469,15 @@ do
 
                 local info      = _StrtInfo[target]
 
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
-                if _BDInfo[target] then error(("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
+                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _BDInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _BDInfo[target] = {
                     [FD_MOD ]   = 0,
                     [FD_NAME]   = tostring(target),
                 }
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_STRUCT, stack + 1)
+                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -2466,11 +2497,11 @@ do
 
                     if ninfo[FD_ARRAY] then     -- Array
                         if not binfo[FD_ARRAY] then
-                            error(("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct isn't an array structure."):format(tostring(target)), stack)
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct isn't an array structure", tostring(target)), stack)
                         end
                     elseif ninfo[FD_STMEM] then -- Member
                         if binfo[FD_ARRAY] then
-                            error(("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure."):format(tostring(target)), stack)
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure", tostring(target)), stack)
                         elseif binfo[FD_STMEM] then
                             -- Try to keep the base struct's member order
                             local cache     = _Cache()
@@ -2566,12 +2597,12 @@ do
                         tinsert(args, ninfo[idx][MFD_NAME])
                         idx         = idx + 1
                     end
-                    ninfo[FD_EMSG]  = ("Usage: %s(%s) - "):format(tostring(target), tblconcat(args, ", "))
+                    ninfo[FD_EMSG]  = strformat("Usage: %s(%s) - ", tostring(target), tblconcat(args, ", "))
                     _Cache(args)
                 elseif ninfo[FD_ARRAY] then
-                    ninfo[FD_EMSG]  = ("Usage: %s(...) - "):format(tostring(target))
+                    ninfo[FD_EMSG]  = strformat("Usage: %s(...) - ", tostring(target))
                 else
-                    ninfo[FD_EMSG]  = ("[%s]"):format(tostring(target))
+                    ninfo[FD_EMSG]  = strformat("[%s]", tostring(target))
                 end
 
                 generateValidator(ninfo)
@@ -2630,7 +2661,7 @@ do
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         local i = FD_STMEM
                         local m = info[i]
                         while m do
@@ -2647,6 +2678,11 @@ do
                             end
                         end, target
                     end
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
+                    return fakefunc, target
                 end
             end;
 
@@ -2670,7 +2706,7 @@ do
                 if info then
                     local objm  = info[FD_TYPMTD]
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         if objm then for k, v in pairs, objm do cache[k] = v or info[k] end end
                         return cache
                     elseif objm then
@@ -2678,10 +2714,11 @@ do
                             local m, v = next(objm, n)
                             if m then return m, v or info[m] end
                         end, target
-                    else
-                        return fakefunc, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -2691,7 +2728,7 @@ do
                 if info then
                     local objm  = info[FD_TYPMTD]
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, objm do if v then cache[k] = v end end
                         return cache
                     elseif objm then
@@ -2700,10 +2737,11 @@ do
                             while m and not v do m, v = next(objm, m) end
                             return m, v
                         end, target
-                    else
-                        return fakefunc, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -2713,7 +2751,7 @@ do
                 if info then
                     local objm  = info[FD_TYPMTD]
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, objm do if not v then cache[k] = info[k] end end
                         return cache
                     elseif objm then
@@ -2722,10 +2760,11 @@ do
                             while m and v do m, v = next(objm, m) end
                             if m then return m, info[m] end
                         end, target
-                    else
-                        return fakefunc, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -2765,17 +2804,17 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
 
-                    if info[FD_STMEM] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element.", stack) end
+                    if info[FD_STMEM] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local tpValid   = getValidate(eleType)
-                    if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid.", stack) end
+                    local tpValid   = namespace.IsResourceType(eleType) and getmetatable(eleType).ValidateValue
+                    if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
                     info[FD_ARRAY]  = eleType
                     info[FD_ARRVLD] = tpValid
                 else
-                    error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2784,11 +2823,11 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.SetBaseStruct(structure, base) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if not struct.Validate(base) then error("Usage: struct.SetBaseStruct(structure, base) - The base must be a structure.", stack) end
+                    if not def then error(strformat("Usage: struct.SetBaseStruct(structure, base) - The %s's definition is finished", tostring(target)), stack) end
+                    if not struct.Validate(base) then error("Usage: struct.SetBaseStruct(structure, base) - The base must be a structure", stack) end
                     info[FD_BASE] = base
                 else
-                    error("Usage: struct.SetBaseStruct(structure, base[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetBaseStruct(structure, base[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2797,10 +2836,10 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.SetDefault(structure, default[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if not def then error(strformat("Usage: struct.SetDefault(structure, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FD_DEFT] = default
                 else
-                    error("Usage: struct.SetDefault(structure, default[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetDefault(structure, default[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2809,11 +2848,11 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(func) ~= "function" then error("Usage: struct.SetValidator(structure, validator) - The validator must be a function.", stack) end
+                    if not def then error(strformat("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(func) ~= "function" then error("Usage: struct.SetValidator(structure, validator) - The validator must be a function", stack) end
                     info[FD_STVLD] = func
                 else
-                    error("Usage: struct.SetValidator(structure, validator[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetValidator(structure, validator[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2822,11 +2861,11 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: struct.SetInitializer(structure, initializer[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(func) ~= "function" then error("Usage: struct.SetInitializer(structure, initializer) - The initializer must be a function.", stack) end
+                    if not def then error(strformat("Usage: struct.SetInitializer(structure, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(func) ~= "function" then error("Usage: struct.SetInitializer(structure, initializer) - The initializer must be a function", stack) end
                     info[FD_STINI] = func
                 else
-                    error("Usage: struct.SetInitializer(structure, initializer[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetInitializer(structure, initializer[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2839,7 +2878,7 @@ do
                         info[FD_MOD] = turnOnFlags(MD_SEAL, info[FD_MOD])
                     end
                 else
-                    error("Usage: struct.SetSealed(structure[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetSealed(structure[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2848,18 +2887,18 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if type(name) ~= "string" then error("Usage: struct.SetStaticMethod(structure, name) - the name must be a string.", stack) end
+                    if type(name) ~= "string" then error("Usage: struct.SetStaticMethod(structure, name) - the name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: Usage: struct.SetStaticMethod(structure, name) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: struct.SetStaticMethod(structure, name) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q."):format(tostring(target), name), stack) end
+                    if name == "" then error("Usage: Usage: struct.SetStaticMethod(structure, name) - The name can't be empty", stack) end
+                    if not def then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s's definition is finished", tostring(target)), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q", tostring(target), name), stack) end
 
                     if info[name] == nil then
                         info[name] = info[FD_TYPMTD][name]
                         info[FD_TYPMTD][name] = false
                     end
                 else
-                    error("Usage: struct.SetStaticMethod(structure, name[, stack]) - The structure is not valid.", stack)
+                    error("Usage: struct.SetStaticMethod(structure, name[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -2875,7 +2914,7 @@ do
                         return info[FD_VALID](info, value, onlyValid, cache)
                     end
                 else
-                    error("Usage: struct.ValidateValue(structure, value[, onlyValid]) - The structure is not valid.", 2)
+                    error("Usage: struct.ValidateValue(structure, value[, onlyValid]) - The structure is not valid", 2)
                 end
             end;
 
@@ -2888,24 +2927,26 @@ do
         __concat    = typeconcat,
         __tostring  = function() return "struct" end,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(struct, tstruct, ...)
-            if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created.", stack) end
+            local env, target, definition, keepenv, stack = GetTypeParams(struct, tstruct, ...)
+            if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
             struct.BeginDefinition(target, stack + 1)
 
-            local builder = typebuilder.NewBuilder(structbuilder, target, env)
+            local tarenv = Prototype.NewObject(structbuilder)
+            environment.SetNameSpace(tarenv, target)
+            environment.SetParent(env)
 
             if definition then
-                builder(definition, stack + 1)
+                tarenv(definition, stack + 1)
                 return target
             else
-                if not keepenv then setfenv(stack, builder) end
-                return builder
+                if not keepenv then setfenv(stack, tarenv) end
+                return tarenv
             end
         end,
     }
 
-    tstruct         = Prototype.NewPrototype(tnamespace, {
+    tstruct         = Prototype "tstruct" (tnamespace, {
         __index     = function(self, name)
             if type(name) == "string" then
                 local info  = _StrtInfo[self]
@@ -2917,7 +2958,7 @@ do
                 struct.AddMethod(self, key, value, 3)
                 return
             end
-            error("The struct type is readonly.", 2)
+            error("The struct type is readonly", 2)
         end,
         __call      = function(self, ...)
             local info  = _StrtInfo[self]
@@ -2927,33 +2968,40 @@ do
         __metatable = struct,
     })
 
-    structbuilder   = Prototype.NewPrototype {
+    structbuilder   = Prototype "structbuilder" {
         __index     = function(self, key)
             local val, cache = getBuilderValue(self, key)
-            if val ~= nil and cache and not typebuilder.InDefineMode(self) then
+
+-- Access methods
+local info  = getTargetInfo(environment.GetNameSpace(self))
+local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
+if m then return m, true end
+return getEnvValue(self, name)
+
+            if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
             end
             return val
         end,
         __newindex  = function(self, key, value)
-            if typebuilder.InDefineMode(self) then
-                if setBuilderOwnerValue(typebuilder.GetBuilderOwner(self), key, value, 3) then
+            local owner = environment.GetNameSpace(self)
+            if _BDInfo[owner] then
+                if setBuilderOwnerValue(owner, key, value, 3) then
                     return
                 end
             end
             return rawset(self, key, value)
         end,
         __call      = function(self, ...)
-            local definition, stack = typebuilder.GetBuilderParams(self, ...)
-            if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing.", stack) end
+            local definition, stack = GetDefinitionParams(self, ...)
+            if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = typebuilder.GetBuilderOwner(self)
-            if not owner then error("The struct builder is expired.", stack) end
+            local owner = environment.GetNameSpace(self)
+            if not owner then error("The struct's definition is finished", stack) end
 
             stack = stack + 1
 
             if type(definition) == "function" then
-                setfenv(definition, self)
                 definition(self)
             else
                 -- Check base struct first
@@ -2974,19 +3022,21 @@ do
                 end
             end
 
-            typebuilder.EndDefinition(self, stack)
+            local baseEnv = environment.GetParent(self)
             struct.EndDefinition(owner, stack)
+
+            setfenv(stack - 1, baseEnv or _G)
 
             return owner
         end,
     }
 
     -- Key feature : member "Name" { Type = String, Default = "Anonymous", Require = false}
-    member          = Prototype.NewPrototype {
+    member          = Prototype "member" {
         __call      = function(self, ...)
             if self == member then
-                local env, name, definition, stack, owner, builder = typebuilder.GetNewFeatureParams(member, ...)
-                if not owner or not builder then error([[Usage: member "name" {...} - can't be used here.]], stack) end
+                local env, name, definition, stack, owner, tarenv = GetFeatureParams(member, ...)
+                if not owner or not tarenv then error([[Usage: member "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: member "name" {...} - the name can't be an empty string.]], stack) end
@@ -2999,7 +3049,7 @@ do
                 end
             else
                 local owner, name       = self.owner, self.name
-                local definition, stack = typebuilder.GetBuilderParams(self, ...)
+                local definition, stack = GetDefinitionParams(self, ...)
 
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -3013,17 +3063,16 @@ do
 
     -- Key feature : endstruct "Number"
     endstruct       = function (...)
-        local env, name, definition, stack, owner, builder = typebuilder.GetNewFeatureParams(endstruct, ...)
+        local env, name, definition, stack, owner, tarenv = GetFeatureParams(endstruct, ...)
 
-        if not owner or not builder then error([[Usage: endstruct "name" - can't be used here.]], stack) end
-        if namespace.GetNameSpaceName(owner, true) ~= name then error(("%s's definition isn't finished."):format(tostring(owner)), stack) end
+        if not owner or not tarenv then error([[Usage: endstruct "name" - can't be used here.]], stack) end
+        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
-        stack = stack + 1
+        setfenv(stack, environment.GetParent(tarenv) or _G)
 
-        typebuilder.EndDefinition(builder, stack)
-        struct.EndDefinition(owner, stack)
+        struct.EndDefinition(owner, stack + 1)
 
-        return typebuilder.GetBuilderEnv(builder)
+        return environment.GetParent(tarenv)
     end
 end
 
@@ -3031,15 +3080,18 @@ end
 --                             interface & class                             --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                             Type Data                             --
+    -----------------------------------------------------------------------
     local _ICInfo   = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
     local _CLDInfo  = {}                                -- CHILDREN MAP
     local _ThisMap  = setmetatable({}, WEAK_ALL)        -- THIS FOR CLASS
     local _SuperMap = setmetatable({}, WEAK_ALL)        -- SUPER FOR CLASS & INTERFACE
     local _ObjMap   = setmetatable({}, WEAK_KEY)        -- OBJECT -> CLASS INFO MAP
-    local _BDInfo   = Prototype.NewObject(threadCache)  -- TYPE BUILDER INFO
-    local _SuperObj = Prototype.NewObject(threadCache)  -- SUPER OBJECT CACHE
+    local _BDInfo   = setmetatable({}, WEAK_KEY)  -- TYPE BUILDER INFO
+    local _SuperObj = setmetatable({}, WEAK_KEY)  -- SUPER OBJECT CACHE
 
-    local getValueFromBuidler   = typebuilder.GetValueFromBuidler
+    local getEnvValue   = environment.GetValue
     local getNameSpace          = namespace.GetNameSpace
 
     local _IndexMap = {}
@@ -3213,13 +3265,13 @@ do
         end
     end
 
-    local function getSuperOnPriorty(info, name, get)
+    local function getSuperOnPriority(info, name, get)
         local minpriority, norpriority
         for _, sinfo in getSuperInfos(info) do
-            local m     = get(sinfo, name)
+            local m = get(sinfo, name)
             if m then
                 local priority = sinfo[FD_INHRTP] and sinfo[FD_INHRTP][name] or IP_NORMAL
-                if priority == IP_FINAL   then return m end
+                if priority == IP_FINAL   then return m, IP_FINAL end
                 if priority == IP_VIRTUAL then
                     minpriority = minpriority or m
                 else
@@ -3227,20 +3279,24 @@ do
                 end
             end
         end
-        return norpriority or minpriority
+        if norpriority then
+            return norpriority, IP_NORMAL
+        elseif minpriority then
+            return minpriority, IP_VIRTUAL
+        end
     end
 
     local function getSuperMethod(info, name)
-        return getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPMTD] and sinfo[FD_TYPMTD][name] end)
+        return getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPMTD] and sinfo[FD_TYPMTD][name] end)
     end
 
     local function getSuperFeature(info, name, ftype)
-        local feature   = getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPFTR] and sinfo[FD_TYPFTR][name] end)
-        return feature and (not ftype and feature or ftype.Validate(feature)) or nil
+        local feature, priority = getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPFTR] and sinfo[FD_TYPFTR][name] end)
+        return feature and (not ftype and feature or ftype.Validate(feature)) or nil, priority
     end
 
     local function getSuperMetaMethod(info, name)
-        return getSuperOnPriorty(info, name, function(sinfo, name) return sinfo[FD_TYPMTM] and sinfo[FD_TYPMTM][META_KEYS[name]] end)
+        return getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPMTM] and sinfo[FD_TYPMTM][META_KEYS[name]] end)
     end
 
     -- Finish Type Building
@@ -3269,7 +3325,7 @@ do
         return lst, cache
     end
 
-    local function generateCacheOnPriorty(source, target, objpri, inhrtp, super)
+    local function generateCacheOnPriority(source, target, objpri, inhrtp, super)
         for k, v in pairs, source do
             if v then
                 local priority  = inhrtp and inhrtp[k] or IP_NORMAL
@@ -3422,7 +3478,7 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[
                         if type(value) == "function" then
-                            attribute.ConsumeAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, 3)
+                            attribute.ConsumeAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, self, name, 3)
                             value = attribute.ApplyAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, nil, self, name)
                         end
                     ]])
@@ -3438,12 +3494,12 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[)
                         if type(value) == "function" then
-                            attribute.ApplyAfterDefine(value, ATTRIBUTE_TARGETS_FUNCTION, nil, self, name)
+                            attribute.ApplyAfterDefine(value, ATTRIBUTE_TARGETS_FUNCTION, self, name)
                         end
                     ]])
                 end
             else
-                tinsert(body, [[error("The object is readonly.", 2)]])
+                tinsert(body, [[error("The object is readonly", 2)]])
             end
 
             tinsert(body, [[end]])
@@ -3472,7 +3528,7 @@ do
         local meta  = info[FD_OBJMTM]
 
         if validateFlags(MD_ABSCLS, info[FD_MOD]) then
-            local msg = ("The %s is abstract, can't be used to create objects."):format(tostring(target))
+            local msg = strformat("The %s is abstract, can't be used to create objects", tostring(target))
             info[FD_CTOR] = function() error(msg, 3) end
             return _Cache(upval)
         end
@@ -3500,11 +3556,6 @@ do
             token   = turnOnFlags(FL_SIMCLS, token)
         elseif validateFlags(MD_ASSPCLS, info[FD_MOD]) then
             token   = turnOnFlags(FL_ASSIMP, token)
-
-            if info[FD_OBJMTD] and next(info[FD_OBJMTD]) then
-                token   = turnOnFlags(FL_OBJMTD, token)
-                tinsert(upval, info[FD_OBJMTD])
-            end
 
             if info[FD_OBJFTR] and next(info[FD_OBJFTR]) then
                 token   = turnOnFlags(FL_OBJFTR, token)
@@ -3564,7 +3615,7 @@ do
                     obj = _new(...)
                     if type(obj) == "table" then
                         local ok, ret = pcall(setmetatable, obj, _meta)
-                        if not ok then error(("The %s's __new meta-method doesn't provide a valid table as object."):format(tostring(_class)), 3) end
+                        if not ok then error(strformat("The %s's __new meta-method doesn't provide a valid table as object", tostring(_class)), 3) end
                     else
                         obj = nil
                     end
@@ -3584,18 +3635,6 @@ do
                     tinsert(body, [[obj = setmetatable(init, _meta) init = false]])
                 elseif validateFlags(FL_ASSIMP, token) then
                     tinsert(body, [[local noconflict = true]])
-
-                    if validateFlags(FL_OBJMTD, token) then
-                        tinsert(header, "_mtd")
-                        tinsert(body, [[
-                            for k in pairs, _mtd do
-                                local tk = type(init[k])
-                                if tk and tk ~= "function" then
-                                    noconflict = false break
-                                end
-                            end
-                        ]])
-                    end
 
                     if validateFlags(FL_OBJFTR, token) then
                         tinsert(header, "_ftr")
@@ -3642,7 +3681,7 @@ do
                 tinsert(body, [[
                     if init then
                         local ok, msg = pcall(_loadInitTable, obj, init)
-                        if not ok then error(msg:match("%d+:%s*(.-)$") or msg, 3) end
+                        if not ok then error(strmatch(msg, "%d+:%s*(.-)$") or msg, 3) end
                     end
                 ]])
             end
@@ -3691,29 +3730,29 @@ do
             local inhrtp= sinfo[FD_INHRTP]
 
             if sinfo[FD_TYPMTM] then
-                generateCacheOnPriorty(sinfo[FD_TYPMTM], objmeta, objpri, inhrtp)
+                generateCacheOnPriority(sinfo[FD_TYPMTM], objmeta, objpri, inhrtp)
             end
 
             if sinfo[FD_TYPFTR] then
-                generateCacheOnPriorty(sinfo[FD_TYPFTR], objftr, objpri, inhrtp)
+                generateCacheOnPriority(sinfo[FD_TYPFTR], objftr, objpri, inhrtp)
             end
 
             if sinfo[FD_TYPMTD] then
-                generateCacheOnPriorty(sinfo[FD_TYPMTD], objmtd, objpri, inhrtp)
+                generateCacheOnPriority(sinfo[FD_TYPMTD], objmtd, objpri, inhrtp)
             end
         end
 
         local inhrtp    = info[FD_INHRTP]
         if info[FD_TYPMTM] then
-            generateCacheOnPriorty(info[FD_TYPMTM], objmeta, objpri, inhrtp, super)
+            generateCacheOnPriority(info[FD_TYPMTM], objmeta, objpri, inhrtp, super)
         end
 
         if info[FD_TYPFTR] then
-            generateCacheOnPriorty(info[FD_TYPFTR], objftr, objpri, inhrtp, super)
+            generateCacheOnPriority(info[FD_TYPFTR], objftr, objpri, inhrtp, super)
         end
 
         if info[FD_TYPMTD] then
-           generateCacheOnPriorty(info[FD_TYPMTD], objmtd, objpri, inhrtp, super)
+           generateCacheOnPriority(info[FD_TYPMTD], objmtd, objpri, inhrtp, super)
         end
 
         if interface.Validate(target) then
@@ -3751,47 +3790,41 @@ do
         end
     end
 
+    local function endDefinitionForNewFeatures(target, stack)
+        local info = getTargetInfo(target)
+
+        if info[FD_NEWFTR] then
+            info[FD_TYPFTR] = info[FD_TYPFTR] or _Cache()
+
+            for name, ftr in pairs, info[FD_NEWFTR] do
+                getmetatable(ftr).EndDefinition(ftr, target, name, stack + 1)
+            end
+
+            _Cache(info[FD_NEWFTR])
+            info[FD_NEWFTR] = nil
+        end
+    end
+
     -- Shared APIS
     local function checkInfoWithName(tType, target, name, allowDefined)
         local info, def = getTargetInfo(target)
-        if not info then return nil, nil, ("The %s is not valid."):format(tostring(tType)) end
-        if not allowDefined and not def then return info, nil, ("The %s's definition is finished."):format(tostring(target)) end
-        if type(name) ~= "string" then return info, nil, "The name must be a string." end
+        if not info then return nil, nil, strformat("The %s is not valid", tostring(tType)) end
+        if not allowDefined and not def then return nil, nil, strformat("The %s's definition is finished", tostring(target)) end
+        if not name or type(name) ~= "string" then return info, nil, "The name must be a string." end
         name = strtrim(name)
         if name == "" then return info, nil, "The name can't be empty." end
         return info, name, nil, def
     end
 
     local function reDefineChildren(target, stack)
-        local children  = _CLDInfo[target]
-        if children then
-            for _, child in ipairs, children, 0 do
+        if _CLDInfo[target] then
+            for _, child in ipairs, _CLDInfo[target], 0 do
                 if not _BDInfo[child] then  -- Not in defintion mode
                     if interface.Validate(child) then
-                        attribute.SuspendConsume()
-                        interface.BeginDefinition(child, stack + 1)
-                        attribute.ResumeConsume()
-                        interface.EndDefinition(child, stack + 1)
+                        interface.RefreshDefinition(child, stack + 1)
                     else
-                        attribute.SuspendConsume()
-                        class.BeginDefinition(child, stack + 1)
-                        attribute.ResumeConsume()
-                        class.EndDefinition(child, stack + 1)
+                        class.RefreshDefinition(child, stack + 1)
                     end
-                end
-            end
-        end
-    end
-
-    local function dispatchNewMethod(target, name, func)
-        local children  = _CLDInfo[target]
-        if children then
-            for _, child in ipairs, children, 0 do
-                local cinfo = getTargetInfo(child)
-
-                if (cinfo[FD_TYPMTD] == nil or cinfo[FD_TYPMTD][name] == nil) and getSuperMethod(cinfo, name) == func then
-                    if cinfo[FD_OBJMTD] then cinfo[FD_OBJMTD][name] = func
-                    dispatchNewMethod(child, name, func)
                 end
             end
         end
@@ -3856,10 +3889,10 @@ do
         local info, _, msg  = checkInfoWithName(tType, target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if not info then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+        if not info then error(strformat("Usage: %s.AddExtend(%s, extendinterface[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-        if not interface.Validate(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - the extendinterface must be an interface."):format(tostring(tType), tostring(tType)), stack) end
-        if interface.IsFinal(extendIF) then error(("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s is marked as final, can't be extended."):format(tostring(tType), tostring(tType), tostring(extendIF)), stack) end
+        if not interface.Validate(extendIF) then error(strformat("Usage: %s.AddExtend(%s, extendinterface[, stack]) - the extendinterface must be an interface", tostring(tType), tostring(tType)), stack) end
+        if interface.IsFinal(extendIF) then error(strformat("Usage: %s.AddExtend(%s, extendinterface[, stack]) - The %s is marked as final, can't be extended", tostring(tType), tostring(tType), tostring(extendIF)), stack) end
 
         -- Check if already extended
         if interface.IsSubType(target, extendIF) then return end
@@ -3869,10 +3902,10 @@ do
 
         if class.Validate(target) then
             if reqcls and not class.IsSubType(target, reqcls) then
-                error(("Usage: class.AddExtend(class, extendinterface[, stack]) - The class must be %s's sub-class."):format(tostring(reqcls)), stack)
+                error(strformat("Usage: class.AddExtend(class, extendinterface[, stack]) - The class must be %s's sub-class", tostring(reqcls)), stack)
             end
         elseif interface.IsSubType(extendIF, target) then
-            error("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The extendinterface is a sub type of the interface.", stack)
+            error("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The extendinterface is a sub type of the interface", stack)
         elseif reqcls then
             local rcls = interface.GetRequireClass(target)
 
@@ -3880,7 +3913,7 @@ do
                 if class.IsSubType(reqcls, rcls) then
                     interface.SetRequireClass(target, reqcls, stack + 1)
                 elseif not class.IsSubType(rcls, reqcls) then
-                    error(("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The interface's require class must be %s's sub-class."):format(tostring(reqcls)), stack)
+                    error(strformat("Usage: interface.AddExtend(interface, extendinterface[, stack]) - The interface's require class must be %s's sub-class", tostring(reqcls)), stack)
                 end
             else
                 interface.SetRequireClass(target, reqcls, stack + 1)
@@ -3895,21 +3928,33 @@ do
         local info, name, msg  = checkInfoWithName(tType, target, name)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if msg then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+        if msg then error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-        if not Prototype.Validate(ftype) then error(("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid."):format(tostring(tType), tostring(tType)), stack) end
-        if META_KEYS[name] or name == MTD_DISPOB then error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s can't be used as feature name."):format(tostring(tType), tostring(tType), name), stack) end
+        if not Prototype.Validate(ftype) then error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid", tostring(tType), tostring(tType)), stack) end
+        if META_KEYS[name] or name == MTD_DISPOB then error(strformat("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s can't be used as feature name", tostring(tType), tostring(tType), name), stack) end
 
         local f = ftype.BeginDefinition(target, name, definition, getSuperFeature(info, name, ftype), stack + 1)
 
         if f then
-            info[FD_TYPFTR]         = info[FD_TYPFTR] or _Cache()
-            info[FD_TYPFTR][name]   = f
+            if info[FD_TYPFTR] and info[FD_TYPFTR][name] ~= nil then
+                if getmetatable(info[FD_TYPFTR][name] or info[FD_STAFTR][name]) ~= ftype then
+                    error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the %q existed as other feature type", tostring(tType), tostring(tType), name), stack)
+                end
+                if info[FD_TYPFTR][name] == false then
+                    ftype.SetStatic(f, stack + 1)
+                    info[FD_STAFTR][name] = f
+                else
+                    info[FD_TYPFTR][name] = f
+                end
+            else
+                info[FD_TYPFTR]         = info[FD_TYPFTR] or _Cache()
+                info[FD_TYPFTR][name]   = f
+            end
 
             info[FD_NEWFTR]         = info[FD_NEWFTR] or _Cache()
-            info[FD_NEWFTR][name]   = true
+            info[FD_NEWFTR][name]   = f
         else
-            error(("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The feature's creation failed."):format(tostring(tType), tostring(tType)), stack)
+            error(strformat("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The feature's creation failed", tostring(tType), tostring(tType)), stack)
         end
     end
 
@@ -3917,29 +3962,22 @@ do
         local info, name, msg, def  = checkInfoWithName(tType, target, name, true)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if msg then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - "):format(tostring(tType), tostring(tType)) .. msg, stack) end
+        if msg then error(strformat("Usage: %s.AddMethod(%s, name, func[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-        if META_KEYS[name] or name == MTD_DISPOB then error(("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The %s can't be used as method name."):format(tostring(tType), tostring(tType), name), stack) end
-        if type(func) ~= "function" then error(("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
+        if META_KEYS[name] or name == MTD_DISPOB then error(strformat("Usage: Usage: %s.AddMethod(%s, name, func[, stack]) - The %s can't be used as method name", tostring(tType), tostring(tType), name), stack) end
+        if type(func) ~= "function" then error(strformat("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
+
+        -- Consume before type's re-definition
+        attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name, stack + 1)
 
         if not def then
-            if info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil or info[FD_OBJMTD] and info[FD_OBJMTD][name] then
-                error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The %s's definition is finished, a method already existed with the name %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
-            elseif info[FD_TYPFTR] and info[FD_TYPFTR][name] ~= nil or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                error(("Usage: %s.AddMethod(%s, name, func[, stack]) - The %s's definition is finished, a feature already existed with the name %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
-            end
-
-            beginDefinition(target, stack + 1)
-
-            if info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil or info[FD_OBJMTD] and info[FD_OBJMTD][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name] ~= nil or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                endDefinition(target, stack + 1, true)
-                return
-            end
+            -- This means a simple but required re-definition
+            tType.BeginDefinition(target, stack + 1)
+            info    = getTargetInfo(target)
         end
 
         local nStatic   = not info[name]
 
-        attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
         func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, nStatic and getSuperMethod(info, name) or nil)
 
         if nStatic then
@@ -3949,192 +3987,169 @@ do
             info[name]      = func
         end
 
-        attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name)
+        attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, target, name)
 
         if not def then
-            if info[FD_OBJMTD] then info[FD_OBJMTD][name] = func end
-            dispatchNewMethod(target, name, func)
-            endDefinition(target, stack + 1, true)
+            tType.EndDefinition(target, stack + 1)
         end
     end
 
     local function addMetaMethod(tType, target, name, func, stack)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        local info, def = getTargetInfo(target)
+        if msg then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-        if info then
-            if type(name) ~= "string" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name = strtrim(name)
-            if name == "" then error(("Usage: Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not META_KEYS[name] then error(("Usage: Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The name isn't a valid meta-method name."):format(tostring(tType), tostring(tType)), stack) end
+        if not META_KEYS[name] then error(strformat("Usage: Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The name isn't a valid meta-method name", tostring(tType), tostring(tType)), stack) end
 
-            local tfunc = type(func)
+        local tfunc = type(func)
 
-            if name ~= MTD_INDEX and tfunc ~= "function" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
-            if name == MTD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
+        if name ~= MTD_INDEX and tfunc ~= "function" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
+        if name == MTD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'", tostring(tType), tostring(tType)), stack) end
 
-            if tfunc == "function" then
-                attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, stack + 1)
-                func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
-            end
+        if tfunc == "function" then
+            attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name, stack + 1)
+            func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
+        end
 
-            info[FD_TYPMTM]                     = info[FD_TYPMTM] or _Cache()
-            info[FD_TYPMTM][name]               = func
-            if name ~= META_KEYS[name] then
-                info[FD_TYPMTM][META_KEYS[name]]= func
-            end
+        info[FD_TYPMTM]                     = info[FD_TYPMTM] or _Cache()
+        info[FD_TYPMTM][name]               = func
+        if name ~= META_KEYS[name] then
+            info[FD_TYPMTM][META_KEYS[name]]= func
+        end
 
-            if tfunc == "table" then
-                info[FD_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
-            elseif tfunc == "function" then
-                attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
-            end
-        else
-            error(("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - The is not valid."):format(tostring(tType), tostring(tType)), stack)
+        if tfunc == "table" then
+            info[FD_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
+        elseif tfunc == "function" then
+            attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name)
         end
     end
 
     local function setDispose(tType, target, func, stack)
-        local info, def = getTargetInfo(target)
+        local info, _, msg  = checkInfoWithName(tType, target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if info then
-            if type(func) ~= "function" then error(("Usage: %s.SetDispose(%s, func[, stack]) - the func must be a function."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetDispose(%s, func[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
+        if not info then error(strformat("Usage: %s.SetDispose(%s, func[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-            info[FD_DISPOSE] = func
-        else
-            error(("Usage: %s.SetDispose(%s, func[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
-        end
+        if type(func) ~= "function" then error(strformat("Usage: %s.SetDispose(%s, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
+
+        info[FD_DISPOSE] = func
     end
 
     local function setModifiedFlag(tType, target, flag, methodName, stack)
-        local info, def = getTargetInfo(target)
+        local info, _, msg  = checkInfoWithName(tType, target)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if info then
-            if not def then error(("Usage: %s.%s(%s[, stack]) - The %s's definition is finished."):format(tostring(tType), methodName, tostring(tType), tostring(target)), stack) end
-            if not validateFlags(flag, info[FD_MOD]) then
-                info[FD_MOD] = turnOnFlags(flag, info[FD_MOD])
-            end
-        else
-            error(("Usage: %s.%s(%s[, stack]) - The %s is not valid."):format(tostring(tType), methodName, tostring(tType), tostring(tType)), stack)
+        if not info then error(strformat("Usage: %s.%s(%s[, stack]) - ", tostring(tType), methodName, tostring(tType)) .. msg, stack) end
+
+        if not validateFlags(flag, info[FD_MOD]) then
+            info[FD_MOD] = turnOnFlags(flag, info[FD_MOD])
         end
     end
 
     local function setStaticFeature(tType, target, name, stack)
-        local info, def = getTargetInfo(target)
+        local info, name, msg   = checkInfoWithName(tType, target, name)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if info then
-            if type(name) ~= "string" then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name = strtrim(name)
-            if name == "" then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
-            if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
-                if info[FD_STAFTR] and info[FD_STAFTR][name] or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's %q's definition is finished, can't set as static."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
-                else
-                    error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s has no feature named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack)
-                end
-            end
+        if msg then error(strformat("Usage: %s.SetStaticFeature(%s, name[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-            local feature = info[FD_NEWFTR][name]
-            getmetatable(feature).SetStatic(feature, stack + 1)
+        if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
+            if info[FD_OBJFTR] and info[FD_OBJFTR][name] ~= nil then
+                error(strformat("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's %q's definition is finished, can't set as static", tostring(tType), tostring(tType), tostring(target), name), stack)
+            else
+                error(strformat("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s has no feature named %q", tostring(tType), tostring(tType), tostring(target), name), stack)
+            end
+        end
+
+        local feature   = info[FD_NEWFTR][name]
+        local ftype     = getmetatable(feature)
+        if ftype.SetStatic(feature, stack + 1) then
+            info[FD_STAFTR] = info[FD_STAFTR] or _Cache()
+            info[FD_STAFTR][name] = feature
+            info[FD_OBJFTR][name] = false
         else
-            error(("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
+            error(strformat("Usage: %s.SetStaticFeature(%s, name[, stack]) - The %s's feature %q can't be set as static", tostring(tType), tostring(tType), tostring(target), name), stack)
         end
     end
 
     local function setStaticMethod(tType, target, name, stack)
-        local info, def = getTargetInfo(target)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if info then
-            if type(name) ~= "string" then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name = strtrim(name)
-            if name == "" then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
-            if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s has no method named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack) end
-            if info[FD_TYPMTD][name] == true then error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %q is a require method."):format(tostring(tType), tostring(tType), name), stack) end
+        if msg then error(strformat("Usage: %s.SetStaticMethod(%s, name[, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-            if info[name] == nil then
-                info[name] = info[FD_TYPMTD][name]
-                info[FD_TYPMTD][name] = false
-            end
-        else
-            error(("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
+        if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(strformat("Usage: %s.SetStaticMethod(%s, name[, stack]) - The %s has no method named %q", tostring(tType), tostring(tType), tostring(target), name), stack) end
+
+        if info[name] == nil then
+            info[name] = info[FD_TYPMTD][name]
+            info[FD_TYPMTD][name] = false
+            if info[FD_INHRTP] and info[FD_INHRTP][name] then info[FD_INHRTP] = nil end
         end
     end
 
-    local function setVirtualMethod(tType, target, name, stack)
-        local info, def = getTargetInfo(target)
+    local function setPriorityFeature(tType, target, name, methodName, priority, stack)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
         stack = (type(stack) == "number" and stack or 2) + 1
 
-        if info then
-            if type(name) ~= "string" then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - the name must be a string."):format(tostring(tType), tostring(tType)), stack) end
-            name = strtrim(name)
-            if name == "" then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The name can't be empty."):format(tostring(tType), tostring(tType)), stack) end
-            if not def then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s's definition is finished."):format(tostring(tType), tostring(tType), tostring(target)), stack) end
-            if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s has no method named %q."):format(tostring(tType), tostring(tType), tostring(target), name), stack) end
-            if info[FD_TYPMTD][name] == true then error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %q is a require method."):format(tostring(tType), tostring(tType), name), stack) end
+        if msg then error(strformat("Usage: %s.%s(%s, name[, stack]) - ", tostring(tType), methodName, tostring(tType)) .. msg, stack) end
 
-            if info[name] == nil then
-                info[name] = info[FD_TYPMTD][name]
-                info[FD_TYPMTD][name] = false
+        if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
+            if info[FD_OBJFTR] and info[FD_OBJFTR][name] ~= nil then
+                error(strformat("Usage: %s.%s(%s, name[, stack]) - The %s's %q's definition is finished, can't change its priority", tostring(tType), methodName, tostring(tType), tostring(target), name), stack)
+            else
+                error(strformat("Usage: %s.%s(%s, name[, stack]) - The %s has no feature named %q", tostring(tType), methodName, tostring(tType), tostring(target), name), stack)
             end
-        else
-            error(("Usage: %s.SetVirtualMethod(%s, name[, stack]) - The %s is not valid."):format(tostring(tType), tostring(tType), tostring(tType)), stack)
         end
+
+        info[FD_INHRTP] = info[FD_INHRTP] or _Cache()
+        info[FD_INHRTP][name] = priority
     end
 
-    local function setVirtualFeature(tType, target, name, stack)
+    local function setPriorityMethod(tType, target, name, methodName, priority, stack)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        if msg then error(strformat("Usage: %s.%s(%s, name[, stack]) - ", tostring(tType), methodName, tostring(tType)) .. msg, stack) end
+
+        if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then
+            if info[FD_TYPMTD] and info[FD_TYPMTD][name] == false then
+                error(strformat("Usage: %s.%s(%s, name[, stack]) - The %s's %q is static, can't change its priority", tostring(tType), methodName, tostring(tType), tostring(target), name), stack)
+            else
+                error(strformat("Usage: %s.%s(%s, name[, stack]) - The %s has no method named %q", tostring(tType), methodName, tostring(tType), tostring(target), name), stack)
+            end
+        end
+
+        info[FD_INHRTP] = info[FD_INHRTP] or _Cache()
+        info[FD_INHRTP][name] = priority
     end
 
-    local function setVirtualMetaMethod(tType, target, name, stack)
+    local function setPriorityMetaMethod(tType, target, name, methodName, priority, stack)
+        local info, name, msg  = checkInfoWithName(tType, target, name)
+        stack = (type(stack) == "number" and stack or 2) + 1
+
+        if msg then error(strformat("Usage: %s.%s(%s, name[, stack]) - ", tostring(tType), methodName, tostring(tType)) .. msg, stack) end
+
+        if not (info[FD_TYPMTM] and info[FD_TYPMTM][name]) then
+            error(strformat("Usage: %s.%s(%s, name[, stack]) - The %s has no meta-method named %q", tostring(tType), methodName, tostring(tType), tostring(target), name), stack)
+        end
+
+        info[FD_INHRTP] = info[FD_INHRTP] or _Cache()
+        info[FD_INHRTP][name] = priority
     end
 
     -- Buidler helpers
-    local function dispatchNewFeatures(target, stack)
-        local info = getTargetInfo(target)
-
-        if info[FD_NEWFTR] then
-            info[FD_TYPFTR] = info[FD_TYPFTR] or _Cache()
-
-            for name, ftr in pairs, info[FD_NEWFTR] do
-                local ftype = getmetatable(ftr)
-                ftype.EndDefinition(ftr, target, name, stack + 1)
-
-                info[FD_TYPFTR][name]       = ftr
-
-                if ftype.IsStatic(ftr) then
-                    info[FD_STAFTR]         = info[FD_STAFTR] or _Cache()
-                    info[FD_STAFTR][name]   = ftr
-                else
-                    info[FD_OBJFTR]         = info[FD_OBJFTR] or _Cache()
-                    info[FD_OBJFTR][name]   = ftr
-                end
-            end
-
-            _Cache(info[FD_NEWFTR])
-            info[FD_NEWFTR] = nil
-        end
-    end
-
     local function getIfBuilderValue(self, name)
         -- Access methods
-        local info = getTargetInfo(typebuilder.GetBuilderOwner(self))
+        local info = getTargetInfo(environment.GetNameSpace(self))
         if info and info[name] then return info[name], true end
-        return getValueFromBuidler(self, name)
+        return getEnvValue(self, name)
     end
 
     local function getClsBuilderValue(self, name)
         -- Access methods
-        local info = getTargetInfo(typebuilder.GetBuilderOwner(self))
+        local info = getTargetInfo(environment.GetNameSpace(self))
         if info and info[name] then return info[name], true end
-        return getValueFromBuidler(self, name)
+        return getEnvValue(self, name)
     end
 
     local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
@@ -4155,7 +4170,7 @@ do
                     struct.AddMethod(owner, key, value, stack)
                     return true
                 end
-            elseif namespace.IsFeatureType(value) then
+            elseif namespace.IsResourceType(value) then
                 if key == MTD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
                 else
@@ -4169,7 +4184,7 @@ do
         elseif tkey == "number" then
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
-            elseif namespace.IsFeatureType(value) then
+            elseif namespace.IsResourceType(value) then
                 struct.SetArrayElement(owner, value, stack)
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
@@ -4180,7 +4195,7 @@ do
         end
     end
 
-    interface       = Prototype.NewPrototype {
+    interface       = Prototype "interface" {
         __index     = {
             ["AddExtend"]       = function(target, extendinterface, stack)
                 addExtend(interface, target, extendinterface, stack)
@@ -4204,28 +4219,19 @@ do
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.BeginDefinition(interface[, stack]) - interface not existed", stack) end
 
-                local info      = _ICInfo[target]
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: interface.BeginDefinition(interface[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
-                if _BDInfo[target] then error(("Usage: interface.BeginDefinition(interface[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
+                if _ICInfo[target] and validateFlags(MD_SEAL, _ICInfo[target][FD_MOD]) then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _BDInfo[target] then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 -- Only one thread can be allowed to define class or interface
                 beginDefinition(target, stack + 1)
 
-                local ninfo     = _Cache()
+                local ninfo     = tblclone(_ICInfo[target], { [FD_SUPCACH] = false }, true)
 
-                ninfo[FD_SUPCACH] = false
-                ninfo[FD_OBJFTR]  = false
-                ninfo[FD_OBJMTD]  = false
-                ninfo[FD_OBJMTM]  = false
-                tblclone(info, ninfo, true)
                 ninfo[FD_SUPCACH] = nil
-                ninfo[FD_OBJFTR]  = nil
-                ninfo[FD_OBJMTD]  = nil
-                ninfo[FD_OBJMTM]  = nil
 
                 _BDInfo[target] = ninfo
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, stack + 1)
+                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -4237,10 +4243,10 @@ do
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, nil, nil, nil, unpack(ninfo, FD_STEXT))
 
                 -- End new type feature's definition
-                dispatchNewFeatures(target, stack + 1)
+                endDefinitionForNewFeatures(target, stack + 1)
 
                 -- Re-generate the extended interfaces order list
-                local lst, spc  = generateSuperInfo(ninfo, _Cache())
+                local lst       = generateSuperInfo(ninfo, _Cache())
                 local idxIF     = FD_STEXT + #lst
 
                 for i, extif in ipairs, lst, 0 do
@@ -4249,34 +4255,64 @@ do
 
                 _Cache(lst)
 
-                -- Check require methods and features
-                -- Generate the super cache
-
-
-
-                local onlyreq       = nil
-                for k, v in pairs, getUniqueReqMethod(ninfo) do if onlyreq then onlyreq = nil break else onlyreq = k end end
-                ninfo[FD_ONEVRM]    = onlyreq
+                generateTypeCaches(target, ninfo)
 
                 -- End interface's definition
-                _BDInfo[target]     = nil
+                _BDInfo[target] = nil
 
                 -- Save as new interface's info
-                _ICInfo[target]     = ninfo
+                _ICInfo[target] = ninfo
+
+                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_INTERFACE)
 
                 -- Release the lock, so other threads can be used to define interface or class
                 endDefinition(target, stack + 1)
 
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_INTERFACE)
+                return target
+            end;
+
+            ["RefreshDefinition"] = function(target, stack)
+                stack = type(stack) == "number" and stack or 2
+
+                target          = interface.Validate(target)
+                if not target then error("Usage: interface.RefreshDefinition(interface[, stack]) - interface not existed", stack) end
+                if _BDInfo[target] then error(strformat("Usage: interface.RefreshDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+
+                -- Only one thread can be allowed to define class or interface
+                beginDefinition(target, stack + 1)
+
+                local ninfo     = tblclone(_ICInfo[target], { [FD_SUPCACH] = false }, true)
+
+                ninfo[FD_SUPCACH] = nil
+
+                -- Re-generate the extended interfaces order list
+                local lst       = generateSuperInfo(ninfo, _Cache())
+                local idxIF     = FD_STEXT + #lst
+
+                for i, extif in ipairs, lst, 0 do
+                    ninfo[idxIF - i]= extif
+                end
+
+                _Cache(lst)
+
+                generateTypeCaches(target, ninfo)
+
+                -- Save as new interface's info
+                _ICInfo[target] = ninfo
+
+                -- Release the lock, so other threads can be used to define interface or class
+                endDefinition(target, stack + 1)
 
                 return target
             end;
+
+            ["GetDefault"]      = fakefunc;
 
             ["GetExtends"]      = function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         for i   = #info, FD_STEXT, -1 do tinsert(cache, info[i]) end
                         return cache
                     else
@@ -4297,7 +4333,8 @@ do
             ["GetFeature"]      = function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    local featr = info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    if featr == false then featr = info[FD_STAFTR][name] end
                     return featr and getmetatable(featr).GetFeature(featr)
                 end
             end;
@@ -4305,22 +4342,16 @@ do
             ["GetObjectFeature"]= function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
-                    if featr then
-                        local t = getmetatable(featr)
-                        if not t.IsStatic(featr) then return t.GetFeature(featr) end
-                    end
+                    local featr = info[FD_TYPFTR] and info[FD_TYPFTR][name]
+                    return featr and getmetatable(featr).GetFeature(featr)
                 end
             end;
 
             ["GetStaticFeature"]= function(target, name)
                 local info, def = getTargetInfo(target)
                 if info and type(name) == "string" then
-                    local featr = def and info[FD_NEWFTR] and info[FD_NEWFTR][name] or info[FD_TYPFTR] and info[FD_TYPFTR][name]
-                    if featr then
-                        local t = getmetatable(featr)
-                        if t.IsStatic(featr) then return t.GetFeature(featr) end
-                    end
+                    local featr = info[FD_STAFTR] and info[FD_STAFTR][name]
+                    return featr and getmetatable(featr).GetFeature(featr)
                 end
             end;
 
@@ -4328,31 +4359,31 @@ do
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
 
-                        if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do cache[k] = getmetatable(v).GetFeature(v) end end
-                        if info[FD_TYPFTR] then for k, v in pairs, info[FD_TYPFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
+                        if info[FD_TYPFTR] then
+                            for k, v in pairs, info[FD_TYPFTR] do
+                                v = v or info[FD_STAFTR][k]
+                                cache[k] = getmetatable(v).GetFeature(v)
+                            end
+                        end
 
                         return cache
-                    else
-                        local nf = def and info[FD_NEWFTR]
+                    elseif infop[FD_TYPFTR] then
                         local tf = info[FD_TYPFTR]
-                        local bnf= nf
+                        local sf = info[FD_STAFTR]
                         return function(self, n)
-                            local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                if v then return n, getmetatable(v).GetFeature(v) end
-                                nf, n   = nil
-                            end
-                            if tf then
-                                n, v    = next(tf, n)
-                                while n and bnf and bnf[n] do n, v = next(tf, n) end
-                                if v then return n, getmetatable(v).GetFeature(v) end
+                            local n, v  = next(tf, n)
+                            if n then
+                                v       = v or sf[n]
+                                return n, getmetatable(v).GetFeature(v)
                             end
                         end, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4361,32 +4392,31 @@ do
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
 
-                        if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do if not getmetatable(v).IsStatic(v) then cache[k] = getmetatable(v).GetFeature(v) end end end
-                        if info[FD_TYPFTR] then for k, v in pairs, info[FD_TYPFTR] do if not cache[k] and not getmetatable(v).IsStatic(v) then cache[k] = getmetatable(v).GetFeature(v) end end end
+                        if info[FD_TYPFTR] then
+                            for k, v in pairs, info[FD_TYPFTR] do
+                                if v then
+                                    cache[k] = getmetatable(v).GetFeature(v)
+                                end
+                            end
+                        end
 
                         return cache
-                    else
-                        local nf = def and info[FD_NEWFTR]
+                    elseif info[FD_TYPFTR] then
                         local tf = info[FD_TYPFTR]
-                        local bnf= nf
                         return function(self, n)
-                            local v
-                            if nf then
-                                n, v    = next(nf, n)
-                                while n and getmetatable(v).IsStatic(v) do n, v = next(nf, n) end
-                                if v then return n, getmetatable(v).GetFeature(v) end
-                                nf, n   = nil
-                            end
-                            if tf then
-                                n, v    = next(tf, n)
-                                while n and (bnf and bnf[n] or getmetatable(v).IsStatic(v)) do n, v = next(tf, n) end
-                                if v then return n, getmetatable(v).GetFeature(v) end
+                            local n, v  = next(tf, n)
+                            while n and v == false do n, v = next(tf, n) end
+                            if v then
+                                return n, getmetatable(v).GetFeature(v)
                             end
                         end, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4395,7 +4425,7 @@ do
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
 
                         if def and info[FD_NEWFTR] then for k, v in pairs, info[FD_NEWFTR] do if getmetatable(v).IsStatic(v) then cache[k] = getmetatable(v).GetFeature(v) end end end
                         if info[FD_STAFTR] then for k, v in pairs, info[FD_STAFTR] do if not cache[k] then cache[k] = getmetatable(v).GetFeature(v) end end end
@@ -4420,7 +4450,10 @@ do
                             end
                         end, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4446,7 +4479,7 @@ do
                 local info      = getTargetInfo(target)
                 if info then
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, info do if type(k) == "string" then cache[k] = v end end
                         return cache
                     else
@@ -4457,7 +4490,10 @@ do
                             if v then return n, v end
                         end, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4467,7 +4503,7 @@ do
                 if info then
                     local obm   = info[FD_TYPMTD]
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         if obm then for k, v in pairs, info do if obm[k] then cache[k] = v end end end
                         return cache
                     elseif obm then
@@ -4477,10 +4513,11 @@ do
                             while n and not obm[n] do n, v = next(info, n) end
                             if v then return n, v end
                         end, target
-                    else
-                        return fakefunc, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4490,7 +4527,7 @@ do
                 if info then
                     local obm   = info[FD_TYPMTD]
                     if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or _Cache()
+                        cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, info do if type(k) == "string" and not (obm and obm[k]) then cache[k] = v end end
                         return cache
                     else
@@ -4501,7 +4538,10 @@ do
                             if v then return n, v end
                         end, target
                     end
-                elseif not cache then
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
                     return fakefunc, target
                 end
             end;
@@ -4568,29 +4608,29 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: interface.SetInitializer(interface, initializer[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(func) ~= "function" then error("Usage: interface.SetInitializer(interface, initializer) - The initializer must be a function.", stack) end
+                    if not def then error(strformat("Usage: interface.SetInitializer(interface, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(func) ~= "function" then error("Usage: interface.SetInitializer(interface, initializer) - The initializer must be a function", stack) end
                     info[FD_INIT] = func
                 else
-                    error("Usage: interface.SetInitializer(interface, initializer[, stack]) - The interface is not valid.", stack)
+                    error("Usage: interface.SetInitializer(interface, initializer[, stack]) - The interface is not valid", stack)
                 end
             end;
 
             ["SetRequireClass"] = function(target, cls, stack)
                 stack = type(stack) == "number" and stack or 2
 
-                if not interface.Validate(target) then error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - the interface is not valid.", stack) end
+                if not interface.Validate(target) then error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - the interface is not valid", stack) end
 
                 local info, def = getTargetInfo(target)
 
                 if info then
-                    if not class.Validate(cls) then error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - the requireclass must be a class.", stack) end
-                    if not def then error(("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The %s' definition is finished."):format(tostring(target)), stack) end
-                    if info[FD_REQCLS] and not class.IsSubType(cls, info[FD_REQCLS]) then error(("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The requireclass must be %s's sub-class."):format(tostring(info[FD_REQCLS])), stack) end
+                    if not class.Validate(cls) then error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - the requireclass must be a class", stack) end
+                    if not def then error(strformat("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The %s' definition is finished", tostring(target)), stack) end
+                    if info[FD_REQCLS] and not class.IsSubType(cls, info[FD_REQCLS]) then error(strformat("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The requireclass must be %s's sub-class", tostring(info[FD_REQCLS])), stack) end
 
                     info[FD_REQCLS] = cls
                 else
-                    error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The interface is not valid.", stack)
+                    error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - The interface is not valid", stack)
                 end
             end;
 
@@ -4599,22 +4639,22 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if type(name) ~= "string" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - the name must be a string.", stack) end
+                    if type(name) ~= "string" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - the name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
+                    if name == "" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The name can't be empty", stack) end
+                    if not def then error(strformat("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if not (info[FD_NEWFTR] and info[FD_NEWFTR][name]) then
                         if info[FD_STAFTR] and info[FD_STAFTR][name] or info[FD_OBJFTR] and info[FD_OBJFTR][name] then
-                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's %q's definition is finished, can't set as require."):format(tostring(target), name), stack)
+                            error(strformat("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s's %q's definition is finished, can't set as require", tostring(target), name), stack)
                         else
-                            error(("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s has no feature named %q."):format(tostring(target), name), stack)
+                            error(strformat("Usage: interface.SetRequireFeature(interface, name[, stack]) - The %s has no feature named %q", tostring(target), name), stack)
                         end
                     end
 
                     local feature = info[FD_NEWFTR][name]
                     getmetatable(feature).SetRequire(feature, stack + 1)
                 else
-                    error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The interface is not valid.", stack)
+                    error("Usage: interface.SetRequireFeature(interface, name[, stack]) - The interface is not valid", stack)
                 end
             end;
 
@@ -4623,16 +4663,16 @@ do
                 stack = (type(stack) == "number" and stack or 2) + 1
 
                 if info then
-                    if type(name) ~= "string" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - the name must be a string.", stack) end
+                    if type(name) ~= "string" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - the name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if not info[name] then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s has no method named %q."):format(tostring(target), name), stack) end
-                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %q is a static method."):format(name), stack) end
+                    if name == "" then error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The name can't be empty", stack) end
+                    if not def then error(strformat("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if not info[name] then error(strformat("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %s has no method named %q", tostring(target), name), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(strformat("Usage: interface.SetRequireMethod(interface, name[, stack]) - The %q is a static method", name), stack) end
 
                     info[FD_TYPMTD][name] = true
                 else
-                    error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The interface is not valid.", stack)
+                    error("Usage: interface.SetRequireMethod(interface, name[, stack]) - The interface is not valid", stack)
                 end
             end;
 
@@ -4641,15 +4681,15 @@ do
                 stack = (type(stack) == "number" and stack or 2) + 1
 
                 if info then
-                    if type(name) ~= "string" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - the name must be a string.", stack) end
+                    if type(name) ~= "string" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - the name must be a string", stack) end
                     name = strtrim(name)
-                    if name == "" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The name can't be empty.", stack) end
-                    if not def then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if not info[name] then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s has no method named %q."):format(tostring(target), name), stack) end
-                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %q is a static method."):format(name), stack) end
+                    if name == "" then error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The name can't be empty", stack) end
+                    if not def then error(strformat("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if not info[name] then error(strformat("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %s has no method named %q", tostring(target), name), stack) end
+                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name]) then error(strformat("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The %q is a static method", name), stack) end
 
                 else
-                    error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The interface is not valid.", stack)
+                    error("Usage: interface.SetRequireMetaMethod(interface, name[, stack]) - The interface is not valid", stack)
                 end
             end;
 
@@ -4680,24 +4720,26 @@ do
         __concat    = typeconcat,
         __tostring  = function() return "interface" end,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(interface, tinterface, ...)
-            if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][, stack]) - the interface type can't be created.", stack) end
+            local env, target, definition, keepenv, stack = GetTypeParams(interface, tinterface, ...)
+            if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][, stack]) - the interface type can't be created", stack) end
 
             interface.BeginDefinition(target, stack + 1)
 
-            local builder = typebuilder.NewBuilder(interfacebuilder, target, env)
+            local tarenv = Prototype.NewObject(interfacebuilder)
+            environment.SetNameSpace(tarenv, target)
+            environment.SetParent(env)
 
             if definition then
-                builder(definition, stack + 1)
+                tarenv(definition, stack + 1)
                 return target
             else
-                if not keepenv then setfenv(stack, builder) end
-                return builder
+                if not keepenv then setfenv(stack, tarenv) end
+                return tarenv
             end
         end,
     }
 
-    class           = Prototype.NewPrototype {
+    class           = Prototype "calss" {
         __index     = {
             ["AddExtend"]       = function(target, extendinterface, stack)
                 addExtend(class, target, extendinterface, stack)
@@ -4723,8 +4765,8 @@ do
 
                 local info      = _ICInfo[target]
 
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined."):format(tostring(target)), stack) end
-                if _BDInfo[target] then error(("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun."):format(tostring(target)), stack) end
+                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _BDInfo[target] then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 -- Only one thread can be allowed to define class or interface
                 beginDefinition(target, stack + 1)
@@ -4745,7 +4787,7 @@ do
 
                 _BDInfo[target] = ninfo
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_CLASS, stack + 1)
+                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -4757,7 +4799,7 @@ do
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, nil, unpack(ninfo, ninfo[FD_SUPCLS] and FD_SUPCLS or FD_STEXT))
 
                 -- End new type feature's definition
-                dispatchNewFeatures(target, stack + 1)
+                endDefinitionForNewFeatures(target, stack + 1)
 
                 -- The init & dispose link for extended interfaces & super classes
                 local initIdx   = FD_STINIT
@@ -4871,6 +4913,8 @@ do
                 return target
             end;
 
+            ["GetDefault"]      = fakefunc;
+
             ["GetExtends"]      = interface.GetExtends;
 
             ["GetFeature"]      = interface.GetFeature;
@@ -4976,17 +5020,17 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not def then error(("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished."):format(tostring(target)), stack) end
-                    if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function.", stack) end
+                    if not def then error(strformat("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function", stack) end
 
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, stack + 1)
+                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, target, name, stack + 1)
                     func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, nil, target, name)
 
                     info[FD_INIT] = func
 
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, nil, target, name)
+                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, target, name)
                 else
-                    error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid.", stack)
+                    error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid", stack)
                 end
             end;
 
@@ -5017,20 +5061,20 @@ do
             ["SetSuperClass"]   = function(target, cls, stack)
                 stack = type(stack) == "number" and stack or 2
 
-                if not class.Validate(target) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the class is not valid.", stack) end
+                if not class.Validate(target) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the class is not valid", stack) end
 
                 local info, def = getTargetInfo(target)
 
                 if info then
-                    if not class.Validate(cls) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the superclass must be a class.", stack) end
-                    if not def then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s' definition is finished."):format(tostring(target)), stack) end
-                    if info[FD_SUPCLS] and info[FD_SUPCLS] ~= cls then error(("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s already has a super class."):format(tostring(target)), stack) end
+                    if not class.Validate(cls) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the superclass must be a class", stack) end
+                    if not def then error(strformat("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s' definition is finished", tostring(target)), stack) end
+                    if info[FD_SUPCLS] and info[FD_SUPCLS] ~= cls then error(strformat("Usage: class.SetSuperClass(class, superclass[, stack]) - The %s already has a super class", tostring(target)), stack) end
 
                     if info[FD_SUPCLS] then return end
 
                     addSuperType(info, target, cls)
                 else
-                    error("Usage: class.SetSuperClass(class, superclass[, stack]) - The class is not valid.", stack)
+                    error("Usage: class.SetSuperClass(class, superclass[, stack]) - The class is not valid", stack)
                 end
             end;
 
@@ -5058,24 +5102,26 @@ do
         __concat    = typeconcat,
         __tostring  = function() return "class" end,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = typebuilder.GetNewTypeParams(class, tclass, ...)
-            if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created.", stack) end
+            local env, target, definition, keepenv, stack = GetTypeParams(class, tclass, ...)
+            if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created", stack) end
 
             class.BeginDefinition(target, stack + 1)
 
-            local builder = typebuilder.NewBuilder(classbuilder, target, env)
+            local tarenv = Prototype.NewObject(classbuilder)
+            environment.SetNameSpace(tarenv, target)
+            environment.SetParent(env)
 
             if definition then
-                builder(definition, stack + 1)
+                tarenv(definition, stack + 1)
                 return target
             else
-                if not keepenv then setfenv(stack, builder) end
-                return builder
+                if not keepenv then setfenv(stack, tarenv) end
+                return tarenv
             end
         end,
     }
 
-    tinterface      = Prototype.NewPrototype(tnamespace, {
+    tinterface      = Prototype "tinterface" (tnamespace, {
         __index     = function(self, key)
             if type(key) == "string" then
                 -- Access methods
@@ -5115,22 +5161,22 @@ do
                 end
             end
 
-            error(("The %s is readonly."):format(tostring(self)), 2)
+            error(strformat("The %s is readonly", tostring(self)), 2)
         end,
         __call      = function(self, init)
             local info  = _ICInfo[self]
             if type(init) == "string" then
                 local ret, msg = struct.ValidateValue(Lambda, init)
-                if msg then error(("Usage: %s(init) - "):format(tostring(self)) .. (type(msg) == "string" and msg:gsub("%%s%.?", "init") or "the init is not valid."), 2) end
+                if msg then error(strformat("Usage: %s(init) - ", tostring(self)) .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "init") or "the init is not valid."), 2) end
                 init    = ret
             end
 
             if type(init) == "function" then
-                if not info[FD_ONEVRM] then error(("Usage: %s(init) - the interface isn't an one method required interface."):format(tostring(self)), 2) end
+                if not info[FD_ONEVRM] then error(strformat("Usage: %s(init) - the interface isn't an one method required interface", tostring(self)), 2) end
                 init    = { [info[FD_ONEVRM]] = init }
             end
 
-            if init and type(init) ~= "table" then error(("Usage: %s(init) - the init can only be lambda expression, function or table."):format(tostring(self)), 2) end
+            if init and type(init) ~= "table" then error(strformat("Usage: %s(init) - the init can only be lambda expression, function or table", tostring(self)), 2) end
 
             local aycls = info[FD_ANYMSCL]
 
@@ -5147,7 +5193,7 @@ do
         __metatable = interface,
     })
 
-    tclass          = Prototype.NewPrototype(tinterface, {
+    tclass          = Prototype "tclass" (tinterface, {
         __newindex  = function(self, key, value)
             if type(key) == "string" then
                 local info  = _ICInfo[self]
@@ -5165,7 +5211,7 @@ do
                 end
             end
 
-            error(("The %s is readonly."):format(tostring(self)), 2)
+            error(strformat("The %s is readonly", tostring(self)), 2)
         end,
         __call      = function(self, ...)
             local info  = _ICInfo[self]
@@ -5175,7 +5221,7 @@ do
         __metatable = class,
     })
 
-    tSuperInterface = Prototype.NewPrototype {
+    tSuperInterface = Prototype "tSuperInterface" {
         __index     = function(self, key)
             local t = type(key)
 
@@ -5184,11 +5230,11 @@ do
                 if obj then
                     _SuperObj[self] = nil
                     local info  = _ObjMap[obj] or getTargetInfo(getmetatable(obj))
-                    if not info then error("Usage: Super[obj].Method(obj, [...]) - Can't figure out the obj's class.", 2) end
+                    if not info then error("Usage: Super[obj].Method(obj, [...]) - Can't figure out the obj's class", 2) end
                     return getSuperMethod(info, key, _SuperMap[self])
                 else
                     local info  = _ICInfo[_SuperMap[self]]
-                    if not info then error("Usage: Super.Method(obj, [...]) - Can't figure out the type that the super represent.", 2) end
+                    if not info then error("Usage: Super.Method(obj, [...]) - Can't figure out the type that the super represent", 2) end
                     local f     = info[FD_SUPCACH][key]
                     if not f then
                         if META_KEYS[key] then
@@ -5198,7 +5244,7 @@ do
                         end
                         info[FD_SUPCACH][key] = f
                     end
-                    if type(f) ~= "function" then error(("No method named %q can be find in Super."):format(key), 2) end
+                    if type(f) ~= "function" then error(strformat("No method named %q can be find in Super", key), 2) end
                     return f
                 end
             elseif t == "table" then
@@ -5216,46 +5262,53 @@ do
         __metatable = interface,
     }
 
-    tSuperClass     = Prototype.NewPrototype (tSuperInterface, {
+    tSuperClass     = Prototype "tSuperClass" (tSuperInterface, {
         __call      = function(self, obj, ...)
 
         end,
         __metatable = class,
     })
 
-    tThisClass      = Prototype.NewPrototype {
+    tThisClass      = Prototype "tThisClass" {
         __call      = function(self, obj, ...)
 
         end,
         __metatable = class,
     }
 
-    interfacebuilder= Prototype.NewPrototype {
+    interfacebuilder= Prototype "interfacebuilder" {
         __index     = function(self, key)
             local val, cache = getBuilderValue(self, key)
-            if val ~= nil and cache and not typebuilder.InDefineMode(self) then
+
+-- Access methods
+local info  = getTargetInfo(environment.GetNameSpace(self))
+local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
+if m then return m, true end
+return getEnvValue(self, name)
+            if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
             end
             return val
         end,
         __newindex  = function(self, key, value)
-            if typebuilder.InDefineMode(self) then
-                if setBuilderOwnerValue(typebuilder.GetBuilderOwner(self), key, value, 3) then                     return
+            local owner = environment.GetNameSpace(self)
+            if _BDInfo[owner] then
+                if setBuilderOwnerValue(owner, key, value, 3) then
+                    return
                 end
             end
             return rawset(self, key, value)
         end,
         __call      = function(self, ...)
-            local definition, stack = typebuilder.GetBuilderParams(self, ...)
-            if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing.", stack) end
+            local definition, stack = GetDefinitionParams(self, ...)
+            if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = typebuilder.GetBuilderOwner(self)
-            if not owner then error("The struct builder is expired.", stack) end
+            local owner = environment.GetNameSpace(self)
+            if not owner then error("The struct's definition is finished", stack) end
 
             stack = stack + 1
 
             if type(definition) == "function" then
-                setfenv(definition, self)
                 definition(self)
             else
                 -- Index key first
@@ -5270,18 +5323,18 @@ do
                 end
             end
 
-            typebuilder.EndDefinition(self, stack)
+            setfenv(stack - 1, environment.GetParent(self) or _G)
             struct.EndDefinition(owner, stack)
 
             return owner
         end,
     }
 
-    classbuilder    = Prototype.NewPrototype( interfacebuilder, {
+    classbuilder    = Prototype "classbuilder" ( interfacebuilder, {
 
     })
 
-    typefeature     = Prototype.NewPrototype {
+    typefeature     = Prototype "typefeature" {
         __index     = {
             ["New"]             = function(owner, name, definition, stack)
             end;
@@ -5298,6 +5351,9 @@ end
 --                                   event                                   --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                            Event Data                             --
+    -----------------------------------------------------------------------
     local _EvtInfo  = setmetatable({}, WEAK_KEY)
 
     local FD_NAME   = 0
@@ -5306,20 +5362,20 @@ do
     local FD_INDEF  = 3
 
     -- Key feature : event "Name"
-    event           = Prototype.NewPrototype (typefeature, {
+    event           = Prototype "event" (typefeature, {
         __index     = {
             ["BeginDefinition"] = function(owner, name, definition, super, stack)
-                local evt       = Prototype.NewPrototype(tevent)
+                local evt       = Prototype "name" (tevent)
                 _EvtInfo[evt]   = setmetatable({ [FD_NAME] = name, [FD_OWNER] = owner, [FD_INDEF] = true }, WEAK_KEY)
 
-                attribute.ConsumeAttributes(evt, ATTRIBUTE_TARGETS_EVENT, stack + 1)
+                attribute.ConsumeAttributes(evt, ATTRIBUTE_TARGETS_EVENT, owner, name, stack + 1)
                 attribute.ApplyAttributes  (evt, ATTRIBUTE_TARGETS_EVENT, nil, owner, name, super)
 
                 return evt
             end;
 
             ["EndDefinition"]   = function(feature, owner, name)
-                attribute.ApplyAfterDefine (feature, ATTRIBUTE_TARGETS_EVENT, nil, owner, name)
+                attribute.ApplyAfterDefine (feature, ATTRIBUTE_TARGETS_EVENT, owner, name)
 
                 local info      = _EvtInfo[feature]
                 if info then info[FD_INDEF] = nil end
@@ -5347,10 +5403,10 @@ do
                     if info[FD_INDEF] then
                         info[FD_STATIC] = true
                     elseif not info[FD_STATIC] then
-                        error("Usage: event.SetStatic(event[, stack]) - The event's definition is finished.", stack)
+                        error("Usage: event.SetStatic(event[, stack]) - The event's definition is finished", stack)
                     end
                 else
-                    error("Usage: event.SetStatic(event[, stack]) - The event object is not valid.", stack)
+                    error("Usage: event.SetStatic(event[, stack]) - The event object is not valid", stack)
                 end
             end;
 
@@ -5360,8 +5416,8 @@ do
         },
         __call      = function(self, ...)
             if self == event then
-                local env, name, definition, stack, owner, builder = typebuilder.GetNewFeatureParams(event, ...)
-                if not owner or not builder then error([[Usage: event "name" - can't be used here.]], stack) end
+                local env, name, definition, stack, owner, tarenv = GetFeatureParams(event, ...)
+                if not owner or not tarenv then error([[Usage: event "name" - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: event "name" - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: event "name" - the name can't be an empty string.]], stack) end
@@ -5373,7 +5429,7 @@ do
         end;
     })
 
-    tevent          = Prototype.NewPrototype {
+    tevent          = Prototype "tevent" {
         __call      = event.Invoke,
     }
 end
@@ -5383,7 +5439,7 @@ end
 -------------------------------------------------------------------------------
 do
     -- Key feature : property "Name" { Type = String, Default = "Anonymous" }
-    property        = Prototype.NewPrototype {
+    property        = Prototype "property" {
         __index     = {
             ["New"]             = function(self, owner, name)
 
@@ -5393,8 +5449,8 @@ do
         },
         __call      = function(self, ...)
             if self == property then
-                local env, name, definition, stack, owner, builder = typebuilder.GetNewFeatureParams(property, ...)
-                if not owner or not builder then error([[Usage: property "name" {...} - can't be used here.]], stack) end
+                local env, name, definition, stack, owner, tarenv = GetFeatureParams(property, ...)
+                if not owner or not tarenv then error([[Usage: property "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: property "name" {...} - the name can't be an empty string.]], stack) end
@@ -5407,7 +5463,7 @@ do
                 end
             else
                 local owner, name       = self.owner, self.name
-                local definition, stack = typebuilder.GetBuilderParams(self, ...)
+                local definition, stack = GetDefinitionParams(self, ...)
 
                 if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -5419,14 +5475,14 @@ do
         end,
     }
 
-    tproperty       = Prototype.NewPrototype { __metatable = property }
+    tproperty       = Prototype "tproperty" { __metatable = property }
 end
 
 -------------------------------------------------------------------------------
 --                           Feature Installation                            --
 -------------------------------------------------------------------------------
 do
-    typebuilder.RegisterKeyWord(structbuilder, {
+    environment.RegisterKeyWord(structbuilder, {
         import          = import,
         member          = member,
         endstruct       = endstruct,
@@ -5436,37 +5492,37 @@ do
         interface       = interface,
     })
 
-    typebuilder.RegisterKeyWord(interfacebuilder, {
+    environment.RegisterKeyWord(interfacebuilder, {
         import          = import,
-        extend          = extend,
+        --extend          = extend,
         event           = event,
         property        = property,
-        endinterface    = endinterface,
+        --endinterface    = endinterface,
         enum            = enum,
         struct          = struct,
         class           = class,
         interface       = interface,
     })
 
-    typebuilder.RegisterKeyWord(classbuilder, {
+    environment.RegisterKeyWord(classbuilder, {
         import          = import,
-        inherit         = inherit,
-        extend          = extend,
+        --inherit         = inherit,
+        --extend          = extend,
         event           = event,
         property        = property,
-        endclass        = endclass,
+        --endclass        = endclass,
         enum            = enum,
         struct          = struct,
         class           = class,
         interface       = interface,
     })
 
-    _G.PLoop = Prototype.NewPrototype {
+    _G.PLoop = Prototype "PLoop" {
         __index = {
             namespace   = namespace,
             enum        = enum,
             import      = import,
-            typebuilder = typebuilder,
+            environment = environment,
         }
     }
 
