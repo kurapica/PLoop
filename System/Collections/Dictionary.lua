@@ -194,7 +194,7 @@ interface "IDictionary" (function (_ENV)
     __Doc__[[Get a list stream worker of the dictionary's keys]]
     property "Keys" {
         Get = function (self)
-            return ListStreamWorker( Threading.Iterator(function()
+            return ListStreamWorker.GetWorker( Threading.Iterator(function()
                 local index = 0
                 for key in self:GetIterator() do
                     index = index + 1
@@ -207,7 +207,7 @@ interface "IDictionary" (function (_ENV)
     __Doc__[[Get a list stream worker of the dictionary's values]]
     property "Values" {
         Get = function (self)
-            return ListStreamWorker( Threading.Iterator(function()
+            return ListStreamWorker.GetWorker( Threading.Iterator(function()
                 local index = 0
                 for _, value in self:GetIterator() do
                     index = index + 1

@@ -54,7 +54,7 @@ class "List" (function (_ENV)
     function IndexOf(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
 
     __Doc__[[Remove an item]]
-    function Remove(self, item) local i = self:Contains(item) if i then return self:RemoveByIndex(i) end end
+    function Remove(self, item) local i = self:IndexOf(item) if i then return self:RemoveByIndex(i) end end
 
     __Doc__[[Remove an item from the tail or the given index]]
     RemoveByIndex = tremove
@@ -148,70 +148,55 @@ class "ListStreamWorker" (function (_ENV)
     ---------------------------
     -- Method
     ---------------------------
+    __Iterator__()
     function GetIterator(self)
-        local targetList = self.TargetList
-        local targetIter = self.TargetIter
-        local targetObj = self.TargetObj
-        local targetIdx = self.TargetIndex
+        local targetList    = self.TargetList
+        local targetIter    = self.TargetIter
+        local targetObj     = self.TargetObj
+        local targetIdx     = self.TargetIndex
 
-        local map = self.MapAction
-        local filter = self.FilterAction
-        local rangeStart = self.RangeStart
-        local rangeStop = self.RangeStop
-        local rangeStep = self.RangeStep
+        local map           = self.MapAction
+        local filter        = self.FilterAction
+        local rangeStart    = self.RangeStart
+        local rangeStop     = self.RangeStop
+        local rangeStep     = self.RangeStep
 
         -- Clear self and put self into IdleWorkers
-        self.TargetList = nil
-        self.TargetIter = nil
-        self.TargetObj = nil
-        self.TargetIndex = nil
+        self.TargetList     = nil
+        self.TargetIter     = nil
+        self.TargetObj      = nil
+        self.TargetIndex    = nil
 
-        self.MapAction = nil
-        self.FilterAction = nil
-        self.RangeStart = nil
-        self.RangeStop = nil
-        self.RangeStep = nil
+        self.MapAction      = nil
+        self.FilterAction   = nil
+        self.RangeStart     = nil
+        self.RangeStop      = nil
+        self.RangeStep      = nil
 
         if #IdleWorkers < 10 then tinsert(IdleWorkers, self) end
 
-        -- Generate the iterator
-        local dowork
-        local iter
-        local targetCls = targetList and Reflector.GetObjectClass(targetList)
-
-        -- Generate the do-work
-        if filter then
-            -- Check Function
-            if map then
-                dowork = function(idx, item) if filter(item) then yield(idx, map(item), item) end end
-            else
-                dowork = function(idx, item) if filter(item) then yield(idx, item) end end
-            end
-        else
-            -- No filter
-            if map then
-                dowork = function(idx, item) yield(idx, map(item), item) end
-            else
-                dowork = function(idx, item) yield(idx, item) end
-            end
+        -- So we should run an iterator over the targetList to fetch datas, like link list
+        if targetList then
+            targetIter, targetObj, targetIdx = targetList:GetIterator()
         end
 
-        -- Generate the for iterator
+        local _, stop
+
+        -- Generate the iterator
         if not rangeStart then
-            if targetList then
-                iter = function() for idx, item in targetList:GetIterator() do dowork(idx, item) end end
-            else
-                iter = function() for idx, item in targetIter, targetObj, targetIdx do dowork(idx, item) end end
-            end
+            rangeStart  = 1
+            rangeStop   = math.huge
+            rangeStep   = 1
         else
             local lstCount
+            local targetCls = targetList and Reflector.GetObjectClass(targetList)
 
             -- If the targetCls is ICountable, we can deal with negative position
             if targetCls and Reflector.IsExtendedInterface(targetCls, ICountable) then lstCount = targetList.Count end
 
             if lstCount then
                 if rangeStart < 0 then rangeStart = lstCount + rangeStart + 1 end
-                if rangeStop < 0 then rangeStop = lstCount + rangeStop + 1 end
+                if rangeStop  < 0 then rangeStop  = lstCount + rangeStop + 1 end
             else
                 if rangeStop == -1 then rangeStop = math.huge end
                 if rangeStart < 0 or rangeStop < 0 then error(("%s can't handle negative index"):format(tostring(targetCls)), 2) end
@@ -219,13 +204,50 @@ class "ListStreamWorker" (function (_ENV)
 
             if targetCls and Reflector.IsExtendedInterface(targetCls, IIndexedList) then
                 -- The targetList should be used like targetList[index]
-                iter = function ()
-                    for i = rangeStart, rangeStop, rangeStep do
-                        local item = targetList[i]
-                        if item == nil then return end
-                        dowork(i, item)
+                if rangeStep == 0 or
+                    (rangeStart > rangeStop and rangeStep > 0) or
+                    (rangeStart < rangeStop and rangeStep < 0) then
+                    return
+                end
+
+                if map then
+                    if filter then
+                        for i = rangeStart, rangeStop, rangeStep do
+                            local item = targetList[i]
+                            if item == nil then return end
+                            if filter(item) then
+                                _, _, stop = yield(i, map(item), item)
+                                if stop then return end
+                            end
+                        end
+                    else
+                        for i = rangeStart, rangeStop, rangeStep do
+                            local item = targetList[i]
+                            if item == nil then return end
+                            _, _, stop = yield(i, map(item), item)
+                            if stop then return end
+                        end
+                    end
+                else
+                    if filter then
+                        for i = rangeStart, rangeStop, rangeStep do
+                            local item = targetList[i]
+                            if item == nil then return end
+                            if filter(item) then
+                                _, _, stop = yield(i, item)
+                                if stop then return end
+                            end
+                        end
+                    else
+                        for i = rangeStart, rangeStop, rangeStep do
+                            local item = targetList[i]
+                            if item == nil then return end
+                            _, _, stop = yield(i, item)
+                            if stop then return end
+                        end
                     end
                 end
+                return
             else
                 if lstCount then
                     if rangeStart > rangeStop then rangeStart, rangeStop, rangeStep = rangeStop, rangeStart, - rangeStep end
@@ -235,41 +257,86 @@ class "ListStreamWorker" (function (_ENV)
                     if rangeStart > rangeStop then rangeStart, rangeStop, rangeStep = rangeStop, rangeStart, - rangeStep end
                 end
 
-                -- So we should run an iterator over the targetList to fetch datas, like link list
-                if targetList then
-                    targetIter, targetObj, targetIdx = targetList:GetIterator()
-                end
-
-                iter = function()
-                    if rangeStep < 1 then return end
-
-                    local idx = 1
-                    local stepCnt = rangeStep
-                    local item
-
-                    while idx < rangeStart do
-                        targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
-                        idx = idx + 1
-                    end
-
-                    while idx <= rangeStop do
-                        targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
-
-                        if stepCnt == rangeStep then
-                            stepCnt = 0
-                            dowork(idx, item)
-                        end
-
-                        stepCnt = stepCnt + 1
-                        idx = idx + 1
-                    end
-                end
             end
         end
 
-        return Threading.Iterator(iter)
+        if rangeStep < 1 then return end
+
+        local idx = 1
+        local stepCnt = rangeStep
+        local item
+
+        while idx < rangeStart do
+            targetIdx, item = targetIter(targetObj, targetIdx)
+            if item == nil then return end
+            idx = idx + 1
+        end
+
+        if map then
+            if filter then
+                while idx <= rangeStop do
+                    targetIdx, item = targetIter(targetObj, targetIdx)
+                    if item == nil then return end
+
+                    if stepCnt == rangeStep then
+                        stepCnt = 0
+                        if filter(item) then
+                            _, _, stop = yield(targetIdx, map(item), item)
+                            if stop then return end
+                        end
+                    end
+
+                    stepCnt = stepCnt + 1
+                    idx = idx + 1
+                end
+            else
+                while idx <= rangeStop do
+                    targetIdx, item = targetIter(targetObj, targetIdx)
+                    if item == nil then return end
+
+                    if stepCnt == rangeStep then
+                        stepCnt = 0
+                        _, _, stop = yield(targetIdx, map(item), item)
+                        if stop then return end
+                    end
+
+                    stepCnt = stepCnt + 1
+                    idx = idx + 1
+                end
+            end
+        else
+            if filter then
+                while idx <= rangeStop do
+                    targetIdx, item = targetIter(targetObj, targetIdx)
+                    if item == nil then return end
+
+                    if stepCnt == rangeStep then
+                        stepCnt = 0
+                        if filter(item) then
+                            _, _, stop = yield(targetIdx, item)
+                            if stop then return end
+                        end
+                    end
+
+                    stepCnt = stepCnt + 1
+                    idx = idx + 1
+                end
+            else
+                while idx <= rangeStop do
+                    targetIdx, item = targetIter(targetObj, targetIdx)
+                    if item == nil then return end
+
+                    if stepCnt == rangeStep then
+                        stepCnt = 0
+                        _, _, stop = yield(targetIdx, item)
+                        if stop then return end
+                    end
+
+                    stepCnt = stepCnt + 1
+                    idx = idx + 1
+                end
+            end
+        end
     end
 
     ---------------------------
@@ -343,22 +410,22 @@ class "ListStreamWorker" (function (_ENV)
     ----------------------------
     -- Meta-method
     ----------------------------
-    __Arguments__{ IList }
-    function __exist(list)
+    __Static__() __Arguments__{ IList }
+    function GetWorker(list)
         local worker = tremove(IdleWorkers)
         if worker then worker.TargetList = list end
-        return worker
+        return worker or ListStreamWorker(list)
     end
 
-    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
-    function __exist(iter, obj, idx)
+    __Static__() __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
+    function GetWorker(iter, obj, idx)
         local worker = tremove(IdleWorkers)
         if worker then
             worker.TargetIter = iter
             worker.TargetObj = obj
             worker.TargetIndex = idx
         end
-        return worker
+        return worker or ListStreamWorker(iter, obj, idx)
     end
 end)
 
@@ -372,21 +439,21 @@ interface "IList" (function (_ENV)
     ---------------------------
     __Doc__[[Map the items to other type datas]]
     __Arguments__{ Callable }
-    function Map(self, func) return ListStreamWorker(self):Map(func) end
+    function Map(self, func) return ListStreamWorker.GetWorker(self):Map(func) end
 
     __Arguments__{ String }
-    function Map(self, feature) return ListStreamWorker(self):Map(feature) end
+    function Map(self, feature) return ListStreamWorker.GetWorker(self):Map(feature) end
 
     __Doc__[[Used to filter the items with a check function]]
     __Arguments__{ Callable }
-    function Filter(self, func) return ListStreamWorker(self):Filter(func) end
+    function Filter(self, func) return ListStreamWorker.GetWorker(self):Filter(func) end
 
     __Arguments__{ String, Argument(Any, true) }
-    function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
+    function Filter(self, feature, value) return ListStreamWorker.GetWorker(self):Filter(feature, value) end
 
     __Doc__[[Used to select items with ranged index]]
     __Arguments__{ Argument(Integer, true, 1), Argument(Integer, true, -1), Argument(Integer, true, 1) }
-    function Range(self, start, stop, step) return ListStreamWorker(self):Range(start, stop, step) end
+    function Range(self, start, stop, step) return ListStreamWorker.GetWorker(self):Range(start, stop, step) end
 
     ---------------------------
     -- Final Method
@@ -443,30 +510,54 @@ interface "IList" (function (_ENV)
         end
     end
 
+    __Doc__[[Check if any element meet the requirement of the target function]]
     __Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
     function Any(self, chk, ...)
-        for _, obj in self:GetIterator() do
-            if chk(obj, ...) then return true end
+        local iter, idx, obj = self:GetIterator()
+        idx, obj = iter(idx, obj)
+        while idx do
+            if chk(obj, ...) then
+                -- Pass true to end iter if it support
+                iter(idx, obj, true)
+                return true
+            end
+            idx, obj = iter(idx, obj)
         end
         return false
     end
 
+    __Doc__[[Check if all elements meet the requirement of the target function]]
     __Arguments__{ Callable, Argument(System.Any, true, nil, nil, true) }
     function All(self, chk, ...)
-        for _, obj in self:GetIterator() do
-            if not chk(obj, ...) then return false end
+        local iter, idx, obj = self:GetIterator()
+        idx, obj = iter(idx, obj)
+        while idx do
+            if not chk(obj, ...) then
+                -- Pass true to end iter if it support
+                iter(idx, obj, true)
+                return false
+            end
+            idx, obj = iter(idx, obj)
         end
         return true
     end
 
+    __Doc__[[Get the first element of the list]]
     function First(self)
-        for _, obj in self:GetIterator() do
+        local iter, idx, obj = self:GetIterator()
+        idx, obj = iter(idx, obj)
+        if idx then
+            iter(idx, obj, true)
             return obj
         end
     end
 
+    __Doc__[[Get the first element of the list, if not existed use the default as result]]
     function FirstOrDefault(self, default)
-        for _, obj in self:GetIterator() do
+        local iter, idx, obj = self:GetIterator()
+        idx, obj = iter(idx, obj)
+        if idx then
+            iter(idx, obj, true)
             return obj
         end
         return default
