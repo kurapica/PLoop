@@ -17,15 +17,15 @@ interface "Threading" (function(_ENV)
     ------------------------------------------------------
     -- Thread Pool
     ------------------------------------------------------
-    THREAD_POOL_MAX = 100
+    THREAD_POOL_MAX         = 100
 
-    THREAD_PROC_INIT = 1
-    THREAD_PROC_CALLFUNC = 2
-    THREAD_PROC_RECYCLING = 3
+    THREAD_PROC_INIT        = 1
+    THREAD_PROC_CALLFUNC    = 2
+    THREAD_PROC_RECYCLING   = 3
 
-    THREAD_POOL = {}
-    THREAD_STATUS = setmetatable({}, {__mode="k"})
-    THREAD_ARG_PROC = setmetatable({}, {
+    THREAD_POOL             = {}
+    THREAD_STATUS           = setmetatable({}, {__mode="k"})
+    THREAD_ARG_PROC         = setmetatable({}, {
         __index = function(self, cnt)
             local body = {}
             local args = ""
@@ -51,6 +51,7 @@ interface "Threading" (function(_ENV)
             return self[cnt]
         end
     })
+    THREAD_AWAIT            = setmetatable({}, {__mode="kv"})
 
     local function reCycleAndRet(iter, ...)
         if #THREAD_POOL < THREAD_POOL_MAX then
@@ -59,13 +60,29 @@ interface "Threading" (function(_ENV)
         else
             THREAD_STATUS[iter] = nil
         end
+        local await = THREAD_AWAIT[iter]
+        if await then
+            THREAD_AWAIT[iter]  = nil
+            if status(await) == "suspended" then
+                resume(await, ...)
+            end
+        end
         yield(...)
     end
 
     local function callIterFunc(iter, func, ...)
         local cnt = select("#", ...)
         THREAD_STATUS[iter] = THREAD_PROC_CALLFUNC
-        reCycleAndRet(iter, THREAD_ARG_PROC[cnt](iter, func, ...))
+        if type(func) == "function" then
+            reCycleAndRet(iter, THREAD_ARG_PROC[cnt](iter, func, ...))
+        end
+    end
+
+    local function process( iter )
+        while true do
+            THREAD_STATUS[iter] = THREAD_PROC_INIT
+            callIterFunc(iter, yield())
+        end
     end
 
     local function newIterator()
@@ -82,18 +99,19 @@ interface "Threading" (function(_ENV)
             iter = tremove(THREAD_POOL)
         end
 
-        local iter = wrap(
-            function( iter )
-                while true do
-                    THREAD_STATUS[iter] = THREAD_PROC_INIT
-                    callIterFunc(iter, yield())
-                end
-            end
-        )
+        local iter = wrap(process)
 
         iter(iter)
 
         return iter
+    end
+
+    local function awaitAndReturn(iter, ...)
+        if THREAD_STATUS[iter] == THREAD_PROC_CALLFUNC then
+            return yield()
+        else
+            return ...
+        end
     end
 
     ------------------------------------------------------
@@ -146,6 +164,19 @@ interface "Threading" (function(_ENV)
     function Iterator(func, ...)
         local iter = newIterator()
         return iter(func, ...)
+    end
+
+    __Doc__[[
+        <desc>Await the call of the target function, the target'd be called as thread.</desc>
+    ]]
+    function Await(func, ...)
+        local th    = running()
+        if not th then error("Usage: Threading.AwaitCall(func[, ...]) -- The API must be called within a thread.", 2) end
+
+        local iter  = newIterator()
+        THREAD_AWAIT[iter] = th
+
+        return awaitAndReturn(iter, iter(func)(...))
     end
 
     ------------------------------------------------------

@@ -425,6 +425,7 @@ do
         if meta                     then tblclone(meta, pmeta, true, true) end
         if pmeta.__metatable == nil then pmeta.__metatable = prototype end
         if pmeta.__tostring  == nil then pmeta.__tostring  = function() return name end end
+        if pmeta.__concat    == nil then pmeta.__concat    = typeconcat end
         if super                    then tblclone(_Prototype[super], pmeta, true, false) end
 
         Trace("The prototype %q is created", 3, name)
@@ -451,8 +452,8 @@ do
             ["ValidateValue"]   = function(prototype, val) return getmetatable(val) == prototype end,
             ["Validate"]        = function(prototype) return _Prototype[prototype] and prototype or nil end,
         },
-        __call                  = newPrototype,
         __newindex              = readOnly,
+        __call                  = newPrototype,
     }
 end
 
@@ -983,7 +984,7 @@ do
     -- Used for features like property, event, member and namespace
     function GetFeatureParams(ftype, ...)
         local env, name, definition, _, stack, keyvisitor = getParams(ftype, ...)
-        return env, name, definition, stack, keyvisitor
+        return env, name, definition, flag, stack, keyvisitor
     end
 
     -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
@@ -1009,7 +1010,7 @@ do
     environment     = Prototype "environment" {
         __index     = {
             ["GetNameSpace"]    = function(env)
-                return type(env) == "table" and rawget(env, ENV_OWN_NS) or nil
+                return namespace.Validate(type(env) == "table" and rawget(env, ENV_OWN_NS))
             end;
 
             ["GetParent"]       = function(env)
@@ -1019,7 +1020,7 @@ do
             -- Get value for env, also auto-cache the value to env if auto-cache is toggle on
             ["GetValue"]        = function(env, name, stack)
                 local value
-                if type(name) == "string" then
+                if type(name) == "string" and type(env) == "table" then
                     -- Check Keywords
                     local keys      = _ENVKeys[getmetatable(env)]
                     value           = keys and keys[name]
@@ -1027,8 +1028,8 @@ do
                         _KeyAccess  = env
                         _AccessKey  = value
                     else
-                        -- Check namespace
-                        local ns    = rawget(env, ENV_OWN_NS)
+                        -- Check current namespace
+                        local ns    = namespace.Validate(rawget(env, ENV_OWN_NS))
                         if ns then
                             value   = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
                         end
@@ -1036,10 +1037,13 @@ do
                         -- Check imported namespaces
                         if value == nil then
                             local imp   = rawget(env, ENV_IMP_NS)
-                            if imp then
+                            if type(imp) == "table" then
                                 for _, sns in ipairs, imp, 0 do
-                                    value   = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
-                                    if value ~= nil then break end
+                                    sns = namespace.Validate(sns)
+                                    if sns then
+                                        value   = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
+                                        if value ~= nil then break end
+                                    end
                                 end
                             end
                         end
@@ -1052,7 +1056,7 @@ do
                         -- Check parent
                         if value == nil then
                             local parent    = rawget(env, ENV_BASE)
-                            if parent then
+                            if type(parent) == "table" then
                                 if _GLNilable then
                                     value   = parent[name]
                                 else
@@ -1135,7 +1139,7 @@ do
 
     -- Key feature : import "System"
     import          = function (...)
-        local env, name, _, stack, visitor = GetFeatureParams(import, ...)
+        local env, name, _, flag, stack, visitor = GetFeatureParams(import, ...)
 
         name = namespace.Validate(name)
         if not env  then error("Usage: import(namespace) - The system can't figure out the environment", stack) end
@@ -1144,7 +1148,7 @@ do
         if visitor then
             environment.ImportNameSpace(visitor, name)
         else
-            namespace.ExportNameSpace(env, name)
+            namespace.ExportNameSpace(env, name, flag)
         end
     end
 end
@@ -1166,20 +1170,20 @@ do
     namespace       = Prototype "namespace" {
         __index     = {
             -- Export a namespace and its children to an environment
-            ["ExportNameSpace"]     = function(env, ns)
+            ["ExportNameSpace"]     = function(env, ns, override)
                 ns  = Validate(ns)
-                if type(env) ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace) - the env must be a table", 2) end
-                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace) - The namespace is not provided", 2) end
+                if type(env) ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", 2) end
+                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", 2) end
 
                 local nsname    = _NSName[ns]
                 if nsname then
                     nsname      = strmatch(nsname, "[^%s%.]+$")
-                    if rawget(env, nsname) == nil then rawset(env, nsname, ns) end
+                    if override or rawget(env, nsname) == nil then rawset(env, nsname, ns) end
                 end
 
                 if _NSTree[ns] then
                     for name, sns in pairs, _NSTree[ns] do
-                        if rawget(env, name) == nil then rawset(env, name, sns) end
+                        if override or rawget(env, name) == nil then rawset(env, name, sns) end
                     end
                 end
             end;
@@ -1273,22 +1277,22 @@ do
         },
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, name, _, stack, visitor = GetFeatureParams(namespace, ...)
+            local env, name, _, flag, stack, visitor = GetFeatureParams(namespace, ...)
 
             if not env and not visitor then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the environment", stack) end
 
-            if type(name) == "string" then
-                local ns = GetNameSpace(name)
-                if not ns then
-                    -- Only apply attribute to new namespace
-                    ns = namespace.GenerateNameSpace(name)
-                    if ns then
-                        attribute.ConsumeAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE, nil, nil, stack + 1)
-                        attribute.ApplyAttributes  (ns, ATTRIBUTE_TARGETS_NAMESPACE)
-                        attribute.ApplyAfterDefine (ns, ATTRIBUTE_TARGETS_NAMESPACE)
-                    end
+            if name ~= nil then
+                if type(name) == "string" then
+                    name = namespace.GenerateNameSpace(name)
+                else
+                    name = namespace.Validate(name)
                 end
-                name = ns
+
+                if not name then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the namespace", stack) end
+
+                attribute.ConsumeAttributes(name, ATTRIBUTE_TARGETS_NAMESPACE, nil, nil, stack + 1)
+                attribute.ApplyAttributes  (name, ATTRIBUTE_TARGETS_NAMESPACE)
+                attribute.ApplyAfterDefine (name, ATTRIBUTE_TARGETS_NAMESPACE)
             end
 
             environment.SetNameSpace(env, name)
@@ -1304,7 +1308,6 @@ do
     tnamespace      = Prototype "tnamespace" {
         __index     = GetNameSpace,
         __newindex  = readOnly,
-        __concat    = typeconcat,
         __tostring  = namespace.GetNameSpaceName,
         __metatable = namespace,
     }
@@ -1329,7 +1332,8 @@ do
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0   -- SEALED
     local MD_FLAG   = 2^1   -- FLAGS
-    local MD_IGCS   = 2^2   -- CASE IGNORED
+    local MD_NFLG   = 2^2   -- NOT FLAG
+    local MD_IGCS   = 2^3   -- CASE IGNORED
 
     -- FIELD INDEX
     local FD_MOD    = 0     -- FIELD MODIFIER
@@ -1339,7 +1343,6 @@ do
     local FD_VALID  = 4     -- FIELD VALIDATOR
     local FD_MAXV   = 5     -- FIELD MAX VALUE(FOR FLAGS)
     local FD_DEFT   = 6     -- FIELD DEFAULT
-    local FD_ATTRAP = 7     -- FIELD WHETHER ATTRIBUTE APPLIED
 
     -- Flags
     local FL_FLAG   = 2^0
@@ -1437,10 +1440,10 @@ do
 
                 local info  = _EnumInfo[target]
 
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                -- if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _BDInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _BDInfo[target] = {
+                _BDInfo[target] = info and validateFlags(MD_SEAL, info[FD_MOD]) and tblclone(info, {}, true, true) or {
                     [FD_MOD  ]  = _GLCaseIgn and MD_IGCS or 0,
                     [FD_ENUMS]  = {},
                     [FD_CACHE]  = {},
@@ -1467,7 +1470,7 @@ do
                 -- Check Flags Enumeration
                 if validateFlags(MD_FLAG, ninfo[FD_MOD]) then
                     local enums = ninfo[FD_ENUMS]
-                    local cache = ninfo[FD_CACHE]
+                    local cache = wipe(ninfo[FD_CACHE])
                     local count = 0
                     local max   = 0
 
@@ -1523,6 +1526,8 @@ do
                 else
                     local enums = ninfo[FD_ENUMS]
                     local cache = ninfo[FD_CACHE]
+
+                    ninfo[FD_MOD] = turnOnFlags(MD_NFLG, ninfo[FD_MOD])
 
                     for k, v in pairs, enums do
                         cache[v] = k
@@ -1648,16 +1653,15 @@ do
                     if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
                     for k, v in pairs, info[FD_ENUMS] do
-                        if v == value then
+                        if strupper(k) == strupper(key) then
+                            if (validateFlags(MD_IGCS, info[FD_MOD]) and strupper(key) or key) == k and v == value then return end
+                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key already existed", stack)
+                        elseif v == value then
                             error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack)
                         end
                     end
 
-                    if validateFlags(MD_IGCS, info[FD_MOD]) then
-                        info[FD_ENUMS][strupper(key)] = value
-                    else
-                        info[FD_ENUMS][key] = value
-                    end
+                    info[FD_ENUMS][validateFlags(MD_IGCS, info[FD_MOD]) and strupper(key) or key] = value
                 else
                     error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
                 end
@@ -1690,6 +1694,7 @@ do
                 if info then
                     if not validateFlags(MD_FLAG, info[FD_MOD]) then
                         if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                        if validateFlags(MD_NFLG, info[FD_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
                         info[FD_MOD] = turnOnFlags(MD_FLAG, info[FD_MOD])
                     end
                 else
@@ -1710,6 +1715,8 @@ do
                 end
             end;
 
+            ["ValidateFlags"]   = validateFlags;
+
             ["ValidateValue"]   = function(target, value)
                 local info  = _EnumInfo[target]
                 if info then
@@ -1726,7 +1733,7 @@ do
         },
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack, visitor = GetTypeParams(enum, tenum, ...)
+            local env, target, definition, flag, stack, visitor = GetTypeParams(enum, tenum, ...)
             if not target then
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack)
             elseif definition ~= nil and type(definition) ~= "table" then
@@ -1787,9 +1794,17 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
+    --                               Const                               --
+    -----------------------------------------------------------------------
+    STYPE_MEMBER    = "MEMBER"
+    STYPE_ARRAY     = "ARRAY"
+    STYPE_CUSTOM    = "CUSTOM"
+
+    -----------------------------------------------------------------------
     --                            Struct Data                            --
     -----------------------------------------------------------------------
     local _StrtInfo = setmetatable({}, WEAK_KEY)
+    local _DependMap= setmetatable({}, WEAK_KEY)
     local _BDInfo   = setmetatable({}, WEAK_KEY)
 
     local _ValidMap = {}
@@ -1797,6 +1812,7 @@ do
 
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0       -- SEALED
+    local MD_CUSTOM = 2^1       -- CUSTOM STRUCT
 
     -- FIELD INDEX
     local FD_MOD    = -1        -- FIELD MODIFIER
@@ -1839,17 +1855,19 @@ do
     local MTD_INIT  = "__init"
     local MTD_BASE  = "__base"
 
-    local getEnvValue   = environment.GetValue
-    local getNameSpace  = namespace.GetNameSpace
+    local BFD_NMTD  = "__PLOOP_BD_NEWMTD"
 
     local function getTargetInfo(target)
         local info  = _BDInfo[target]
         if info then return info, true else return _StrtInfo[target], false end
     end
 
-    local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
+    local function setBuilderOwnerValue(self, key, value, stack, notnewindex)
         local tkey  = type(key)
         local tval  = type(value)
+
+        local owner = environment.GetNameSpace(self)
+        if not owner then error("The structure's definition is finished", stack) end
 
         stack       = stack + 1
 
@@ -1863,6 +1881,15 @@ do
                     return true
                 else
                     struct.AddMethod(owner, key, value, stack)
+                    if not notnewindex then
+                        -- Those functions should be saved to the builder when the definition is finished
+                        local newMethod = rawget(self, BFD_NMTD)
+                        if not newMethod then
+                            newMethod   = {}
+                            rawset(self, BFD_NMTD, newMethod)
+                        end
+                        newMethod[key]  = true
+                    end
                     return true
                 end
             elseif namespace.IsResourceType(value) then
@@ -1890,6 +1917,108 @@ do
         end
     end
 
+    local function needVlidateCache4Type(stype)
+        if stype and struct.Validate(stype) then
+            if _BDInfo[stype] then return true end  -- Still in building, can't decide
+
+            local stype     = struct.GetStructType(stype)
+            if stype == STYPE_CUSTOM then
+                return false
+            elseif stype == STYPE_ARRAY then
+                return needVlidateCache4Type(struct.GetArrayElement(stype))
+            elseif stype == STYPE_MEMBER then
+                if not struct.IsSealed(stype) then
+                    return true
+                else
+                    for i, name in struct.GetMembers(stype) do
+                        local mtype = struct.GetMember(stype, name)
+                        if needVlidateCache4Type(mtype) then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    local function checkRepeatType(target, cache, info)
+        if cache[target] then return true end
+        local tinfo = info or getTargetInfo(target)
+
+        if tinfo[FD_ARRAY] then
+            checkRepeatType(tinfo[FD_ARRAY], cache)
+        elseif tinfo[FD_STMEM] then
+            local i = FD_STMEM
+            local m = tinfo[i]
+            while m do
+                checkRepeatType(m, cache)
+                i   = i + 1
+                m   = tinfo[i]
+            end
+        end
+    end
+
+    local function refreshCacheRequired(target, info)
+        if info[FD_ARRAY] or info[FD_STMEM] then
+            local cache     = _Cache()
+            info[FD_VCACHE] = checkRepeatType(target, cache, info) or false
+            _Cache(cache)
+        else
+            info[FD_VCACHE] = false
+        end
+    end
+
+    local function notAllSealed(target)
+        if target and struct.Validate(target) then
+            local info, def = getTargetInfo(target)
+
+            if def or not validateFlags(MD_SEAL, info[FD_MOD]) then
+                return true
+            end
+
+            if info[FD_ARRAY] then
+                return notAllSealed(info[FD_ARRAY])
+            elseif info[FD_STMEM] then
+                local i = FD_STMEM
+                local m = info[i]
+                while m do
+                    if notAllSealed(m) then
+                        return true
+                    end
+                    i   = i + 1
+                    m   = info[i]
+                end
+            end
+        end
+    end
+
+    local function checkDependence(target, chkType)
+        if notAllSealed(chkType) then
+            _DependMap[chkType]         = _DependMap[chkType] or setmetatable({}, WEAK_KEY)
+            _DependMap[chkType][target] = true
+        elseif chkType and _DependMap[chkType] then
+            _DependMap[chkType]         = nil
+            if not next(_DependMap[chkType]) then _DependMap[chkType] = nil end
+        end
+    end
+
+    local function refreshDependence(target, info)
+        info = info or getTargetInfo(target)
+
+        if info[FD_ARRAY] then
+            checkDependence(target, info[FD_ARRAY])
+        elseif info[FD_STMEM] then
+            local i = FD_STMEM
+            local m = info[i]
+            while m do
+                checkDependence(target, m)
+                i   = i + 1
+                m   = info[i]
+            end
+        end
+    end
+
     local function generateValidator(info)
         local token = 0
         local upval = _Cache()
@@ -1904,7 +2033,7 @@ do
             while info[i] do
                 if not c then
                     local mtype = info[i][MFD_TYPE]
-                    if mtype and struct.Validate(mtype) and not (struct.IsSealed(mtype) and not _BDInfo[mtype] and struct.GetStructType(mtype) == StructType.CUSTOM) then
+                    if needVlidateCache4Type(mtype) then
                         c = true
                     end
                 end
@@ -1921,7 +2050,7 @@ do
             tinsert(upval, info[FD_ARRVLD])
 
             local atype = info[FD_ARRAY]
-            if struct.Validate(atype) and not (struct.IsSealed(atype) and not _BDInfo[atype] and struct.GetStructType(atype) == StructType.CUSTOM) then
+            if struct.Validate(atype) and not ( not _BDInfo[atype] and struct.GetStructType(atype) == STYPE_CUSTOM) then
                 token   = turnOnFlags(FL_VCACHE, token)
                 info[FD_VCACHE] = true
             end
@@ -2308,12 +2437,6 @@ do
 
         _Cache(upval)
     end
-
-    -- [ENUM] System.StructType
-    -- Set the namespace as System
-    namespace (_PLoopEnv, "System")
-    enum (_PLoopEnv, "StructType", { "MEMBER", "ARRAY", "CUSTOM" })
-    enum.SetSealed(StructType)
 
     struct          = Prototype "struct" {
         __index     = {
@@ -2772,9 +2895,9 @@ do
             ["GetStructType"]   = function(target)
                 local info      = getTargetInfo(target)
                 if info then
-                    if info[FD_ARRAY] then return StructType.ARRAY end
-                    if info[FD_STMEM] then return StructType.MEMBER end
-                    return StructType.CUSTOM
+                    if info[FD_ARRAY] then return STYPE_ARRAY end
+                    if info[FD_STMEM] then return STYPE_MEMBER end
+                    return STYPE_CUSTOM
                 end
             end;
 
@@ -2924,7 +3047,6 @@ do
             end;
         },
         __newindex  = readOnly,
-        __concat    = typeconcat,
         __tostring  = function() return "struct" end,
         __call      = function(self, ...)
             local env, target, definition, keepenv, stack = GetTypeParams(struct, tstruct, ...)
@@ -2950,7 +3072,7 @@ do
         __index     = function(self, name)
             if type(name) == "string" then
                 local info  = _StrtInfo[self]
-                return info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or getNameSpace(self, name)
+                return info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or namespace.GetNameSpace(self, name)
             end
         end,
         __newindex  = function(self, key, value)
@@ -2972,11 +3094,11 @@ do
         __index     = function(self, key)
             local val, cache = getBuilderValue(self, key)
 
--- Access methods
-local info  = getTargetInfo(environment.GetNameSpace(self))
-local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
-if m then return m, true end
-return getEnvValue(self, name)
+            -- Access methods
+            local info  = getTargetInfo(environment.GetNameSpace(self))
+            local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
+            if m then return m, true end
+            return environment.GetValue(self, name)
 
             if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
@@ -2986,7 +3108,7 @@ return getEnvValue(self, name)
         __newindex  = function(self, key, value)
             local owner = environment.GetNameSpace(self)
             if _BDInfo[owner] then
-                if setBuilderOwnerValue(owner, key, value, 3) then
+                if setBuilderOwnerValue(self, key, value, 3) then
                     return
                 end
             end
@@ -3006,20 +3128,28 @@ return getEnvValue(self, name)
             else
                 -- Check base struct first
                 if definition[MTD_BASE] ~= nil then
-                    setBuilderOwnerValue(owner, MTD_BASE, definition[MTD_BASE], stack)
+                    setBuilderOwnerValue(self, MTD_BASE, definition[MTD_BASE], stack, true)
                     definition[MTD_BASE] = nil
                 end
 
                 -- Index key
                 for i, v in ipairs, definition, 0 do
-                    setBuilderOwnerValue(owner, i, v, stack)
+                    setBuilderOwnerValue(self, i, v, stack, true)
                 end
 
                 for k, v in pairs, definition do
                     if type(k) == "string" then
-                        setBuilderOwnerValue(owner, k, v, stack, true)
+                        setBuilderOwnerValue(self, k, v, stack, true)
                     end
                 end
+            end
+
+            local newMethod     = rawget(self, BFD_NMTD)
+            if newMethod then
+                for k in pairs(newMethod) do
+                    rawset(self, k, struct.GetMethod(k))
+                end
+                rawset(self, BFD_NMTD, nil)
             end
 
             local baseEnv = environment.GetParent(self)
@@ -3035,7 +3165,7 @@ return getEnvValue(self, name)
     member          = Prototype "member" {
         __call      = function(self, ...)
             if self == member then
-                local env, name, definition, stack, owner, tarenv = GetFeatureParams(member, ...)
+                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(member, ...)
                 if not owner or not tarenv then error([[Usage: member "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -3063,7 +3193,7 @@ return getEnvValue(self, name)
 
     -- Key feature : endstruct "Number"
     endstruct       = function (...)
-        local env, name, definition, stack, owner, tarenv = GetFeatureParams(endstruct, ...)
+        local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(endstruct, ...)
 
         if not owner or not tarenv then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
@@ -4717,7 +4847,6 @@ do
             end;
         },
         __newindex  = readOnly,
-        __concat    = typeconcat,
         __tostring  = function() return "interface" end,
         __call      = function(self, ...)
             local env, target, definition, keepenv, stack = GetTypeParams(interface, tinterface, ...)
@@ -5099,7 +5228,6 @@ do
             end;
         },
         __newindex  = readOnly,
-        __concat    = typeconcat,
         __tostring  = function() return "class" end,
         __call      = function(self, ...)
             local env, target, definition, keepenv, stack = GetTypeParams(class, tclass, ...)
@@ -5280,11 +5408,11 @@ do
         __index     = function(self, key)
             local val, cache = getBuilderValue(self, key)
 
--- Access methods
-local info  = getTargetInfo(environment.GetNameSpace(self))
-local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
-if m then return m, true end
-return getEnvValue(self, name)
+            -- Access methods
+            local info  = getTargetInfo(environment.GetNameSpace(self))
+            local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
+            if m then return m, true end
+            return getEnvValue(self, name)
             if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
             end
@@ -5416,7 +5544,7 @@ do
         },
         __call      = function(self, ...)
             if self == event then
-                local env, name, definition, stack, owner, tarenv = GetFeatureParams(event, ...)
+                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(event, ...)
                 if not owner or not tarenv then error([[Usage: event "name" - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: event "name" - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -5449,7 +5577,7 @@ do
         },
         __call      = function(self, ...)
             if self == property then
-                local env, name, definition, stack, owner, tarenv = GetFeatureParams(property, ...)
+                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(property, ...)
                 if not owner or not tarenv then error([[Usage: property "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
