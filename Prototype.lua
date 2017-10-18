@@ -983,7 +983,7 @@ do
 
     -- Used for features like property, event, member and namespace
     function GetFeatureParams(ftype, ...)
-        local env, name, definition, _, stack, keyvisitor = getParams(ftype, ...)
+        local env, name, definition, flag, stack, keyvisitor = getParams(ftype, ...)
         return env, name, definition, flag, stack, keyvisitor
     end
 
@@ -1355,11 +1355,6 @@ do
 
     local function generateValidator(info)
         local token = 0
-        local upval = _Cache()
-
-        tinsert(upval, info[FD_ENUMS])
-        tinsert(upval, info[FD_CACHE])
-        tinsert(upval, info[FD_EMSG])
 
         if validateFlags(MD_IGCS, info[FD_MOD]) then
             token   = turnOnFlags(FL_IGCS, token)
@@ -1367,19 +1362,16 @@ do
 
         if validateFlags(MD_FLAG, info[FD_MOD]) then
             token   = turnOnFlags(FL_FLAG, token)
-            tinsert(upval, info[FD_MAXV])
         end
 
         if not _ValidMap[token] then
-            local header    = _Cache()
             local body      = _Cache()
 
-            tinsert(header, "enums")
-            tinsert(header, "cache")
-            tinsert(header, "emsg")
-
             tinsert(body, "")   -- Remain for closure values
-            tinsert(body, [[return function(value)]])
+            tinsert(body, [[
+                return function(info, value)
+                local cache = info[]] .. FD_CACHE .. [[]
+            ]])
 
             tinsert(body, [[if cache[value] then return value end]])
 
@@ -1392,17 +1384,16 @@ do
             end
 
             tinsert(body, [[
-                value = enums[value]
-                return value, value == nil and emsg or nil
+                value = info[]] .. FD_ENUMS .. [[][value]
+                return value, value == nil and info[]] .. FD_EMSG .. [[] or nil
             ]])
 
             if validateFlags(FL_FLAG, token) then
-                tinsert(header, "maxv")
                 tinsert(body, [[
                     elseif vtype == "number" then
                         if value == 0 then
                             if cache[0] then return 0 end
-                        elseif floor(value) == value and value > 0 and value <= maxv then
+                        elseif floor(value) == value and value > 0 and value <= info[]] .. FD_MAXV .. [[] then
                             return value
                         end
                 ]])
@@ -1410,24 +1401,17 @@ do
 
             tinsert(body, [[
                 end
-                return nil, emsg
+                return nil, info[]] .. FD_EMSG .. [[]
             ]])
 
             tinsert(body, [[end]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
-            end
+            _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
 
-            _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)
-
-            _Cache(header)
             _Cache(body)
         end
 
-        info[FD_VALID] = _ValidMap[token](unpack(upval))
-
-        _Cache(upval)
+        info[FD_VALID] = _ValidMap[token]
     end
 
     enum            = Prototype "enum" {
@@ -1538,7 +1522,7 @@ do
 
                 -- Check Default
                 if ninfo[FD_DEFT] ~= nil then
-                    ninfo[FD_DEFT]  = ninfo[FD_VALID](ninfo[FD_DEFT])
+                    ninfo[FD_DEFT]  = ninfo[FD_VALID](ninfo, ninfo[FD_DEFT])
                     if ninfo[FD_DEFT] == nil then
                         error(ninfo[FD_EMSG]:format("The default"), stack)
                     end
@@ -1720,7 +1704,7 @@ do
             ["ValidateValue"]   = function(target, value)
                 local info  = _EnumInfo[target]
                 if info then
-                    return info[FD_VALID](value)
+                    return info[FD_VALID](info, value)
                 else
                     error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
                 end
@@ -1806,6 +1790,7 @@ do
     local _StrtInfo = setmetatable({}, WEAK_KEY)
     local _DependMap= setmetatable({}, WEAK_KEY)
     local _BDInfo   = setmetatable({}, WEAK_KEY)
+    local _InDef    = setmetatable({}, WEAK_KEY)
 
     local _ValidMap = {}
     local _CtorMap  = {}
@@ -1863,11 +1848,11 @@ do
     end
 
     local function setBuilderOwnerValue(self, key, value, stack, notnewindex)
+        local owner = environment.GetNameSpace(self)
+        if not (owner and _InDef[self]) then error("The structure's definition is finished", stack) end
+
         local tkey  = type(key)
         local tval  = type(value)
-
-        local owner = environment.GetNameSpace(self)
-        if not owner then error("The structure's definition is finished", stack) end
 
         stack       = stack + 1
 
@@ -1917,58 +1902,7 @@ do
         end
     end
 
-    local function needVlidateCache4Type(stype)
-        if stype and struct.Validate(stype) then
-            if _BDInfo[stype] then return true end  -- Still in building, can't decide
-
-            local stype     = struct.GetStructType(stype)
-            if stype == STYPE_CUSTOM then
-                return false
-            elseif stype == STYPE_ARRAY then
-                return needVlidateCache4Type(struct.GetArrayElement(stype))
-            elseif stype == STYPE_MEMBER then
-                if not struct.IsSealed(stype) then
-                    return true
-                else
-                    for i, name in struct.GetMembers(stype) do
-                        local mtype = struct.GetMember(stype, name)
-                        if needVlidateCache4Type(mtype) then
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-        return false
-    end
-
-    local function checkRepeatType(target, cache, info)
-        if cache[target] then return true end
-        local tinfo = info or getTargetInfo(target)
-
-        if tinfo[FD_ARRAY] then
-            checkRepeatType(tinfo[FD_ARRAY], cache)
-        elseif tinfo[FD_STMEM] then
-            local i = FD_STMEM
-            local m = tinfo[i]
-            while m do
-                checkRepeatType(m, cache)
-                i   = i + 1
-                m   = tinfo[i]
-            end
-        end
-    end
-
-    local function refreshCacheRequired(target, info)
-        if info[FD_ARRAY] or info[FD_STMEM] then
-            local cache     = _Cache()
-            info[FD_VCACHE] = checkRepeatType(target, cache, info) or false
-            _Cache(cache)
-        else
-            info[FD_VCACHE] = false
-        end
-    end
-
+    -- Update dependence
     local function notAllSealed(target)
         if target and struct.Validate(target) then
             local info, def = getTargetInfo(target)
@@ -1980,26 +1914,24 @@ do
             if info[FD_ARRAY] then
                 return notAllSealed(info[FD_ARRAY])
             elseif info[FD_STMEM] then
-                local i = FD_STMEM
-                local m = info[i]
-                while m do
+                for _, m in ipairs, info, FD_STMEM - 1 do
                     if notAllSealed(m) then
                         return true
                     end
-                    i   = i + 1
-                    m   = info[i]
                 end
             end
         end
     end
 
     local function checkDependence(target, chkType)
-        if notAllSealed(chkType) then
-            _DependMap[chkType]         = _DependMap[chkType] or setmetatable({}, WEAK_KEY)
-            _DependMap[chkType][target] = true
-        elseif chkType and _DependMap[chkType] then
-            _DependMap[chkType]         = nil
-            if not next(_DependMap[chkType]) then _DependMap[chkType] = nil end
+        if target ~= chkType then
+            if notAllSealed(chkType) then
+                _DependMap[chkType]         = _DependMap[chkType] or setmetatable({}, WEAK_KEY)
+                _DependMap[chkType][target] = true
+            elseif chkType and _DependMap[chkType] then
+                _DependMap[chkType][target] = nil
+                if not next(_DependMap[chkType]) then _DependMap[chkType] = nil end
+            end
         end
     end
 
@@ -2009,51 +1941,44 @@ do
         if info[FD_ARRAY] then
             checkDependence(target, info[FD_ARRAY])
         elseif info[FD_STMEM] then
-            local i = FD_STMEM
-            local m = info[i]
-            while m do
+            for _, m in ipairs, info, FD_STMEM - 1 do
                 checkDependence(target, m)
-                i   = i + 1
-                m   = info[i]
             end
         end
     end
 
+    -- Cache required
+    local function checkRepeatType(target, info)
+        if info[FD_ARRAY] then
+            if info[FD_ARRAY] == target then return true end
+            return checkRepeatType(target, getTargetInfo(info[FD_ARRAY]))
+        elseif info[FD_STMEM] then
+            for _, m in ipairs, info, FD_STMEM - 1 do
+                if m == target or checkRepeatType(target, getTargetInfo(m)) then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end
+
+    -- Validator
     local function generateValidator(info)
         local token = 0
         local upval = _Cache()
 
-        info[FD_VCACHE] = nil
+        if info[FD_VCACHE] then
+            token = turnOnFlags(FL_VCACHE, token)
+        end
 
         if info[FD_STMEM] then
             token   = turnOnFlags(FL_MEMBER, token)
             local i = FD_STMEM
-            local c = false
-
-            while info[i] do
-                if not c then
-                    local mtype = info[i][MFD_TYPE]
-                    if needVlidateCache4Type(mtype) then
-                        c = true
-                    end
-                end
-                i   = i + 1
-            end
-            if c then
-                token = turnOnFlags(FL_VCACHE, token)
-                info[FD_VCACHE] = true
-            end
-            tinsert(upval, i - 1)
+            while info[i + 1] do i = i + 1 end
+            tinsert(upval, i)
         elseif info[FD_ARRAY] then
             token   = turnOnFlags(FL_ARRAY, token)
-            tinsert(upval, info[FD_ARRAY])
-            tinsert(upval, info[FD_ARRVLD])
-
-            local atype = info[FD_ARRAY]
-            if struct.Validate(atype) and not ( not _BDInfo[atype] and struct.GetStructType(atype) == STYPE_CUSTOM) then
-                token   = turnOnFlags(FL_VCACHE, token)
-                info[FD_VCACHE] = true
-            end
         else
             token   = turnOnFlags(FL_CUSTOM, token)
         end
@@ -2066,7 +1991,6 @@ do
                 tinsert(upval, i - 1)
             else
                 token = turnOnFlags(FL_SVALID, token)
-                tinsert(upval, info[FD_STVLD])
             end
         end
 
@@ -2078,7 +2002,6 @@ do
                 tinsert(upval, i - 1)
             else
                 token = turnOnFlags(FL_SINIT, token)
-                tinsert(upval, info[FD_STINI])
             end
         end
 
@@ -2086,7 +2009,6 @@ do
             for k, v in pairs, info[FD_TYPMTD] do
                 if v then
                     token   = turnOnFlags(FL_OBJMTD, token)
-                    tinsert(upval, info[FD_TYPMTD])
                     break
                 end
             end
@@ -2109,9 +2031,13 @@ do
                 if validateFlags(FL_VCACHE, token) then
                     tinsert(body, [[
                         -- Cache to block recursive validation
-                        local vcache = cache[info] or _Cache()
-                        cache[info]  = vcache
-                        if vcache[value] then return value end
+                        local vcache = cache[info]
+                        if not vcache then
+                            vcache = _Cache()
+                            cache[info] = vcache
+                        elseif vcache[value] then
+                            return value
+                        end
                         vcache[value]= true
                     ]])
                 end
@@ -2165,9 +2091,9 @@ do
                     end
                 ]])
             elseif validateFlags(FL_ARRAY, token) then
-                tinsert(header, "array")
-                tinsert(header, "avalid")
                 tinsert(body, [[
+                    local array = info[]] .. FD_ARRAY .. [[]
+                    local avalid= info[]] .. FD_ARRVLD .. [[]
                     if onlyValid then
                         for i, v in ipairs, value, 0 do
                             local ret, msg  = avalid(array, v, true, cache)
@@ -2184,9 +2110,8 @@ do
             end
 
             if validateFlags(FL_SVALID, token) then
-                tinsert(header, "svalid")
                 tinsert(body, [[
-                    local msg = svalid(value)
+                    local msg = info[]] .. FD_STVLD .. [[](value)
                     if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FD_NAME .. [[]) end
                 ]])
             elseif validateFlags(FL_MVALID, token) then
@@ -2203,9 +2128,8 @@ do
                 tinsert(body, [[if onlyValid then return value end]])
 
                 if validateFlags(FL_SINIT, token) then
-                    tinsert(header, "sinit")
                     tinsert(body, [[
-                        local ret = sinit(value)
+                        local ret = info[]] .. FD_STINI .. [[](value)
                     ]])
 
                     if validateFlags(FL_CUSTOM, token) then
@@ -2225,13 +2149,12 @@ do
             end
 
             if validateFlags(FL_OBJMTD, token) then
-                tinsert(header, "methods")
                 if validateFlags(FL_CUSTOM, token) then
                     tinsert(body, [[if type(value) == "table" then]])
                 end
 
                 tinsert(body, [[
-                    for k, v in pairs, methods do
+                    for k, v in pairs, info[]] .. FD_TYPMTD .. [[] do
                         if v and value[k] == nil then value[k] = v end
                     end
                 ]])
@@ -2252,15 +2175,24 @@ do
 
             _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
 
+            if #header == 0 then
+                _ValidMap[token] = _ValidMap[token]()
+            end
+
             _Cache(header)
             _Cache(body)
         end
 
-        info[FD_VALID] = _ValidMap[token](unpack(upval))
+        if #upval > 0 then
+            info[FD_VALID] = _ValidMap[token](unpack(upval))
+        else
+            info[FD_VALID] = _ValidMap[token]
+        end
 
         _Cache(upval)
     end
 
+    -- Ctor
     local function generateConstructor(info)
         local token = 0
         local upval = _Cache()
@@ -2287,13 +2219,9 @@ do
             end
         elseif info[FD_ARRAY] then
             token   = turnOnFlags(FL_ARRAY, token)
-            tinsert(upval, info[FD_ARRAY])
-            tinsert(upval, info[FD_ARRVLD])
         else
             token   = turnOnFlags(FL_CUSTOM, token)
         end
-
-        tinsert(upval, info[FD_VALID])
 
         -- Build the validator generator
         if not _CtorMap[token] then
@@ -2305,6 +2233,7 @@ do
             if validateFlags(FL_MEMBER, token) or validateFlags(FL_ARRAY, token) then
                 tinsert(body, [[
                     return function(info, first, ...)
+                        local ivalid = info[]].. FD_VALID .. [[]
                         local ret, msg
                         if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
                 ]])
@@ -2328,14 +2257,10 @@ do
                         tinsert(body, [[local fmatch = false]])
                     end
                 elseif validateFlags(FL_ARRAY, token) then
-                    tinsert(header, "array")
-                    tinsert(header, "avalid")
                     tinsert(body, [[
-                        local _, fmatch = avalid(array, first, true) fmatch = not fmatch
+                        local _, fmatch = info[]] .. FD_ARRVLD .. [[](info[]] .. FD_ARRAY .. [[], first, true) fmatch = not fmatch
                     ]])
                 end
-
-                tinsert(header, "ivalid")
 
                 if validateFlags(FL_VCACHE, token) then
                     tinsert(body, [[
@@ -2371,10 +2296,9 @@ do
                     end
                 ]])
             else
-                tinsert(header, "ivalid")
-
                 tinsert(body, [[
                     return function(info, first)
+                        local ivalid = info[]].. FD_VALID .. [[]
                         local ret, msg
                 ]])
             end
@@ -2429,13 +2353,54 @@ do
 
             _CtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
 
+            if #header == 0 then
+                _CtorMap[token] = _CtorMap[token]()
+            end
+
             _Cache(header)
             _Cache(vbody)
         end
 
-        info[FD_CTOR] = _CtorMap[token](unpack(upval))
+        if #upval > 0 then
+            info[FD_CTOR] = _CtorMap[token](unpack(upval))
+        else
+            info[FD_CTOR] = _CtorMap[token]
+        end
 
         _Cache(upval)
+    end
+
+    -- Refresh Depends
+    local function refreshDepends(target, cache)
+        local map = _DependMap[target]
+
+        if map then
+            _DependMap[target] = nil
+
+            for t in pairs, map do
+                if not cache[t] then
+                    cache[t] = true
+
+                    local info, def = getTargetInfo(t)
+                    if not def then
+                        refreshDependence(t, info)
+
+                        local nVcache = checkRepeatType(t, info)
+
+                        if nVcache ~= info[FD_VCACHE] then
+                            info[FD_VCACHE] = nVcache
+
+                            generateValidator(info)
+                            generateConstructor(info)
+                        end
+
+                        refreshDepends(t, cache)
+                    end
+                end
+            end
+
+            _Cache(map)
+        end
     end
 
     struct          = Prototype "struct" {
@@ -2488,7 +2453,7 @@ do
                         end
                     end
 
-                    attribute.ApplyAttributes  (minfo, ATTRIBUTE_TARGETS_MEMBER, definition, target, name, smem)
+                    attribute.ApplyAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, definition, target, name, smem)
 
                     for k, v in pairs, definition do
                         if type(k) == "string" then
@@ -2728,6 +2693,10 @@ do
                     ninfo[FD_EMSG]  = strformat("[%s]", tostring(target))
                 end
 
+                ninfo[FD_VCACHE]    = checkRepeatType(target, ninfo)
+
+                refreshDependence(target, ninfo)
+
                 generateValidator(ninfo)
                 generateConstructor(ninfo)
 
@@ -2746,6 +2715,14 @@ do
                 _StrtInfo[target]   = ninfo
 
                 attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_STRUCT)
+
+                -- Refresh structs depended on this
+                if _DependMap[target] then
+                    local cache = _Cache()
+                    cache[target] = true
+                    refreshDepends(target, cache)
+                    _Cache(cache)
+                end
 
                 return target
             end;
@@ -3047,16 +3024,18 @@ do
             end;
         },
         __newindex  = readOnly,
-        __tostring  = function() return "struct" end,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = GetTypeParams(struct, tstruct, ...)
+            local env, target, definition, keepenv, stack, visitor = GetTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
             struct.BeginDefinition(target, stack + 1)
 
             local tarenv = Prototype.NewObject(structbuilder)
             environment.SetNameSpace(tarenv, target)
-            environment.SetParent(env)
+            environment.SetParent(tarenv, env)
+            environment.SetAutoCache(tarenv, false)
+
+            _InDef[tarenv] = true
 
             if definition then
                 tarenv(definition, stack + 1)
@@ -3092,34 +3071,20 @@ do
 
     structbuilder   = Prototype "structbuilder" {
         __index     = function(self, key)
-            local val, cache = getBuilderValue(self, key)
-
-            -- Access methods
-            local info  = getTargetInfo(environment.GetNameSpace(self))
-            local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
-            if m then return m, true end
-            return environment.GetValue(self, name)
-
-            if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
-                rawset(self, key, val)
-            end
-            return val
+            local newMethod     = rawget(self, BFD_NMTD)
+            return newMethod and newMethod[key] and struct.GetMethod(environment.GetNameSpace(self), key) or environment.GetValue(self, key)
         end,
         __newindex  = function(self, key, value)
-            local owner = environment.GetNameSpace(self)
-            if _BDInfo[owner] then
-                if setBuilderOwnerValue(self, key, value, 3) then
-                    return
-                end
+            if not setBuilderOwnerValue(self, key, value, 3) then
+                return rawset(self, key, value)
             end
-            return rawset(self, key, value)
         end,
         __call      = function(self, ...)
             local definition, stack = GetDefinitionParams(self, ...)
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
-            if not owner then error("The struct's definition is finished", stack) end
+            if not (owner and _InDef[self] and _BDInfo[owner]) then error("The struct's definition is finished", stack) end
 
             stack = stack + 1
 
@@ -3144,18 +3109,20 @@ do
                 end
             end
 
+            struct.EndDefinition(owner, stack)
+
+            _InDef[self]    = nil
+            environment.SetAutoCache(self, true)
+
             local newMethod     = rawget(self, BFD_NMTD)
             if newMethod then
                 for k in pairs(newMethod) do
-                    rawset(self, k, struct.GetMethod(k))
+                    rawset(self, k, struct.GetMethod(owner, k))
                 end
                 rawset(self, BFD_NMTD, nil)
             end
 
-            local baseEnv = environment.GetParent(self)
-            struct.EndDefinition(owner, stack)
-
-            setfenv(stack - 1, baseEnv or _G)
+            setfenv(stack - 1, environment.GetParent(self) or _G)
 
             return owner
         end,
@@ -3163,10 +3130,13 @@ do
 
     -- Key feature : member "Name" { Type = String, Default = "Anonymous", Require = false}
     member          = Prototype "member" {
+        __index     = writeOnly,
+        __newindex  = readOnly,
         __call      = function(self, ...)
             if self == member then
-                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(member, ...)
-                if not owner or not tarenv then error([[Usage: member "name" {...} - can't be used here.]], stack) end
+                local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(member, ...)
+                local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
+                if not owner or not keyvisitor then error([[Usage: member "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: member "name" {...} - the name can't be an empty string.]], stack) end
@@ -3188,21 +3158,35 @@ do
 
                 struct.AddMember(owner, name, definition, stack + 1)
             end
-        end;
-    };
+        end,
+    }
 
     -- Key feature : endstruct "Number"
     endstruct       = function (...)
-        local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(endstruct, ...)
+        local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(endstruct, ...)
+        local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
 
-        if not owner or not tarenv then error([[Usage: endstruct "name" - can't be used here.]], stack) end
+        if not owner or not keyvisitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
-
-        setfenv(stack, environment.GetParent(tarenv) or _G)
 
         struct.EndDefinition(owner, stack + 1)
 
-        return environment.GetParent(tarenv)
+        _InDef[keyvisitor]  = nil
+        environment.SetAutoCache(keyvisitor, true)
+
+        local newMethod     = rawget(keyvisitor, BFD_NMTD)
+        if newMethod then
+            for k in pairs(newMethod) do
+                rawset(keyvisitor, k, struct.GetMethod(owner, k))
+            end
+            rawset(keyvisitor, BFD_NMTD, nil)
+        end
+
+        local baseEnv       = environment.GetParent(keyvisitor) or _G
+
+        setfenv(stack, baseEnv)
+
+        return baseEnv
     end
 end
 
@@ -3218,15 +3202,13 @@ do
     local _ThisMap  = setmetatable({}, WEAK_ALL)        -- THIS FOR CLASS
     local _SuperMap = setmetatable({}, WEAK_ALL)        -- SUPER FOR CLASS & INTERFACE
     local _ObjMap   = setmetatable({}, WEAK_KEY)        -- OBJECT -> CLASS INFO MAP
-    local _BDInfo   = setmetatable({}, WEAK_KEY)  -- TYPE BUILDER INFO
-    local _SuperObj = setmetatable({}, WEAK_KEY)  -- SUPER OBJECT CACHE
-
-    local getEnvValue   = environment.GetValue
-    local getNameSpace          = namespace.GetNameSpace
+    local _BDInfo   = setmetatable({}, WEAK_KEY)        -- TYPE BUILDER INFO
+    local _SuperObj = setmetatable({}, WEAK_KEY)        -- SUPER OBJECT CACHE
 
     local _IndexMap = {}
     local _NewIdxMap= {}
     local _CtorMap  = {}
+    local _InDef    = setmetatable({}, WEAK_KEY)
 
     -- FEATURE MODIFIER
     local MD_SEAL   = 2^0           -- SEALED TYPE
@@ -3305,6 +3287,9 @@ do
     -- Super & This
     local AL_SUPER  = "Super"
     local AL_THIS   = "This"
+
+    -- Building
+    local BFD_NMTD  = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS = {
         __add       = "__add",      -- a + b
@@ -4272,14 +4257,14 @@ do
         -- Access methods
         local info = getTargetInfo(environment.GetNameSpace(self))
         if info and info[name] then return info[name], true end
-        return getEnvValue(self, name)
+        return environment.GetValue(self, name)
     end
 
     local function getClsBuilderValue(self, name)
         -- Access methods
         local info = getTargetInfo(environment.GetNameSpace(self))
         if info and info[name] then return info[name], true end
-        return getEnvValue(self, name)
+        return environment.GetValue(self, name)
     end
 
     local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
@@ -4847,7 +4832,6 @@ do
             end;
         },
         __newindex  = readOnly,
-        __tostring  = function() return "interface" end,
         __call      = function(self, ...)
             local env, target, definition, keepenv, stack = GetTypeParams(interface, tinterface, ...)
             if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][, stack]) - the interface type can't be created", stack) end
@@ -5228,7 +5212,6 @@ do
             end;
         },
         __newindex  = readOnly,
-        __tostring  = function() return "class" end,
         __call      = function(self, ...)
             local env, target, definition, keepenv, stack = GetTypeParams(class, tclass, ...)
             if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created", stack) end
@@ -5269,7 +5252,7 @@ do
                 end
 
                 -- Access child-namespaces
-                return getNameSpace(self, key)
+                return namespace.GetNameSpace(self, key)
             end
         end,
         __newindex  = function(self, key, value)
@@ -5412,7 +5395,7 @@ do
             local info  = getTargetInfo(environment.GetNameSpace(self))
             local m     = info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name])
             if m then return m, true end
-            return getEnvValue(self, name)
+            return environment.GetValue(self, name)
             if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
             end
