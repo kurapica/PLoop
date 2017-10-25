@@ -18,6 +18,19 @@ PLOOP_PLATFORM_SETTINGS = PLOOP_PLATFORM_SETTINGS or {
     -- Whether all enumerations are case ignored.
     ENUM_GLOBAL_IGNORE_CASE     = false,
 
+    -- ==Struct==
+
+    -- ==Interface X Class X Object==
+    -- Whether all old objects keep using new features when their classes or extend interfaces are re-defined.
+    CLASS_ALL_SIMPLE_VERSION    = false,
+
+    -- Whether all interfaces & classes only use Super.Method(obj, ...) to call super's features, don't use new
+    -- style like :
+    --              Super[obj].Name = "Ann"
+    --              Super[obj].OnNameChanged = Super[obj].OnNameChanged + print
+    --              Super[obj]:Greet("King")
+    CLASS_ALL_OLD_SUPER_STYLE   = false,
+
     -- ==Log==
     -- The Log level used in the Prototype core part.
     --          1 : Trace

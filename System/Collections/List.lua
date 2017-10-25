@@ -513,15 +513,15 @@ interface "IList" (function (_ENV)
     __Doc__[[Check if any element meet the requirement of the target function]]
     __Arguments__{ Callable, Argument(Any, true, nil, nil, true) }
     function Any(self, chk, ...)
-        local iter, idx, obj = self:GetIterator()
-        idx, obj = iter(idx, obj)
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
         while idx do
-            if chk(obj, ...) then
+            if chk(val, ...) then
                 -- Pass true to end iter if it support
-                iter(idx, obj, true)
+                iter(obj, idx, true)
                 return true
             end
-            idx, obj = iter(idx, obj)
+            idx, val = iter(obj, idx)
         end
         return false
     end
@@ -529,36 +529,68 @@ interface "IList" (function (_ENV)
     __Doc__[[Check if all elements meet the requirement of the target function]]
     __Arguments__{ Callable, Argument(System.Any, true, nil, nil, true) }
     function All(self, chk, ...)
-        local iter, idx, obj = self:GetIterator()
-        idx, obj = iter(idx, obj)
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
         while idx do
-            if not chk(obj, ...) then
+            if not chk(val, ...) then
                 -- Pass true to end iter if it support
-                iter(idx, obj, true)
+                iter(obj, idx, true)
                 return false
             end
-            idx, obj = iter(idx, obj)
+            idx, val = iter(obj, idx)
         end
         return true
     end
 
     __Doc__[[Get the first element of the list]]
-    function First(self)
-        local iter, idx, obj = self:GetIterator()
-        idx, obj = iter(idx, obj)
-        if idx then
-            iter(idx, obj, true)
-            return obj
+    __Arguments__{ Callable, Argument(System.Any, true, nil, nil, true) }
+    function First(self, chk, ...)
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
+        while idx do
+            if chk(val, ...) then
+                -- Pass true to end iter if it support
+                iter(obj, idx, true)
+                return val
+            end
+            idx, val = iter(obj, idx)
         end
     end
 
+    __Arguments__ {}
+    function First(self)
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
+        while idx do
+            iter(obj, idx, true)
+            return val
+        end
+        return false
+    end
+
     __Doc__[[Get the first element of the list, if not existed use the default as result]]
+    __Arguments__{ System.Any, Callable, Argument(System.Any, true, nil, nil, true) }
+    function FirstOrDefault(self, default, chk, ...)
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
+        while idx do
+            if chk(val, ...) then
+                -- Pass true to end iter if it support
+                iter(obj, idx, true)
+                return val
+            end
+            idx, val = iter(obj, idx)
+        end
+        return default
+    end
+
+    __Arguments__{ System.Any }
     function FirstOrDefault(self, default)
-        local iter, idx, obj = self:GetIterator()
-        idx, obj = iter(idx, obj)
-        if idx then
-            iter(idx, obj, true)
-            return obj
+        local iter, obj, idx, val = self:GetIterator()
+        idx, val = iter(obj, idx)
+        while idx do
+            iter(obj, idx, true)
+            return val
         end
         return default
     end

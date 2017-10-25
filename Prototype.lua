@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2017/07/17                                               --
+-- Update Date  :   2017/10/22                                               --
 -- Version      :   a001                                                     --
 --===========================================================================--
 
@@ -41,118 +41,119 @@
 --                          Environment Preparation                          --
 -------------------------------------------------------------------------------
 do
-    local error         = error
-    local strformat     = string.format
-    local strgsub       = string.gsub
-    local _PLoopEnv     = setmetatable(
+    local error                 = error
+    local strformat             = string.format
+    local strgsub               = string.gsub
+    local _PLoopEnv             = setmetatable(
         {
-            _G          = _G,
-            LUA_VERSION = tonumber(_VERSION and _VERSION:match("[%d%.]+")) or 5.1,
+            _G                  = _G,
+            LUA_VERSION         = tonumber(_VERSION and _VERSION:match("[%d%.]+")) or 5.1,
 
             -- Weak Mode
-            WEAK_KEY    = { __mode = "k"  },
-            WEAK_VALUE  = { __mode = "v"  },
-            WEAK_ALL    = { __mode = "kv" },
+            WEAK_KEY            = { __mode = "k"  },
+            WEAK_VALUE          = { __mode = "v"  },
+            WEAK_ALL            = { __mode = "kv" },
 
             -- Iterator
-            ipairs      = ipairs(_G),
-            pairs       = pairs (_G),
-            next        = next,
-            select      = select,
+            ipairs              = ipairs(_G),
+            pairs               = pairs (_G),
+            next                = next,
+            select              = select,
 
             -- String
-            strlen      = string.len,
-            strformat   = string.format,
-            strfind     = string.find,
-            strsub      = string.sub,
-            strbyte     = string.byte,
-            strchar     = string.char,
-            strrep      = string.rep,
-            strgsub     = string.gsub,
-            strupper    = string.upper,
-            strlower    = string.lower,
-            strmatch    = string.match,
-            strgmatch   = string.gmatch,
-            strtrim     = function(s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
+            strlen              = string.len,
+            strformat           = string.format,
+            strfind             = string.find,
+            strsub              = string.sub,
+            strbyte             = string.byte,
+            strchar             = string.char,
+            strrep              = string.rep,
+            strgsub             = string.gsub,
+            strupper            = string.upper,
+            strlower            = string.lower,
+            strmatch            = string.match,
+            strgmatch           = string.gmatch,
+            strtrim             = function(s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
 
             -- Table
-            tblconcat   = table.concat,
-            tinsert     = table.insert,
-            tremove     = table.remove,
-            unpack      = table.unpack or unpack,
-            sort        = table.sort,
-            setmetatable= setmetatable,
-            getmetatable= getmetatable,
-            rawset      = rawset,
-            rawget      = rawget,
+            tblconcat           = table.concat,
+            tinsert             = table.insert,
+            tremove             = table.remove,
+            unpack              = table.unpack or unpack,
+            sort                = table.sort,
+            setmetatable        = setmetatable,
+            getmetatable        = getmetatable,
+            rawset              = rawset,
+            rawget              = rawget,
 
             -- Type
-            type        = type,
-            tonumber    = tonumber,
-            tostring    = tostring,
+            type                = type,
+            tonumber            = tonumber,
+            tostring            = tostring,
 
             -- Math
-            floor       = math.floor,
-            mlog        = math.log,
-            mabs        = math.abs,
+            floor               = math.floor,
+            mlog                = math.log,
+            mabs                = math.abs,
 
             -- Coroutine
-            create      = coroutine.create,
-            resume      = coroutine.resume,
-            running     = coroutine.running,
-            status      = coroutine.status,
-            wrap        = coroutine.wrap,
-            yield       = coroutine.yield,
+            create              = coroutine.create,
+            resume              = coroutine.resume,
+            running             = coroutine.running,
+            status              = coroutine.status,
+            wrap                = coroutine.wrap,
+            yield               = coroutine.yield,
 
             -- Safe
-            pcall       = pcall,
-            error       = error,
-            print       = print,
-            newproxy    = newproxy or false,
+            pcall               = pcall,
+            error               = error,
+            print               = print,
+            newproxy            = newproxy or false,
 
             -- In lua 5.2, the loadstring is deprecated
-            loadstring  = loadstring or load,
-            loadfile    = loadfile,
+            loadstring          = loadstring or load,
+            loadfile            = loadfile,
 
             -- Debug lib
-            debug       = debug or false,
-            debuginfo   = debug and debug.getinfo or false,
-            getupvalue  = debug and debug.getupvalue or false,
-            traceback   = debug and debug.traceback or false,
-            setfenv     = setfenv or debug and debug.setfenv or false,
-            getfenv     = getfenv or debug and debug.getfenv or false,
+            debug               = debug or false,
+            debuginfo           = debug and debug.getinfo or false,
+            getupvalue          = debug and debug.getupvalue or false,
+            traceback           = debug and debug.traceback or false,
+            setfenv             = setfenv or debug and debug.setfenv or false,
+            getfenv             = getfenv or debug and debug.getfenv or false,
         }, {
-            __index     = function(self, k)
+            __index             = function(self, k)
                 error(strformat("Global variable %q can't be found", k), 2)
             end,
-            __metatable = true
+            __metatable         = true
         }
     )
-    _PLoopEnv._PLoopEnv = _PLoopEnv
+    _PLoopEnv._PLoopEnv         = _PLoopEnv
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
     -----------------------------------------------------------------------
     --                          Share Function                           --
     -----------------------------------------------------------------------
-    wipe        = function (t) for k in pairs, t do t[k] = nil end return t end
-    fakefunc    = function () end
-    readOnly    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
-    writeOnly   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
-    typeconcat  = function (a, b) return tostring(a) .. tostring(b) end
+    wipe                        = function (t) for k in pairs, t do t[k] = nil end return t end
+    fakefunc                    = function () end
+    readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
+    writeOnly                   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
+    typeconcat                  = function (a, b) return tostring(a) .. tostring(b) end
 
     -----------------------------------------------------------------------
     --                          Debug Function                           --
     -----------------------------------------------------------------------
-    getCallLine = not debuginfo and fakefunc or
-                    function (stack)
-                        local info = debuginfo((stack or 2) + 1, "lS")
-                        if info then return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?") end
-                    end
+    getCallLine                 = not debuginfo and fakefunc or function (stack)
+        local info = debuginfo((stack or 2) + 1, "lS")
+        if info then
+            return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
+        end
+    end
 
     -----------------------------------------------------------------------
     --                               Clone                               --
     -----------------------------------------------------------------------
-    local function deepClone(src, tar, override, cache)
+    local deepClone             = function (src, tar, override, cache)
         if cache then cache[src] = tar end
 
         for k, v in pairs, src do
@@ -169,7 +170,7 @@ do
         return tar
     end
 
-    function tblclone(src, tar, deep, override, safe)
+    tblclone                    = function (src, tar, deep, override, safe)
         if src then
             if deep then
                 local cache = safe and _Cache()
@@ -184,7 +185,7 @@ do
         return tar
     end
 
-    function clone(src, deep, safe)
+    clone                       = function (src, deep, safe)
         if type(src) == "table" and getmetatable(src) == nil then
             return tblclone(src, {}, deep, true, safe)
         else
@@ -196,11 +197,11 @@ do
     --                          Loading Snippet                          --
     -----------------------------------------------------------------------
     if LUA_VERSION > 5.1 then
-        function loadSnippet(chunk, source, env)
+        loadSnippet             = function (chunk, source, env)
             return loadstring(chunk, source, nil, env or _PLoopEnv)
         end
     else
-        function loadSnippet(chunk, source, env)
+        loadSnippet             = function (chunk, source, env)
             -- print("--------------" .. source .. "-----------")
             -- print(chunk)
             local v, err = loadstring(chunk, source)
@@ -213,54 +214,54 @@ do
     --                         Flags Management                          --
     -----------------------------------------------------------------------
     if LUA_VERSION >= 5.3 then
-        validateFlags = loadstring [[
+        validateFlags           = loadstring [[
             return function(checkValue, targetValue)
                 return (checkValue & (targetValue or 0)) > 0
             end
         ]] ()
 
-        turnOnFlags = loadstring [[
+        turnOnFlags             = loadstring [[
             return function(checkValue, targetValue)
                 return checkValue | (targetValue or 0)
             end
         ]] ()
 
-        turnOffFlags = loadstring [[
+        turnOffFlags            = loadstring [[
             return function(checkValue, targetValue)
                 return (~checkValue) & (targetValue or 0)
             end
         ]] ()
     elseif (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
-        local band  = _G.bit32 and bit32.band or bit.band
-        local bor   = _G.bit32 and bit32.bor  or bit.bor
-        local bnot  = _G.bit32 and bit32.bnot or bit.bnot
+        local band              = _G.bit32 and bit32.band or bit.band
+        local bor               = _G.bit32 and bit32.bor  or bit.bor
+        local bnot              = _G.bit32 and bit32.bnot or bit.bnot
 
-        function validateFlags(checkValue, targetValue)
+        validateFlags           = function (checkValue, targetValue)
             return band(checkValue, targetValue or 0) > 0
         end
 
-        function turnOnFlags(checkValue, targetValue)
+        turnOnFlags             = function (checkValue, targetValue)
             return bor(checkValue, targetValue or 0)
         end
 
-        function turnOffFlags(checkValue, targetValue)
+        turnOffFlags            = function (checkValue, targetValue)
             return band(bnot(checkValue), targetValue or 0)
         end
     else
-        function validateFlags(checkValue, targetValue)
+        validateFlags           = function (checkValue, targetValue)
             if not targetValue or checkValue > targetValue then return false end
             targetValue = targetValue % (2 * checkValue)
             return (targetValue - targetValue % checkValue) == checkValue
         end
 
-        function turnOnFlags(checkValue, targetValue)
+        turnOnFlags             = function (checkValue, targetValue)
             if not validateFlags(checkValue, targetValue) then
                 return checkValue + (targetValue or 0)
             end
             return targetValue
         end
 
-        function turnOffFlags(checkValue, targetValue)
+        turnOffFlags            = function (checkValue, targetValue)
             if validateFlags(checkValue, targetValue) then
                 return targetValue - checkValue
             end
@@ -271,9 +272,9 @@ do
     -----------------------------------------------------------------------
     --                             newproxy                              --
     -----------------------------------------------------------------------
-    newproxy = newproxy or (function ()
-        local falseMeta = { __metatable = false }
-        local _proxymap = setmetatable({}, WEAK_ALL)
+    newproxy                    = newproxy or (function ()
+        local falseMeta         = { __metatable = false }
+        local _proxymap         = setmetatable({}, WEAK_ALL)
 
         return function (prototype)
             if prototype == true then
@@ -299,7 +300,7 @@ do
             local upvaluejoin   = debug.upvaluejoin
             local getlocal      = debug.getlocal
 
-            function setfenv(f, t)
+            setfenv             = function (f, t)
                 f = type(f) == 'function' and f or getinfo(f + 1, 'f').func
                 local up, name = 0
                 repeat
@@ -309,7 +310,7 @@ do
                 if name then upvaluejoin(f, up, function() return t end, 1) end
             end
 
-            function getfenv(f)
+            getfenv             = function (f)
                 local cf, up, name, val = type(f) == 'function' and f or getinfo(f + 1, 'f').func, 0
                 repeat
                     up = up + 1
@@ -327,16 +328,16 @@ do
                 end
             end
         else
-            getfenv = fakefunc
-            setfenv = fakefunc
+            getfenv             = fakefunc
+            setfenv             = fakefunc
         end
     end
 
     -----------------------------------------------------------------------
     --                      PLOOP PLATFORM SETTINGS                      --
     -----------------------------------------------------------------------
-    PLOOP_PLATFORM_SETTINGS    = (function(default)
-        local settings  = _G.PLOOP_PLATFORM_SETTINGS
+    PLOOP_PLATFORM_SETTINGS     = (function(default)
+        local settings = _G.PLOOP_PLATFORM_SETTINGS
         if type(settings) == "table" then
             for k, v in pairs, default do
                 local r = settings[k]
@@ -357,21 +358,25 @@ do
         -- Enum
         ENUM_GLOBAL_IGNORE_CASE     = false,
 
+        -- Interface X Class X Object
+        CLASS_ALL_SIMPLE_VERSION    = false,
+        CLASS_ALL_OLD_SUPER_STYLE   = false,
+
         -- Log
-        CORE_LOG_LEVEL      = 3,
-        CORE_LOG_HANDLER    = print,
+        CORE_LOG_LEVEL              = 3,
+        CORE_LOG_HANDLER            = print,
 
         -- Multi-thread
-        MULTI_OS_THREAD     = false,
-        MULTI_OS_LOCK       = fakefunc,
-        MULTI_OS_RELEASE    = fakefunc,
+        MULTI_OS_THREAD             = false,
+        MULTI_OS_LOCK               = fakefunc,
+        MULTI_OS_RELEASE            = fakefunc,
     }
 
     -----------------------------------------------------------------------
     --                            Main Cache                             --
     -----------------------------------------------------------------------
-    _Cache          = setmetatable({}, {
-        __call      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
+    _Cache                      = setmetatable({}, {
+        __call                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
             function(self, tbl) return tbl and wipe(tbl) or {} end
             or
             function(self, tbl) if tbl then return tinsert(self, wipe(tbl)) else return tremove(self) or {} end end,
@@ -381,7 +386,7 @@ do
     -----------------------------------------------------------------------
     --                                Log                                --
     -----------------------------------------------------------------------
-    local function genreateLogger(prefix, loglvl)
+    local genreateLogger        = function (prefix, loglvl)
         local handler = PLOOP_PLATFORM_SETTINGS.CORE_LOG_HANDLER
         return PLOOP_PLATFORM_SETTINGS.CORE_LOG_LEVEL > loglvl and fakefunc or
             function(msg, stack, ...)
@@ -394,12 +399,12 @@ do
             end
     end
 
-    Trace   = genreateLogger("[PLoop:Trace]", 1)
-    Debug   = genreateLogger("[PLoop:Debug]", 2)
-    Info    = genreateLogger("[PLoop:Info]",  3)
-    Warn    = genreateLogger("[PLoop:Warn]",  4)
-    Error   = genreateLogger("[PLoop:Error]", 5)
-    Fatal   = genreateLogger("[PLoop:Fatal]", 6)
+    Trace                       = genreateLogger("[PLoop:Trace]", 1)
+    Debug                       = genreateLogger("[PLoop:Debug]", 2)
+    Info                        = genreateLogger("[PLoop:Info]",  3)
+    Warn                        = genreateLogger("[PLoop:Warn]",  4)
+    Error                       = genreateLogger("[PLoop:Error]", 5)
+    Fatal                       = genreateLogger("[PLoop:Fatal]", 6)
 end
 
 -------------------------------------------------------------------------------
@@ -415,25 +420,26 @@ end
 --                                                                           --
 -------------------------------------------------------------------------------
 do
-    local _Prototype = setmetatable({}, WEAK_ALL)
+    local _Prototype            = setmetatable({}, WEAK_ALL)
 
-    local function savePrototype(name, meta, super)
+    local savePrototype         = function (name, meta, super)
         local prototype       = newproxy(true)
         local pmeta           = getmetatable(prototype)
         _Prototype[prototype] = pmeta
 
-        if meta                     then tblclone(meta, pmeta, true, true) end
-        if pmeta.__metatable == nil then pmeta.__metatable = prototype end
-        if pmeta.__tostring  == nil then pmeta.__tostring  = function() return name end end
-        if pmeta.__concat    == nil then pmeta.__concat    = typeconcat end
-        if super                    then tblclone(_Prototype[super], pmeta, true, false) end
+        if meta                         then tblclone(meta, pmeta, true, true) end
+        if pmeta.__metatable == nil     then pmeta.__metatable = prototype end
+        if pmeta.__tostring  == nil     then pmeta.__tostring  = function() return name end end
+        if pmeta.__concat    == nil     then pmeta.__concat    = typeconcat end
+        if super                        then tblclone(_Prototype[super], pmeta, true, false) end
+        if pmeta.__tostring  == false   then pmeta.__tostring = nil end
 
         Trace("The prototype %q is created", 3, name)
 
         return prototype
     end
 
-    local function newPrototype(self, name)
+    local newPrototype          = function (self, name)
         name = name or self
         if type(name) ~= "string" then name = "anonymous" end
         return function(super, meta)
@@ -445,8 +451,8 @@ do
     end
 
     -- Root Prototype
-    Prototype = newPrototype "Prototype" {
-        __index     = {
+    Prototype                   = newPrototype "Prototype" {
+        __index                 = {
             ["NewProxy"]        = newproxy,
             ["NewObject"]       = function(prototype, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[prototype]) end,
             ["ValidateValue"]   = function(prototype, val) return getmetatable(val) == prototype end,
@@ -498,47 +504,47 @@ do
     --                          CONST VARIABLES                          --
     -----------------------------------------------------------------------
     -- ATTRIBUTE TARGETS
-    ATTRIBUTE_TARGETS_ALL           = 0
+    ATTRIBUTE_TARGETS_ALL       = 0
 
     -- ATTRIBUTE APPLY PHASE
-    ATTRIBUTE_APPLYPH_BEFOREDEF     = 2^0
-    ATTRIBUTE_APPLYPH_AFTERDEF      = 2^1
+    ATTRIBUTE_APPLYPH_BEFOREDEF = 2^0
+    ATTRIBUTE_APPLYPH_AFTERDEF  = 2^1
 
     -----------------------------------------------------------------------
     --                          Attribute Data                           --
     -----------------------------------------------------------------------
-    local _ATarType = { [ATTRIBUTE_TARGETS_ALL] = "All" }
-    local _ATUseName= {}
-    local _AttrInfo = setmetatable({}, WEAK_KEY)
-    local _InrtInfo = setmetatable({}, WEAK_KEY)
+    local _AttrTargetTypes      = { [ATTRIBUTE_TARGETS_ALL] = "All" }
+    local _AttrUseNameApply     = {}
+    local _AttrTargetData       = setmetatable({}, WEAK_KEY)
+    local _AttrTargetInrt       = setmetatable({}, WEAK_KEY)
 
     -- Temporary Cache
-    local _PreAttrs = {}
-    local _TarAttrs = setmetatable({}, WEAK_KEY)
-    local _FinAttrs = setmetatable({}, WEAK_KEY)
-    local _Suspend  = false
-    local _UseWarn  = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
+    local _RegisteredAttrs      = {}
+    local _TargetAttrs          = setmetatable({}, WEAK_KEY)
+    local _AfterDefineAttrs     = setmetatable({}, WEAK_KEY)
+    local _SuspendNextConsume   = false
+    local _UseWarnInstreadErr   = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
     -- Helpers
-    local function getAttributeUsage(attr)
-        local info  = _AttrInfo[getmetatable(attr)]
+    local getAttributeUsage     = function (attr)
+        local info  = _AttrTargetData[getmetatable(attr)]
         return info and info[attribute]
     end
 
-    local function getField(obj, field, default, chkType)
+    local getField              = function (obj, field, default, chkType)
         local val   = obj and obj[field]
         if val ~= nil and (not chkType or type(val) == chkType) then return val end
         return default
     end
 
-    local function getAttributeInfo(attr, field, default, chkType, attrusage)
+    local getAttributeInfo      = function (attr, field, default, chkType, attrusage)
         local val   = getField(attr, field, nil, chkType)
         if val == nil then val = getField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
         if val ~= nil then return val end
         return default
     end
 
-    local function addAttribtue(list, attr, noSameType)
+    local addAttribtue          = function (list, attr, noSameType)
         for _, v in ipairs, list, 0 do
             if v == attr then return end
             if noSameType and getmetatable(v) == getmetatable(attr) then return end
@@ -560,8 +566,8 @@ do
         tinsert(list, idx, attr)
     end
 
-    attribute       = Prototype "attribute" {
-        __index     = {
+    attribute                   = Prototype "attribute" {
+        __index                 = {
             -- Apply the registered attributes to the feature
             -- @target          - the target feature
             -- @targetType      - the target's type
@@ -570,14 +576,14 @@ do
             -- @name            - the target's name
             -- @...             - the target's super features, used for inheritance
             ["ApplyAttributes"] = function(target, targetType, definition, owner, name, ...)
-                local tarAttrs  = _TarAttrs[target]
-                if tarAttrs  then _TarAttrs[target] = nil end
+                local tarAttrs  = _TargetAttrs[target]
+                if tarAttrs  then _TargetAttrs[target] = nil end
 
                 -- Check inheritance
                 for i = 1, select("#", ...) do
                     local super = select(i, ...)
-                    if super and _InrtInfo[super] then
-                        for _, sattr in pairs, _InrtInfo[super] do
+                    if super and _AttrTargetInrt[super] then
+                        for _, sattr in pairs, _AttrTargetInrt[super] do
                             local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
 
                             if aTar == ATTRIBUTE_TARGETS_ALL or validateFlags(targetType, aTar) then
@@ -590,16 +596,16 @@ do
 
                 if not tarAttrs then return target end
 
-                local extAttrs  = _AttrInfo[target] and tblclone(_AttrInfo[target], _Cache())
-                local extInhrt  = _InrtInfo[target] and tblclone(_InrtInfo[target], _Cache())
+                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
+                local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
                 local finAttrs
                 local isMethod  = type(target) == "function"
                 local newAttrs  = false
                 local newInhrt  = false
-                local applyTar  = (_ATUseName[targetType] and (name or tostring(target))) or target
+                local applyTar  = (_AttrUseNameApply[targetType] and (name or tostring(target))) or target
 
                 -- Apply the attribute to the target
-                Trace("Starting apply pre-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Starting apply pre-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
                 for i, attr in ipairs, tarAttrs, 0 do
                     local aType = getmetatable(attr)
@@ -644,18 +650,18 @@ do
                     end
                 end
 
-                Trace("Finished apply pre-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Finished apply pre-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
                 _Cache(tarAttrs)
 
                 if isMethod then target = applyTar end
 
                 -- Save the after definition attributes
-                if finAttrs then _FinAttrs[target] = finAttrs end
+                if finAttrs then _AfterDefineAttrs[target] = finAttrs end
 
                 -- Save attribute save datas
-                if newAttrs then _AttrInfo[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
-                if newInhrt then _InrtInfo[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
+                if newAttrs then _AttrTargetData[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
+                if newInhrt then _AttrTargetInrt[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
 
                 return target
             end;
@@ -666,17 +672,17 @@ do
             -- @owner           - the target's owner(may be itself)
             -- @name            - the target's name
             ["ApplyAfterDefine"]= function(target, targetType, owner, name)
-                local finAttrs  = _FinAttrs[target]
-                if not finAttrs then return else _FinAttrs[target] = nil end
+                local finAttrs  = _AfterDefineAttrs[target]
+                if not finAttrs then return else _AfterDefineAttrs[target] = nil end
 
-                local extAttrs  = _AttrInfo[target] and tblclone(_AttrInfo[target], _Cache())
-                local extInhrt  = _InrtInfo[target] and tblclone(_InrtInfo[target], _Cache())
+                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
+                local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
                 local newAttrs  = false
                 local newInhrt  = false
-                local applyTar  = (_ATUseName[targetType] and (name or tostring(target))) or target
+                local applyTar  = (_AttrUseNameApply[targetType] and (name or tostring(target))) or target
 
                 -- Apply the attribute to the target
-                Trace("Starting apply post-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Starting apply post-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
                 for i, attr in ipairs, finAttrs, 0 do
                     local aType = getmetatable(attr)
@@ -708,57 +714,57 @@ do
                     end
                 end
 
-                Trace("Finished apply post-attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Finished apply post-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
                 _Cache(finAttrs)
 
                 -- Save attribute save datas
-                if newAttrs then _AttrInfo[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
-                if newInhrt then _InrtInfo[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
+                if newAttrs then _AttrTargetData[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
+                if newInhrt then _AttrTargetInrt[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
             end;
 
             -- Clear all registered attributes
             ["Clear"]           = function()
-                if #_PreAttrs > 0 then
+                if #_RegisteredAttrs > 0 then
                     Trace("attribute.Clear() is called", 2)
-                    wipe(_PreAttrs)
+                    wipe(_RegisteredAttrs)
                 end
             end;
 
             ["ConsumeAttributes"] = function(target, targetType, owner, name, stack)
-                if _Suspend then _Suspend = false return end
-                if #_PreAttrs  == 0 then return end
+                if _SuspendNextConsume then _SuspendNextConsume = false return end
+                if #_RegisteredAttrs  == 0 then return end
 
-                local tarAttrs  = _PreAttrs
-                _PreAttrs       = _Cache()
+                local tarAttrs  = _RegisteredAttrs
+                _RegisteredAttrs= _Cache()
 
-                Trace("Starting consume attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Starting consume attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
                 for i = #tarAttrs, 1, -1 do
                     local attr  = tarAttrs[i]
                     local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
 
                     if aTar ~= ATTRIBUTE_TARGETS_ALL and not validateFlags(targetType, aTar) then
-                        if _UseWarn then
-                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                        if _UseWarnInstreadErr then
+                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
                             tremove(tarAttrs, i)
                         else
                             _Cache(tarAttrs)
-                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target)), stack)
+                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target)), stack)
                         end
                     end
                 end
 
-                Trace("Finished consume attribtues on [%s]%s", _ATarType[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("Finished consume attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
 
-                _TarAttrs[target] = tarAttrs
+                _TargetAttrs[target] = tarAttrs
             end;
 
             -- Get saved attribute data
             -- @target          - the target feature
             -- @attributeType   - the attribute's type
             ["GetAttributeData"]= function(target, aType)
-                local info      = _AttrInfo[target]
+                local info      = _AttrTargetData[target]
                 return info and clone(info[aType], true, true)
             end;
 
@@ -769,14 +775,14 @@ do
                 local attr      = attribute.ValidateValue(attr)
                 if not attr then error("Usage : attribute.Register(attr) - the attr is not valid", 2) end
                 Trace("New attribute %q is registered", tostring(attr))
-                return addAttribtue(_PreAttrs, attr, noSameType)
+                return addAttribtue(_RegisteredAttrs, attr, noSameType)
             end;
 
             -- Register an attribute type with usage information
             ["RegisterAttributeType"] = function(aType, usage)
-                if _AttrInfo[aType] and _AttrInfo[aType][attribute] and _AttrInfo[aType][attribute].Final then return end
+                if _AttrTargetData[aType] and _AttrTargetData[aType][attribute] and _AttrTargetData[aType][attribute].Final then return end
 
-                local extAttrs  = tblclone(_AttrInfo[aType], _Cache())
+                local extAttrs  = tblclone(_AttrTargetData[aType], _Cache())
                 local attrusage = _Cache()
 
                 Trace("New attribute type %q is registered", tostring(aType))
@@ -794,29 +800,29 @@ do
                 attrusage.Final             = getField(usage, "Final", false)
 
                 extAttrs[attribute]         = attrusage
-                _AttrInfo[aType]            = extAttrs
+                _AttrTargetData[aType]      = extAttrs
             end;
 
             -- Register attribute type with name
             ["RegisterTargetType"] = function(name, useNameAsApplyTarget)
                 local i             = 2^0
-                while _ATarType[i] do i = i * 2 end
-                _ATarType [i]       = name
-                _ATUseName[i]       = useNameAsApplyTarget and true or nil
+                while _AttrTargetTypes[i] do i = i * 2 end
+                _AttrTargetTypes[i] = name
+                _AttrUseNameApply[i]= useNameAsApplyTarget and true or nil
                 Trace("New attribute target type %q is registered", name)
                 return i
             end;
 
-            ["SuspendNextConsume"]  = function()
-                _Suspend = true
+            ["SuspendNextConsume"] = function()
+                _SuspendNextConsume = true
             end;
 
             -- Un-register attribute
             ["Unregister"]      = function(attr)
-                for i, v in ipairs, _PreAttrs, 0 do
+                for i, v in ipairs, _RegisteredAttrs, 0 do
                     if v == attr then
                         Trace("Attribtue %q is unregistered", tostring(attr))
-                        return tremove(_PreAttrs, i)
+                        return tremove(_RegisteredAttrs, i)
                     end
                 end
             end;
@@ -828,29 +834,29 @@ do
 
             -- Validate whether the target is an attribute type
             ["Validate"]        = function(attrtype)
-                local info  = _AttrInfo[attrtype]
+                local info      = _AttrTargetData[attrtype]
                 return info and info[attribute] and attrtype or nil
             end;
         },
-        __newindex  = readOnly,
+        __newindex              = readOnly,
     }
 
     -----------------------------------------------------------------------
     --                         ATTRIBUTE TARGETS                         --
     -----------------------------------------------------------------------
     -- ATTRIBUTE TARGETS
-    ATTRIBUTE_TARGETS_NAMESPACE     = attribute.RegisterTargetType("Namespace")
-    ATTRIBUTE_TARGETS_ENUM          = attribute.RegisterTargetType("Enum")
-    ATTRIBUTE_TARGETS_STRUCT        = attribute.RegisterTargetType("Struct")
-    ATTRIBUTE_TARGETS_INTERFACE     = attribute.RegisterTargetType("Interface")
-    ATTRIBUTE_TARGETS_CLASS         = attribute.RegisterTargetType("Class")
-    ATTRIBUTE_TARGETS_FUNCTION      = attribute.RegisterTargetType("Function")
-    ATTRIBUTE_TARGETS_METHOD        = attribute.RegisterTargetType("Method")
-    ATTRIBUTE_TARGETS_METAMETHOD    = attribute.RegisterTargetType("Metamethod")
-    ATTRIBUTE_TARGETS_CONSTRUCTOR   = attribute.RegisterTargetType("Constructor")
-    ATTRIBUTE_TARGETS_MEMBER        = attribute.RegisterTargetType("Member", true)
-    ATTRIBUTE_TARGETS_EVENT         = attribute.RegisterTargetType("Event", true)
-    ATTRIBUTE_TARGETS_PROPERTY      = attribute.RegisterTargetType("Property", true)
+    ATTRIBUTE_TARGETS_NAMESPACE = attribute.RegisterTargetType("Namespace")
+    ATTRIBUTE_TARGETS_ENUM      = attribute.RegisterTargetType("Enum")
+    ATTRIBUTE_TARGETS_STRUCT    = attribute.RegisterTargetType("Struct")
+    ATTRIBUTE_TARGETS_INTERFACE = attribute.RegisterTargetType("Interface")
+    ATTRIBUTE_TARGETS_CLASS     = attribute.RegisterTargetType("Class")
+    ATTRIBUTE_TARGETS_FUNCTION  = attribute.RegisterTargetType("Function")
+    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
+    ATTRIBUTE_TARGETS_METAMETHOD= attribute.RegisterTargetType("Metamethod")
+    ATTRIBUTE_TARGETS_CTOR      = attribute.RegisterTargetType("Constructor")
+    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member", true)
+    ATTRIBUTE_TARGETS_EVENT     = attribute.RegisterTargetType("Event", true)
+    ATTRIBUTE_TARGETS_PROPERTY  = attribute.RegisterTargetType("Property", true)
 end
 
 -------------------------------------------------------------------------------
@@ -863,24 +869,24 @@ do
     -----------------------------------------------------------------------
     --                         Environment Data                          --
     -----------------------------------------------------------------------
-    local _ENVKeys  = {}    -- Keywords for environment type
-    local _KeyAccess        -- The environment that access the next keyword
-    local _AccessKey        -- The next keyword
+    local _ENVKeys              = {}    -- Keywords for environment type
+    local _KeyAccess                    -- The environment that access the next keyword
+    local _AccessKey                    -- The next keyword
 
     -- Environment Special Field
-    local ENV_OWN_NS= "__PLOOP_ENV_OWNNS"
-    local ENV_IMP_NS= "__PLOOP_ENV_IMPNS"
-    local ENV_BASE  = "__PLOOP_ENV_BSENV"
-    local ENV_NO_AT = "__PLOOP_ENV_NAUTO"
+    local ENV_NS_OWNER          = "__PLOOP_ENV_OWNNS"
+    local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
+    local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
+    local ENV_AUTOCACHE_OFF     = "__PLOOP_ENV_NAUTO"
 
-    local _GLNilable= PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
+    local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
 
-    local safeAutoCache     = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
+    local safeAutoCache         = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
         (PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK == fakefunc and fakefunc or (function()
-            local lock      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK
-            local release   = PLOOP_PLATFORM_SETTINGS.MULTI_OS_RELEASE
+            local lock          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK
+            local release       = PLOOP_PLATFORM_SETTINGS.MULTI_OS_RELEASE
             return function(self, key, value, stack)
-                if value ~= nil and not rawget(self, ENV_NO_AT) then
+                if value ~= nil and not rawget(self, ENV_AUTOCACHE_OFF) then
                     local result, err = lock(self, 1, 0)
                     if result then
                         rawset(self, key, value)
@@ -893,17 +899,15 @@ do
             end
         end)())
         or function(self, key, value)
-            if value ~= nil and not rawget(self, ENV_NO_AT) then
+            if value ~= nil and not rawget(self, ENV_AUTOCACHE_OFF) then
                 rawset(self, key, value)
             end
         end
 
     -- Share Helpers
-    local function getValue(self, key)
-        return self[key]
-    end
+    local getValue              = function (self, key) return self[key] end
 
-    local function getParams(keyword, ...)
+    local getParams             = function (keyword, ...)
         local env, target, definition, flag, stack
         local keyvisitor    = keyword and environment.GetKeywordVisitor(keyword)
 
@@ -976,19 +980,19 @@ do
         return env, target, definition, flag, stack, keyvisitor
     end
 
-    function GetDefinitionParams(self, ...)
+    GetDefinitionParams         = function (self, ...)
         local _, _, definition, _, stack = getParams(nil, self, ...)
         return definition, stack
     end
 
     -- Used for features like property, event, member and namespace
-    function GetFeatureParams(ftype, ...)
+    GetFeatureParams            = function (ftype, ...)
         local env, name, definition, flag, stack, keyvisitor = getParams(ftype, ...)
         return env, name, definition, flag, stack, keyvisitor
     end
 
     -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
-    function GetTypeParams(nType, prototype, ...)
+    GetTypeParams               = function (nType, prototype, ...)
         local env, target, definition, flag, stack, visitor = getParams(nType, ...)
 
         if target then
@@ -1007,14 +1011,14 @@ do
     end
 
     -- Prototypes
-    environment     = Prototype "environment" {
-        __index     = {
+    environment                 = Prototype "environment" {
+        __index                 = {
             ["GetNameSpace"]    = function(env)
-                return namespace.Validate(type(env) == "table" and rawget(env, ENV_OWN_NS))
+                return namespace.Validate(type(env) == "table" and rawget(env, ENV_NS_OWNER))
             end;
 
             ["GetParent"]       = function(env)
-                return type(env) == "table" and rawget(env, ENV_BASE) or nil
+                return type(env) == "table" and rawget(env, ENV_BASE_ENV) or nil
             end;
 
             -- Get value for env, also auto-cache the value to env if auto-cache is toggle on
@@ -1029,14 +1033,14 @@ do
                         _AccessKey  = value
                     else
                         -- Check current namespace
-                        local ns    = namespace.Validate(rawget(env, ENV_OWN_NS))
+                        local ns    = namespace.Validate(rawget(env, ENV_NS_OWNER))
                         if ns then
                             value   = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
                         end
 
                         -- Check imported namespaces
                         if value == nil then
-                            local imp   = rawget(env, ENV_IMP_NS)
+                            local imp   = rawget(env, ENV_NS_IMPORTS)
                             if type(imp) == "table" then
                                 for _, sns in ipairs, imp, 0 do
                                     sns = namespace.Validate(sns)
@@ -1055,9 +1059,9 @@ do
 
                         -- Check parent
                         if value == nil then
-                            local parent    = rawget(env, ENV_BASE)
+                            local parent    = rawget(env, ENV_BASE_ENV)
                             if type(parent) == "table" then
-                                if _GLNilable then
+                                if ENV_ALLOW_NIL_GLBVAR then
                                     value   = parent[name]
                                 else
                                     local ok, ret = pcall(getValue, parent, name)
@@ -1074,11 +1078,11 @@ do
                 return value
             end;
 
-            ["GetKeywordVisitor"]   = function(keyword)
+            ["GetKeywordVisitor"] = function(keyword)
                 local visitor
                 if _AccessKey == keyword then visitor = _KeyAccess end
-                _KeyAccess          = nil
-                _AccessKey          = nil
+                _KeyAccess      = nil
+                _AccessKey      = nil
                 return visitor
             end;
 
@@ -1088,15 +1092,15 @@ do
                 if type(env) ~= "table" then error("Usage: environment.ImportNameSpace(env, namespace) - the env must be a table", 2) end
                 if not ns then error("Usage: environment.ImportNameSpace(env, namespace) - The namespace is not provided", 2) end
 
-                local imports = rawget(env, ENV_IMP_NS)
-                if not imports then imports = setmetatable({}, WEAK_VALUE) rawset(env, ENV_IMP_NS, imports) end
+                local imports   = rawget(env, ENV_NS_IMPORTS)
+                if not imports then imports = setmetatable({}, WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
                 for _, v in ipairs, imports, 0 do if v == ns then return end end
                 tinsert(imports, ns)
             end;
 
             ["IsAutoCache"]     = function(env)
                 if type(env) ~= "table" then error("Usage: environment.IsAutoCache(env) - the env must be a table", 2) end
-                return not rawget(env, ENV_NO_AT)
+                return not rawget(env, ENV_AUTOCACHE_OFF)
             end;
 
             ["RegisterKeyWord"] = function(envtype, key, keyword)
@@ -1120,25 +1124,25 @@ do
 
             ["SetAutoCache"]    = function(env, auto)
                 if type(env) ~= "table" then error("Usage: environment.SetAutoCache(env, auto) - the env must be a table", 2) end
-                rawset(env, ENV_NO_AT, not auto or nil)
+                rawset(env, ENV_AUTOCACHE_OFF, not auto or nil)
             end;
 
             ["SetNameSpace"]    = function(env, ns)
                 if type(env) ~= "table" then error("Usage: environment.SetNameSpace(env, namespace) - the env must be a table", 2) end
-                rawset(env, ENV_OWN_NS, namespace.Validate(ns))
+                rawset(env, ENV_NS_OWNER, namespace.Validate(ns))
             end;
 
             ["SetParent"]       = function(env, base)
                 if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", 2) end
                 if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", 2) end
-                rawset(env, ENV_BASE, base or nil)
+                rawset(env, ENV_BASE_ENV, base or nil)
             end;
         },
-        __newindex  = readOnly,
+        __newindex              = readOnly,
     }
 
     -- Key feature : import "System"
-    import          = function (...)
+    import                      = function (...)
         local env, name, _, flag, stack, visitor = GetFeatureParams(import, ...)
 
         name = namespace.Validate(name)
@@ -1151,6 +1155,12 @@ do
             namespace.ExportNameSpace(env, name, flag)
         end
     end
+
+    -- Simple environment
+    tenvironment                = Prototype "tenvironment" {
+        __index                 = environment.GetValue,
+        __tostring              = false, -- Environment's value maybe used as lock key, so keep __tostring nil
+    }
 end
 
 -------------------------------------------------------------------------------
@@ -1160,17 +1170,18 @@ do
     -----------------------------------------------------------------------
     --                          Namespace Data                           --
     -----------------------------------------------------------------------
-    local _NSTree   = setmetatable({}, WEAK_KEY)
-    local _NSName   = setmetatable({}, WEAK_KEY)
+    local _NSTree               = setmetatable({}, WEAK_KEY)
+    local _NSName               = setmetatable({}, WEAK_KEY)
 
     -- Shortcut
-    local Validate, GetNameSpace
+    local Validate
+    local GetNameSpace
 
     -- Prototype
-    namespace       = Prototype "namespace" {
+    namespace                   = Prototype "namespace" {
         __index     = {
             -- Export a namespace and its children to an environment
-            ["ExportNameSpace"]     = function(env, ns, override)
+            ["ExportNameSpace"] = function(env, ns, override)
                 ns  = Validate(ns)
                 if type(env) ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", 2) end
                 if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", 2) end
@@ -1189,7 +1200,7 @@ do
             end;
 
             -- Generate namespace by access name(if it is nil, anonymous namespace could be created)
-            ["GenerateNameSpace"]   = function(parent, name, prototype)
+            ["GenerateNameSpace"] = function(parent, name, prototype)
                 if type(parent) == "string" then name, prototype, parent = parent, name, nil end
                 prototype = prototype and Prototype.Validate(prototype) or tnamespace
 
@@ -1237,7 +1248,7 @@ do
             end;
 
             -- Get the namespace by name
-            ["GetNameSpace"]        = function(parent, name)
+            ["GetNameSpace"]    = function(parent, name)
                 if type(parent) == "string" then
                     name, parent = parent, nil
                 elseif type(name)   ~= "string" then
@@ -1259,24 +1270,24 @@ do
             end;
 
             -- Get the namespace's name
-            ["GetNameSpaceName"]    = function(ns, last)
+            ["GetNameSpaceName"]= function(ns, last)
                 local name = _NSName[Validate(ns)]
                 if name ~= nil then return name and (last and strmatch(name, "[^%s%.]+$") or name) or "Anonymous" end
             end;
 
-            ["IsResourceType"]       = function(ns)
+            ["IsResourceType"]  = function(ns)
                 ns = Validate(ns)
                 return ns and getmetatable(ns) ~= namespace or false
             end;
 
             -- Validate whether the arg is a namespace
-            ["Validate"]            = function(ns)
+            ["Validate"]        = function(ns)
                 if type(ns) == "string" then ns = GetNameSpace(ns) end
                 return _NSName[ns] ~= nil and ns or nil
             end;
         },
-        __newindex  = readOnly,
-        __call      = function(self, ...)
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
             local env, name, _, flag, stack, visitor = GetFeatureParams(namespace, ...)
 
             if not env and not visitor then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the environment", stack) end
@@ -1301,19 +1312,19 @@ do
     }
 
     -- Shortcut Assignment
-    Validate        = namespace.Validate
-    GetNameSpace    = namespace.GetNameSpace
+    Validate                    = namespace.Validate
+    GetNameSpace                = namespace.GetNameSpace
 
     -- default type for namespace
-    tnamespace      = Prototype "tnamespace" {
-        __index     = GetNameSpace,
-        __newindex  = readOnly,
-        __tostring  = namespace.GetNameSpaceName,
-        __metatable = namespace,
+    tnamespace                  = Prototype "tnamespace" {
+        __index                 = GetNameSpace,
+        __newindex              = readOnly,
+        __tostring              = namespace.GetNameSpaceName,
+        __metatable             = namespace,
     }
 
     -- Init the root namespace, anonymous namespace can be be collected as garbage
-    ROOT_NAMESPACE  = namespace.GenerateNameSpace()
+    ROOT_NAMESPACE              = namespace.GenerateNameSpace()
 end
 
 -------------------------------------------------------------------------------
@@ -1323,54 +1334,55 @@ do
     -----------------------------------------------------------------------
     --                             Enum Data                             --
     -----------------------------------------------------------------------
-    local _EnumInfo = setmetatable({}, WEAK_KEY)
-    local _BDInfo   = setmetatable({}, WEAK_KEY)
-    local _GLCaseIgn= PLOOP_PLATFORM_SETTINGS.ENUM_GLOBAL_IGNORE_CASE
+    local _EnumInfo             = setmetatable({}, WEAK_KEY)
+    local _EnumBuilderInfo      = setmetatable({}, WEAK_KEY)
 
-    local _ValidMap = {}
+    local _EnumValidMap         = {}
 
     -- FEATURE MODIFIER
-    local MD_SEAL   = 2^0   -- SEALED
-    local MD_FLAG   = 2^1   -- FLAGS
-    local MD_NFLG   = 2^2   -- NOT FLAG
-    local MD_IGCS   = 2^3   -- CASE IGNORED
+    local MOD_SEALED_ENUM       = 2^0   -- SEALED
+    local MOD_FLAGS_ENUM        = 2^1   -- FLAGS
+    local MOD_NOT_FLAGS         = 2^2   -- NOT FLAG
+    local MOD_CASE_IGNORED      = 2^3   -- CASE IGNORED
+
+    local MOD_ENUM_INIT         = PLOOP_PLATFORM_SETTINGS.ENUM_GLOBAL_IGNORE_CASE and MOD_CASE_IGNORED or 0
 
     -- FIELD INDEX
-    local FD_MOD    = 0     -- FIELD MODIFIER
-    local FD_ENUMS  = 1     -- FIELD ENUMERATIONS
-    local FD_CACHE  = 2     -- FIELD CACHE : VALUE -> NAME
-    local FD_EMSG   = 3     -- FIELD ERROR MESSAGE
-    local FD_VALID  = 4     -- FIELD VALIDATOR
-    local FD_MAXV   = 5     -- FIELD MAX VALUE(FOR FLAGS)
-    local FD_DEFT   = 6     -- FIELD DEFAULT
+    local FLD_ENUM_MOD          = 0     -- FIELD MODIFIER
+    local FLD_ENUM_ITEMS        = 1     -- FIELD ENUMERATIONS
+    local FLD_ENUM_CACHE        = 2     -- FIELD CACHE : VALUE -> NAME
+    local FLD_ENUM_ERRMSG       = 3     -- FIELD ERROR MESSAGE
+    local FLD_ENUM_VALID        = 4     -- FIELD VALIDATOR
+    local FLD_ENUM_MAXVAL       = 5     -- FIELD MAX VALUE(FOR FLAGS)
+    local FLD_ENUM_DEFAULT      = 6     -- FIELD DEFAULT
 
     -- Flags
-    local FL_FLAG   = 2^0
-    local FL_IGCS   = 2^1
+    local FLG_FLAGS_ENUM        = 2^0
+    local FLG_CASE_IGNORED      = 2^1
 
-    local function getTargetInfo(target)
-        local info  = _BDInfo[target]
+    local getTargetInfo         = function (target)
+        local info  = _EnumBuilderInfo[target]
         if info then return info, true else return _EnumInfo[target], false end
     end
 
-    local function generateValidator(info)
+    local generateValidator     = function (info)
         local token = 0
 
-        if validateFlags(MD_IGCS, info[FD_MOD]) then
-            token   = turnOnFlags(FL_IGCS, token)
+        if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
+            token   = turnOnFlags(FLG_CASE_IGNORED, token)
         end
 
-        if validateFlags(MD_FLAG, info[FD_MOD]) then
-            token   = turnOnFlags(FL_FLAG, token)
+        if validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
+            token   = turnOnFlags(FLG_FLAGS_ENUM, token)
         end
 
-        if not _ValidMap[token] then
+        if not _EnumValidMap[token] then
             local body      = _Cache()
 
             tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[
                 return function(info, value)
-                local cache = info[]] .. FD_CACHE .. [[]
+                local cache = info[]] .. FLD_ENUM_CACHE .. [[]
             ]])
 
             tinsert(body, [[if cache[value] then return value end]])
@@ -1379,21 +1391,21 @@ do
 
             tinsert(body, [[if vtype == "string" then]])
 
-            if validateFlags(FL_IGCS, token) then
+            if validateFlags(FLG_CASE_IGNORED, token) then
                 tinsert(body, [[value = strupper(value)]])
             end
 
             tinsert(body, [[
-                value = info[]] .. FD_ENUMS .. [[][value]
-                return value, value == nil and info[]] .. FD_EMSG .. [[] or nil
+                value = info[]] .. FLD_ENUM_ITEMS .. [[][value]
+                return value, value == nil and info[]] .. FLD_ENUM_ERRMSG .. [[] or nil
             ]])
 
-            if validateFlags(FL_FLAG, token) then
+            if validateFlags(FLG_FLAGS_ENUM, token) then
                 tinsert(body, [[
                     elseif vtype == "number" then
                         if value == 0 then
                             if cache[0] then return 0 end
-                        elseif floor(value) == value and value > 0 and value <= info[]] .. FD_MAXV .. [[] then
+                        elseif floor(value) == value and value > 0 and value <= info[]] .. FLD_ENUM_MAXVAL .. [[] then
                             return value
                         end
                 ]])
@@ -1401,21 +1413,21 @@ do
 
             tinsert(body, [[
                 end
-                return nil, info[]] .. FD_EMSG .. [[]
+                return nil, info[]] .. FLD_ENUM_ERRMSG .. [[]
             ]])
 
             tinsert(body, [[end]])
 
-            _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
+            _EnumValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
 
             _Cache(body)
         end
 
-        info[FD_VALID] = _ValidMap[token]
+        info[FLD_ENUM_VALID] = _EnumValidMap[token]
     end
 
-    enum            = Prototype "enum" {
-        __index     = {
+    enum                        = Prototype "enum" {
+        __index                 = {
             ["BeginDefinition"] = function(target, stack)
                 stack   = type(stack) == "number" and stack or 2
 
@@ -1424,24 +1436,24 @@ do
 
                 local info  = _EnumInfo[target]
 
-                -- if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _BDInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _BDInfo[target] = info and validateFlags(MD_SEAL, info[FD_MOD]) and tblclone(info, {}, true, true) or {
-                    [FD_MOD  ]  = _GLCaseIgn and MD_IGCS or 0,
-                    [FD_ENUMS]  = {},
-                    [FD_CACHE]  = {},
-                    [FD_EMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
-                    [FD_VALID]  = false,
-                    [FD_MAXV ]  = false,
-                    [FD_DEFT ]  = nil,
+                _EnumBuilderInfo[target] = info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                    [FLD_ENUM_MOD]      = MOD_ENUM_INIT,
+                    [FLD_ENUM_ITEMS]     = {},
+                    [FLD_ENUM_CACHE]    = {},
+                    [FLD_ENUM_ERRMSG]       = "%s must be a value of [" .. tostring(target) .."]",
+                    [FLD_ENUM_VALID]    = false,
+                    [FLD_ENUM_MAXVAL]     = false,
+                    [FLD_ENUM_DEFAULT]  = nil,
                 }
 
                 attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _BDInfo[target]
+                local ninfo     = _EnumBuilderInfo[target]
                 if not ninfo then return end
 
                 stack = type(stack) == "number" and stack or 2
@@ -1449,12 +1461,12 @@ do
                 -- If don't use the enumbuilder
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_ENUM)
 
-                _BDInfo[target] = nil
+                _EnumBuilderInfo[target] = nil
 
                 -- Check Flags Enumeration
-                if validateFlags(MD_FLAG, ninfo[FD_MOD]) then
-                    local enums = ninfo[FD_ENUMS]
-                    local cache = wipe(ninfo[FD_CACHE])
+                if validateFlags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
+                    local enums = ninfo[FLD_ENUM_ITEMS]
+                    local cache = wipe(ninfo[FLD_ENUM_CACHE])
                     local count = 0
                     local max   = 0
 
@@ -1506,12 +1518,12 @@ do
                     end
 
                     -- Mark the max value
-                    ninfo[FD_MAXV] = 2^count - 1
+                    ninfo[FLD_ENUM_MAXVAL] = 2^count - 1
                 else
-                    local enums = ninfo[FD_ENUMS]
-                    local cache = ninfo[FD_CACHE]
+                    local enums = ninfo[FLD_ENUM_ITEMS]
+                    local cache = ninfo[FLD_ENUM_CACHE]
 
-                    ninfo[FD_MOD] = turnOnFlags(MD_NFLG, ninfo[FD_MOD])
+                    ninfo[FLD_ENUM_MOD] = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
 
                     for k, v in pairs, enums do
                         cache[v] = k
@@ -1521,10 +1533,10 @@ do
                 generateValidator(ninfo)
 
                 -- Check Default
-                if ninfo[FD_DEFT] ~= nil then
-                    ninfo[FD_DEFT]  = ninfo[FD_VALID](ninfo, ninfo[FD_DEFT])
-                    if ninfo[FD_DEFT] == nil then
-                        error(ninfo[FD_EMSG]:format("The default"), stack)
+                if ninfo[FLD_ENUM_DEFAULT] ~= nil then
+                    ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo, ninfo[FLD_ENUM_DEFAULT])
+                    if ninfo[FLD_ENUM_DEFAULT] == nil then
+                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack)
                     end
                 end
 
@@ -1538,16 +1550,16 @@ do
 
             ["GetDefault"]      = function(target)
                 local info      = getTargetInfo(target)
-                return info and info[FD_DEFT]
+                return info and info[FLD_ENUM_DEFAULT]
             end;
 
             ["GetEnumValues"]   = function(target, cache)
                 local info      = _EnumInfo[target]
                 if info then
                     if cache then
-                        return tblclone(info[FD_ENUMS], type(cache) == "table" and wipe(cache) or {})
+                        return tblclone(info[FLD_ENUM_ITEMS], type(cache) == "table" and wipe(cache) or {})
                     else
-                        info    = info[FD_ENUMS]
+                        info    = info[FLD_ENUM_ITEMS]
                         return function(self, key) return next(info, key) end, target
                     end
                 end
@@ -1555,17 +1567,17 @@ do
 
             ["IsCaseIgnored"]   = function(target)
                 local info  = getTargetInfo(target)
-                return info and validateFlags(MD_IGCS, info[FD_MOD]) or false
+                return info and validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) or false
             end;
 
             ["IsFlagsEnum"]     = function(target)
                 local info      = getTargetInfo(target)
-                return info and validateFlags(MD_FLAG, info[FD_MOD]) or false
+                return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
             ["IsSealed"]        = function(target)
                 local info      = getTargetInfo(target)
-                return info and validateFlags(MD_SEAL, info[FD_MOD]) or false
+                return info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
             ["IsSubType"]       = function() return false end;
@@ -1574,13 +1586,13 @@ do
             ["Parse"]           = function(target, value, cache)
                 local info      = _EnumInfo[target]
                 if info then
-                    local ecache= info[FD_CACHE]
+                    local ecache= info[FLD_ENUM_CACHE]
 
-                    if info[FD_MAXV] then
+                    if info[FLD_ENUM_MAXVAL] then
                         if cache then
                             local ret = type(cache) == "table" and wipe(cache) or {}
 
-                            if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FD_MAXV] then
+                            if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
                                 if value > 0 then
                                     local ckv = 1
 
@@ -1594,7 +1606,7 @@ do
                             end
 
                             return ret
-                        elseif type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FD_MAXV] then
+                        elseif type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
                             if value == 0 then
                                 return function(self, key) if not key then return ecache[0], 0 end end, target
                             else
@@ -1622,7 +1634,7 @@ do
 
                 if info then
                     if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                    info[FD_DEFT] = default
+                    info[FLD_ENUM_DEFAULT] = default
                 else
                     error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
                 end
@@ -1636,16 +1648,16 @@ do
                     if not def then error(strformat("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
-                    for k, v in pairs, info[FD_ENUMS] do
+                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
                         if strupper(k) == strupper(key) then
-                            if (validateFlags(MD_IGCS, info[FD_MOD]) and strupper(key) or key) == k and v == value then return end
+                            if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
                             error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key already existed", stack)
                         elseif v == value then
                             error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack)
                         end
                     end
 
-                    info[FD_ENUMS][validateFlags(MD_IGCS, info[FD_MOD]) and strupper(key) or key] = value
+                    info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
                 else
                     error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
                 end
@@ -1656,14 +1668,14 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not validateFlags(MD_IGCS, info[FD_MOD]) then
+                    if not validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
                         if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        info[FD_MOD]    = turnOnFlags(MD_IGCS, info[FD_MOD])
+                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD])
 
-                        local enums     = info[FD_ENUMS]
+                        local enums     = info[FLD_ENUM_ITEMS]
                         local nenums    = _Cache()
                         for k, v in pairs, enums do nenums[strupper(k)] = v end
-                        info[FD_ENUMS]  = nenums
+                        info[FLD_ENUM_ITEMS]  = nenums
                         _Cache(enums)
                     end
                 else
@@ -1676,10 +1688,10 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not validateFlags(MD_FLAG, info[FD_MOD]) then
+                    if not validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
                         if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        if validateFlags(MD_NFLG, info[FD_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
-                        info[FD_MOD] = turnOnFlags(MD_FLAG, info[FD_MOD])
+                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
+                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
                     error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
@@ -1691,8 +1703,8 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not validateFlags(MD_SEAL, info[FD_MOD]) then
-                        info[FD_MOD] = turnOnFlags(MD_SEAL, info[FD_MOD])
+                    if not validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
+                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
                     error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", stack)
@@ -1702,9 +1714,9 @@ do
             ["ValidateFlags"]   = validateFlags;
 
             ["ValidateValue"]   = function(target, value)
-                local info  = _EnumInfo[target]
+                local info      = _EnumInfo[target]
                 if info then
-                    return info[FD_VALID](info, value)
+                    return info[FLD_ENUM_VALID](info, value)
                 else
                     error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
                 end
@@ -1715,8 +1727,8 @@ do
                 return getmetatable(target) == enum and target or nil
             end;
         },
-        __newindex  = readOnly,
-        __call      = function(self, ...)
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
             local env, target, definition, flag, stack, visitor = GetTypeParams(enum, tenum, ...)
             if not target then
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack)
@@ -1738,22 +1750,22 @@ do
         end,
     }
 
-    tenum           = Prototype "tenum" (tnamespace, {
-        __index     = enum.ValidateValue,
-        __call      = enum.Parse,
-        __metatable = enum,
+    tenum                       = Prototype "tenum" (tnamespace, {
+        __index                 = enum.ValidateValue,
+        __call                  = enum.Parse,
+        __metatable             = enum,
     })
 
-    enumbuilder     = Prototype "enumbuilder" {
-        __index     = writeOnly,
-        __newindex  = readOnly,
-        __call      = function(self, ...)
+    enumbuilder                 = Prototype "enumbuilder" {
+        __index                 = writeOnly,
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
             local definition, stack = GetDefinitionParams(self, ...)
             if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
             if not owner then error("The enumeration can't be found", stack) end
-            if not _BDInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
+            if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
 
             attribute.ApplyAttributes(owner, ATTRIBUTE_TARGETS_ENUM, definition)
 
@@ -1773,6 +1785,7 @@ do
     }
 end
 
+
 -------------------------------------------------------------------------------
 --                                 structure                                 --
 -------------------------------------------------------------------------------
@@ -1780,76 +1793,75 @@ do
     -----------------------------------------------------------------------
     --                               Const                               --
     -----------------------------------------------------------------------
-    STYPE_MEMBER    = "MEMBER"
-    STYPE_ARRAY     = "ARRAY"
-    STYPE_CUSTOM    = "CUSTOM"
+    STRUCT_TYPE_MEMBER          = "MEMBER"
+    STRUCT_TYPE_ARRAY           = "ARRAY"
+    STRUCT_TYPE_CUSTOM          = "CUSTOM"
 
     -----------------------------------------------------------------------
     --                            Struct Data                            --
     -----------------------------------------------------------------------
-    local _StrtInfo = setmetatable({}, WEAK_KEY)
-    local _DependMap= setmetatable({}, WEAK_KEY)
-    local _BDInfo   = setmetatable({}, WEAK_KEY)
-    local _InDef    = setmetatable({}, WEAK_KEY)
+    local _StrtInfo             = setmetatable({}, WEAK_KEY)
+    local _DependenceMap        = setmetatable({}, WEAK_KEY)
+    local _StructBuilderInfo    = setmetatable({}, WEAK_KEY)
+    local _StructBuilderInDefine= setmetatable({}, WEAK_KEY)
 
-    local _ValidMap = {}
-    local _CtorMap  = {}
+    local _StructValidMap       = {}
+    local _StructCtorMap        = {}
 
     -- FEATURE MODIFIER
-    local MD_SEAL   = 2^0       -- SEALED
-    local MD_CUSTOM = 2^1       -- CUSTOM STRUCT
+    local MOD_SEALED_STRUCT     = 2^0       -- SEALED
 
     -- FIELD INDEX
-    local FD_MOD    = -1        -- FIELD MODIFIER
-    local FD_TYPMTD = -2        -- FIELD OBJECT METHODS
-    local FD_DEFT   = -3        -- FEILD DEFAULT
-    local FD_BASE   = -4        -- FIELD BASE STRUCT
-    local FD_VALID  = -5        -- FIELD VALIDATOR
-    local FD_CTOR   = -6        -- FIELD CONSTRUCTOR
-    local FD_NAME   = -7        -- FEILD STRUCT NAME
-    local FD_EMSG   = -8        -- FIELD ERROR MESSAGE
-    local FD_VCACHE = -9        -- FIELD VALIDATOR CACHE
+    local FLD_STRUCT_MOD        = -1        -- FIELD MODIFIER
+    local FLD_STRUCT_TYPEMETHOD = -2        -- FIELD OBJECT METHODS
+    local FLD_STRUCT_DEFAULT    = -3        -- FEILD DEFAULT
+    local FLD_STRUCT_BASE       = -4        -- FIELD BASE STRUCT
+    local FLD_STRUCT_VALID      = -5        -- FIELD VALIDATOR
+    local FLD_STRUCT_CTOR       = -6        -- FIELD CONSTRUCTOR
+    local FLD_STRUCT_NAME       = -7        -- FEILD STRUCT NAME
+    local FLD_STRUCT_ERRMSG     = -8        -- FIELD ERROR MESSAGE
+    local FLD_STRUCT_VALIDCACHE = -9        -- FIELD VALIDATOR CACHE
 
-    local FD_ARRAY  =  0        -- FIELD ARRAY ELEMENT
-    local FD_ARRVLD =  2        -- FIELD ARRAY ELEMENT VALIDATOR
-    local FD_STMEM  =  1        -- FIELD START INDEX OF MEMBER
-    local FD_STVLD  =  10000    -- FIELD START INDEX OF VALIDATOR
-    local FD_STINI  =  20000    -- FIELD START INDEX OF INITIALIZE
+    local FLD_STRUCT_ARRAY      =  0        -- FIELD ARRAY ELEMENT
+    local FLD_STRUCT_ARRVALID   =  2        -- FIELD ARRAY ELEMENT VALIDATOR
+    local FLD_STRUCT_MEMBERSTART=  1        -- FIELD START INDEX OF MEMBER
+    local FLD_STRUCT_VALIDSTART =  10000    -- FIELD START INDEX OF VALIDATOR
+    local FLD_STRUCT_INITSTART  =  20000    -- FIELD START INDEX OF INITIALIZE
 
     -- MEMBER FIELD INDEX
-    local MFD_NAME  =  1        -- MEMBER FIELD NAME
-    local MFD_TYPE  =  2        -- MEMBER FIELD TYPE
-    local MFD_VALD  =  3        -- MEMBER FIELD TYPE VALIDATOR
-    local MFD_DEFT  =  4        -- MEMBER FIELD DEFAULT
-    local MFD_ASFT  =  5        -- MEMBER FIELD AS DEFAULT FACTORY
-    local MFD_REQ   =  0        -- MEMBER FIELD REQUIRE
+    local FLD_MEMBER_NAME       =  1        -- MEMBER FIELD NAME
+    local FLD_MEMBER_TYPE       =  2        -- MEMBER FIELD TYPE
+    local FLD_MEMBER_VALID      =  3        -- MEMBER FIELD TYPE VALIDATOR
+    local FLD_MEMBER_DEFAULT    =  4        -- MEMBER FIELD DEFAULT
+    local FLD_MEMBER_DEFTFACTORY=  5        -- MEMBER FIELD AS DEFAULT FACTORY
+    local FLD_MEMBER_REQUIRE    =  0        -- MEMBER FIELD REQUIRED
 
     -- TYPE FLAGS
-    local FL_CUSTOM = 2^0       -- CUSTOM STRUCT FLAG
-    local FL_MEMBER = 2^1       -- MEMBER STRUCT FLAG
-    local FL_ARRAY  = 2^2       -- ARRAY  STRUCT FLAG
-    local FL_SVALID = 2^3       -- SINGLE VALID  FLAG
-    local FL_MVALID = 2^4       -- MULTI  VALID  FLAG
-    local FL_SINIT  = 2^5       -- SINGLE INIT   FLAG
-    local FL_MINIT  = 2^6       -- MULTI  INIT   FLAG
-    local FL_OBJMTD = 2^7       -- OBJECT METHOD FLAG
-    local FL_VCACHE = 2^8       -- VALID  CACHE  FLAG
-    local FL_MLFDRQ = 2^9       -- MULTI  FIELD  REQUIRE FLAG
-    local FL_FSTTYP = 2^10      -- FIRST  MEMBER TYPE    FLAG
+    local FLG_CUSTOM_STRUCT     = 2^0       -- CUSTOM STRUCT FLAG
+    local FLG_MEMBER_STRUCT     = 2^1       -- MEMBER STRUCT FLAG
+    local FLG_ARRAY_STRUCT      = 2^2       -- ARRAY  STRUCT FLAG
+    local FLG_STRUCT_SINGLE_VLD = 2^3       -- SINGLE VALID  FLAG
+    local FLG_STRUCT_MULTI_VLD  = 2^4       -- MULTI  VALID  FLAG
+    local FLG_STRUCT_SINGLE_INIT= 2^5       -- SINGLE INIT   FLAG
+    local FLG_STRUCT_MULTI_INIT = 2^6       -- MULTI  INIT   FLAG
+    local FLG_STRUCT_OBJ_METHOD = 2^7       -- OBJECT METHOD FLAG
+    local FLG_STRUCT_VALIDCACHE = 2^8       -- VALID  CACHE  FLAG
+    local FLG_STRUCT_MULTI_REQ  = 2^9       -- MULTI  FIELD  REQUIRE FLAG
+    local FLG_STRUCT_FIRST_TYPE = 2^10      -- FIRST  MEMBER TYPE    FLAG
 
-    local MTD_INIT  = "__init"
-    local MTD_BASE  = "__base"
+    local STRUCT_KEYWORD_INIT   = "__init"
+    local STRUCT_KEYWORD_BASE   = "__base"
 
-    local BFD_NMTD  = "__PLOOP_BD_NEWMTD"
+    local STRUCT_BUILDER_NEWMTD = "__PLOOP_BD_NEWMTD"
 
-    local function getTargetInfo(target)
-        local info  = _BDInfo[target]
+    local getTargetInfo         = function (target)
+        local info  = _StructBuilderInfo[target]
         if info then return info, true else return _StrtInfo[target], false end
     end
 
-    local function setBuilderOwnerValue(self, key, value, stack, notnewindex)
+    local setBuilderOwnerValue  = function (self, key, value, stack, notnewindex)
         local owner = environment.GetNameSpace(self)
-        if not (owner and _InDef[self]) then error("The structure's definition is finished", stack) end
+        if not (owner and _StructBuilderInDefine[self]) then error("The structure's definition is finished", stack) end
 
         local tkey  = type(key)
         local tval  = type(value)
@@ -1858,7 +1870,7 @@ do
 
         if tkey == "string" and not tonumber(key) then
             if tval == "function" then
-                if key == MTD_INIT then
+                if key == STRUCT_KEYWORD_INIT then
                     struct.SetInitializer(owner, value, stack)
                     return true
                 elseif key == namespace.GetNameSpaceName(owner, true) then
@@ -1868,17 +1880,17 @@ do
                     struct.AddMethod(owner, key, value, stack)
                     if not notnewindex then
                         -- Those functions should be saved to the builder when the definition is finished
-                        local newMethod = rawget(self, BFD_NMTD)
+                        local newMethod = rawget(self, STRUCT_BUILDER_NEWMTD)
                         if not newMethod then
                             newMethod   = {}
-                            rawset(self, BFD_NMTD, newMethod)
+                            rawset(self, STRUCT_BUILDER_NEWMTD, newMethod)
                         end
                         newMethod[key]  = true
                     end
                     return true
                 end
             elseif namespace.IsResourceType(value) then
-                if key == MTD_BASE then
+                if key == STRUCT_KEYWORD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
                 else
                     struct.AddMember(owner, key, { Type = value }, stack)
@@ -1903,18 +1915,18 @@ do
     end
 
     -- Update dependence
-    local function notAllSealed(target)
+    local notAllSealed          = function (target)
         if target and struct.Validate(target) then
             local info, def = getTargetInfo(target)
 
-            if def or not validateFlags(MD_SEAL, info[FD_MOD]) then
+            if def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
                 return true
             end
 
-            if info[FD_ARRAY] then
-                return notAllSealed(info[FD_ARRAY])
-            elseif info[FD_STMEM] then
-                for _, m in ipairs, info, FD_STMEM - 1 do
+            if info[FLD_STRUCT_ARRAY] then
+                return notAllSealed(info[FLD_STRUCT_ARRAY])
+            elseif info[FLD_STRUCT_MEMBERSTART] then
+                for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                     if notAllSealed(m) then
                         return true
                     end
@@ -1923,37 +1935,37 @@ do
         end
     end
 
-    local function checkDependence(target, chkType)
+    local checkDependence       = function (target, chkType)
         if target ~= chkType then
             if notAllSealed(chkType) then
-                _DependMap[chkType]         = _DependMap[chkType] or setmetatable({}, WEAK_KEY)
-                _DependMap[chkType][target] = true
-            elseif chkType and _DependMap[chkType] then
-                _DependMap[chkType][target] = nil
-                if not next(_DependMap[chkType]) then _DependMap[chkType] = nil end
+                _DependenceMap[chkType]         = _DependenceMap[chkType] or setmetatable({}, WEAK_KEY)
+                _DependenceMap[chkType][target] = true
+            elseif chkType and _DependenceMap[chkType] then
+                _DependenceMap[chkType][target] = nil
+                if not next(_DependenceMap[chkType]) then _DependenceMap[chkType] = nil end
             end
         end
     end
 
-    local function refreshDependence(target, info)
+    local refreshDependence     = function (target, info)
         info = info or getTargetInfo(target)
 
-        if info[FD_ARRAY] then
-            checkDependence(target, info[FD_ARRAY])
-        elseif info[FD_STMEM] then
-            for _, m in ipairs, info, FD_STMEM - 1 do
+        if info[FLD_STRUCT_ARRAY] then
+            checkDependence(target, info[FLD_STRUCT_ARRAY])
+        elseif info[FLD_STRUCT_MEMBERSTART] then
+            for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 checkDependence(target, m)
             end
         end
     end
 
     -- Cache required
-    local function checkRepeatType(target, info)
-        if info[FD_ARRAY] then
-            if info[FD_ARRAY] == target then return true end
-            return checkRepeatType(target, getTargetInfo(info[FD_ARRAY]))
-        elseif info[FD_STMEM] then
-            for _, m in ipairs, info, FD_STMEM - 1 do
+    local checkRepeatType       = function (target, info)
+        if info[FLD_STRUCT_ARRAY] then
+            if info[FLD_STRUCT_ARRAY] == target then return true end
+            return checkRepeatType(target, getTargetInfo(info[FLD_STRUCT_ARRAY]))
+        elseif info[FLD_STRUCT_MEMBERSTART] then
+            for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 if m == target or checkRepeatType(target, getTargetInfo(m)) then
                     return true
                 end
@@ -1964,71 +1976,71 @@ do
     end
 
     -- Validator
-    local function generateValidator(info)
+    local generateValidator     = function (info)
         local token = 0
         local upval = _Cache()
 
-        if info[FD_VCACHE] then
-            token = turnOnFlags(FL_VCACHE, token)
+        if info[FLD_STRUCT_VALIDCACHE] then
+            token = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
         end
 
-        if info[FD_STMEM] then
-            token   = turnOnFlags(FL_MEMBER, token)
-            local i = FD_STMEM
+        if info[FLD_STRUCT_MEMBERSTART] then
+            token   = turnOnFlags(FLG_MEMBER_STRUCT, token)
+            local i = FLD_STRUCT_MEMBERSTART
             while info[i + 1] do i = i + 1 end
             tinsert(upval, i)
-        elseif info[FD_ARRAY] then
-            token   = turnOnFlags(FL_ARRAY, token)
+        elseif info[FLD_STRUCT_ARRAY] then
+            token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
         else
-            token   = turnOnFlags(FL_CUSTOM, token)
+            token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
         end
 
-        if info[FD_STVLD] then
-            if info[FD_STVLD + 1] then
-                local i = FD_STVLD + 2
+        if info[FLD_STRUCT_VALIDSTART] then
+            if info[FLD_STRUCT_VALIDSTART + 1] then
+                local i = FLD_STRUCT_VALIDSTART + 2
                 while info[i] do i = i + 1 end
-                token = turnOnFlags(FL_MVALID, token)
+                token = turnOnFlags(FLG_STRUCT_MULTI_VLD, token)
                 tinsert(upval, i - 1)
             else
-                token = turnOnFlags(FL_SVALID, token)
+                token = turnOnFlags(FLG_STRUCT_SINGLE_VLD, token)
             end
         end
 
-        if info[FD_STINI] then
-            if info[FD_STINI + 1] then
-                local i = FD_STINI + 2
+        if info[FLD_STRUCT_INITSTART] then
+            if info[FLD_STRUCT_INITSTART + 1] then
+                local i = FLD_STRUCT_INITSTART + 2
                 while info[i] do i = i + 1 end
-                token = turnOnFlags(FL_MINIT, token)
+                token = turnOnFlags(FLG_STRUCT_MULTI_INIT, token)
                 tinsert(upval, i - 1)
             else
-                token = turnOnFlags(FL_SINIT, token)
+                token = turnOnFlags(FLG_STRUCT_SINGLE_INIT, token)
             end
         end
 
-        if info[FD_TYPMTD] then
-            for k, v in pairs, info[FD_TYPMTD] do
+        if info[FLD_STRUCT_TYPEMETHOD] then
+            for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do
                 if v then
-                    token   = turnOnFlags(FL_OBJMTD, token)
+                    token   = turnOnFlags(FLG_STRUCT_OBJ_METHOD, token)
                     break
                 end
             end
         end
 
         -- Build the validator generator
-        if not _ValidMap[token] then
+        if not _StructValidMap[token] then
             local header    = _Cache()
             local body      = _Cache()
 
             tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
-            if validateFlags(FL_MEMBER, token) or validateFlags(FL_ARRAY, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
                     if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table." end
                     if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table." end
                 ]])
 
-                if validateFlags(FL_VCACHE, token) then
+                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
                     tinsert(body, [[
                         -- Cache to block recursive validation
                         local vcache = cache[info]
@@ -2043,46 +2055,46 @@ do
                 end
             end
 
-            if validateFlags(FL_MEMBER, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) then
                 tinsert(header, "count")
                 tinsert(body, [[
                     if onlyValid then
-                        for i = ]] .. FD_STMEM .. [[, count do
+                        for i = ]] .. FLD_STRUCT_MEMBERSTART .. [[, count do
                             local mem  = info[i]
-                            local name = mem[]] .. MFD_NAME .. [[]
-                            local vtype= mem[]] .. MFD_TYPE ..[[]
+                            local name = mem[]] .. FLD_MEMBER_NAME .. [[]
+                            local vtype= mem[]] .. FLD_MEMBER_TYPE ..[[]
                             local val  = value[name]
                             local msg
 
                             if val == nil then
-                                if mem[]] .. MFD_REQ .. [[] then
+                                if mem[]] .. FLD_MEMBER_REQUIRE .. [[] then
                                     return nil, true
                                 end
                             elseif vtype then
-                                val, msg = mem[]] .. MFD_VALD .. [[](vtype, val, true, cache)
+                                val, msg = mem[]] .. FLD_MEMBER_VALID .. [[](vtype, val, true, cache)
                                 if msg then return nil, true end
                             end
                         end
                     else
-                        for i = ]] .. FD_STMEM .. [[, count do
+                        for i = ]] .. FLD_STRUCT_MEMBERSTART .. [[, count do
                             local mem  = info[i]
-                            local name = mem[]] .. MFD_NAME .. [[]
-                            local vtype= mem[]] .. MFD_TYPE ..[[]
+                            local name = mem[]] .. FLD_MEMBER_NAME .. [[]
+                            local vtype= mem[]] .. FLD_MEMBER_TYPE ..[[]
                             local val  = value[name]
                             local msg
 
                             if val == nil then
-                                if mem[]] .. MFD_REQ .. [[] then
+                                if mem[]] .. FLD_MEMBER_REQUIRE .. [[] then
                                     return nil, strformat("%s.%s can't be nil", "%s", name)
                                 end
 
-                                if mem[]] .. MFD_ASFT .. [[] then
-                                    val= mem[]] .. MFD_DEFT .. [[](value)
+                                if mem[]] .. FLD_MEMBER_DEFTFACTORY .. [[] then
+                                    val= mem[]] .. FLD_MEMBER_DEFAULT .. [[](value)
                                 else
-                                    val= clone(mem[]] .. MFD_DEFT .. [[], true)
+                                    val= clone(mem[]] .. FLD_MEMBER_DEFAULT .. [[], true)
                                 end
                             elseif vtype then
-                                val, msg = mem[]] .. MFD_VALD .. [[](vtype, val, false, cache)
+                                val, msg = mem[]] .. FLD_MEMBER_VALID .. [[](vtype, val, false, cache)
                                 if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s" .. "." .. name) or strformat("%s.%s must be [%s]", "%s", name, tostring(vtype)) end
                             end
 
@@ -2090,10 +2102,10 @@ do
                         end
                     end
                 ]])
-            elseif validateFlags(FL_ARRAY, token) then
+            elseif validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
-                    local array = info[]] .. FD_ARRAY .. [[]
-                    local avalid= info[]] .. FD_ARRVLD .. [[]
+                    local array = info[]] .. FLD_STRUCT_ARRAY .. [[]
+                    local avalid= info[]] .. FLD_STRUCT_ARRVALID .. [[]
                     if onlyValid then
                         for i, v in ipairs, value, 0 do
                             local ret, msg  = avalid(array, v, true, cache)
@@ -2109,57 +2121,57 @@ do
                 ]])
             end
 
-            if validateFlags(FL_SVALID, token) then
+            if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
                 tinsert(body, [[
-                    local msg = info[]] .. FD_STVLD .. [[](value)
-                    if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FD_NAME .. [[]) end
+                    local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
+                    if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                 ]])
-            elseif validateFlags(FL_MVALID, token) then
+            elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
                 tinsert(header, "mvalid")
                 tinsert(body, [[
-                    for i = ]] .. FD_STVLD .. [[, mvalid do
+                    for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
                         local msg = info[i](value)
-                        if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FD_NAME .. [[]) end
+                        if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                     end
                 ]])
             end
 
-            if validateFlags(FL_SINIT, token) or validateFlags(FL_MINIT, token) then
+            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) then
                 tinsert(body, [[if onlyValid then return value end]])
 
-                if validateFlags(FL_SINIT, token) then
+                if validateFlags(FLG_STRUCT_SINGLE_INIT, token) then
                     tinsert(body, [[
-                        local ret = info[]] .. FD_STINI .. [[](value)
+                        local ret = info[]] .. FLD_STRUCT_INITSTART .. [[](value)
                     ]])
 
-                    if validateFlags(FL_CUSTOM, token) then
+                    if validateFlags(FLG_CUSTOM_STRUCT, token) then
                         tinsert(body, [[if ret ~= nil then value = ret end]])
                     end
                 else
                     tinsert(header, "minit")
                     tinsert(body, [[
-                        for i = ]] .. FD_STINI .. [[, minit do
+                        for i = ]] .. FLD_STRUCT_INITSTART .. [[, minit do
                             local ret = info[i](value)
                         ]])
-                    if validateFlags(FL_CUSTOM, token) then
+                    if validateFlags(FLG_CUSTOM_STRUCT, token) then
                         tinsert(body, [[if ret ~= nil then value = ret end]])
                     end
                     tinsert(body, [[end]])
                 end
             end
 
-            if validateFlags(FL_OBJMTD, token) then
-                if validateFlags(FL_CUSTOM, token) then
+            if validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
+                if validateFlags(FLG_CUSTOM_STRUCT, token) then
                     tinsert(body, [[if type(value) == "table" then]])
                 end
 
                 tinsert(body, [[
-                    for k, v in pairs, info[]] .. FD_TYPMTD .. [[] do
+                    for k, v in pairs, info[]] .. FLD_STRUCT_TYPEMETHOD .. [[] do
                         if v and value[k] == nil then value[k] = v end
                     end
                 ]])
 
-                if validateFlags(FL_CUSTOM, token) then
+                if validateFlags(FLG_CUSTOM_STRUCT, token) then
                     tinsert(body, [[end]])
                 end
             end
@@ -2173,10 +2185,10 @@ do
                 body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            _ValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
+            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
 
             if #header == 0 then
-                _ValidMap[token] = _ValidMap[token]()
+                _StructValidMap[token] = _StructValidMap[token]()
             end
 
             _Cache(header)
@@ -2184,65 +2196,65 @@ do
         end
 
         if #upval > 0 then
-            info[FD_VALID] = _ValidMap[token](unpack(upval))
+            info[FLD_STRUCT_VALID] = _StructValidMap[token](unpack(upval))
         else
-            info[FD_VALID] = _ValidMap[token]
+            info[FLD_STRUCT_VALID] = _StructValidMap[token]
         end
 
         _Cache(upval)
     end
 
     -- Ctor
-    local function generateConstructor(info)
+    local generateConstructor   = function (info)
         local token = 0
         local upval = _Cache()
 
-        if info[FD_VCACHE] then
-            token   = turnOnFlags(FL_VCACHE, token)
+        if info[FLD_STRUCT_VALIDCACHE] then
+            token   = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
         end
 
-        if info[FD_STMEM] then
-            token   = turnOnFlags(FL_MEMBER, token)
-            local i = FD_STMEM + 1
+        if info[FLD_STRUCT_MEMBERSTART] then
+            token   = turnOnFlags(FLG_MEMBER_STRUCT, token)
+            local i = FLD_STRUCT_MEMBERSTART + 1
             local r = false
             while info[i] do
-                if not r and info[i][MFD_REQ] then r = true end
+                if not r and info[i][FLD_MEMBER_REQUIRE] then r = true end
                 i = i + 1
             end
             tinsert(upval, i - 1)
             if r then
-                token = turnOnFlags(FL_MLFDRQ, token)
-            elseif info[FD_STMEM][MFD_TYPE] then
-                token = turnOnFlags(FL_FSTTYP, token)
-                tinsert(upval, info[FD_STMEM][MFD_TYPE])
-                tinsert(upval, info[FD_STMEM][MFD_VALD])
+                token = turnOnFlags(FLG_STRUCT_MULTI_REQ, token)
+            elseif info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE] then
+                token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
+                tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE])
+                tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
             end
-        elseif info[FD_ARRAY] then
-            token   = turnOnFlags(FL_ARRAY, token)
+        elseif info[FLD_STRUCT_ARRAY] then
+            token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
         else
-            token   = turnOnFlags(FL_CUSTOM, token)
+            token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
         end
 
         -- Build the validator generator
-        if not _CtorMap[token] then
+        if not _StructCtorMap[token] then
             local header    = _Cache()
             local body      = _Cache()
 
             tinsert(body, "")
 
-            if validateFlags(FL_MEMBER, token) or validateFlags(FL_ARRAY, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
                     return function(info, first, ...)
-                        local ivalid = info[]].. FD_VALID .. [[]
+                        local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
                         local ret, msg
                         if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
                 ]])
 
-                if validateFlags(FL_MEMBER, token) then
+                if validateFlags(FLG_MEMBER_STRUCT, token) then
                     tinsert(header, "count")
-                    if not validateFlags(FL_MLFDRQ, token) then
+                    if not validateFlags(FLG_STRUCT_MULTI_REQ, token) then
                         -- So, it may be the first member
-                        if validateFlags(FL_FSTTYP, token) then
+                        if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
                             tinsert(header, "ftype")
                             tinsert(header, "fvalid")
                             tinsert(body, [[
@@ -2256,13 +2268,13 @@ do
                     else
                         tinsert(body, [[local fmatch = false]])
                     end
-                elseif validateFlags(FL_ARRAY, token) then
+                elseif validateFlags(FLG_ARRAY_STRUCT, token) then
                     tinsert(body, [[
-                        local _, fmatch = info[]] .. FD_ARRVLD .. [[](info[]] .. FD_ARRAY .. [[], first, true) fmatch = not fmatch
+                        local _, fmatch = info[]] .. FLD_STRUCT_ARRVALID .. [[](info[]] .. FLD_STRUCT_ARRAY .. [[], first, true) fmatch = not fmatch
                     ]])
                 end
 
-                if validateFlags(FL_VCACHE, token) then
+                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
                     tinsert(body, [[
                         local cache = _Cache()
                         ret, msg    = ivalid(info, first, fmatch, cache)
@@ -2277,7 +2289,7 @@ do
                             if fmatch then
                 ]])
 
-                if validateFlags(FL_VCACHE, token) then
+                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
                     tinsert(body, [[
                         local cache = _Cache()
                         ret, msg = ivalid(info, first, false, cache)
@@ -2291,29 +2303,29 @@ do
                             end
                             return ret
                         elseif not fmatch then
-                            error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
+                            error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                         end
                     end
                 ]])
             else
                 tinsert(body, [[
                     return function(info, first)
-                        local ivalid = info[]].. FD_VALID .. [[]
+                        local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
                         local ret, msg
                 ]])
             end
 
-            if validateFlags(FL_MEMBER, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) then
                 tinsert(body, [[
                     ret = {}
                     local j = 1
-                    ret[ info[]] .. FD_STMEM .. [[][]] .. MFD_NAME .. [[] ] = first
-                    for i = ]] .. (FD_STMEM + 1) .. [[, count do
-                        ret[ info[i][]] .. MFD_NAME .. [[] ] = (select(j, ...))
+                    ret[ info[]] .. FLD_STRUCT_MEMBERSTART .. [[][]] .. FLD_MEMBER_NAME .. [[] ] = first
+                    for i = ]] .. (FLD_STRUCT_MEMBERSTART + 1) .. [[, count do
+                        ret[ info[i][]] .. FLD_MEMBER_NAME .. [[] ] = (select(j, ...))
                         j = j + 1
                     end
                 ]])
-            elseif validateFlags(FL_ARRAY, token) then
+            elseif validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
                     ret = { first, ... }
                 ]])
@@ -2321,7 +2333,7 @@ do
                 tinsert(body, [[ret = first]])
             end
 
-            if validateFlags(FL_VCACHE, token) then
+            if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
                 tinsert(body, [[
                     local cache = _Cache()
                     ret, msg = ivalid(info, ret, false, cache)
@@ -2335,9 +2347,9 @@ do
 
             tinsert(body, [[if not msg then return ret end]])
 
-            if validateFlags(FL_MEMBER, token) or validateFlags(FL_ARRAY, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
-                    error(info[]] .. FD_EMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
+                    error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                 ]])
             else
                 tinsert(body, [[
@@ -2351,10 +2363,10 @@ do
                 body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            _CtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
+            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
 
             if #header == 0 then
-                _CtorMap[token] = _CtorMap[token]()
+                _StructCtorMap[token] = _StructCtorMap[token]()
             end
 
             _Cache(header)
@@ -2362,20 +2374,20 @@ do
         end
 
         if #upval > 0 then
-            info[FD_CTOR] = _CtorMap[token](unpack(upval))
+            info[FLD_STRUCT_CTOR] = _StructCtorMap[token](unpack(upval))
         else
-            info[FD_CTOR] = _CtorMap[token]
+            info[FLD_STRUCT_CTOR] = _StructCtorMap[token]
         end
 
         _Cache(upval)
     end
 
     -- Refresh Depends
-    local function refreshDepends(target, cache)
-        local map = _DependMap[target]
+    local refreshDepends        = function (target, cache)
+        local map = _DependenceMap[target]
 
         if map then
-            _DependMap[target] = nil
+            _DependenceMap[target] = nil
 
             for t in pairs, map do
                 if not cache[t] then
@@ -2387,8 +2399,8 @@ do
 
                         local nVcache = checkRepeatType(t, info)
 
-                        if nVcache ~= info[FD_VCACHE] then
-                            info[FD_VCACHE] = nVcache
+                        if nVcache ~= info[FLD_STRUCT_VALIDCACHE] then
+                            info[FLD_STRUCT_VALIDCACHE] = nVcache
 
                             generateValidator(info)
                             generateConstructor(info)
@@ -2403,8 +2415,8 @@ do
         end
     end
 
-    struct          = Prototype "struct" {
-        __index     = {
+    struct                      = Prototype "struct" {
+        __index                 = {
             ["AddMember"]       = function(target, name, definition, stack)
                 local info, def = getTargetInfo(target)
 
@@ -2425,29 +2437,29 @@ do
                     name = strtrim(name)
                     if name == "" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name can't be empty", stack) end
                     if type(definition) ~= "table" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The definition is missing", stack) end
-                    if info[FD_ARRAY] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is an array structure, can't add member", stack) end
+                    if info[FLD_STRUCT_ARRAY] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is an array structure, can't add member", stack) end
 
-                    local idx = FD_STMEM
+                    local idx = FLD_STRUCT_MEMBERSTART
                     while info[idx] do
-                        if info[idx][MFD_NAME] == name then
+                        if info[idx][FLD_MEMBER_NAME] == name then
                             error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is a existed member with the name : %q", name), stack)
                         end
                         idx = idx + 1
                     end
 
                     local minfo = _Cache()
-                    minfo[MFD_NAME] = name
+                    minfo[FLD_MEMBER_NAME] = name
 
                     attribute.ConsumeAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name, stack + 1)
 
                     local smem  = nil
 
-                    if info[FD_BASE] and _StrtInfo[info[FD_BASE]] then
-                        local sinfo = _StrtInfo[info[FD_BASE]]
-                        local si    = FD_STMEM
+                    if info[FLD_STRUCT_BASE] and _StrtInfo[info[FLD_STRUCT_BASE]] then
+                        local sinfo = _StrtInfo[info[FLD_STRUCT_BASE]]
+                        local si    = FLD_STRUCT_MEMBERSTART
                         while sinfo[si] do
-                            if sinfo[i][MFD_NAME] == name then
-                                smem = sinfo[i][MFD_NAME]
+                            if sinfo[i][FLD_MEMBER_NAME] == name then
+                                smem = sinfo[i][FLD_MEMBER_NAME]
                                 break
                             end
                         end
@@ -2463,34 +2475,34 @@ do
                                 local tpValid = namespace.IsResourceType(v) and getmetatable(v).ValidateValue
 
                                 if tpValid then
-                                    minfo[MFD_TYPE] = v
-                                    minfo[MFD_VALD] = tpValid
+                                    minfo[FLD_MEMBER_TYPE] = v
+                                    minfo[FLD_MEMBER_VALID] = tpValid
                                 else
                                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The member's type is not valid", stack)
                                 end
                             elseif k == "require" and v then
-                                minfo[MFD_REQ]  = true
+                                minfo[FLD_MEMBER_REQUIRE]  = true
                             elseif k == "default" then
-                                minfo[MFD_DEFT] = v
+                                minfo[FLD_MEMBER_DEFAULT] = v
                             end
                         end
                     end
 
-                    if minfo[MFD_REQ] then
-                        minfo[MFD_DEFT] = nil
-                    elseif minfo[MFD_TYPE] then
-                        if minfo[MFD_DEFT] ~= nil then
-                            local valid, msg = minfo[MFD_VALD](minfo[MFD_TYPE], minfo[MFD_DEFT])
+                    if minfo[FLD_MEMBER_REQUIRE] then
+                        minfo[FLD_MEMBER_DEFAULT] = nil
+                    elseif minfo[FLD_MEMBER_TYPE] then
+                        if minfo[FLD_MEMBER_DEFAULT] ~= nil then
+                            local valid, msg = minfo[FLD_MEMBER_VALID](minfo[FLD_MEMBER_TYPE], minfo[FLD_MEMBER_DEFAULT])
                             if valid ~= nil then
-                                minfo[MFD_DEFT] = valid
-                            elseif type(minfo[MFD_DEFT]) == "function" then
-                                minfo[MFD_ASFT] = true
+                                minfo[FLD_MEMBER_DEFAULT] = valid
+                            elseif type(minfo[FLD_MEMBER_DEFAULT]) == "function" then
+                                minfo[FLD_MEMBER_DEFTFACTORY] = true
                             else
                                 error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The default value is not valid", stack)
                             end
                         end
-                        if minfo[MFD_DEFT] == nil then
-                            minfo[MFD_DEFT] = getmetatable(minfo[MFD_TYPE]).GetDefault(minfo[MFD_TYPE])
+                        if minfo[FLD_MEMBER_DEFAULT] == nil then
+                            minfo[FLD_MEMBER_DEFAULT] = getmetatable(minfo[FLD_MEMBER_TYPE]).GetDefault(minfo[FLD_MEMBER_TYPE])
                         end
                     end
 
@@ -2520,20 +2532,20 @@ do
 
                     local sfunc
 
-                    if info[FD_BASE] and not info[name] then
-                        if not struct.IsStaticMethod(info[FD_BASE], name) then
-                            sfunc = struct.GetMethod(info[FD_BASE], name)
+                    if info[FLD_STRUCT_BASE] and not info[name] then
+                        if not struct.IsStaticMethod(info[FLD_STRUCT_BASE], name) then
+                            sfunc = struct.GetMethod(info[FLD_STRUCT_BASE], name)
                         end
                     end
 
                     func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, sfunc)
 
                     local hasMethod= false
-                    if not def and info[FD_TYPMTD] then for k, v in pairs, info[FD_TYPMTD] do if v then hasMethod = true break end end end
+                    if not def and info[FLD_STRUCT_TYPEMETHOD] then for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do if v then hasMethod = true break end end end
 
                     if not info[name] then
-                        info[FD_TYPMTD] = info[FD_TYPMTD] or _Cache()
-                        info[FD_TYPMTD][name] = func
+                        info[FLD_STRUCT_TYPEMETHOD] = info[FLD_STRUCT_TYPEMETHOD] or _Cache()
+                        info[FLD_STRUCT_TYPEMETHOD][name] = func
                     else
                         info[name]  = func
                     end
@@ -2557,43 +2569,43 @@ do
 
                 local info      = _StrtInfo[target]
 
-                if info and validateFlags(MD_SEAL, info[FD_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _BDInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                if info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _BDInfo[target] = {
-                    [FD_MOD ]   = 0,
-                    [FD_NAME]   = tostring(target),
+                _StructBuilderInfo[target] = {
+                    [FLD_STRUCT_MOD ]   = 0,
+                    [FLD_STRUCT_NAME]   = tostring(target),
                 }
 
                 attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _BDInfo[target]
+                local ninfo     = _StructBuilderInfo[target]
                 if not ninfo then return end
 
                 stack = type(stack) == "number" and stack or 2
 
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, nil, ninfo[FD_BASE])
+                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, nil, ninfo[FLD_STRUCT_BASE])
 
-                _BDInfo[target] = nil
+                _StructBuilderInfo[target] = nil
 
                 -- Install base struct's features
-                if ninfo[FD_BASE] then
+                if ninfo[FLD_STRUCT_BASE] then
                     -- Check conflict, some should be handled by the author
-                    local binfo     = _StrtInfo[ninfo[FD_BASE]]
+                    local binfo     = _StrtInfo[ninfo[FLD_STRUCT_BASE]]
 
-                    if ninfo[FD_ARRAY] then     -- Array
-                        if not binfo[FD_ARRAY] then
+                    if ninfo[FLD_STRUCT_ARRAY] then     -- Array
+                        if not binfo[FLD_STRUCT_ARRAY] then
                             error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct isn't an array structure", tostring(target)), stack)
                         end
-                    elseif ninfo[FD_STMEM] then -- Member
-                        if binfo[FD_ARRAY] then
+                    elseif ninfo[FLD_STRUCT_MEMBERSTART] then -- Member
+                        if binfo[FLD_STRUCT_ARRAY] then
                             error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure", tostring(target)), stack)
-                        elseif binfo[FD_STMEM] then
+                        elseif binfo[FLD_STRUCT_MEMBERSTART] then
                             -- Try to keep the base struct's member order
                             local cache     = _Cache()
-                            local idx       = FD_STMEM
+                            local idx       = FLD_STRUCT_MEMBERSTART
                             while ninfo[idx] do
                                 tinsert(cache, ninfo[idx])
                                 idx         = idx + 1
@@ -2601,13 +2613,13 @@ do
 
                             local memCnt    = #cache
 
-                            idx             = FD_STMEM
+                            idx             = FLD_STRUCT_MEMBERSTART
                             while binfo[idx] do
-                                local name  = binfo[idx][MFD_NAME]
+                                local name  = binfo[idx][FLD_MEMBER_NAME]
                                 ninfo[idx]  = binfo[idx]
 
                                 for k, v in pairs, cache do
-                                    if name == v[MFD_NAME] then
+                                    if name == v[FLD_MEMBER_NAME] then
                                         ninfo[idx]  = v
                                         cache[k]    = nil
                                         break
@@ -2627,12 +2639,12 @@ do
                             _Cache(cache)
                         end
                     else                        -- Custom
-                        if binfo[FD_ARRAY] then
-                            ninfo[FD_ARRAY] = binfo[FD_ARRAY]
-                            ninfo[FD_ARRVLD]= binfo[FD_ARRVLD]
-                        elseif binfo[FD_STMEM] then
+                        if binfo[FLD_STRUCT_ARRAY] then
+                            ninfo[FLD_STRUCT_ARRAY] = binfo[FLD_STRUCT_ARRAY]
+                            ninfo[FLD_STRUCT_ARRVALID]= binfo[FLD_STRUCT_ARRVALID]
+                        elseif binfo[FLD_STRUCT_MEMBERSTART] then
                             -- Share members
-                            local idx = FD_STMEM
+                            local idx = FLD_STRUCT_MEMBERSTART
                             while binfo[idx] do
                                 ninfo[idx]  = binfo[idx]
                                 idx         = idx + 1
@@ -2641,17 +2653,17 @@ do
                     end
 
                     -- Clone the validator and Initializer
-                    local nvalid    = ninfo[FD_STVLD]
-                    local ninit     = ninfo[FD_STINI]
+                    local nvalid    = ninfo[FLD_STRUCT_VALIDSTART]
+                    local ninit     = ninfo[FLD_STRUCT_INITSTART]
 
-                    local idx       = FD_STVLD
+                    local idx       = FLD_STRUCT_VALIDSTART
                     while binfo[idx] do
                         ninfo[idx]  = binfo[idx]
                         idx         = idx + 1
                     end
                     ninfo[idx]      = nvalid
 
-                    idx             = FD_STINI
+                    idx             = FLD_STRUCT_INITSTART
                     while binfo[idx] do
                         ninfo[idx]  = binfo[idx]
                         idx         = idx + 1
@@ -2659,41 +2671,41 @@ do
                     ninfo[idx]      = ninit
 
                     -- Clone the methods
-                    if binfo[FD_TYPMTD] then
-                        nobjmtd     = ninfo[FD_TYPMTD] or _Cache()
+                    if binfo[FLD_STRUCT_TYPEMETHOD] then
+                        nobjmtd     = ninfo[FLD_STRUCT_TYPEMETHOD] or _Cache()
 
-                        for k, v in pairs, binfo[FD_TYPMTD] do
+                        for k, v in pairs, binfo[FLD_STRUCT_TYPEMETHOD] do
                             if v and nobjmtd[k] == nil then
                                 nobjmtd[k]  = v
                             end
                         end
 
                         if next(nobjmtd) then
-                            ninfo[FD_TYPMTD] = nobjmtd
+                            ninfo[FLD_STRUCT_TYPEMETHOD] = nobjmtd
                         else
-                            ninfo[FD_TYPMTD] = nil
+                            ninfo[FLD_STRUCT_TYPEMETHOD] = nil
                             _Cache(nobjmtd)
                         end
                     end
                 end
 
                 -- Generate error message
-                if ninfo[FD_STMEM] then
+                if ninfo[FLD_STRUCT_MEMBERSTART] then
                     local args      = _Cache()
-                    local idx       = FD_STMEM
+                    local idx       = FLD_STRUCT_MEMBERSTART
                     while ninfo[idx] do
-                        tinsert(args, ninfo[idx][MFD_NAME])
+                        tinsert(args, ninfo[idx][FLD_MEMBER_NAME])
                         idx         = idx + 1
                     end
-                    ninfo[FD_EMSG]  = strformat("Usage: %s(%s) - ", tostring(target), tblconcat(args, ", "))
+                    ninfo[FLD_STRUCT_ERRMSG]  = strformat("Usage: %s(%s) - ", tostring(target), tblconcat(args, ", "))
                     _Cache(args)
-                elseif ninfo[FD_ARRAY] then
-                    ninfo[FD_EMSG]  = strformat("Usage: %s(...) - ", tostring(target))
+                elseif ninfo[FLD_STRUCT_ARRAY] then
+                    ninfo[FLD_STRUCT_ERRMSG]  = strformat("Usage: %s(...) - ", tostring(target))
                 else
-                    ninfo[FD_EMSG]  = strformat("[%s]", tostring(target))
+                    ninfo[FLD_STRUCT_ERRMSG]  = strformat("[%s]", tostring(target))
                 end
 
-                ninfo[FD_VCACHE]    = checkRepeatType(target, ninfo)
+                ninfo[FLD_STRUCT_VALIDCACHE]    = checkRepeatType(target, ninfo)
 
                 refreshDependence(target, ninfo)
 
@@ -2701,13 +2713,13 @@ do
                 generateConstructor(ninfo)
 
                 -- Check the default value is it's custom struct
-                if ninfo[FD_DEFT] ~= nil then
-                    local deft      = ninfo[FD_DEFT]
-                    ninfo[FD_DEFT]  = nil
+                if ninfo[FLD_STRUCT_DEFAULT] ~= nil then
+                    local deft      = ninfo[FLD_STRUCT_DEFAULT]
+                    ninfo[FLD_STRUCT_DEFAULT]  = nil
 
-                    if not ninfo[FD_ARRAY] and not ninfo[FD_STMEM] then
+                    if not ninfo[FLD_STRUCT_ARRAY] and not ninfo[FLD_STRUCT_MEMBERSTART] then
                         local ret, msg = struct.ValidateValue(target, deft)
-                        if not msg then ninfo[FD_DEFT] = ret end
+                        if not msg then ninfo[FLD_STRUCT_DEFAULT] = ret end
                     end
                 end
 
@@ -2717,7 +2729,7 @@ do
                 attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_STRUCT)
 
                 -- Refresh structs depended on this
-                if _DependMap[target] then
+                if _DependenceMap[target] then
                     local cache = _Cache()
                     cache[target] = true
                     refreshDepends(target, cache)
@@ -2729,27 +2741,27 @@ do
 
             ["GetArrayElement"] = function(target)
                 local info      = getTargetInfo(target)
-                return info and info[FD_ARRAY]
+                return info and info[FLD_STRUCT_ARRAY]
             end;
 
             ["GetBaseStruct"]   = function(target)
                 local info      = getTargetInfo(target)
-                return info and info[FD_BASE]
+                return info and info[FLD_STRUCT_BASE]
             end;
 
             ["GetDefault"]      = function(target)
                 local info      = getTargetInfo(target)
-                return info and info[FD_DEFT]
+                return info and info[FLD_STRUCT_DEFAULT]
             end;
 
             ["GetMember"]       = function(target, name)
                 local info      = getTargetInfo(target)
                 if info then
-                    local idx   = FD_STMEM
+                    local idx   = FLD_STRUCT_MEMBERSTART
                     local minfo = info[idx]
                     while minfo do
-                        if idx == name or minfo[MFD_NAME] == name then
-                            return minfo[MFD_TYPE], minfo[MFD_DEFT], minfo[MFD_REQ]
+                        if idx == name or minfo[FLD_MEMBER_NAME] == name then
+                            return minfo[FLD_MEMBER_TYPE], minfo[FLD_MEMBER_DEFAULT], minfo[FLD_MEMBER_REQUIRE]
                         end
                         idx     = idx + 1
                         minfo   = info[idx]
@@ -2762,19 +2774,19 @@ do
                 if info then
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
-                        local i = FD_STMEM
+                        local i = FLD_STRUCT_MEMBERSTART
                         local m = info[i]
                         while m do
-                            tinsert(cache, m[MFD_NAME])
+                            tinsert(cache, m[FLD_MEMBER_NAME])
                             i   = i + 1
                             m   = info[i]
                         end
                         return cache
                     else
                         return function(self, i)
-                            i   = i and (i + 1) or FD_STMEM
+                            i   = i and (i + 1) or FLD_STRUCT_MEMBERSTART
                             if info[i] then
-                                return i, info[i][MFD_NAME]
+                                return i, info[i][FLD_MEMBER_NAME]
                             end
                         end, target
                     end
@@ -2788,12 +2800,12 @@ do
 
             ["GetMethod"]       = function(target, name)
                 local info, def = getTargetInfo(target)
-                return info and type(name) == "string" and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or nil
+                return info and type(name) == "string" and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or nil
             end;
 
             ["GetObjectMethod"] = function(target, name)
                 local info      = getTargetInfo(target)
-                return info and type(name) == "string" and info[FD_TYPMTD] and info[FD_TYPMTD][name] or nil
+                return info and type(name) == "string" and info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] or nil
             end;
 
             ["GetStaticMethod"] = function(target, name)
@@ -2804,7 +2816,7 @@ do
             ["GetMethods"]      = function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local objm  = info[FD_TYPMTD]
+                    local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
                         if objm then for k, v in pairs, objm do cache[k] = v or info[k] end end
@@ -2826,7 +2838,7 @@ do
             ["GetObjectMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local objm  = info[FD_TYPMTD]
+                    local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, objm do if v then cache[k] = v end end
@@ -2849,7 +2861,7 @@ do
             ["GetStaticMethods"]= function(target, cache)
                 local info      = getTargetInfo(target)
                 if info then
-                    local objm  = info[FD_TYPMTD]
+                    local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
                         for k, v in pairs, objm do if not v then cache[k] = info[k] end end
@@ -2872,9 +2884,9 @@ do
             ["GetStructType"]   = function(target)
                 local info      = getTargetInfo(target)
                 if info then
-                    if info[FD_ARRAY] then return STYPE_ARRAY end
-                    if info[FD_STMEM] then return STYPE_MEMBER end
-                    return STYPE_CUSTOM
+                    if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
+                    if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
+                    return STRUCT_TYPE_CUSTOM
                 end
             end;
 
@@ -2883,7 +2895,7 @@ do
                     while target do
                         if target == base then return true end
                         local i = getTargetInfo(target)
-                        target  = i and i[FD_BASE]
+                        target  = i and i[FLD_STRUCT_BASE]
                     end
                 end
                 return false
@@ -2891,7 +2903,7 @@ do
 
             ["IsSealed"]        = function(target)
                 local info      = getTargetInfo(target)
-                return info and validateFlags(MD_SEAL, info[FD_MOD]) or false
+                return info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
             end;
 
             ["IsStaticMethod"]  = function(target, name)
@@ -2906,13 +2918,13 @@ do
                 if info then
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
 
-                    if info[FD_STMEM] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
+                    if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
                     local tpValid   = namespace.IsResourceType(eleType) and getmetatable(eleType).ValidateValue
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
-                    info[FD_ARRAY]  = eleType
-                    info[FD_ARRVLD] = tpValid
+                    info[FLD_STRUCT_ARRAY]  = eleType
+                    info[FLD_STRUCT_ARRVALID] = tpValid
                 else
                     error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid", stack)
                 end
@@ -2925,7 +2937,7 @@ do
                 if info then
                     if not def then error(strformat("Usage: struct.SetBaseStruct(structure, base) - The %s's definition is finished", tostring(target)), stack) end
                     if not struct.Validate(base) then error("Usage: struct.SetBaseStruct(structure, base) - The base must be a structure", stack) end
-                    info[FD_BASE] = base
+                    info[FLD_STRUCT_BASE] = base
                 else
                     error("Usage: struct.SetBaseStruct(structure, base[, stack]) - The structure is not valid", stack)
                 end
@@ -2937,7 +2949,7 @@ do
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetDefault(structure, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                    info[FD_DEFT] = default
+                    info[FLD_STRUCT_DEFAULT] = default
                 else
                     error("Usage: struct.SetDefault(structure, default[, stack]) - The structure is not valid", stack)
                 end
@@ -2950,7 +2962,7 @@ do
                 if info then
                     if not def then error(strformat("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: struct.SetValidator(structure, validator) - The validator must be a function", stack) end
-                    info[FD_STVLD] = func
+                    info[FLD_STRUCT_VALIDSTART] = func
                 else
                     error("Usage: struct.SetValidator(structure, validator[, stack]) - The structure is not valid", stack)
                 end
@@ -2963,7 +2975,7 @@ do
                 if info then
                     if not def then error(strformat("Usage: struct.SetInitializer(structure, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: struct.SetInitializer(structure, initializer) - The initializer must be a function", stack) end
-                    info[FD_STINI] = func
+                    info[FLD_STRUCT_INITSTART] = func
                 else
                     error("Usage: struct.SetInitializer(structure, initializer[, stack]) - The structure is not valid", stack)
                 end
@@ -2974,8 +2986,8 @@ do
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
-                    if not validateFlags(MD_SEAL, info[FD_MOD]) then
-                        info[FD_MOD] = turnOnFlags(MD_SEAL, info[FD_MOD])
+                    if not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
+                        info[FLD_STRUCT_MOD] = turnOnFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])
                     end
                 else
                     error("Usage: struct.SetSealed(structure[, stack]) - The structure is not valid", stack)
@@ -2991,11 +3003,11 @@ do
                     name = strtrim(name)
                     if name == "" then error("Usage: Usage: struct.SetStaticMethod(structure, name) - The name can't be empty", stack) end
                     if not def then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s's definition is finished", tostring(target)), stack) end
-                    if not (info[FD_TYPMTD] and info[FD_TYPMTD][name] ~= nil) then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q", tostring(target), name), stack) end
+                    if not (info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] ~= nil) then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q", tostring(target), name), stack) end
 
                     if info[name] == nil then
-                        info[name] = info[FD_TYPMTD][name]
-                        info[FD_TYPMTD][name] = false
+                        info[name] = info[FLD_STRUCT_TYPEMETHOD][name]
+                        info[FLD_STRUCT_TYPEMETHOD][name] = false
                     end
                 else
                     error("Usage: struct.SetStaticMethod(structure, name[, stack]) - The structure is not valid", stack)
@@ -3005,13 +3017,13 @@ do
             ["ValidateValue"]   = function(target, value, onlyValid, cache)
                 local info  = _StrtInfo[target]
                 if info then
-                    if not cache and info[FD_VCACHE] then
+                    if not cache and info[FLD_STRUCT_VALIDCACHE] then
                         cache = _Cache()
-                        local ret, msg = info[FD_VALID](info, value, onlyValid, cache)
+                        local ret, msg = info[FLD_STRUCT_VALID](info, value, onlyValid, cache)
                         for k, v in pairs, cache do cache[k] = nil _Cache(v) end _Cache(cache)
                         return ret, msg
                     else
-                        return info[FD_VALID](info, value, onlyValid, cache)
+                        return info[FLD_STRUCT_VALID](info, value, onlyValid, cache)
                     end
                 else
                     error("Usage: struct.ValidateValue(structure, value[, onlyValid]) - The structure is not valid", 2)
@@ -3023,8 +3035,8 @@ do
                 return getmetatable(target) == struct and target or nil
             end;
         },
-        __newindex  = readOnly,
-        __call      = function(self, ...)
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
             local env, target, definition, keepenv, stack, visitor = GetTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
@@ -3035,7 +3047,7 @@ do
             environment.SetParent(tarenv, env)
             environment.SetAutoCache(tarenv, false)
 
-            _InDef[tarenv] = true
+            _StructBuilderInDefine[tarenv] = true
 
             if definition then
                 tarenv(definition, stack + 1)
@@ -3047,44 +3059,44 @@ do
         end,
     }
 
-    tstruct         = Prototype "tstruct" (tnamespace, {
-        __index     = function(self, name)
+    tstruct                     = Prototype "tstruct" (tnamespace, {
+        __index                 = function(self, name)
             if type(name) == "string" then
                 local info  = _StrtInfo[self]
-                return info and (info[name] or info[FD_TYPMTD] and info[FD_TYPMTD][name]) or namespace.GetNameSpace(self, name)
+                return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNameSpace(self, name)
             end
         end,
-        __newindex  = function(self, key, value)
+        __newindex              = function(self, key, value)
             if type(key) == "string" and type(value) == "function" then
                 struct.AddMethod(self, key, value, 3)
                 return
             end
             error("The struct type is readonly", 2)
         end,
-        __call      = function(self, ...)
+        __call                  = function(self, ...)
             local info  = _StrtInfo[self]
-            local ret   = info[FD_CTOR](info, ...)
+            local ret   = info[FLD_STRUCT_CTOR](info, ...)
             return ret
         end,
-        __metatable = struct,
+        __metatable             = struct,
     })
 
-    structbuilder   = Prototype "structbuilder" {
-        __index     = function(self, key)
-            local newMethod     = rawget(self, BFD_NMTD)
+    structbuilder               = Prototype "structbuilder" {
+        __index                 = function(self, key)
+            local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             return newMethod and newMethod[key] and struct.GetMethod(environment.GetNameSpace(self), key) or environment.GetValue(self, key)
         end,
-        __newindex  = function(self, key, value)
+        __newindex              = function(self, key, value)
             if not setBuilderOwnerValue(self, key, value, 3) then
                 return rawset(self, key, value)
             end
         end,
-        __call      = function(self, ...)
+        __call                  = function(self, ...)
             local definition, stack = GetDefinitionParams(self, ...)
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
-            if not (owner and _InDef[self] and _BDInfo[owner]) then error("The struct's definition is finished", stack) end
+            if not (owner and _StructBuilderInDefine[self] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
 
             stack = stack + 1
 
@@ -3092,9 +3104,9 @@ do
                 definition(self)
             else
                 -- Check base struct first
-                if definition[MTD_BASE] ~= nil then
-                    setBuilderOwnerValue(self, MTD_BASE, definition[MTD_BASE], stack, true)
-                    definition[MTD_BASE] = nil
+                if definition[STRUCT_KEYWORD_BASE] ~= nil then
+                    setBuilderOwnerValue(self, STRUCT_KEYWORD_BASE, definition[STRUCT_KEYWORD_BASE], stack, true)
+                    definition[STRUCT_KEYWORD_BASE] = nil
                 end
 
                 -- Index key
@@ -3111,15 +3123,15 @@ do
 
             struct.EndDefinition(owner, stack)
 
-            _InDef[self]    = nil
+            _StructBuilderInDefine[self]    = nil
             environment.SetAutoCache(self, true)
 
-            local newMethod     = rawget(self, BFD_NMTD)
+            local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             if newMethod then
                 for k in pairs(newMethod) do
                     rawset(self, k, struct.GetMethod(owner, k))
                 end
-                rawset(self, BFD_NMTD, nil)
+                rawset(self, STRUCT_BUILDER_NEWMTD, nil)
             end
 
             setfenv(stack - 1, environment.GetParent(self) or _G)
@@ -3129,10 +3141,10 @@ do
     }
 
     -- Key feature : member "Name" { Type = String, Default = "Anonymous", Require = false}
-    member          = Prototype "member" {
-        __index     = writeOnly,
-        __newindex  = readOnly,
-        __call      = function(self, ...)
+    member                      = Prototype "member" {
+        __index                 = writeOnly,
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
             if self == member then
                 local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(member, ...)
                 local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
@@ -3162,7 +3174,7 @@ do
     }
 
     -- Key feature : endstruct "Number"
-    endstruct       = function (...)
+    endstruct                   = function (...)
         local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(endstruct, ...)
         local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
 
@@ -3171,15 +3183,15 @@ do
 
         struct.EndDefinition(owner, stack + 1)
 
-        _InDef[keyvisitor]  = nil
+        _StructBuilderInDefine[keyvisitor]  = nil
         environment.SetAutoCache(keyvisitor, true)
 
-        local newMethod     = rawget(keyvisitor, BFD_NMTD)
+        local newMethod     = rawget(keyvisitor, STRUCT_BUILDER_NEWMTD)
         if newMethod then
             for k in pairs(newMethod) do
                 rawset(keyvisitor, k, struct.GetMethod(owner, k))
             end
-            rawset(keyvisitor, BFD_NMTD, nil)
+            rawset(keyvisitor, STRUCT_BUILDER_NEWMTD, nil)
         end
 
         local baseEnv       = environment.GetParent(keyvisitor) or _G
@@ -3198,16 +3210,15 @@ do
     --                             Type Data                             --
     -----------------------------------------------------------------------
     local _ICInfo   = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
-    local _CLDInfo  = {}                                -- CHILDREN MAP
-    local _ThisMap  = setmetatable({}, WEAK_ALL)        -- THIS FOR CLASS
-    local _SuperMap = setmetatable({}, WEAK_ALL)        -- SUPER FOR CLASS & INTERFACE
-    local _ObjMap   = setmetatable({}, WEAK_KEY)        -- OBJECT -> CLASS INFO MAP
     local _BDInfo   = setmetatable({}, WEAK_KEY)        -- TYPE BUILDER INFO
-    local _SuperObj = setmetatable({}, WEAK_KEY)        -- SUPER OBJECT CACHE
+    local _CLDInfo  = {}                                -- CHILDREN MAP
+    local _ThisMap  = setmetatable({}, WEAK_ALL)        -- THIS  -> CLASS
+    local _SuperMap = setmetatable({}, WEAK_ALL)        -- SUPER -> CLASS | INTERFACE
 
     local _IndexMap = {}
     local _NewIdxMap= {}
     local _CtorMap  = {}
+
     local _InDef    = setmetatable({}, WEAK_KEY)
 
     -- FEATURE MODIFIER
@@ -3218,12 +3229,24 @@ do
     local MD_OBJMDAT= 2^4           -- ENABLE OBJECT METHOD ATTRIBUTE
     local MD_NRAWSET= 2^5           -- NO RAW SET FOR OBJECTS
     local MD_ASSPCLS= 2^6           -- AS A SIMPLE CLASS
-    local MD_KPOBJUP= 2^7           -- KEEP UPDATING OBJECT WITH NEW FEATURES
+    local MD_SIMPVER= 2^7           -- SIMPLE VERSION CLASS - NO VERSION CONTROL
+    local MD_ODSUPER= 2^8           -- OLD SUPER STYLE
+    local MD_THDSAFE= 2^9           --  @todo: THREAD SAFE, can't be all controlled by the system
+
+    local MD_INITVAL= (function()
+        local v
+        if PLOOP_PLATFORM_SETTINGS.CLASS_ALL_SIMPLE_VERSION then
+            v = turnOnFlags(0, MD_SIMPVER)
+        end
+        if PLOOP_PLATFORM_SETTINGS.CLASS_ALL_OLD_SUPER_STYLE then
+            return turnOnFlags(v or 0, MD_ODSUPER)
+        end
+    end)()
 
     -- FIELDS
     local FD_MOD    = -1            -- FIELD MODIFIER
     local FD_SUPCLS =  0            -- FIELD SUPER CLASS
-    local FD_STEXT  =  1            -- FIELD EXTEND INTERFACE START INDEX(so we can use unpack on it)
+    local FD_STEXT  =  1            -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
     local FD_INIT   = -2            -- FIELD INITIALIZER
     local FD_DISPOSE= -3            -- FIELD DISPOSE
     local FD_TYPFTR = -4            -- FILED TYPE FEATURES
@@ -3240,9 +3263,7 @@ do
     local FD_SIMPCLS=-15            -- FIELD CLASS IS A SIMPLE CLASS
     local FD_SUPINFO=-16            -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
     local FD_SUPCACH=-17            -- FIELD SUPER CACHE
-    local FD_ALTHIS =-18            -- FIELD ALIAS THIS (CONSTRUCTOR)
-    local FD_ALSUPER=-19            -- FIELD ALIAS SUPER (CONSTRUCTOR, METHODS FROM SUPER CLASS & EXTENDED INTERFACES)
-    local FD_NEWFTR =-20            -- FIELD TYPE NEW FEATURES
+    local FD_NEWFTR =-18            -- FIELD TYPE NEW FEATURES
 
     -- Ctor & Dispose
     local FD_CTOR   = 10^4          -- FIELD THE CONSTRUCTOR
@@ -3264,6 +3285,8 @@ do
     local FL_NEWIDX = 2^5           -- HAS NEW INDEX
     local FL_OBJATR = 2^6           -- ENABLE OBJECT METHOD ATTRIBUTE
     local FL_NRAWST = 2^7           -- ENABLE NO RAW SET
+    local FL_SUPACC = 2^8           -- HAS SUPER METHOD OR FEATURE
+    local FL_TDSAFE = 2^9           -- THREAD SAFE
 
     -- Flags for constructor
     local FL_EXTOBJ = 2^2           -- HAS __exist
@@ -3272,7 +3295,6 @@ do
     local FL_ASSIMP = 2^5           -- AS SIMPLE CLASS
     local FL_HSCLIN = 2^6           -- HAS CLASS INITIALIZER
     local FL_HASIFS = 2^7           -- NEED CALL INTERFACE'S INITIALIZER
-    local FL_MAPOBJ = 2^8           -- MAP THE OBJECT TO INFO
 
     -- Meta-Methods
     local MTD_EXIST = "__exist"
@@ -3287,8 +3309,9 @@ do
     -- Super & This
     local AL_SUPER  = "Super"
     local AL_THIS   = "This"
+    local SP_ACCESS = "__PLOOP_SUPER_ACCESS"
 
-    -- Building
+    -- Type Builder
     local BFD_NMTD  = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS = {
@@ -3334,7 +3357,7 @@ do
         return info[FD_SUPINFO] and info[FD_SUPINFO][target] or _BDInfo[target] or _ICInfo[target]
     end
 
-    local function getSuperInfos(info, reverse)
+    local function getSuperInfoIter(info, reverse)
         if reverse then
             if info[FD_SUPCLS] then
                 local scache    = _Cache()
@@ -3382,7 +3405,7 @@ do
 
     local function getSuperOnPriority(info, name, get)
         local minpriority, norpriority
-        for _, sinfo in getSuperInfos(info) do
+        for _, sinfo in getSuperInfoIter(info) do
             local m = get(sinfo, name)
             if m then
                 local priority = sinfo[FD_INHRTP] and sinfo[FD_INHRTP][name] or IP_NORMAL
@@ -3401,20 +3424,32 @@ do
         end
     end
 
+    local function getTypeMethod(info, name)
+        return info[FD_TYPMTD] and info[FD_TYPMTD][name]
+    end
+
+    local function getTypeFeature(info, name)
+        return info[FD_TYPFTR] and info[FD_TYPFTR][name]
+    end
+
+    local function getTypeMetaMethod(info, name)
+        return info[FD_TYPMTM] and info[FD_TYPMTM][META_KEYS[name]]
+    end
+
     local function getSuperMethod(info, name)
-        return getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPMTD] and sinfo[FD_TYPMTD][name] end)
+        return getSuperOnPriority(info, name, getTypeMethod)
     end
 
     local function getSuperFeature(info, name, ftype)
-        local feature, priority = getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPFTR] and sinfo[FD_TYPFTR][name] end)
+        local feature, priority = getSuperOnPriority(info, name, getTypeFeature)
         return feature and (not ftype and feature or ftype.Validate(feature)) or nil, priority
     end
 
     local function getSuperMetaMethod(info, name)
-        return getSuperOnPriority(info, name, function(sinfo, name) return sinfo[FD_TYPMTM] and sinfo[FD_TYPMTM][META_KEYS[name]] end)
+        return getSuperOnPriority(info, name, getTypeMetaMethod)
     end
 
-    -- Finish Type Building
+    -- Type Building
     local function generateSuperInfo(info, lst, cache)
         if info then
             local scls      = info[FD_SUPCLS]
@@ -3652,11 +3687,6 @@ do
         tinsert(upval, meta)
         tinsert(upval, target)
 
-        if not validateFlags(MD_KPOBJUP, info[FD_MOD]) then
-            token   = turnOnFlags(FL_MAPOBJ, token)
-            tinsert(upval, _ObjMap)
-        end
-
         if meta[MTD_EXIST] then
             token   = turnOnFlags(FL_EXTOBJ, token)
             tinsert(upval, meta[MTD_EXIST])
@@ -3699,10 +3729,6 @@ do
             tinsert(header, "_info")
             tinsert(header, "_meta")
             tinsert(header, "_class")
-
-            if validateFlags(FL_MAPOBJ, token) then
-                tinsert(header, "_ObjMap")
-            end
 
             tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[return function(...)]])
@@ -3811,10 +3837,6 @@ do
                 ]])
             end
 
-            if validateFlags(FL_MAPOBJ, token) then
-                tinsert(body, [[_ObjMap[obj] = _info]])
-            end
-
             tinsert(body, [[
                     return obj
                 end
@@ -3841,7 +3863,7 @@ do
         local objmtd    = _Cache()
         local super     = _Cache()
 
-        for _, sinfo in getSuperInfos(info, true) do
+        for _, sinfo in getSuperInfoIter(info, true) do
             local inhrtp= sinfo[FD_INHRTP]
 
             if sinfo[FD_TYPMTM] then
@@ -5090,14 +5112,14 @@ do
 
             ["IsFinal"]         = interface.IsFinal;
 
-            ["IsObjectKeepUpdating"] = function(target)
-                local info      = getTargetInfo(target)
-                return info and validateFlags(MD_KPOBJUP, info[FD_MOD]) or false
-            end;
-
             ["IsObjMethodAttrEnabled"] = function(target)
                 local info      = getTargetInfo(target)
                 return info and validateFlags(MD_OBJMDAT, info[FD_MOD]) or false
+            end;
+
+            ["IsOldSuperStyleClass"] = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_ODSUPER, info[FD_MOD]) or false
             end;
 
             ["IsRawSetBlocked"] = function(target)
@@ -5112,9 +5134,19 @@ do
                 return info and (info[FD_SIMPCLS] or validateFlags(MD_ASSPCLS, info[FD_MOD])) or false
             end;
 
+            ["IsSimpleVersion"] = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_SIMPVER, info[FD_MOD]) or false
+            end;
+
             ["IsStaticFeature"] = interface.IsStaticFeature;
 
             ["IsStaticMethod"]  = interface.IsStaticMethod;
+
+            ["IsThreadSafe"]    = function(target)
+                local info      = getTargetInfo(target)
+                return info and validateFlags(MD_THDSAFE, info[FD_MOD]) or false
+            end;
 
             ["SetAbstract"]     = function(target, stack)
                 setModifiedFlag(class, target, MD_ABSCLS, "SetAbstract", stack)
@@ -5136,12 +5168,12 @@ do
                     if not def then error(strformat("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function", stack) end
 
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, target, name, stack + 1)
-                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, nil, target, name)
+                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CTOR, target, name, stack + 1)
+                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CTOR, nil, target, name)
 
                     info[FD_INIT] = func
 
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CONSTRUCTOR, target, name)
+                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CTOR, target, name)
                 else
                     error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid", stack)
                 end
@@ -5155,12 +5187,12 @@ do
                 setModifiedFlag(class, target, MD_FINAL, "SetFinal", stack)
             end;
 
-            ["SetObjectKeepUpdating"] = function(target, stack)
-                setModifiedFlag(class, target, MD_KPOBJUP, "SetObjectKeepUpdating", stack)
-            end;
-
             ["SetObjMethodAttrEnabled"] = function(target, stack)
                 setModifiedFlag(class, target, MD_OBJMDAT, "SetObjMethodAttrEnabled", stack)
+            end;
+
+            ["SetOldSuperStyle"]= function(target, stack)
+                setModifiedFlag(class, target, MD_ODSUPER, "SetOldSuperStyle", stack)
             end;
 
             ["SetRawSetBlocked"]= function(target, stack)
@@ -5169,6 +5201,10 @@ do
 
             ["SetSealed"]       = function(target, stack)
                 setModifiedFlag(class, target, MD_SEAL, "SetSealed", stack)
+            end;
+
+            ["SetSimpleVersion"]= function(target, stack)
+                setModifiedFlag(class, target, MD_SIMPVER, "SetSimpleVersion", stack)
             end;
 
             ["SetSuperClass"]   = function(target, cls, stack)
@@ -5199,11 +5235,15 @@ do
                 setStaticMethod(class, target, name, stack)
             end;
 
+            ["SetThreadSafe"]   = function(target, stack)
+                setModifiedFlag(class, target, MD_THDSAFE, "SetThreadSafe", stack)
+            end;
+
             ["ValidateValue"]   = function(cls, value)
                 local ocls      = getmetatable(value)
                 if not ocls     then return false end
                 if ocls == cls  then return true end
-                local info      = _ObjMap[value] or getTargetInfo(ocls)
+                local info      = getTargetInfo(ocls)
                 return info and info[FD_SUPINFO] and info[FD_SUPINFO][cls] and true or false
             end;
 
@@ -5340,7 +5380,7 @@ do
                 local obj = _SuperObj[self]
                 if obj then
                     _SuperObj[self] = nil
-                    local info  = _ObjMap[obj] or getTargetInfo(getmetatable(obj))
+                    local info  = getTargetInfo(getmetatable(obj))
                     if not info then error("Usage: Super[obj].Method(obj, [...]) - Can't figure out the obj's class", 2) end
                     return getSuperMethod(info, key, _SuperMap[self])
                 else
