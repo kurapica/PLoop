@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2017 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2018 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --
@@ -33,17 +33,18 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2017/10/22                                               --
--- Version      :   a001                                                     --
+-- Update Date  :   2017/12/14                                               --
+-- Version      :   1.0.0-alpha.1                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
---                          Environment Preparation                          --
+--                                preparation                                --
 -------------------------------------------------------------------------------
 do
-    local error                 = error
-    local strformat             = string.format
-    local strgsub               = string.gsub
+    -----------------------------------------------------------------------
+    --                      environment preparation                      --
+    -----------------------------------------------------------------------
+    local cerror, cformat       = error, string.format
     local _PLoopEnv             = setmetatable(
         {
             _G                  = _G,
@@ -73,7 +74,6 @@ do
             strlower            = string.lower,
             strmatch            = string.match,
             strgmatch           = string.gmatch,
-            strtrim             = function(s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
 
             -- Table
             tblconcat           = table.concat,
@@ -121,27 +121,72 @@ do
             traceback           = debug and debug.traceback or false,
             setfenv             = setfenv or debug and debug.setfenv or false,
             getfenv             = getfenv or debug and debug.getfenv or false,
+
+            -- Share API
+            fakefunc            = function() end,
         }, {
-            __index             = function(self, k)
-                error(strformat("Global variable %q can't be found", k), 2)
-            end,
-            __metatable         = true
+            __index             = function(self, k) cerror(cformat("Global variable %q can't be found", k), 2) end,
+            __metatable         = true,
         }
     )
-    _PLoopEnv._PLoopEnv         = _PLoopEnv
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
     -----------------------------------------------------------------------
-    --                          Share Function                           --
+    --                         platform settings                         --
     -----------------------------------------------------------------------
-    wipe                        = function (t) for k in pairs, t do t[k] = nil end return t end
-    fakefunc                    = function () end
-    readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
-    writeOnly                   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
-    typeconcat                  = function (a, b) return tostring(a) .. tostring(b) end
+    PLOOP_PLATFORM_SETTINGS     = (function(default)
+        local settings = _G.PLOOP_PLATFORM_SETTINGS
+        if type(settings) == "table" then
+            for k, v in pairs, default do
+                local r = settings[k]
+                if r ~= nil then
+                    if type(r) ~= type(v) then
+                        Error("The PLOOP_PLATFORM_SETTINGS[%q]'s value must be %s.", k, type(v))
+                    else
+                        default[k]  = r
+                    end
+                end
+            end
+        end
+        return default
+    end) {
+        -- Attribute
+        ATTR_USE_WARN_INSTEAD_ERROR         = false,
+
+        -- Environment
+        ENV_ALLOW_GLOBAL_VAR_BE_NIL         = false,
+
+        -- Enum
+        ENUM_GLOBAL_IGNORE_CASE             = false,
+
+        -- Interface X Class X Object
+        CLASS_ALL_SIMPLE_VERSION            = false,
+        CLASS_ALL_OLD_SUPER_STYLE           = false,
+
+        -- Log
+        CORE_LOG_LEVEL                      = 3,
+        CORE_LOG_HANDLER                    = print,
+
+        -- Multi-thread
+        MULTI_OS_THREAD                     = false,
+        MULTI_OS_THREAD_LUA_LOCK_APPLIED    = false,
+        MULTI_OS_LOCK                       = fakefunc,
+        MULTI_OS_RELEASE                    = fakefunc,
+    }
 
     -----------------------------------------------------------------------
-    --                          Debug Function                           --
+    --                               share                               --
+    -----------------------------------------------------------------------
+    strtrim                     = function(s)     return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end
+
+    typeconcat                  = function (a, b) return tostring(a) .. tostring(b) end
+    wipe                        = function (t)    for k in pairs, t do t[k] = nil end return t end
+
+    readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
+    writeOnly                   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
+
+    -----------------------------------------------------------------------
+    --                               debug                               --
     -----------------------------------------------------------------------
     getCallLine                 = not debuginfo and fakefunc or function (stack)
         local info = debuginfo((stack or 2) + 1, "lS")
@@ -151,9 +196,9 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                               Clone                               --
+    --                               clone                               --
     -----------------------------------------------------------------------
-    local deepClone             = function (src, tar, override, cache)
+    deepClone                   = function (src, tar, override, cache)
         if cache then cache[src] = tar end
 
         for k, v in pairs, src do
@@ -194,7 +239,7 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                          Loading Snippet                          --
+    --                          loading snippet                          --
     -----------------------------------------------------------------------
     if LUA_VERSION > 5.1 then
         loadSnippet             = function (chunk, source, env)
@@ -211,7 +256,7 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                         Flags Management                          --
+    --                         flags management                          --
     -----------------------------------------------------------------------
     if LUA_VERSION >= 5.3 then
         validateFlags           = loadstring [[
@@ -291,7 +336,7 @@ do
     end)()
 
     -----------------------------------------------------------------------
-    --                        Environment Control                        --
+    --                        environment control                        --
     -----------------------------------------------------------------------
     if not setfenv then
         if debug and debug.getinfo and debug.getupvalue and debug.upvaluejoin and debug.getlocal then
@@ -334,46 +379,7 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                      PLOOP PLATFORM SETTINGS                      --
-    -----------------------------------------------------------------------
-    PLOOP_PLATFORM_SETTINGS     = (function(default)
-        local settings = _G.PLOOP_PLATFORM_SETTINGS
-        if type(settings) == "table" then
-            for k, v in pairs, default do
-                local r = settings[k]
-                if r ~= nil then
-                    if type(r) ~= type(v) then error(("The PLOOP_PLATFORM_SETTINGS[%q]'s value must be %s."):format(k, type(v))) end
-                    default[k] = r
-                end
-            end
-        end
-        return default
-    end) {
-        -- Debug
-        ATTR_USE_WARN_INSTEAD_ERROR = false,
-
-        -- Environment
-        ENV_ALLOW_GLOBAL_VAR_BE_NIL = true,
-
-        -- Enum
-        ENUM_GLOBAL_IGNORE_CASE     = false,
-
-        -- Interface X Class X Object
-        CLASS_ALL_SIMPLE_VERSION    = false,
-        CLASS_ALL_OLD_SUPER_STYLE   = false,
-
-        -- Log
-        CORE_LOG_LEVEL              = 3,
-        CORE_LOG_HANDLER            = print,
-
-        -- Multi-thread
-        MULTI_OS_THREAD             = false,
-        MULTI_OS_LOCK               = fakefunc,
-        MULTI_OS_RELEASE            = fakefunc,
-    }
-
-    -----------------------------------------------------------------------
-    --                            Main Cache                             --
+    --                            main cache                             --
     -----------------------------------------------------------------------
     _Cache                      = setmetatable({}, {
         __call                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
@@ -384,9 +390,9 @@ do
     )
 
     -----------------------------------------------------------------------
-    --                                Log                                --
+    --                                log                                --
     -----------------------------------------------------------------------
-    local genreateLogger        = function (prefix, loglvl)
+    local generateLogger        = function (prefix, loglvl)
         local handler = PLOOP_PLATFORM_SETTINGS.CORE_LOG_HANDLER
         return PLOOP_PLATFORM_SETTINGS.CORE_LOG_LEVEL > loglvl and fakefunc or
             function(msg, stack, ...)
@@ -399,68 +405,193 @@ do
             end
     end
 
-    Trace                       = genreateLogger("[PLoop:Trace]", 1)
-    Debug                       = genreateLogger("[PLoop:Debug]", 2)
-    Info                        = genreateLogger("[PLoop:Info]",  3)
-    Warn                        = genreateLogger("[PLoop:Warn]",  4)
-    Error                       = genreateLogger("[PLoop:Error]", 5)
-    Fatal                       = genreateLogger("[PLoop:Fatal]", 6)
+    Trace                       = generateLogger("[PLoop:Trace]", 1)
+    Debug                       = generateLogger("[PLoop:Debug]", 2)
+    Info                        = generateLogger("[PLoop:Info]",  3)
+    Warn                        = generateLogger("[PLoop:Warn]",  4)
+    Error                       = generateLogger("[PLoop:Error]", 5)
+    Fatal                       = generateLogger("[PLoop:Fatal]", 6)
 end
 
 -------------------------------------------------------------------------------
---                                 Prototype                                 --
---                                                                           --
---  In the prototype system, there are two type features defined by it :     --
---                                                                           --
---  * userdata as prototype with Inheritable meta-table settings             --
---  * table as object with same meta-table setting from the prototype        --
---                                                                           --
---  I can't say the userdata is the class, the object is the class object.   --
---  They are designed to serve different purposes under several conditions.  --
---                                                                           --
+-- The prototypes are types of other types(like classes), for a class "A",
+-- A is its object's type and the class is A's prototype.
+--
+-- The prototypes are simply defined based on the lua's meta-table, as an example:
+--
+--      proxy = prototype "proxy" {
+--          __index = function(self, key) return rawget(self, "__" .. key) end,
+--          __newindex = function(self, key, value) rawset(self, "__" .. key, value) end,
+--      }
+--
+-- The prototype's creation'll return an userdata created by newproxy as the result if the newproxy API existed,
+-- otherwise, a fake newproxy system will be used and the result would be a table instead of the userdata.
+--
+-- All meta-settings will be copied to the result's meta-table, with several default settings:
+--      * __metatable : if nil, the prototype itself would be used.
+--      * __tostring  : if nil, the prototype's name would be used, if false, __tostring will be set to nil.
+--
+-- It's also support a simple inheritance system like :
+--
+--      cproxy = prototype "cproxy" (proxy, {
+--          __call = function(self, ...) end,
+--      })
+--
+-- The new prototype's meta-table will copy meta-settings from it's super prototype (except the __metatable and __tostring).
+--
+-- The complete definition syntaxes are
+--
+--      val = prototype (["name",][superprototype,][definiton][,nodeepclone][,stack])
+--      val = prototype "name" ([superprototype,][definiton][,nodeepclone][,stack])
+--
+-- The params :
+--      * name            : string, the prototype's name, if ommit, must have superprototype or definiton to
+--                          define an anonymous prototype.
+--      * superprototype  : prototype, the super prototype whose meta-settings would be copied to the new one.
+--      * definition      : table, the prototype's meta-settings.
+--      * nodeepclone     : boolean, the __index maybe a table, normally, it's content would be deep cloned to
+--                          the prototype's meta-settings, if true, the __index table will be used directly, so
+--                          you may modify it after the prototype's definition.
+--      * stack           : number, the stack level used to raise errors.
+--
+-- @prototype prototype
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                         private variables                         --
+    -----------------------------------------------------------------------
     local _Prototype            = setmetatable({}, WEAK_ALL)
 
-    local savePrototype         = function (name, meta, super)
-        local prototype       = newproxy(true)
-        local pmeta           = getmetatable(prototype)
-        _Prototype[prototype] = pmeta
+    -----------------------------------------------------------------------
+    --                              Helpers                              --
+    -----------------------------------------------------------------------
+    local newPrototypeName      = nil
 
-        if meta                         then tblclone(meta, pmeta, true, true) end
-        if pmeta.__metatable == nil     then pmeta.__metatable = prototype end
-        if pmeta.__tostring  == nil     then pmeta.__tostring  = function() return name end end
-        if pmeta.__concat    == nil     then pmeta.__concat    = typeconcat end
+    local parsePrototypeArgs    = function(...)
+        local name, meta, super, nodeepclone, stack
+
+        for i = 1, select("#", ...) do
+            local value         = select(i, ...)
+            local vtype         = type(value)
+
+            if vtype == "boolean" then
+                nodeepclone     = value
+            elseif vtype == "number" then
+                stack           = value
+            elseif vtype == "string" and strtrim(value) ~= "" then
+                name            = strtrim(value)
+            elseif vtype == "table" then
+                if getmetatable(value) == nil then
+                    meta        = value
+                elseif _Prototype[value] then
+                    super       = value
+                end
+            end
+        end
+
+        return name, meta, super, nodeepclone or false, stack or 1
+    end
+
+    local newPrototype          = function (...)
+        local name, meta, super, nodeepclone, stack = parsePrototypeArgs(...)
+
+        name                    = name or newPrototypeName
+        newPrototypeName        = nil
+
+        local prototype         = newproxy(true)
+        local pmeta             = getmetatable(prototype)
+        _Prototype[prototype]   = pmeta
+
+        -- Default
+        if meta                         then tblclone(meta, pmeta, not nodeepclone, true) end
+        if pmeta.__metatable   == nil   then pmeta.__metatable  = prototype end
+        if pmeta.__tostring    == nil   then pmeta.__tostring   = name and function() return name end end
+
+        -- Inherit
         if super                        then tblclone(_Prototype[super], pmeta, true, false) end
-        if pmeta.__tostring  == false   then pmeta.__tostring = nil end
 
-        Trace("The prototype %q is created", 3, name)
+        -- Clear
+        if pmeta.__tostring    == false then pmeta.__tostring   = nil end
+
+        Trace("The [prototype] %s is created", (stack or 1) + 1, name)
 
         return prototype
     end
 
-    local newPrototype          = function (self, name)
-        name = name or self
-        if type(name) ~= "string" then name = "anonymous" end
-        return function(super, meta)
-            if _Prototype[super] == nil then meta, super = super, nil end
-            if type(meta) ~= "table"    then meta = nil end
-            local prototype = savePrototype(name, meta, super)
-            return prototype
-        end
-    end
-
-    -- Root Prototype
-    Prototype                   = newPrototype "Prototype" {
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    prototype                   = newPrototype ("prototype", {
         __index                 = {
+            --- Get the methods or return an iterator to get the methods of the prototype
+            -- @owner prototype
+            -- @method GetMethods
+            -- @param cache optional
+            -- @return
+            ["GetMethods"]      = function(self, cache)
+                local meta      = _Prototype[self]
+                if meta and type(meta.__index) == "table" then
+                    local methods = meta.__index
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or {}
+                        for k, v in pairs, methods do if type(v) == "function" then cache[k] = v end end
+                        return cache
+                    else
+                        return function(self, n)
+                            local k, v = next(methods, n)
+                            while k and type(v) ~= "function" do k, v = next(methods, k) end
+                            return k, v
+                        end, self
+                    end
+                elseif cache then
+                    return type(cache) == "table" and cache or nil
+                else
+                    return fakefunc, self
+                end
+            end,
+
+            --- Create a proxy with the prototype's meta-table
+            -- @owner prototype
+            -- @method NewProxy
+            -- @return the proxy of the same meta-table
             ["NewProxy"]        = newproxy,
-            ["NewObject"]       = function(prototype, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[prototype]) end,
-            ["ValidateValue"]   = function(prototype, val) return getmetatable(val) == prototype end,
-            ["Validate"]        = function(prototype) return _Prototype[prototype] and prototype or nil end,
+
+            --- Create a table(object) with the prototype's meta-table
+            -- @owner prototype
+            -- @method NewObject
+            -- @param table optional, the table used to be set the meta-table
+            -- @return the table with the meta-table settings
+            ["NewObject"]       = function(self, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[self]) end,
+
+            --- Whether the value is a object of the prototype(has the same meta-table)
+            -- @owner prototype
+            -- @method ValidateValue
+            -- @param value the value to be validated
+            -- @return true if the value is generated from the prototype
+            ["ValidateValue"]   = function(self, val) return getmetatable(val) == self end,
+
+            --- Whether the value is a prototype
+            -- @owner prototype
+            -- @static-method Validate
+            -- @param value the value to be validated
+            -- @return true if the value is a prototype
+            ["Validate"]        = function(self) return _Prototype[self] and self or nil end,
         },
         __newindex              = readOnly,
-        __call                  = newPrototype,
-    }
+        __call                  = function(...)
+            local name, meta, super, nodeepclone, stack = parsePrototypeArgs(...)
+
+            if meta or super then
+                local prototype = newPrototype(name, meta, super, nodeepclone, stack + 1)
+                return prototype
+            elseif name then
+                newPrototypeName= name
+                return newPrototype
+            else
+                error([["Usage: prototype "name" { meta-settings }]], 2)
+            end
+        end,
+    })
 end
 
 -------------------------------------------------------------------------------
@@ -479,8 +610,10 @@ end
 --      Whether the attribute is inheritable.                                --
 --                                                                           --
 -- * ApplyPhase                                                              --
---      The apply phase of the attribute: 1 - Before the definition of the   --
---  feature, 2 - After the definition of the feature, 3 - in both phase.     --
+--      The apply phase of the attribute:                                    --
+--          1 - Before the definition of the feature                         --
+--          2 - After the definition of the feature                          --
+--          3 - (= 1 + 2) in both phase.                                     --
 --                                                                           --
 -- * Overridable                                                             --
 --      Whether the attribute's saved data is overridable.                   --
@@ -501,7 +634,7 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                          CONST VARIABLES                          --
+    --                          public constants                         --
     -----------------------------------------------------------------------
     -- ATTRIBUTE TARGETS
     ATTRIBUTE_TARGETS_ALL       = 0
@@ -511,35 +644,41 @@ do
     ATTRIBUTE_APPLYPH_AFTERDEF  = 2^1
 
     -----------------------------------------------------------------------
-    --                          Attribute Data                           --
+    --                         private variables                         --
     -----------------------------------------------------------------------
+    -- Attribute Data
     local _AttrTargetTypes      = { [ATTRIBUTE_TARGETS_ALL] = "All" }
     local _AttrUseNameApply     = {}
+
+    -- Attribute Target Data
     local _AttrTargetData       = setmetatable({}, WEAK_KEY)
     local _AttrTargetInrt       = setmetatable({}, WEAK_KEY)
 
-    -- Temporary Cache
+    -- Temporary Cache (Single thread for definition at the same time, so no need to care the conflict)
     local _RegisteredAttrs      = {}
     local _TargetAttrs          = setmetatable({}, WEAK_KEY)
     local _AfterDefineAttrs     = setmetatable({}, WEAK_KEY)
+
+    -----------------------------------------------------------------------
+    --                              Helpers                              --
+    -----------------------------------------------------------------------
     local _SuspendNextConsume   = false
     local _UseWarnInstreadErr   = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
-    -- Helpers
     local getAttributeUsage     = function (attr)
         local info  = _AttrTargetData[getmetatable(attr)]
         return info and info[attribute]
     end
 
-    local getField              = function (obj, field, default, chkType)
+    local getAttrUsageField     = function (obj, field, default, chkType)
         local val   = obj and obj[field]
         if val ~= nil and (not chkType or type(val) == chkType) then return val end
         return default
     end
 
     local getAttributeInfo      = function (attr, field, default, chkType, attrusage)
-        local val   = getField(attr, field, nil, chkType)
-        if val == nil then val = getField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
+        local val   = getAttrUsageField(attr, field, nil, chkType)
+        if val == nil then val = getAttrUsageField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
         if val ~= nil then return val end
         return default
     end
@@ -566,7 +705,10 @@ do
         tinsert(list, idx, attr)
     end
 
-    attribute                   = Prototype "attribute" {
+    -----------------------------------------------------------------------
+    --                             attribute                             --
+    -----------------------------------------------------------------------
+    attribute                   = prototype "attribute" {
         __index                 = {
             -- Apply the registered attributes to the feature
             -- @target          - the target feature
@@ -575,9 +717,11 @@ do
             -- @owner           - the target's owner
             -- @name            - the target's name
             -- @...             - the target's super features, used for inheritance
+            -- return
+            --
             ["ApplyAttributes"] = function(target, targetType, definition, owner, name, ...)
                 local tarAttrs  = _TargetAttrs[target]
-                if tarAttrs  then _TargetAttrs[target] = nil end
+                if tarAttrs then _TargetAttrs[target] = nil end
 
                 -- Check inheritance
                 for i = 1, select("#", ...) do
@@ -726,7 +870,7 @@ do
             -- Clear all registered attributes
             ["Clear"]           = function()
                 if #_RegisteredAttrs > 0 then
-                    Trace("attribute.Clear() is called", 2)
+                    Trace("Registerd attributes are cleared", 2)
                     wipe(_RegisteredAttrs)
                 end
             end;
@@ -788,23 +932,23 @@ do
                 Trace("New attribute type %q is registered", tostring(aType))
 
                 -- Default usage data for attributes
-                attrusage.AttributeTarget   = getField(usage, "AttributeTarget",ATTRIBUTE_TARGETS_ALL,      "number")
-                attrusage.Inheritable       = getField(usage, "Inheritable",    false)
-                attrusage.ApplyPhase        = getField(usage, "ApplyPhase",     ATTRIBUTE_APPLYPH_BEFOREDEF,"number")
-                attrusage.Overridable       = getField(usage, "Overridable",    true)
-                attrusage.ApplyAttribute    = getField(usage, "ApplyAttribute", nil,                        "function")
-                attrusage.Priority          = getField(usage, "Priority",       0,                          "number")
-                attrusage.SubLevel          = getField(usage, "SubLevel",       0,                          "number")
+                attrusage.AttributeTarget   = getAttrUsageField(usage, "AttributeTarget",ATTRIBUTE_TARGETS_ALL,      "number")
+                attrusage.Inheritable       = getAttrUsageField(usage, "Inheritable",    false)
+                attrusage.ApplyPhase        = getAttrUsageField(usage, "ApplyPhase",     ATTRIBUTE_APPLYPH_BEFOREDEF,"number")
+                attrusage.Overridable       = getAttrUsageField(usage, "Overridable",    true)
+                attrusage.ApplyAttribute    = getAttrUsageField(usage, "ApplyAttribute", nil,                        "function")
+                attrusage.Priority          = getAttrUsageField(usage, "Priority",       0,                          "number")
+                attrusage.SubLevel          = getAttrUsageField(usage, "SubLevel",       0,                          "number")
 
                 -- A special data for attribute usage, so the attribute usage won't be overridden
-                attrusage.Final             = getField(usage, "Final", false)
+                attrusage.Final             = getAttrUsageField(usage, "Final", false)
 
                 extAttrs[attribute]         = attrusage
                 _AttrTargetData[aType]      = extAttrs
             end;
 
             -- Register attribute type with name
-            ["RegisterTargetType"] = function(name, useNameAsApplyTarget)
+            ["RegisterTargetType"]  = function(name, useNameAsApplyTarget)
                 local i             = 2^0
                 while _AttrTargetTypes[i] do i = i * 2 end
                 _AttrTargetTypes[i] = name
@@ -813,7 +957,7 @@ do
                 return i
             end;
 
-            ["SuspendNextConsume"] = function()
+            ["SuspendNextConsume"]  = function()
                 _SuspendNextConsume = true
             end;
 
@@ -840,23 +984,6 @@ do
         },
         __newindex              = readOnly,
     }
-
-    -----------------------------------------------------------------------
-    --                         ATTRIBUTE TARGETS                         --
-    -----------------------------------------------------------------------
-    -- ATTRIBUTE TARGETS
-    ATTRIBUTE_TARGETS_NAMESPACE = attribute.RegisterTargetType("Namespace")
-    ATTRIBUTE_TARGETS_ENUM      = attribute.RegisterTargetType("Enum")
-    ATTRIBUTE_TARGETS_STRUCT    = attribute.RegisterTargetType("Struct")
-    ATTRIBUTE_TARGETS_INTERFACE = attribute.RegisterTargetType("Interface")
-    ATTRIBUTE_TARGETS_CLASS     = attribute.RegisterTargetType("Class")
-    ATTRIBUTE_TARGETS_FUNCTION  = attribute.RegisterTargetType("Function")
-    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
-    ATTRIBUTE_TARGETS_METAMETHOD= attribute.RegisterTargetType("Metamethod")
-    ATTRIBUTE_TARGETS_CTOR      = attribute.RegisterTargetType("Constructor")
-    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member", true)
-    ATTRIBUTE_TARGETS_EVENT     = attribute.RegisterTargetType("Event", true)
-    ATTRIBUTE_TARGETS_PROPERTY  = attribute.RegisterTargetType("Property", true)
 end
 
 -------------------------------------------------------------------------------
@@ -867,47 +994,38 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                         Environment Data                          --
+    --                         attribute targets                         --
     -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_FUNCTION  = attribute.RegisterTargetType("Function")
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
+    -----------------------------------------------------------------------
+    -- Registered Keywords
     local _ENVKeys              = {}    -- Keywords for environment type
-    local _KeyAccess                    -- The environment that access the next keyword
+    local _GlobalKeys           = {}    -- Global keywords
+
+    -- Keyword visitor
+    local _KeyVisitor                   -- The environment that access the next keyword
     local _AccessKey                    -- The next keyword
 
     -- Environment Special Field
     local ENV_NS_OWNER          = "__PLOOP_ENV_OWNNS"
     local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
     local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
-    local ENV_AUTOCACHE_OFF     = "__PLOOP_ENV_NAUTO"
 
     local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
 
-    local safeAutoCache         = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
-        (PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK == fakefunc and fakefunc or (function()
-            local lock          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_LOCK
-            local release       = PLOOP_PLATFORM_SETTINGS.MULTI_OS_RELEASE
-            return function(self, key, value, stack)
-                if value ~= nil and not rawget(self, ENV_AUTOCACHE_OFF) then
-                    local result, err = lock(self, 1, 0)
-                    if result then
-                        rawset(self, key, value)
-                        result, err = release(self, result)
-                        if not result then
-                            Error("Auto-cache failed with release%s%s", (stack or 2) + 1, err and " - " or "", err or "")
-                        end
-                    end
-                end
-            end
-        end)())
-        or function(self, key, value)
-            if value ~= nil and not rawget(self, ENV_AUTOCACHE_OFF) then
-                rawset(self, key, value)
-            end
-        end
-
     -- Share Helpers
-    local getValue              = function (self, key) return self[key] end
+    local saferawset            = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED
+        and function(self, key, value, stack)
+            Error("Environment's auto-cache is disabled, you need use local for the %q variable", (stack or 1) + 1, key)
+            rawset(self, key, value)    -- Block next error message, may cause lua error
+        end or rawset
 
-    local getParams             = function (keyword, ...)
+    local saferawget            = function (self, key) return self[key] end     -- Just a joke
+
+    local parseParams           = function (keyword, ...)
         local env, target, definition, flag, stack
         local keyvisitor    = keyword and environment.GetKeywordVisitor(keyword)
 
@@ -981,19 +1099,19 @@ do
     end
 
     GetDefinitionParams         = function (self, ...)
-        local _, _, definition, _, stack = getParams(nil, self, ...)
+        local _, _, definition, _, stack = parseParams(nil, self, ...)
         return definition, stack
     end
 
     -- Used for features like property, event, member and namespace
     GetFeatureParams            = function (ftype, ...)
-        local env, name, definition, flag, stack, keyvisitor = getParams(ftype, ...)
+        local env, name, definition, flag, stack, keyvisitor = parseParams(ftype, ...)
         return env, name, definition, flag, stack, keyvisitor
     end
 
     -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
     GetTypeParams               = function (nType, prototype, ...)
-        local env, target, definition, flag, stack, visitor = getParams(nType, ...)
+        local env, target, definition, flag, stack, visitor = parseParams(nType, ...)
 
         if target then
             if type(target) == "string" then
@@ -1011,7 +1129,7 @@ do
     end
 
     -- Prototypes
-    environment                 = Prototype "environment" {
+    environment                 = prototype "environment" {
         __index                 = {
             ["GetNameSpace"]    = function(env)
                 return namespace.Validate(type(env) == "table" and rawget(env, ENV_NS_OWNER))
@@ -1021,15 +1139,22 @@ do
                 return type(env) == "table" and rawget(env, ENV_BASE_ENV) or nil
             end;
 
-            -- Get value for env, also auto-cache the value to env if auto-cache is toggle on
-            ["GetValue"]        = function(env, name, stack)
+            -- Get value for env, also auto-cache the value to env if auto-cache is true
+            ["GetValue"]        = function(env, name, autocache, stack)
                 local value
                 if type(name) == "string" and type(env) == "table" then
-                    -- Check Keywords
-                    local keys      = _ENVKeys[getmetatable(env)]
-                    value           = keys and keys[name]
+                    -- Check Global Keywords
+                    value           = _GlobalKeys[name]
+
+                    -- Check environment special keywords
+                    if not value then
+                        local keys  = _ENVKeys[getmetatable(env)]
+                        value       = keys and keys[name]
+                    end
+
                     if value then
-                        _KeyAccess  = env
+                        -- Register the keyword visitor
+                        _KeyVisitor = env
                         _AccessKey  = value
                     else
                         -- Check current namespace
@@ -1064,15 +1189,18 @@ do
                                 if ENV_ALLOW_NIL_GLBVAR then
                                     value   = parent[name]
                                 else
-                                    local ok, ret = pcall(getValue, parent, name)
+                                    local ok, ret = pcall(saferawget, parent, name)
                                     if not ok or ret == nil then error(("The global variable %q can't be nil."):format(name), (stack or 1) + 1) end
                                     value   = ret
                                 end
                             end
                         end
 
-                        -- Safe Auto-Cache
-                        safeAutoCache(env, name, value, (stack or 1) + 1)
+                        -- Auto-Cache
+                        if value ~= nil and autocache then
+                            Trace("The %s is auto saving for %s", 3, name, tostring(env))
+                            saferawset(env, name, value, (stack or 1) + 1)
+                        end
                     end
                 end
                 return value
@@ -1080,8 +1208,8 @@ do
 
             ["GetKeywordVisitor"] = function(keyword)
                 local visitor
-                if _AccessKey == keyword then visitor = _KeyAccess end
-                _KeyAccess      = nil
+                if _AccessKey == keyword then visitor = _KeyVisitor end
+                _KeyVisitor     = nil
                 _AccessKey      = nil
                 return visitor
             end;
@@ -1098,15 +1226,8 @@ do
                 tinsert(imports, ns)
             end;
 
-            ["IsAutoCache"]     = function(env)
-                if type(env) ~= "table" then error("Usage: environment.IsAutoCache(env) - the env must be a table", 2) end
-                return not rawget(env, ENV_AUTOCACHE_OFF)
-            end;
-
-            ["RegisterKeyWord"] = function(envtype, key, keyword)
-                if not envtype or (type(envtype) ~= "table" and type(envtype) ~= "userdata") then error("Usage: environment.RegisterKeyWord(envtype, key[, keyword]) - the envtype isn't valid", 2) end
-                _ENVKeys[envtype]   = _ENVKeys[envtype] or {}
-                local keywords      = _ENVKeys[envtype]
+            ["RegisterGlobalKeyword"] = function(key, keyword)
+                local keywords      = _GlobalKeys
 
                 if type(key) == "table" and getmetatable(key) == nil then
                     for k, v in pairs, key do
@@ -1119,12 +1240,20 @@ do
                 end
             end;
 
-            -- SafeAutoCache(self, key, value[, stack])
-            ["SafeAutoCache"]   = safeAutoCache;
+            ["RegisterContextKeyword"] = function(envtype, key, keyword)
+                if not envtype or (type(envtype) ~= "table" and type(envtype) ~= "userdata") then error("Usage: environment.RegisterContextKeyword(envtype, key[, keyword]) - the envtype isn't valid", 2) end
+                _ENVKeys[envtype]   = _ENVKeys[envtype] or {}
+                local keywords      = _ENVKeys[envtype]
 
-            ["SetAutoCache"]    = function(env, auto)
-                if type(env) ~= "table" then error("Usage: environment.SetAutoCache(env, auto) - the env must be a table", 2) end
-                rawset(env, ENV_AUTOCACHE_OFF, not auto or nil)
+                if type(key) == "table" and getmetatable(key) == nil then
+                    for k, v in pairs, key do
+                        if type(k) ~= "string" then k = tostring(v) end
+                        if not keywords[k] and v then keywords[k] = v end
+                    end
+                else
+                    if type(key) ~= "string" then key, keyword= tostring(key), key end
+                    if key and not keywords[key] and keyword then keywords[key] = keyword end
+                end
             end;
 
             ["SetNameSpace"]    = function(env, ns)
@@ -1157,7 +1286,7 @@ do
     end
 
     -- Simple environment
-    tenvironment                = Prototype "tenvironment" {
+    tenvironment                = prototype "tenvironment" {
         __index                 = environment.GetValue,
         __tostring              = false, -- Environment's value maybe used as lock key, so keep __tostring nil
     }
@@ -1168,7 +1297,12 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                          Namespace Data                           --
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_NAMESPACE = attribute.RegisterTargetType("Namespace")
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
     -----------------------------------------------------------------------
     local _NSTree               = setmetatable({}, WEAK_KEY)
     local _NSName               = setmetatable({}, WEAK_KEY)
@@ -1178,7 +1312,7 @@ do
     local GetNameSpace
 
     -- Prototype
-    namespace                   = Prototype "namespace" {
+    namespace                   = prototype "namespace" {
         __index     = {
             -- Export a namespace and its children to an environment
             ["ExportNameSpace"] = function(env, ns, override)
@@ -1202,7 +1336,7 @@ do
             -- Generate namespace by access name(if it is nil, anonymous namespace could be created)
             ["GenerateNameSpace"] = function(parent, name, prototype)
                 if type(parent) == "string" then name, prototype, parent = parent, name, nil end
-                prototype = prototype and Prototype.Validate(prototype) or tnamespace
+                prototype = prototype and prototype.Validate(prototype) or tnamespace
 
                 if type(name) == "string" then
                     if parent ~= nil then
@@ -1227,7 +1361,7 @@ do
                             sns = _NSTree[ns][sn]
 
                             if not sns then
-                                sns = Prototype.NewProxy(nxt and tnamespace or prototype)
+                                sns = prototype.NewProxy(nxt and tnamespace or prototype)
                                 _NSName[sns] = _NSName[ns] and _NSName[ns] .. "." .. sn or sn
                                 _NSTree[ns][sn] = sns
                             end
@@ -1239,7 +1373,7 @@ do
                     if ns ~= parent then return ns end
                     error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string like 'System.Collections.List'", 2)
                 elseif name == nil then
-                    local ns = Prototype.NewProxy(prototype)
+                    local ns = prototype.NewProxy(prototype)
                     _NSName[ns] = false
                     return ns
                 else
@@ -1316,7 +1450,7 @@ do
     GetNameSpace                = namespace.GetNameSpace
 
     -- default type for namespace
-    tnamespace                  = Prototype "tnamespace" {
+    tnamespace                  = prototype "tnamespace" {
         __index                 = GetNameSpace,
         __newindex              = readOnly,
         __tostring              = namespace.GetNameSpaceName,
@@ -1332,7 +1466,12 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                             Enum Data                             --
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_ENUM      = attribute.RegisterTargetType("Enum")
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
     -----------------------------------------------------------------------
     local _EnumInfo             = setmetatable({}, WEAK_KEY)
     local _EnumBuilderInfo      = setmetatable({}, WEAK_KEY)
@@ -1360,12 +1499,12 @@ do
     local FLG_FLAGS_ENUM        = 2^0
     local FLG_CASE_IGNORED      = 2^1
 
-    local getTargetInfo         = function (target)
+    local getEnumTargetInfo     = function (target)
         local info  = _EnumBuilderInfo[target]
         if info then return info, true else return _EnumInfo[target], false end
     end
 
-    local generateValidator     = function (info)
+    local genEnumValidator      = function (info)
         local token = 0
 
         if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
@@ -1426,7 +1565,7 @@ do
         info[FLD_ENUM_VALID] = _EnumValidMap[token]
     end
 
-    enum                        = Prototype "enum" {
+    enum                        = prototype "enum" {
         __index                 = {
             ["BeginDefinition"] = function(target, stack)
                 stack   = type(stack) == "number" and stack or 2
@@ -1434,19 +1573,19 @@ do
                 target  = enum.Validate(target)
                 if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
 
-                local info  = _EnumInfo[target]
+                local info      = _EnumInfo[target]
 
                 -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _EnumBuilderInfo[target] = info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
-                    [FLD_ENUM_MOD]      = MOD_ENUM_INIT,
-                    [FLD_ENUM_ITEMS]     = {},
-                    [FLD_ENUM_CACHE]    = {},
-                    [FLD_ENUM_ERRMSG]       = "%s must be a value of [" .. tostring(target) .."]",
-                    [FLD_ENUM_VALID]    = false,
+                _EnumBuilderInfo[target]  = info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                    [FLD_ENUM_MOD]        = MOD_ENUM_INIT,
+                    [FLD_ENUM_ITEMS]      = {},
+                    [FLD_ENUM_CACHE]      = {},
+                    [FLD_ENUM_ERRMSG]     = "%s must be a value of [" .. tostring(target) .."]",
+                    [FLD_ENUM_VALID]      = false,
                     [FLD_ENUM_MAXVAL]     = false,
-                    [FLD_ENUM_DEFAULT]  = nil,
+                    [FLD_ENUM_DEFAULT]    = nil,
                 }
 
                 attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, nil, nil, stack + 1)
@@ -1479,7 +1618,7 @@ do
                                 if cache[0] then
                                     error(strformat("The %s and %s can't be the same value", k, cache[0]), stack)
                                 else
-                                    cache[0]        = k
+                                    cache[0] = k
                                 end
                             elseif v > 0 then
                                 count   = count + 1
@@ -1512,8 +1651,8 @@ do
                     for k, v in pairs, enums do
                         if v == -1 then
                             while cache[2^n] do n = n + 1 end
-                            cache[2^n] = k
-                            enums[k]   = 2^n
+                            cache[2^n]  = k
+                            enums[k]    = 2^n
                         end
                     end
 
@@ -1530,7 +1669,7 @@ do
                     end
                 end
 
-                generateValidator(ninfo)
+                genEnumValidator(ninfo)
 
                 -- Check Default
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
@@ -1549,7 +1688,7 @@ do
             end;
 
             ["GetDefault"]      = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and info[FLD_ENUM_DEFAULT]
             end;
 
@@ -1566,17 +1705,17 @@ do
             end;
 
             ["IsCaseIgnored"]   = function(target)
-                local info  = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) or false
             end;
 
             ["IsFlagsEnum"]     = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
             ["IsSealed"]        = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
@@ -1629,7 +1768,7 @@ do
             end;
 
             ["SetDefault"]      = function(target, default, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -1641,7 +1780,7 @@ do
             end;
 
             ["SetEnumValue"]    = function(target, key, value, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -1664,7 +1803,7 @@ do
             end;
 
             ["SetCaseIgnored"]  = function(target, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -1684,7 +1823,7 @@ do
             end;
 
             ["SetFlagsEnum"]    = function(target, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -1699,7 +1838,7 @@ do
             end;
 
             ["SetSealed"]       = function(target, stack)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -1738,7 +1877,7 @@ do
 
             enum.BeginDefinition(target, stack + 1)
 
-            local builder = Prototype.NewObject(enumbuilder)
+            local builder = prototype.NewObject(enumbuilder)
             environment.SetNameSpace(builder, target)
 
             if definition then
@@ -1750,13 +1889,13 @@ do
         end,
     }
 
-    tenum                       = Prototype "tenum" (tnamespace, {
+    tenum                       = prototype "tenum" (tnamespace, {
         __index                 = enum.ValidateValue,
         __call                  = enum.Parse,
         __metatable             = enum,
     })
 
-    enumbuilder                 = Prototype "enumbuilder" {
+    enumbuilder                 = prototype "enumbuilder" {
         __index                 = writeOnly,
         __newindex              = readOnly,
         __call                  = function(self, ...)
@@ -1785,20 +1924,26 @@ do
     }
 end
 
-
 -------------------------------------------------------------------------------
 --                                 structure                                 --
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                               Const                               --
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_STRUCT    = attribute.RegisterTargetType("Struct")
+    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
+    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member", true)
+
+    -----------------------------------------------------------------------
+    --                          public constants                         --
     -----------------------------------------------------------------------
     STRUCT_TYPE_MEMBER          = "MEMBER"
     STRUCT_TYPE_ARRAY           = "ARRAY"
     STRUCT_TYPE_CUSTOM          = "CUSTOM"
 
     -----------------------------------------------------------------------
-    --                            Struct Data                            --
+    --                         private variables                         --
     -----------------------------------------------------------------------
     local _StrtInfo             = setmetatable({}, WEAK_KEY)
     local _DependenceMap        = setmetatable({}, WEAK_KEY)
@@ -1854,12 +1999,12 @@ do
 
     local STRUCT_BUILDER_NEWMTD = "__PLOOP_BD_NEWMTD"
 
-    local getTargetInfo         = function (target)
+    local getEnumTargetInfo     = function (target)
         local info  = _StructBuilderInfo[target]
         if info then return info, true else return _StrtInfo[target], false end
     end
 
-    local setBuilderOwnerValue  = function (self, key, value, stack, notnewindex)
+    local setStructBuilderValue = function (self, key, value, stack, notnewindex)
         local owner = environment.GetNameSpace(self)
         if not (owner and _StructBuilderInDefine[self]) then error("The structure's definition is finished", stack) end
 
@@ -1915,19 +2060,19 @@ do
     end
 
     -- Update dependence
-    local notAllSealed          = function (target)
+    local notAllSealedStruct    = function (target)
         if target and struct.Validate(target) then
-            local info, def = getTargetInfo(target)
+            local info, def = getEnumTargetInfo(target)
 
             if def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
                 return true
             end
 
             if info[FLD_STRUCT_ARRAY] then
-                return notAllSealed(info[FLD_STRUCT_ARRAY])
+                return notAllSealedStruct(info[FLD_STRUCT_ARRAY])
             elseif info[FLD_STRUCT_MEMBERSTART] then
                 for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                    if notAllSealed(m) then
+                    if notAllSealedStruct(m) then
                         return true
                     end
                 end
@@ -1935,9 +2080,9 @@ do
         end
     end
 
-    local checkDependence       = function (target, chkType)
+    local checkStructDependence = function (target, chkType)
         if target ~= chkType then
-            if notAllSealed(chkType) then
+            if notAllSealedStruct(chkType) then
                 _DependenceMap[chkType]         = _DependenceMap[chkType] or setmetatable({}, WEAK_KEY)
                 _DependenceMap[chkType][target] = true
             elseif chkType and _DependenceMap[chkType] then
@@ -1947,26 +2092,26 @@ do
         end
     end
 
-    local refreshDependence     = function (target, info)
-        info = info or getTargetInfo(target)
+    local updateStructDependence= function (target, info)
+        info = info or getEnumTargetInfo(target)
 
         if info[FLD_STRUCT_ARRAY] then
-            checkDependence(target, info[FLD_STRUCT_ARRAY])
+            checkStructDependence(target, info[FLD_STRUCT_ARRAY])
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                checkDependence(target, m)
+                checkStructDependence(target, m)
             end
         end
     end
 
     -- Cache required
-    local checkRepeatType       = function (target, info)
+    local checkRepeatStructType = function (target, info)
         if info[FLD_STRUCT_ARRAY] then
             if info[FLD_STRUCT_ARRAY] == target then return true end
-            return checkRepeatType(target, getTargetInfo(info[FLD_STRUCT_ARRAY]))
+            return checkRepeatStructType(target, getEnumTargetInfo(info[FLD_STRUCT_ARRAY]))
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                if m == target or checkRepeatType(target, getTargetInfo(m)) then
+                if m == target or checkRepeatStructType(target, getEnumTargetInfo(m)) then
                     return true
                 end
             end
@@ -1976,7 +2121,7 @@ do
     end
 
     -- Validator
-    local generateValidator     = function (info)
+    local genStructValidator    = function (info)
         local token = 0
         local upval = _Cache()
 
@@ -2205,7 +2350,7 @@ do
     end
 
     -- Ctor
-    local generateConstructor   = function (info)
+    local genStructConstructor  = function (info)
         local token = 0
         local upval = _Cache()
 
@@ -2383,7 +2528,7 @@ do
     end
 
     -- Refresh Depends
-    local refreshDepends        = function (target, cache)
+    local updateStructDepends   = function (target, cache)
         local map = _DependenceMap[target]
 
         if map then
@@ -2393,20 +2538,20 @@ do
                 if not cache[t] then
                     cache[t] = true
 
-                    local info, def = getTargetInfo(t)
+                    local info, def = getEnumTargetInfo(t)
                     if not def then
-                        refreshDependence(t, info)
+                        updateStructDependence(t, info)
 
-                        local nVcache = checkRepeatType(t, info)
+                        local nVcache = checkRepeatStructType(t, info)
 
                         if nVcache ~= info[FLD_STRUCT_VALIDCACHE] then
                             info[FLD_STRUCT_VALIDCACHE] = nVcache
 
-                            generateValidator(info)
-                            generateConstructor(info)
+                            genStructValidator(info)
+                            genStructConstructor(info)
                         end
 
-                        refreshDepends(t, cache)
+                        updateStructDepends(t, cache)
                     end
                 end
             end
@@ -2415,10 +2560,10 @@ do
         end
     end
 
-    struct                      = Prototype "struct" {
+    struct                      = prototype "struct" {
         __index                 = {
             ["AddMember"]       = function(target, name, definition, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
 
                 if type(name) == "table" then
                     definition, stack, name = name, definition, nil
@@ -2515,7 +2660,7 @@ do
             end;
 
             ["AddMethod"]       = function(target, name, func, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2554,7 +2699,7 @@ do
 
                     if not def and not hasMethod then
                         -- Need re-generate validator
-                        generateValidator(info)
+                        genStructValidator(info)
                     end
                 else
                     error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
@@ -2705,12 +2850,12 @@ do
                     ninfo[FLD_STRUCT_ERRMSG]  = strformat("[%s]", tostring(target))
                 end
 
-                ninfo[FLD_STRUCT_VALIDCACHE]    = checkRepeatType(target, ninfo)
+                ninfo[FLD_STRUCT_VALIDCACHE]    = checkRepeatStructType(target, ninfo)
 
-                refreshDependence(target, ninfo)
+                updateStructDependence(target, ninfo)
 
-                generateValidator(ninfo)
-                generateConstructor(ninfo)
+                genStructValidator(ninfo)
+                genStructConstructor(ninfo)
 
                 -- Check the default value is it's custom struct
                 if ninfo[FLD_STRUCT_DEFAULT] ~= nil then
@@ -2732,7 +2877,7 @@ do
                 if _DependenceMap[target] then
                     local cache = _Cache()
                     cache[target] = true
-                    refreshDepends(target, cache)
+                    updateStructDepends(target, cache)
                     _Cache(cache)
                 end
 
@@ -2740,22 +2885,22 @@ do
             end;
 
             ["GetArrayElement"] = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and info[FLD_STRUCT_ARRAY]
             end;
 
             ["GetBaseStruct"]   = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and info[FLD_STRUCT_BASE]
             end;
 
             ["GetDefault"]      = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and info[FLD_STRUCT_DEFAULT]
             end;
 
             ["GetMember"]       = function(target, name)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     local idx   = FLD_STRUCT_MEMBERSTART
                     local minfo = info[idx]
@@ -2770,7 +2915,7 @@ do
             end;
 
             ["GetMembers"]      = function(target, cache)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
@@ -2799,22 +2944,22 @@ do
             end;
 
             ["GetMethod"]       = function(target, name)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 return info and type(name) == "string" and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or nil
             end;
 
             ["GetObjectMethod"] = function(target, name)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and type(name) == "string" and info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] or nil
             end;
 
             ["GetStaticMethod"] = function(target, name)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and type(name) == "string" and info[name] or nil
             end;
 
             ["GetMethods"]      = function(target, cache)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -2836,7 +2981,7 @@ do
             end;
 
             ["GetObjectMethods"]= function(target, cache)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -2859,7 +3004,7 @@ do
             end;
 
             ["GetStaticMethods"]= function(target, cache)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -2882,7 +3027,7 @@ do
             end;
 
             ["GetStructType"]   = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 if info then
                     if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
                     if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
@@ -2894,7 +3039,7 @@ do
                 if struct.Validate(base) then
                     while target do
                         if target == base then return true end
-                        local i = getTargetInfo(target)
+                        local i = getEnumTargetInfo(target)
                         target  = i and i[FLD_STRUCT_BASE]
                     end
                 end
@@ -2902,17 +3047,17 @@ do
             end;
 
             ["IsSealed"]        = function(target)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
             end;
 
             ["IsStaticMethod"]  = function(target, name)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 return info and type(name) == "string" and info[name] and true or false
             end;
 
             ["SetArrayElement"] = function(target, eleType, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2931,7 +3076,7 @@ do
             end;
 
             ["SetBaseStruct"]   = function(target, base, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2944,7 +3089,7 @@ do
             end;
 
             ["SetDefault"]      = function(target, default, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2956,7 +3101,7 @@ do
             end;
 
             ["SetValidator"]    = function(target, func, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2969,7 +3114,7 @@ do
             end;
 
             ["SetInitializer"]  = function(target, func, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2982,7 +3127,7 @@ do
             end;
 
             ["SetSealed"]       = function(target, stack)
-                local info      = getTargetInfo(target)
+                local info      = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -2995,7 +3140,7 @@ do
             end;
 
             ["SetStaticMethod"] = function(target, name, stack)
-                local info, def = getTargetInfo(target)
+                local info, def = getEnumTargetInfo(target)
                 stack = type(stack) == "number" and stack or 2
 
                 if info then
@@ -3042,10 +3187,10 @@ do
 
             struct.BeginDefinition(target, stack + 1)
 
-            local tarenv = Prototype.NewObject(structbuilder)
+            local tarenv = prototype.NewObject(structbuilder)
             environment.SetNameSpace(tarenv, target)
             environment.SetParent(tarenv, env)
-            environment.SetAutoCache(tarenv, false)
+            environment.ToggleDefineMode(tarenv, true)
 
             _StructBuilderInDefine[tarenv] = true
 
@@ -3059,7 +3204,7 @@ do
         end,
     }
 
-    tstruct                     = Prototype "tstruct" (tnamespace, {
+    tstruct                     = prototype "tstruct" (tnamespace, {
         __index                 = function(self, name)
             if type(name) == "string" then
                 local info  = _StrtInfo[self]
@@ -3081,13 +3226,13 @@ do
         __metatable             = struct,
     })
 
-    structbuilder               = Prototype "structbuilder" {
+    structbuilder               = prototype "structbuilder" {
         __index                 = function(self, key)
             local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             return newMethod and newMethod[key] and struct.GetMethod(environment.GetNameSpace(self), key) or environment.GetValue(self, key)
         end,
         __newindex              = function(self, key, value)
-            if not setBuilderOwnerValue(self, key, value, 3) then
+            if not setStructBuilderValue(self, key, value, 3) then
                 return rawset(self, key, value)
             end
         end,
@@ -3105,18 +3250,18 @@ do
             else
                 -- Check base struct first
                 if definition[STRUCT_KEYWORD_BASE] ~= nil then
-                    setBuilderOwnerValue(self, STRUCT_KEYWORD_BASE, definition[STRUCT_KEYWORD_BASE], stack, true)
+                    setStructBuilderValue(self, STRUCT_KEYWORD_BASE, definition[STRUCT_KEYWORD_BASE], stack, true)
                     definition[STRUCT_KEYWORD_BASE] = nil
                 end
 
                 -- Index key
                 for i, v in ipairs, definition, 0 do
-                    setBuilderOwnerValue(self, i, v, stack, true)
+                    setStructBuilderValue(self, i, v, stack, true)
                 end
 
                 for k, v in pairs, definition do
                     if type(k) == "string" then
-                        setBuilderOwnerValue(self, k, v, stack, true)
+                        setStructBuilderValue(self, k, v, stack, true)
                     end
                 end
             end
@@ -3124,7 +3269,7 @@ do
             struct.EndDefinition(owner, stack)
 
             _StructBuilderInDefine[self]    = nil
-            environment.SetAutoCache(self, true)
+            environment.ToggleDefineMode(self, false)
 
             local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             if newMethod then
@@ -3141,7 +3286,7 @@ do
     }
 
     -- Key feature : member "Name" { Type = String, Default = "Anonymous", Require = false}
-    member                      = Prototype "member" {
+    member                      = prototype "member" {
         __index                 = writeOnly,
         __newindex              = readOnly,
         __call                  = function(self, ...)
@@ -3157,7 +3302,7 @@ do
                     if type(definition) ~= "table" then error([[Usage: member ("name", {...}) - the definition must be a table.]], stack) end
                     struct.AddMember(owner, name, definition, stack + 1)
                 else
-                    return Prototype.NewObject(member, { name = name, owner = owner })
+                    return prototype.NewObject(member, { name = name, owner = owner })
                 end
             else
                 local owner, name       = self.owner, self.name
@@ -3184,7 +3329,7 @@ do
         struct.EndDefinition(owner, stack + 1)
 
         _StructBuilderInDefine[keyvisitor]  = nil
-        environment.SetAutoCache(keyvisitor, true)
+        environment.ToggleDefineMode(keyvisitor, false)
 
         local newMethod     = rawget(keyvisitor, STRUCT_BUILDER_NEWMTD)
         if newMethod then
@@ -3207,7 +3352,16 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                             Type Data                             --
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_INTERFACE = attribute.RegisterTargetType("Interface")
+    ATTRIBUTE_TARGETS_CLASS     = attribute.RegisterTargetType("Class")
+    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
+    ATTRIBUTE_TARGETS_METAMETHOD= attribute.RegisterTargetType("Metamethod")
+    ATTRIBUTE_TARGETS_CTOR      = attribute.RegisterTargetType("Constructor")
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
     -----------------------------------------------------------------------
     local _ICInfo   = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
     local _BDInfo   = setmetatable({}, WEAK_KEY)        -- TYPE BUILDER INFO
@@ -4067,7 +4221,7 @@ do
 
         if msg then error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - ", tostring(tType), tostring(tType)) .. msg, stack) end
 
-        if not Prototype.Validate(ftype) then error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid", tostring(tType), tostring(tType)), stack) end
+        if not prototype.Validate(ftype) then error(strformat("Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - the featureType is not valid", tostring(tType), tostring(tType)), stack) end
         if META_KEYS[name] or name == MTD_DISPOB then error(strformat("Usage: Usage: %s.AddFeature(%s, featureType, name[, definition][, stack]) - The %s can't be used as feature name", tostring(tType), tostring(tType), name), stack) end
 
         local f = ftype.BeginDefinition(target, name, definition, getSuperFeature(info, name, ftype), stack + 1)
@@ -4332,7 +4486,7 @@ do
         end
     end
 
-    interface       = Prototype "interface" {
+    interface       = prototype "interface" {
         __index     = {
             ["AddExtend"]       = function(target, extendinterface, stack)
                 addExtend(interface, target, extendinterface, stack)
@@ -4860,7 +5014,7 @@ do
 
             interface.BeginDefinition(target, stack + 1)
 
-            local tarenv = Prototype.NewObject(interfacebuilder)
+            local tarenv = prototype.NewObject(interfacebuilder)
             environment.SetNameSpace(tarenv, target)
             environment.SetParent(env)
 
@@ -4874,7 +5028,7 @@ do
         end,
     }
 
-    class           = Prototype "calss" {
+    class           = prototype "calss" {
         __index     = {
             ["AddExtend"]       = function(target, extendinterface, stack)
                 addExtend(class, target, extendinterface, stack)
@@ -5258,7 +5412,7 @@ do
 
             class.BeginDefinition(target, stack + 1)
 
-            local tarenv = Prototype.NewObject(classbuilder)
+            local tarenv = prototype.NewObject(classbuilder)
             environment.SetNameSpace(tarenv, target)
             environment.SetParent(env)
 
@@ -5272,7 +5426,7 @@ do
         end,
     }
 
-    tinterface      = Prototype "tinterface" (tnamespace, {
+    tinterface      = prototype "tinterface" (tnamespace, {
         __index     = function(self, key)
             if type(key) == "string" then
                 -- Access methods
@@ -5344,7 +5498,7 @@ do
         __metatable = interface,
     })
 
-    tclass          = Prototype "tclass" (tinterface, {
+    tclass          = prototype "tclass" (tinterface, {
         __newindex  = function(self, key, value)
             if type(key) == "string" then
                 local info  = _ICInfo[self]
@@ -5372,7 +5526,7 @@ do
         __metatable = class,
     })
 
-    tSuperInterface = Prototype "tSuperInterface" {
+    tSuperInterface = prototype "tSuperInterface" {
         __index     = function(self, key)
             local t = type(key)
 
@@ -5413,21 +5567,21 @@ do
         __metatable = interface,
     }
 
-    tSuperClass     = Prototype "tSuperClass" (tSuperInterface, {
+    tSuperClass     = prototype "tSuperClass" (tSuperInterface, {
         __call      = function(self, obj, ...)
 
         end,
         __metatable = class,
     })
 
-    tThisClass      = Prototype "tThisClass" {
+    tThisClass      = prototype "tThisClass" {
         __call      = function(self, obj, ...)
 
         end,
         __metatable = class,
     }
 
-    interfacebuilder= Prototype "interfacebuilder" {
+    interfacebuilder= prototype "interfacebuilder" {
         __index     = function(self, key)
             local val, cache = getBuilderValue(self, key)
 
@@ -5481,11 +5635,11 @@ do
         end,
     }
 
-    classbuilder    = Prototype "classbuilder" ( interfacebuilder, {
+    classbuilder    = prototype "classbuilder" ( interfacebuilder, {
 
     })
 
-    typefeature     = Prototype "typefeature" {
+    typefeature     = prototype "typefeature" {
         __index     = {
             ["New"]             = function(owner, name, definition, stack)
             end;
@@ -5503,7 +5657,12 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                            Event Data                             --
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_EVENT     = attribute.RegisterTargetType("Event", true)
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
     -----------------------------------------------------------------------
     local _EvtInfo  = setmetatable({}, WEAK_KEY)
 
@@ -5513,10 +5672,10 @@ do
     local FD_INDEF  = 3
 
     -- Key feature : event "Name"
-    event           = Prototype "event" (typefeature, {
+    event           = prototype "event" (typefeature, {
         __index     = {
             ["BeginDefinition"] = function(owner, name, definition, super, stack)
-                local evt       = Prototype "name" (tevent)
+                local evt       = prototype "name" (tevent)
                 _EvtInfo[evt]   = setmetatable({ [FD_NAME] = name, [FD_OWNER] = owner, [FD_INDEF] = true }, WEAK_KEY)
 
                 attribute.ConsumeAttributes(evt, ATTRIBUTE_TARGETS_EVENT, owner, name, stack + 1)
@@ -5580,7 +5739,7 @@ do
         end;
     })
 
-    tevent          = Prototype "tevent" {
+    tevent          = prototype "tevent" {
         __call      = event.Invoke,
     }
 end
@@ -5589,8 +5748,20 @@ end
 --                                 property                                  --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRIBUTE_TARGETS_PROPERTY  = attribute.RegisterTargetType("Property", true)
+
+    -----------------------------------------------------------------------
+    --                         private variables                         --
+    -----------------------------------------------------------------------
+
+    -----------------------------------------------------------------------
+    --                             property                              --
+    -----------------------------------------------------------------------
     -- Key feature : property "Name" { Type = String, Default = "Anonymous" }
-    property        = Prototype "property" {
+    property        = prototype "property" {
         __index     = {
             ["New"]             = function(self, owner, name)
 
@@ -5610,7 +5781,7 @@ do
                     if type(definition) ~= "table" then error([[Usage: property ("name", {...}) - the definition must be a table.]], stack) end
                     getmetatable(owner).AddFeature(owner, property, name, definition, stack + 1)
                 else
-                    return Prototype.NewObject(property, { name = name, owner = owner })
+                    return prototype.NewObject(property, { name = name, owner = owner })
                 end
             else
                 local owner, name       = self.owner, self.name
@@ -5626,14 +5797,14 @@ do
         end,
     }
 
-    tproperty       = Prototype "tproperty" { __metatable = property }
+    tproperty       = prototype "tproperty" { __metatable = property }
 end
 
 -------------------------------------------------------------------------------
 --                           Feature Installation                            --
 -------------------------------------------------------------------------------
 do
-    environment.RegisterKeyWord(structbuilder, {
+    environment.RegisterContextKeyword(structbuilder, {
         import          = import,
         member          = member,
         endstruct       = endstruct,
@@ -5643,7 +5814,7 @@ do
         interface       = interface,
     })
 
-    environment.RegisterKeyWord(interfacebuilder, {
+    environment.RegisterContextKeyword(interfacebuilder, {
         import          = import,
         --extend          = extend,
         event           = event,
@@ -5655,7 +5826,7 @@ do
         interface       = interface,
     })
 
-    environment.RegisterKeyWord(classbuilder, {
+    environment.RegisterContextKeyword(classbuilder, {
         import          = import,
         --inherit         = inherit,
         --extend          = extend,
@@ -5668,7 +5839,7 @@ do
         interface       = interface,
     })
 
-    _G.PLoop = Prototype "PLoop" {
+    _G.PLoop = prototype "PLoop" {
         __index = {
             namespace   = namespace,
             enum        = enum,

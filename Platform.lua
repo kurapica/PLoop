@@ -4,56 +4,73 @@
 --                                                                           --
 --===========================================================================--
 
-PLOOP_PLATFORM_SETTINGS = PLOOP_PLATFORM_SETTINGS or {
-    -- ==Attribute==
-    -- Whether the attribute system use warning instead of error for invalid attribtue target type.
-    ATTR_USE_WARN_INSTEAD_ERROR = false,
+--- This is an example for platform settings, so the PLoop.init won't load it.
+--
+-- It's optional and so its fields.
+--
+-- The settings should be provided by the framework that based on the target
+-- platform, and should be applied before loading the PLoop.
+PLOOP_PLATFORM_SETTINGS = {
+    -- Attribute
 
-    -- ==Environment==
-    -- Whether the environmet allow global variable be nil, if false, things like ture(spell error)
+    --- Whether the attribute system use warning instead of error for invalid attribtue target type.
+    ATTR_USE_WARN_INSTEAD_ERROR         = false,
+
+    -- Environment
+
+    --- Whether the environmet allow global variable be nil, if false, things like ture(spell error)
     -- could be notified, but it require more usage of pcall and error.
-    ENV_ALLOW_GLOBAL_VAR_BE_NIL = true,
+    ENV_ALLOW_GLOBAL_VAR_BE_NIL         = false,
 
-    -- ==Enum==
-    -- Whether all enumerations are case ignored.
-    ENUM_GLOBAL_IGNORE_CASE     = false,
+    -- Enum
 
-    -- ==Struct==
+    --- Whether all enumerations are case ignored.
+    ENUM_GLOBAL_IGNORE_CASE             = false,
 
-    -- ==Interface X Class X Object==
-    -- Whether all old objects keep using new features when their classes or extend interfaces are re-defined.
-    CLASS_ALL_SIMPLE_VERSION    = false,
+    -- Struct
 
-    -- Whether all interfaces & classes only use Super.Method(obj, ...) to call super's features, don't use new
+    -- Interface X Class X Object
+
+    --- Whether all old objects keep using new features when their classes or extend interfaces are re-defined.
+    CLASS_ALL_SIMPLE_VERSION            = false,
+
+    --- Whether all interfaces & classes only use Super.Method(obj, ...) to call super's features, don't use new
     -- style like :
     --              Super[obj].Name = "Ann"
     --              Super[obj].OnNameChanged = Super[obj].OnNameChanged + print
     --              Super[obj]:Greet("King")
-    CLASS_ALL_OLD_SUPER_STYLE   = false,
+    CLASS_ALL_OLD_SUPER_STYLE           = false,
 
-    -- ==Log==
-    -- The Log level used in the Prototype core part.
+    -- Log
+
+    --- The Log level used in the Prototype core part.
     --          1 : Trace
     --          2 : Debug
     --          3 : Info
     --          4 : Warn
     --          5 : Error
     --          6 : Fatal
-    CORE_LOG_LEVEL      = 3,
+    CORE_LOG_LEVEL                      = 1,
 
-    --  The core log handler, default print.
+    ---  The core log handler, default print.
     --      function CORE_LOG_HANDLER(message, loglevel)
     --          -- message  : the log message
     --          -- loglevel : the log message's level
     --      end
-    CORE_LOG_HANDLER    = print,
+    CORE_LOG_HANDLER                    = print,
 
-    -- ==Multi-thread==
-    -- Whether the system is used in a platform where multi os threads share one lua-state,
+    -- Multi-thread
+
+    --- Whether the system is used in a platform where multi os threads share one lua-state,
     -- so the access conflict can't be ignore.
-    MULTI_OS_THREAD     = false,
+    MULTI_OS_THREAD                     = false,
 
-    -- The API provided by platform so PLoop can use it to void access conflict, only work ,
+    --- Whether the system is used in a platform where multi os threads share one lua-state, and
+    -- the lua_lock and lua_unlock apis are applied, so PLoop don't need to care about the thread
+    -- conflict.
+    MULTI_OS_THREAD_LUA_LOCK_APPLIED    = false,
+
+    --- The API provided by platform so PLoop can use it to void access conflict, only work ,
     -- when MULTI_OS_THREAD is true.
     --      function MULTI_OS_LOCK(key[, expiration[, timeout]])
     --          -- key          : The lock's key, normally special object
@@ -68,7 +85,7 @@ PLOOP_PLATFORM_SETTINGS = PLOOP_PLATFORM_SETTINGS or {
     --      end
     MULTI_OS_LOCK       = nil,
 
-    -- The API provided by platform used to release the lock, only work when MULTI_OS_THREAD is true.                              --
+    --- The API provided by platform used to release the lock, only work when MULTI_OS_THREAD is true.                              --
     --      function MULTI_OS_RELEASE(key, lockresult)
     --          -- key          : The lock's key
     --          -- lockresult   : The result of the lock

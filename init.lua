@@ -1,6 +1,3 @@
--- Option
-require "PLoop.Platform"
-
 -- Core
 local root = require "PLoop.Core"
 

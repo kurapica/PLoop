@@ -452,7 +452,7 @@ do
             if iType == TYPE_CLASS then
                 -- Create Class object, using ret avoid tail call error stack
                 local ret = Class2Obj(info, ...)
-                _DebugMap[ret] = debug.getinfo(2)
+                --_DebugMap[ret] = debug.getinfo(2)
                 return ret
             elseif iType == TYPE_STRUCT then
                 -- Create Struct
@@ -3636,11 +3636,20 @@ do
 
             -- Check Static Property
             value = info.Property and info.Property[key]
-            if value and value.IsStatic then return info.Owner[key] end
+            --if value and value.IsStatic then return info.Owner[key] end
+            if value and value.IsStatic then
+                error("Can't access static property " .. key .." directly.", 2)
+            end
 
             -- Check others
             value = __index(self, info, key)
             if value ~= nil then rawset(self, key, value) return value end
+
+            error("Can't index the " .. key ..".", 2)
+        end
+
+        _MetaClsEnv.__newindex = function(self, key, value)
+            error("Can't set " .. key .. " during runtime.", 2)
         end
 
         _MetaClsDefEnv.__index = function(self, key)
