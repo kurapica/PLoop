@@ -30,7 +30,7 @@ The second empty comment line would be ignored since the next line is a code and
 
 Comments like '---xxxxx---' xxxx would be ignored.
 
-If there are no valid feature like type, table, function and etc or special tag is used like @module, the comment should be ignored.
+If there are no valid feature like type, table, function and others or auto infered tag like @module, @prototype, @method is used, the comment should be ignored.
 
 Comments like
 
@@ -118,14 +118,14 @@ Here is a list of comment tags used in the PLDoc:
         * event <word>          -- the event name.                      <auto infered>
         * meta-method <word>    -- supported meta-method name.          <auto infered>
         * method <word>         -- the method name.                     <auto infered>
-        * static-method <word>  -- the static method name.              <auto infered>
+        * static                -- the feature is static.               <auto infered>
 
     * common tags:
         * @author <text>        -- the author of the Module, class, interface or other features.
         * @copyright <text>     -- the copyright notice of the feature.
         * @description <text>   -- the description of the next feature. <auto infered>
         * @field <text>         -- the description of a table's field.
-        * @param <word> <text>  -- the function's parameter with description, multi supported.
+        * @param <word> (<type>) <text>  -- the function's parameter with its type and description, multi supported.
         * @release <text>       -- the release description.
         * @return <text>        -- the return value's description, multi supported.
         * @section <text>       --
@@ -135,8 +135,8 @@ Here is a list of comment tags used in the PLDoc:
         * @region <text>        -- start of a region.
         * @endregion <text>     -- end of a region, shoud be pairs with the @region.
         * @owner <word>         -- the owner of the features, must be declared in the same file and before the feature.
-        * @tparam <type> <text> -- the function's parameter with its type and description, multi supported.
-        * @treturn <type> <text>-- the return value's type and description, multi supported.
+        * @format (params) <text>        -- the format of the paramerters with description.
+        * @rformat (returns) <text>       -- the format of the return values with description.
 
 
 Infered Tags

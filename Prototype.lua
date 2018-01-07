@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2017/12/14                                               --
--- Version      :   1.0.0-alpha.1                                            --
+-- Update Date  :   2018/01/07                                               --
+-- Version      :   1.0.0-alpha.002                                          --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -132,11 +132,17 @@ do
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
     -----------------------------------------------------------------------
-    --                         platform settings                         --
+    -- The table contains several settings can be modified based on the
+    -- target platform and frameworks. It must be provided before loading
+    -- the PLoop, and the table and its fields are all optional.
+    --
+    -- @table PLOOP_PLATFORM_SETTINGS
     -----------------------------------------------------------------------
     PLOOP_PLATFORM_SETTINGS     = (function(default)
         local settings = _G.PLOOP_PLATFORM_SETTINGS
         if type(settings) == "table" then
+            _G.PLOOP_PLATFORM_SETTINGS = nil
+
             for k, v in pairs, default do
                 local r = settings[k]
                 if r ~= nil then
@@ -150,40 +156,101 @@ do
         end
         return default
     end) {
-        -- Attribute
+        --- Whether the attribute system use warning instead of error for
+        -- invalid attribute target type.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         ATTR_USE_WARN_INSTEAD_ERROR         = false,
 
-        -- Environment
+        --- Whether the environmet allow global variable be nil, if false,
+        -- things like ture(spell error) could be notified, but it require
+        -- more usage for pcall and error.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         ENV_ALLOW_GLOBAL_VAR_BE_NIL         = false,
 
-        -- Enum
+        --- Whether all enumerations are case ignored.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         ENUM_GLOBAL_IGNORE_CASE             = false,
 
-        -- Interface X Class X Object
+        --- Whether all old objects keep using new features when their
+        -- classes or extend interfaces are re-defined.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_ALL_SIMPLE_VERSION            = false,
+
+        --- Whether all interfaces & classes only use the classic format
+        -- `Super.Method(obj, ...)` to call super's features, don't use new
+        -- style like :
+        --      Super[obj].Name = "Ann"
+        --      Super[obj].OnNameChanged = Super[obj].OnNameChanged + print
+        --      Super[obj]:Greet("King")
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_ALL_OLD_SUPER_STYLE           = false,
 
-        -- Log
+        --- The Log level used in the Prototype core part.
+        --          1 : Trace
+        --          2 : Debug
+        --          3 : Info
+        --          4 : Warn
+        --          5 : Error
+        --          6 : Fatal
+        -- Default 3(Info)
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         CORE_LOG_LEVEL                      = 3,
+
+        --- The core log handler works like :
+        --      function CORE_LOG_HANDLER(message, loglevel)
+        --          -- message  : the log message
+        --          -- loglevel : the log message's level
+        --      end
+        -- Default print
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         CORE_LOG_HANDLER                    = print,
 
-        -- Multi-thread
+        --- Whether the system is used in a platform where multi os threads
+        -- share one lua-state, so the access conflict can't be ignore.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD                     = false,
+
+        --- Whether the system is used in a platform where multi os threads
+        -- share one lua-state, and the lua_lock and lua_unlock apis are
+        -- applied, so PLoop don't need to care about the thread conflict.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD_LUA_LOCK_APPLIED    = false,
-        MULTI_OS_LOCK                       = fakefunc,
-        MULTI_OS_RELEASE                    = fakefunc,
+
+        --- Whether the system is used in a platform where hot-patch is
+        -- enabled, so the PLoop need use clone-replace mechanism instead
+        -- of rawset for the system storages.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        MULTI_OS_THREAD_HOTPATCH_ENABLED    = false,
+
+        --- Whether use warning instead of error when using environment's
+        -- auto cache mechanism, the check only used when MULTI_OS_THREAD
+        -- is true and MULTI_OS_THREAD_LUA_LOCK_APPLIED is false.
+        MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = true,
     }
 
     -----------------------------------------------------------------------
     --                               share                               --
     -----------------------------------------------------------------------
-    strtrim                     = function(s)     return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end
+    strtrim                     = function (s)    return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end
 
     typeconcat                  = function (a, b) return tostring(a) .. tostring(b) end
     wipe                        = function (t)    for k in pairs, t do t[k] = nil end return t end
 
     readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
-    writeOnly                   = function (self) error(strformat("The %s can't be read", tostring(self)), 2) end
+    writeOnly                   = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
+
+    newStorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
+    saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_HOTPATCH_ENABLED
+                                    and function(self, key, value) if self[key] ~= nil then self[key] = value return self else return tblclone(self, { [key] = value } ) end end
+                                    or  function(self, key, value) self[key] = value return self end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -243,12 +310,16 @@ do
     -----------------------------------------------------------------------
     if LUA_VERSION > 5.1 then
         loadSnippet             = function (chunk, source, env)
+            Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
+            Trace(source)
+            Trace("[core][loadSnippet] <== %s", source or "anonymous")
             return loadstring(chunk, source, nil, env or _PLoopEnv)
         end
     else
         loadSnippet             = function (chunk, source, env)
-            -- print("--------------" .. source .. "-----------")
-            -- print(chunk)
+            Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
+            Trace(source)
+            Trace("[core][loadSnippet] <== %s", source or "anonymous")
             local v, err = loadstring(chunk, source)
             if v then setfenv(v, env or _PLoopEnv) end
             return v, err
@@ -319,16 +390,16 @@ do
     -----------------------------------------------------------------------
     newproxy                    = newproxy or (function ()
         local falseMeta         = { __metatable = false }
-        local _proxymap         = setmetatable({}, WEAK_ALL)
+        local proxymap          = newStorage(WEAK_ALL)
 
         return function (prototype)
             if prototype == true then
-                local meta = {}
-                prototype = setmetatable({}, meta)
-                _proxymap[prototype] = meta
+                local meta  = {}
+                prototype   = setmetatable({}, meta)
+                proxymap[prototype] = meta
                 return prototype
-            elseif _proxymap[prototype] then
-                return setmetatable({}, _proxymap[prototype])
+            elseif proxymap[prototype] then
+                return setmetatable({}, proxymap[prototype])
             else
                 return setmetatable({}, falseMeta)
             end
@@ -407,60 +478,176 @@ do
 
     Trace                       = generateLogger("[PLoop:Trace]", 1)
     Debug                       = generateLogger("[PLoop:Debug]", 2)
-    Info                        = generateLogger("[PLoop:Info]",  3)
-    Warn                        = generateLogger("[PLoop:Warn]",  4)
+    Info                        = generateLogger("[PLoop: Info]", 3)
+    Warn                        = generateLogger("[PLoop: Warn]", 4)
     Error                       = generateLogger("[PLoop:Error]", 5)
     Fatal                       = generateLogger("[PLoop:Fatal]", 6)
+
+    -----------------------------------------------------------------------
+    --                          keyword helper                           --
+    -----------------------------------------------------------------------
+    local parseParams           = function (ptype, ...)
+        local visitor           = ptype and environment.GetKeywordVisitor(ptype)
+        local env, target, definition, flag, stack
+
+        for i = 1, select('#', ...) do
+            local v = select(i, ...)
+            local t = type(v)
+
+            if t == "boolean" then
+                if flag == nil then flag = v end
+            elseif t == "number" then
+                stack = stack or v
+            elseif t == "function" then
+                definition = definition or v
+            elseif t == "string" then
+                v       = strtrim(v)
+                if strfind(v, "^%S+$") then
+                    target      = target or v
+                else
+                    definition  = definition or v
+                end
+            elseif t == "userdata" then
+                if ptype and ptype.Validate(v) then
+                    target      = target or v
+                end
+            elseif t == "table" then
+                if getmetatable(v) ~= nil then
+                    if ptype and ptype.Validate(v) then
+                        target  = target or v
+                    else
+                        env     = env or v
+                    end
+                elseif v == _G then
+                    env         = env or v
+                else
+                    definition  = definition or v
+                end
+            end
+        end
+
+        -- Default
+        stack = stack or 1
+        env = env or visitor or getfenv(stack + 3) or _G
+
+        return visitor, env, target, definition, flag, stack
+    end
+
+    -- Used for features like property, event, member and namespace
+    GetFeatureParams            = function (ftype, ...)
+        local  visitor, env, target, definition, flag, stack = parseParams(ftype, ...)
+        return visitor, env, target, definition, flag, stack
+    end
+
+    -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
+    GetTypeParams               = function (nType, ptype, ...)
+        local  visitor, env, target, definition, flag, stack = parseParams(nType, ...)
+
+        if target then
+            if type(target) == "string" then
+                local path  = target
+                target      = namespace.GetNameSpace(environment.GetNameSpace(visitor or env), path)
+                if not target then
+                    target  = prototype.NewProxy(ptype)
+                    namespace.SaveNameSpace(environment.GetNameSpace(visitor or env), path, target, stack + 2)
+                end
+
+                if not nType.Validate(target) then
+                    target == nil
+                else
+                    if visitor then rawset(visitor, namespace.GetNameSpaceName(target, true), target) end
+                    if env and env ~= visitor then rawset(env, namespace.GetNameSpaceName(target, true), target) end
+                end
+            end
+        else
+            -- Anonymous
+            target = prototype.NewProxy(ptype)
+        end
+
+        return visitor, env, target, definition, flag, stack
+    end
+
+    ParseDefinition             = function(definition, env, stack)
+        if type(definition) == "string" then
+            local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
+            if def then
+                def, msg    = pcall(def)
+                if def then
+                    definition = msg
+                else
+                    error(msg, (stack or 1) + 1)
+                end
+            else
+                error(msg, (stack or 1) + 1)
+            end
+        end
+        return definition
+    end
 end
 
 -------------------------------------------------------------------------------
 -- The prototypes are types of other types(like classes), for a class "A",
 -- A is its object's type and the class is A's prototype.
 --
--- The prototypes are simply defined based on the lua's meta-table, as an example:
+-- The prototypes are simple userdata generated like:
 --
 --      proxy = prototype "proxy" {
 --          __index = function(self, key) return rawget(self, "__" .. key) end,
---          __newindex = function(self, key, value) rawset(self, "__" .. key, value) end,
+--          __newindex = function(self, key, value)
+--              rawset(self, "__" .. key, value)
+--          end,
 --      }
 --
--- The prototype's creation'll return an userdata created by newproxy as the result if the newproxy API existed,
--- otherwise, a fake newproxy system will be used and the result would be a table instead of the userdata.
+--      obj = prototype.NewObject(proxy)
+--      obj.Name = "Test"
+--      print(obj.Name, obj.__Name)
 --
--- All meta-settings will be copied to the result's meta-table, with several default settings:
+-- The prototypes are normally userdata created by newproxy if the newproxy API
+-- existed, otherwise a fake newproxy will be used and they will be tables.
+--
+-- All meta-table settings will be copied to the result's meta-table, and there
+-- are two fields whose default value is provided by the prototype system :
 --      * __metatable : if nil, the prototype itself would be used.
---      * __tostring  : if nil, the prototype's name would be used, if false, __tostring will be set to nil.
+--      * __tostring  : if nil, the prototype's name would be used if the name
+--          existed, if false, __tostring will be set to nil.
 --
--- It's also support a simple inheritance system like :
+-- The prototype system also support a simple inheritance system like :
 --
 --      cproxy = prototype "cproxy" (proxy, {
 --          __call = function(self, ...) end,
 --      })
 --
--- The new prototype's meta-table will copy meta-settings from it's super prototype (except the __metatable and __tostring).
+-- The new prototype's meta-table will copy meta-settings from its super except
+-- the __metatable and __tostring.
 --
 -- The complete definition syntaxes are
 --
---      val = prototype (["name",][superprototype,][definiton][,nodeepclone][,stack])
---      val = prototype "name" ([superprototype,][definiton][,nodeepclone][,stack])
+--      val = prototype (["name",][super,][definiton][,nodeepclone][,stack])
+--      val = prototype "name" ([super,][definiton][,nodeepclone][,stack])
 --
 -- The params :
---      * name            : string, the prototype's name, if ommit, must have superprototype or definiton to
---                          define an anonymous prototype.
---      * superprototype  : prototype, the super prototype whose meta-settings would be copied to the new one.
---      * definition      : table, the prototype's meta-settings.
---      * nodeepclone     : boolean, the __index maybe a table, normally, it's content would be deep cloned to
---                          the prototype's meta-settings, if true, the __index table will be used directly, so
---                          you may modify it after the prototype's definition.
---      * stack           : number, the stack level used to raise errors.
+--      * name          : string, the prototype's name, if ommit, must have
+--              super or definiton to define an anonymous prototype.
 --
--- @prototype prototype
+--      * super         : prototype, the super prototype whose meta-settings
+--              would be copied to the new one.
+--
+--      * definition    : table, the prototype's meta-settings.
+--
+--      * nodeepclone   : boolean, the __index maybe a table, normally, it's
+--              content would be deep cloned to the prototype's meta-settings,
+--              if true, the __index table will be used directly, so you may
+--              modify it after the prototype's definition.
+--
+--      * stack         : number, the stack level used to raise errors.
+--
+-- @prototype   prototype
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
-    local _Prototype            = setmetatable({}, WEAK_ALL)
+    local _Prototype            = newStorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                              Helpers                              --
@@ -505,7 +692,7 @@ do
         -- Default
         if meta                         then tblclone(meta, pmeta, not nodeepclone, true) end
         if pmeta.__metatable   == nil   then pmeta.__metatable  = prototype end
-        if pmeta.__tostring    == nil   then pmeta.__tostring   = name and function() return name end end
+        if pmeta.__tostring    == nil   then pmeta.__tostring   = name and (function() return name end) or false end
 
         -- Inherit
         if super                        then tblclone(_Prototype[super], pmeta, true, false) end
@@ -513,7 +700,7 @@ do
         -- Clear
         if pmeta.__tostring    == false then pmeta.__tostring   = nil end
 
-        Trace("The [prototype] %s is created", (stack or 1) + 1, name)
+        Debug("[prototype] %s created", (stack or 1) + 1, name or "anonymous")
 
         return prototype
     end
@@ -523,11 +710,20 @@ do
     -----------------------------------------------------------------------
     prototype                   = newPrototype ("prototype", {
         __index                 = {
-            --- Get the methods or return an iterator to get the methods of the prototype
-            -- @owner prototype
-            -- @method GetMethods
-            -- @param cache optional
-            -- @return
+            --- Get the methods of the prototype
+            -- @static
+            -- @method  GetMethods
+            -- @owner   prototype
+            -- @format  (prototype[, cache])
+            -- @param   prototype               the target prototype
+            -- @param   cache:(table|boolean)   whether save the result in the cache if it's a table or return a cache table if it's true
+            -- @rformat (iter, prototype)       without the cache parameter, used in generic for
+            -- @return  iter:function           the iterator
+            -- @return  prototype               the prototype itself
+            -- @rformat (cache)                 with the cache parameter, return the cache of the methods.
+            -- @return  cache
+            -- @usage   for name, func in prototype.GetMethods(class) do print(name) end
+            -- @usage   for name, func in pairs(prototype.GetMethods(class, true)) do print(name) end
             ["GetMethods"]      = function(self, cache)
                 local meta      = _Prototype[self]
                 if meta and type(meta.__index) == "table" then
@@ -551,30 +747,40 @@ do
             end,
 
             --- Create a proxy with the prototype's meta-table
-            -- @owner prototype
-            -- @method NewProxy
-            -- @return the proxy of the same meta-table
+            -- @static
+            -- @method  NewProxy
+            -- @owner   prototype
+            -- @param   prototype               the target prototype
+            -- @return  proxy:userdata          the proxy of the same meta-table
+            -- @usage   clsA = prototype.NewProxy(class)
             ["NewProxy"]        = newproxy,
 
             --- Create a table(object) with the prototype's meta-table
-            -- @owner prototype
-            -- @method NewObject
-            -- @param table optional, the table used to be set the meta-table
-            -- @return the table with the meta-table settings
+            -- @static
+            -- @method  NewObject
+            -- @owner   prototype
+            -- @format  (prototype, [object])
+            -- @param   prototype               the target prototype
+            -- @param   object:table            the raw-table used to be set the prototype's metatable
+            -- @return  object:table            the table with the prototype's meta-table
             ["NewObject"]       = function(self, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[self]) end,
 
-            --- Whether the value is a object of the prototype(has the same meta-table)
-            -- @owner prototype
-            -- @method ValidateValue
-            -- @param value the value to be validated
-            -- @return true if the value is generated from the prototype
+            --- Whether the value is an object(proxy) of the prototype(has the same meta-table),
+            -- only works for the prototype that use itself as the __metatable.
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   prototype
+            -- @param   prototype               the target prototype
+            -- @param   value:(table|userdata)  the value to be validated
+            -- @return  result:boolean          true if the value is generated from the prototype
             ["ValidateValue"]   = function(self, val) return getmetatable(val) == self end,
 
             --- Whether the value is a prototype
-            -- @owner prototype
-            -- @static-method Validate
-            -- @param value the value to be validated
-            -- @return true if the value is a prototype
+            -- @static
+            -- @method  Validate
+            -- @owner   prototype
+            -- @param   prototype               the prototype to be validated
+            -- @return  result:boolean          true if the prototype is valid
             ["Validate"]        = function(self) return _Prototype[self] and self or nil end,
         },
         __newindex              = readOnly,
@@ -595,42 +801,113 @@ do
 end
 
 -------------------------------------------------------------------------------
---                                 attribute                                 --
---                                                                           --
--- The attributes are used to bind informations to the features, or used to  --
--- modify those features directly(like wrap a function).                     --
---                                                                           --
--- An attribute or its type's attribute usage should contains several fields,--
--- The type's attribute usage would be used as default value.                --
---                                                                           --
--- * AttributeTarget                                                         --
---      The flags that represents the types of the target features.          --
---                                                                           --
--- * Inheritable                                                             --
---      Whether the attribute is inheritable.                                --
---                                                                           --
--- * ApplyPhase                                                              --
---      The apply phase of the attribute:                                    --
---          1 - Before the definition of the feature                         --
---          2 - After the definition of the feature                          --
---          3 - (= 1 + 2) in both phase.                                     --
---                                                                           --
--- * Overridable                                                             --
---      Whether the attribute's saved data is overridable.                   --
---                                                                           --
--- * ApplyAttribute                                                          --
---      The method used to apply the attribute to the target feature.        --
---                                                                           --
--- * Priority                                                                --
---      The attribute's priority, the bigger the first to be  applied.       --
---                                                                           --
--- * SubLevel                                                                --
---      The priority's sublevel, for attributes with same priority, the      --
---  bigger sublevel the first be applied.                                    --
---                                                                           --
--- * Final                                                                   --
---      Special for attribute usage, attribute usage can't be overridden if  --
---  true.                                                                    --
+-- The attributes are used to bind informations to features, or used to modify
+-- those features directly.
+--
+-- The attributes should provide attribute usages by themselves or their types.
+--
+-- The attribute usages are fixed name fields, methods or properties of the
+-- attribute:
+--
+--      * InitDefinition    A method used to modify the target's definition or
+--                      init the target before it load its definition, and its
+--                      return value will be used as the new definition for the
+--                      target if existed.
+--          * Parameters :
+--              * attribute     the attribute
+--              * target        the target like class, method and etc
+--              * targetType    the target type, that's a flag value registered
+--                      by types. @see attribute.RegisterTargetType
+--              * definition    the definition of the target.
+--              * owner         the target's owner, it the target is a method,
+--                      the owner may be a class or interface that contains it.
+--              * name          the target's name, like method name.
+--          * Returns :
+--              * (definiton)   the return value will be used as the target's
+--                      new definition.
+--
+--      * ApplyAttribute    A method used to apply the attribute to the target.
+--                      the method would be called after the definition of the
+--                      target. The target still can be modified.
+--          * Parameters :
+--              * attribute     the attribute
+--              * target        the target like class, method and etc
+--              * targetType    the target type, that's a flag value registered
+--                      by the target type. @see attribute.RegisterTargetType
+--              * owner         the target's owner, it the target is a method,
+--                      the owner may be a class or interface that contains it.
+--              * name          the target's name, like method name.
+--
+--      * AttachAttribute   A method used to generate attachment to the target
+--                      such as runtime document, map to database's tables and
+--                      etc. The method would be called after the definition of
+--                      the target. The target can't be modified.
+--          * Parameters :
+--              * attribute     the attribute
+--              * target        the target like class, method and etc
+--              * targetType    the target type, that's a flag value registered
+--                      by the target type. @see attribute.RegisterTargetType
+--              * owner         the target's owner, it the target is a method,
+--                      the owner may be a class or interface that contains it.
+--              * name          the target's name, like method name.
+--          * Returns :
+--              * (attach)      the return value will be used as attachment of
+--                      the attribute's type for the target.
+--
+--      * AttributeTarget   Default 0 (all types). The flags that represents
+--              the type of the target like class, method and other features.
+--
+--      * Inheritable       Default false. Whether the attribute is inheritable
+--              , @see attribute.ApplyAttributes
+--
+--      * Overridable       Default true. Whether the attribute's saved data is
+--              overridable.
+--
+--      * Priority          Default 0. The attribute's priority, the bigger the
+--              first to be applied.
+--
+--      * SubLevel          Default 0. The priority's sublevel, for attributes
+--              with same priority, the bigger sublevel the first be applied.
+--
+--      * Final             Default false. Special for attribute's type, so the
+--              type's attribute usage can't be overridden, that's means the
+--              attribute type can't be registered again.
+--
+-- To fetch the attribute usages from an attribute, take the *ApplyAttribute*
+-- as an example, the system will first use `attr["ApplyAttribute"]` to fetch
+-- the value, since the system don't care how it's provided, field, property,
+-- __index all works.
+--
+-- If it's nil, the system will use `getmetatable(attr)` to get its type, the
+-- type may be registered to the attribute system with the attribute usages,
+-- if it existed, the system will try to fetch the value from it.
+-- @see attribute.RegisterAttributeType
+--
+-- If the attribute don't provide attribute usage and so it's type, the default
+-- value will be used.
+--
+-- Although the attribute system is designed without the type requirement, it's
+-- better to define them by creating classes extend @see System.IAttribute
+--
+-- To use the attribute system on a target within its definition, here is list
+-- of actions:
+--
+--   1. Save attributes to the target.         @see attribute.SaveAttributes
+--   2. Inherit super attributes to the target.@see attribute.InheritAttributes
+--   3. Modify the definition of the target.   @see attribute.InitDefinition
+--   4. Change the target if needed.           @see attribute.ToggleTarget
+--   5. Apply the definition on the target.
+--   6. Apply the attributes on the target.    @see attribute.ApplyAttributes
+--   7. Finish the definition of the target.
+--   8. Attach attributes datas to the target. @see attribute.AttachAttributes
+--
+-- The step 2 can be processed after step 3 since we can't know the target's
+-- super before it's definition, but in that case, the inherited attributes
+-- can't modify the target's definition.
+--
+-- The step 2, 3, 4, 6 are all optional.
+--
+-- @prototype   attribute
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -639,30 +916,24 @@ do
     -- ATTRIBUTE TARGETS
     ATTRIBUTE_TARGETS_ALL       = 0
 
-    -- ATTRIBUTE APPLY PHASE
-    ATTRIBUTE_APPLYPH_BEFOREDEF = 2^0
-    ATTRIBUTE_APPLYPH_AFTERDEF  = 2^1
-
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
     -- Attribute Data
     local _AttrTargetTypes      = { [ATTRIBUTE_TARGETS_ALL] = "All" }
-    local _AttrUseNameApply     = {}
 
     -- Attribute Target Data
-    local _AttrTargetData       = setmetatable({}, WEAK_KEY)
-    local _AttrTargetInrt       = setmetatable({}, WEAK_KEY)
+    local _AttrTargetData       = newStorage(WEAK_KEY)
+    local _AttrTargetInrt       = newStorage(WEAK_KEY)
 
-    -- Temporary Cache (Single thread for definition at the same time, so no need to care the conflict)
+    -- Temporary Cache
     local _RegisteredAttrs      = {}
+    local _RegisteredAttrsStack = {}
     local _TargetAttrs          = setmetatable({}, WEAK_KEY)
-    local _AfterDefineAttrs     = setmetatable({}, WEAK_KEY)
 
     -----------------------------------------------------------------------
     --                              Helpers                              --
     -----------------------------------------------------------------------
-    local _SuspendNextConsume   = false
     local _UseWarnInstreadErr   = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
     local getAttributeUsage     = function (attr)
@@ -678,12 +949,12 @@ do
 
     local getAttributeInfo      = function (attr, field, default, chkType, attrusage)
         local val   = getAttrUsageField(attr, field, nil, chkType)
-        if val == nil then val = getAttrUsageField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
+        if val == nil then val  = getAttrUsageField(attrusage or getAttributeUsage(attr), field, nil, chkType) end
         if val ~= nil then return val end
         return default
     end
 
-    local addAttribtue          = function (list, attr, noSameType)
+    local addAttribute          = function (list, attr, noSameType)
         for _, v in ipairs, list, 0 do
             if v == attr then return end
             if noSameType and getmetatable(v) == getmetatable(attr) then return end
@@ -710,18 +981,190 @@ do
     -----------------------------------------------------------------------
     attribute                   = prototype "attribute" {
         __index                 = {
-            -- Apply the registered attributes to the feature
-            -- @target          - the target feature
-            -- @targetType      - the target's type
-            -- @definition      - the target's definition, so it can be modified
-            -- @owner           - the target's owner
-            -- @name            - the target's name
-            -- @...             - the target's super features, used for inheritance
-            -- return
-            --
-            ["ApplyAttributes"] = function(target, targetType, definition, owner, name, ...)
+            --- Use the registered attributes to init the target's definition
+            -- @static
+            -- @method  InitDefinition
+            -- @owner   attribute
+            -- @format  (target, targetType, definition, [owner], [name][, ...])
+            -- @param   target          the target, maybe class, method, object and etc
+            -- @param   targetType      the flag value of the target's type
+            -- @param   definition      the definition of the target
+            -- @param   owner           the target's owner, like the class for a method
+            -- @param   name            the target's name if it has owner
+            -- @return  definition      the target's new definition, nil means no change, false means cancel the target's definition, it may be done by the attribute, these may not be supported by the target type
+            ["InitDefinition"]  = function(target, targetType, definition, owner, name)
                 local tarAttrs  = _TargetAttrs[target]
-                if tarAttrs then _TargetAttrs[target] = nil end
+                if not tarAttrs then return end
+
+                -- Apply the attribute to the target
+                Debug("[attribute][InitDefinition] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+
+                for i, attr in ipairs, tarAttrs, 0 do
+                    local ausage= getAttributeUsage(attr)
+                    local apply = getAttributeInfo (attr, "InitDefinition", nil, "function", ausage)
+
+                    -- Apply attribute before the definition
+                    if apply then
+                        Trace("Call %s.InitDefinition", tostring(attr))
+
+                        local ret = apply(attr, target, targetType, definition, owner, name)
+                        if ret ~= nil then definition = ret end
+                    end
+                end
+
+                Trace("[attribute][InitDefinition] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+
+                return definition
+            end;
+
+            --- Apply the registered attributes to the target before the definition
+            -- @static
+            -- @method  ApplyAttributes
+            -- @owner   attribute
+            -- @format  (target, targetType, definition, [owner], [name][, ...])
+            -- @param   target          the target, maybe class, method, object and etc
+            -- @param   targetType      the flag value of the target's type
+            -- @param   owner           the target's owner, like the class for a method
+            -- @param   name            the target's name if it has owner
+            ["ApplyAttributes"] = function(target, targetType, owner, name)
+                local tarAttrs  = _TargetAttrs[target]
+                if not tarAttrs then return end
+
+                -- Apply the attribute to the target
+                Debug("[attribute][ApplyAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+
+                for i, attr in ipairs, tarAttrs, 0 do
+                    local ausage= getAttributeUsage(attr)
+                    local apply = getAttributeInfo (attr, "ApplyAttribute", nil, "function", ausage)
+
+                    -- Apply attribute before the definition
+                    if apply then
+                        Trace("Call %s.ApplyAttribute", tostring(attr))
+                        apply(attr, target, targetType, owner, name)
+                    end
+                end
+
+                Trace("[attribute][ApplyAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+            end;
+
+            --- Attach the registered attributes data to the target after the definition
+            -- @static
+            -- @method  AttachAttributes
+            -- @owner   attribute
+            -- @format  (target, targetType, [owner], [name])
+            -- @param   target          the target, maybe class, method, object and etc
+            -- @param   targetType      the flag value of the target's type
+            -- @param   owner           the target's owner, like the class for a method
+            -- @param   name            the target's name if it has owner
+            ["AttachAttributes"]= function(target, targetType, owner, name)
+                local tarAttrs  = _TargetAttrs[target]
+                if not tarAttrs then return else _TargetAttrs[target] = nil end
+
+                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
+                local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
+                local newAttrs  = false
+                local newInhrt  = false
+
+                -- Apply the attribute to the target
+                Debug("[attribute][AttachAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+
+                for i, attr in ipairs, tarAttrs, 0 do
+                    local aType = getmetatable(attr)
+                    local ausage= getAttributeUsage(attr)
+                    local attach= getAttributeInfo (attr, "AttachAttribute",nil,    "function", ausage)
+                    local ovrd  = getAttributeInfo (attr, "Overridable",    true,   nil,        ausage)
+                    local inhr  = getAttributeInfo (attr, "Inheritable",    false,  nil,        ausage)
+
+                    -- Try attach the attribute
+                    if attach and (ovrd or extAttrs == nil or extAttrs[aType] == nil) then
+                        Trace("Call %s.AttachAttribute", tostring(attr))
+
+                        local ret = attach(attr, target, targetType, owner, name)
+
+                        if ret ~= nil then
+                            extAttrs        = extAttrs or _Cache()
+                            extAttrs[aType] = ret
+                            newAttrs        = true
+                        end
+                    end
+
+                    if inhr then
+                        Trace("Save inheritable attribute %s", tostring(attr))
+
+                        extInhrt        = extInhrt or _Cache()
+                        extInhrt[aType] = attr
+                        newInhrt        = true
+                    end
+                end
+
+                Trace("[attribute][AttachAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+
+                _Cache(tarAttrs)
+
+                -- Save
+                if newAttrs then
+                    _AttrTargetData = saveStorage(_AttrTargetData, target, extAttrs)
+                elseif extAttrs then
+                    _Cache(extAttrs)
+                end
+                if newInhrt then
+                    _AttrTargetInrt = saveStorage(_AttrTargetInrt, target, extInhrt)
+                elseif extInhrt then
+                    _Cache(extInhrt)
+                end
+            end;
+
+            --- Get the attached attribute data of the target
+            -- @static
+            -- @method  GetAttachedData
+            -- @owner   attribute
+            -- @param   target          the target
+            -- @param   attributeType   the attribute type
+            ["GetAttachedData"] = function(target, aType)
+                local info      = _AttrTargetData[target]
+                return info and clone(info[aType], true, true)
+            end;
+
+            --- Call a definition function within a standalone attribute system
+            -- so it won't use the registered attributes that belong to others.
+            -- Normally used in attribute's ApplyAttribute or AttachAttribute
+            -- that need create new features with attributes.
+            -- @static
+            -- @method  IndependentCall
+            -- @owner   attribtue
+            -- @param   definition      the function to be processed
+            ["IndependentCall"] = function(definition)
+                if type(definition) ~= "function" then
+                    error("Usage : attribute.Register(definition) - the definition must be a function", 2)
+                end
+
+                tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
+                _RegisteredAttrs= _Cache()
+
+                local ok, msg   = pcall(definition)
+
+                _RegisteredAttrs= tremove(_RegisteredAttrsStack) or _Cache()
+
+                if not ok then error(msg, 0) end
+            end;
+
+            --- Register the super's inheritable attributes to the target, must be called after
+            -- the @attribute.SaveAttributes and before the @attribute.AttachAttributes
+            -- @static
+            -- @method  Inherit
+            -- @owner   attribute
+            -- @format  (target, targetType, ...)
+            -- @param   target          the target, maybe class, method, object and etc
+            -- @param   targetType      the flag value of the target's type
+            -- @param   ...             the target's super that used for attribute inheritance
+            ["InheritAttributes"] = function(target, targetType, ...)
+                local cnt       = select("#", ...)
+                if cnt == 0 then return end
+
+                -- Apply the attribute to the target
+                Debug("[attribute][InheritAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+
+                local tarAttrs  = _TargetAttrs[target]
 
                 -- Check inheritance
                 for i = 1, select("#", ...) do
@@ -731,252 +1174,173 @@ do
                             local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
 
                             if aTar == ATTRIBUTE_TARGETS_ALL or validateFlags(targetType, aTar) then
-                                tarAttrs    = tarAttrs or _Cache()
-                                addAttribtue(tarAttrs, sattr, true)
+                                Trace("Inherit attribtue %s", tostring(sattr))
+                                tarAttrs = tarAttrs or _Cache()
+                                addAttribute(tarAttrs, sattr, true)
                             end
                         end
                     end
                 end
 
-                if not tarAttrs then return target end
-
-                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
-                local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
-                local finAttrs
-                local isMethod  = type(target) == "function"
-                local newAttrs  = false
-                local newInhrt  = false
-                local applyTar  = (_AttrUseNameApply[targetType] and (name or tostring(target))) or target
-
-                -- Apply the attribute to the target
-                Trace("Starting apply pre-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-
-                for i, attr in ipairs, tarAttrs, 0 do
-                    local aType = getmetatable(attr)
-                    local ausage= getAttributeUsage(attr)
-                    local aPhse = getAttributeInfo(attr, "ApplyPhase",      ATTRIBUTE_APPLYPH_BEFOREDEF,    "number",   ausage)
-                    local apply = getAttributeInfo(attr, "ApplyAttribute",  nil,                            "function", ausage)
-                    local ovrd  = getAttributeInfo(attr, "Overridable",     true,                           nil,        ausage)
-                    local inhr  = getAttributeInfo(attr, "Inheritable",     false,                          nil,        ausage)
-
-                    -- Save for next phase
-                    if validateFlags(ATTRIBUTE_APPLYPH_AFTERDEF, aPhse) then
-                        finAttrs= finAttrs or _Cache()
-                        tinsert(finAttrs, attr)
-                    end
-
-                    -- Apply attribute before the definition
-                    if validateFlags(ATTRIBUTE_APPLYPH_BEFOREDEF, aPhse) and
-                        (ovrd or ((extAttrs == nil or extAttrs[aType] == nil) and (extInhrt == nil or extInhrt[aType] == nil))) then
-                        if apply then
-                            Trace("Apply attribute %s", tostring(attr))
-
-                            local ret = apply(attr, applyTar, targetType, definition, owner, name, ATTRIBUTE_APPLYPH_BEFOREDEF)
-
-                            if ret ~= nil then
-                                if isMethod and type(ret) == "function" then
-                                    applyTar        = ret
-                                else
-                                    extAttrs        = extAttrs or _Cache()
-                                    extAttrs[aType] = ret
-                                    newAttrs        = true
-                                end
-                            end
-                        end
-
-                        if inhr then
-                            Trace("Save inherited attribute %s", tostring(attr))
-
-                            extInhrt        = extInhrt or _Cache()
-                            extInhrt[aType] = attr
-                            newInhrt        = true
-                        end
-                    end
-                end
-
-                Trace("Finished apply pre-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-
-                _Cache(tarAttrs)
-
-                if isMethod then target = applyTar end
-
-                -- Save the after definition attributes
-                if finAttrs then _AfterDefineAttrs[target] = finAttrs end
-
-                -- Save attribute save datas
-                if newAttrs then _AttrTargetData[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
-                if newInhrt then _AttrTargetInrt[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
-
-                return target
-            end;
-
-            -- Apply the after-definition attributes to the feature
-            -- @target          - the target feature
-            -- @targetType      - the target's type
-            -- @owner           - the target's owner(may be itself)
-            -- @name            - the target's name
-            ["ApplyAfterDefine"]= function(target, targetType, owner, name)
-                local finAttrs  = _AfterDefineAttrs[target]
-                if not finAttrs then return else _AfterDefineAttrs[target] = nil end
-
-                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
-                local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
-                local newAttrs  = false
-                local newInhrt  = false
-                local applyTar  = (_AttrUseNameApply[targetType] and (name or tostring(target))) or target
-
-                -- Apply the attribute to the target
-                Trace("Starting apply post-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-
-                for i, attr in ipairs, finAttrs, 0 do
-                    local aType = getmetatable(attr)
-                    local ausage= getAttributeUsage(attr)
-                    local apply = getAttributeInfo(attr, "ApplyAttribute",  nil,    "function", ausage)
-                    local ovrd  = getAttributeInfo(attr, "Overridable",     true,   nil,        ausage)
-                    local inhr  = getAttributeInfo(attr, "Inheritable",     false,  nil,        ausage)
-
-                    if ovrd or ((extAttrs == nil or extAttrs[aType] == nil) and (extInhrt == nil or extInhrt[aType] == nil)) then
-                        if apply then
-                            Trace("Apply attribute %s", tostring(attr))
-
-                            local ret = apply(attr, applyTar, targetType, nil, owner, name, ATTRIBUTE_APPLYPH_AFTERDEF)
-
-                            if ret ~= nil and type(ret) ~= "function" then
-                                extAttrs        = extAttrs or _Cache()
-                                extAttrs[aType] = ret
-                                newAttrs        = true
-                            end
-                        end
-
-                        if inhr then
-                            Trace("Save inherited attribute %s", tostring(attr))
-
-                            extInhrt        = extInhrt or _Cache()
-                            extInhrt[aType] = attr
-                            newInhrt        = true
-                        end
-                    end
-                end
-
-                Trace("Finished apply post-attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-
-                _Cache(finAttrs)
-
-                -- Save attribute save datas
-                if newAttrs then _AttrTargetData[target] = extAttrs elseif extAttrs then _Cache(extAttrs) end
-                if newInhrt then _AttrTargetInrt[target] = extInhrt elseif extInhrt then _Cache(extInhrt) end
-            end;
-
-            -- Clear all registered attributes
-            ["Clear"]           = function()
-                if #_RegisteredAttrs > 0 then
-                    Trace("Registerd attributes are cleared", 2)
-                    wipe(_RegisteredAttrs)
-                end
-            end;
-
-            ["ConsumeAttributes"] = function(target, targetType, owner, name, stack)
-                if _SuspendNextConsume then _SuspendNextConsume = false return end
-                if #_RegisteredAttrs  == 0 then return end
-
-                local tarAttrs  = _RegisteredAttrs
-                _RegisteredAttrs= _Cache()
-
-                Trace("Starting consume attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-
-                for i = #tarAttrs, 1, -1 do
-                    local attr  = tarAttrs[i]
-                    local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
-
-                    if aTar ~= ATTRIBUTE_TARGETS_ALL and not validateFlags(targetType, aTar) then
-                        if _UseWarnInstreadErr then
-                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
-                            tremove(tarAttrs, i)
-                        else
-                            _Cache(tarAttrs)
-                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target)), stack)
-                        end
-                    end
-                end
-
-                Trace("Finished consume attribtues on [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and (tostring(owner) .. "'s " .. name) or tostring(target))
+                Trace("[attribute][InheritAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
 
                 _TargetAttrs[target] = tarAttrs
             end;
 
-            -- Get saved attribute data
-            -- @target          - the target feature
-            -- @attributeType   - the attribute's type
-            ["GetAttributeData"]= function(target, aType)
-                local info      = _AttrTargetData[target]
-                return info and clone(info[aType], true, true)
-            end;
-
-            -- Register the attribute to be used by the next feature
-            -- @attr        - The attribute to register.
-            -- @noSameType  - Don't register the attribute if there is another attribute with the same type
+            --- Register the attribute to be used by the next feature
+            -- @static
+            -- @method  Register
+            -- @owner   attribute
+            -- @format  attr[, noSameType]
+            -- @param   attr            the attribute to be registered
+            -- @param   noSameType      whether don't register the attribute if there is another attribute with the same type
             ["Register"]        = function(attr, noSameType)
                 local attr      = attribute.ValidateValue(attr)
                 if not attr then error("Usage : attribute.Register(attr) - the attr is not valid", 2) end
-                Trace("New attribute %q is registered", tostring(attr))
-                return addAttribtue(_RegisteredAttrs, attr, noSameType)
+                Debug("[attribute][Register] %s", tostring(attr))
+                return addAttribute(_RegisteredAttrs, attr, noSameType)
             end;
 
-            -- Register an attribute type with usage information
-            ["RegisterAttributeType"] = function(aType, usage)
-                if _AttrTargetData[aType] and _AttrTargetData[aType][attribute] and _AttrTargetData[aType][attribute].Final then return end
+            --- Register an attribute type with usage information
+            -- @static
+            -- @method  RegisterAttributeType
+            -- @owner   attribute
+            -- @param   attributeType   the attribute type
+            -- @param   usages          the attribute usages
+            ["RegisterAttributeType"] = function(attrType, usage)
+                if not attrType then
+                    error("Usage: attribute.RegisterAttributeType(attrType, usage) - The attrType can't be nil", 2)
+                end
+                if _AttrTargetData[attrType] and _AttrTargetData[attrType][attribute] and _AttrTargetData[attrType][attribute].Final then
+                    return
+                end
 
-                local extAttrs  = tblclone(_AttrTargetData[aType], _Cache())
+                local extAttrs  = tblclone(_AttrTargetData[attrType], _Cache())
                 local attrusage = _Cache()
 
-                Trace("New attribute type %q is registered", tostring(aType))
+                Debug("[attribute][RegisterAttributeType] %s", tostring(attrType))
 
                 -- Default usage data for attributes
-                attrusage.AttributeTarget   = getAttrUsageField(usage, "AttributeTarget",ATTRIBUTE_TARGETS_ALL,      "number")
-                attrusage.Inheritable       = getAttrUsageField(usage, "Inheritable",    false)
-                attrusage.ApplyPhase        = getAttrUsageField(usage, "ApplyPhase",     ATTRIBUTE_APPLYPH_BEFOREDEF,"number")
-                attrusage.Overridable       = getAttrUsageField(usage, "Overridable",    true)
-                attrusage.ApplyAttribute    = getAttrUsageField(usage, "ApplyAttribute", nil,                        "function")
-                attrusage.Priority          = getAttrUsageField(usage, "Priority",       0,                          "number")
-                attrusage.SubLevel          = getAttrUsageField(usage, "SubLevel",       0,                          "number")
+                attrusage.InitDefinition    = getAttrUsageField(usage,  "InitDefinition",   nil,                   "function")
+                attrusage.ApplyAttribute    = getAttrUsageField(usage,  "ApplyAttribute",   nil,                   "function")
+                attrusage.AttachAttribute   = getAttrUsageField(usage,  "AttachAttribute",  nil,                   "function")
+                attrusage.AttributeTarget   = getAttrUsageField(usage,  "AttributeTarget",  ATTRIBUTE_TARGETS_ALL, "number")
+                attrusage.Inheritable       = getAttrUsageField(usage,  "Inheritable",      false)
+                attrusage.Overridable       = getAttrUsageField(usage,  "Overridable",      true)
+                attrusage.Priority          = getAttrUsageField(usage,  "Priority",         0,                     "number")
+                attrusage.SubLevel          = getAttrUsageField(usage,  "SubLevel",         0,                     "number")
 
                 -- A special data for attribute usage, so the attribute usage won't be overridden
-                attrusage.Final             = getAttrUsageField(usage, "Final", false)
+                attrusage.Final             = getAttrUsageField(usage,  "Final",            false)
 
                 extAttrs[attribute]         = attrusage
-                _AttrTargetData[aType]      = extAttrs
+                _AttrTargetData             = saveStorage(_AttrTargetData, attrType, extAttrs)
             end;
 
-            -- Register attribute type with name
-            ["RegisterTargetType"]  = function(name, useNameAsApplyTarget)
+            --- Register attribute target type
+            -- @static
+            -- @method  RegisterTargetType
+            -- @owner   attribtue
+            -- @param   name:string     the target type's name
+            -- @return  flag:number     the target type's flag value
+            ["RegisterTargetType"]  = function(name)
                 local i             = 2^0
                 while _AttrTargetTypes[i] do i = i * 2 end
                 _AttrTargetTypes[i] = name
-                _AttrUseNameApply[i]= useNameAsApplyTarget and true or nil
-                Trace("New attribute target type %q is registered", name)
+                Debug("[attribute][RegisterTargetType] %q = %d", name, i)
                 return i
             end;
 
-            ["SuspendNextConsume"]  = function()
-                _SuspendNextConsume = true
+            --- Save the current registered attributes to the target
+            -- @static
+            -- @method  SaveAttributes
+            -- @owner   attribtue
+            -- @format  (target, targetType, [owner], [name][, stack])
+            -- @param   target          the target
+            -- @param   targetType      the target type
+            -- @param   stack           the stack level
+            ["SaveAttributes"]  = function(target, targetType, stack)
+                if #_RegisteredAttrs  == 0 then return end
+
+                local regAttrs  = _RegisteredAttrs
+                _RegisteredAttrs= _Cache()
+
+                Debug("[attribute][SaveAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+
+                for i = #regAttrs, 1, -1 do
+                    local attr  = regAttrs[i]
+                    local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
+
+                    if aTar ~= ATTRIBUTE_TARGETS_ALL and not validateFlags(targetType, aTar) then
+                        if _UseWarnInstreadErr then
+                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                            tremove(regAttrs, i)
+                        else
+                            _Cache(regAttrs)
+                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", tostring(target)), stack)
+                        end
+                    end
+                end
+
+                Debug("[attribute][SaveAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+
+                _TargetAttrs[target] = regAttrs
             end;
 
-            -- Un-register attribute
+            --- Toggle the target, save the old target's attributes to the new one
+            -- @static
+            -- @method  ToggleTarget
+            -- @owner   attribtue
+            -- @format  (old, new)
+            -- @param   old             the old target
+            -- @param   new             the new target
+            ["ToggleTarget"]    = function(old, new)
+                local tarAttrs  = _TargetAttrs[old]
+                if tarAttrs and new and new ~= old then
+                    _TargetAttrs[old] = nil
+                    _TargetAttrs[new] = tarAttrs
+                end
+            end;
+
+            --- Un-register an attribute
+            -- @static
+            -- @method  Unregister
+            -- @owner   attribtue
+            -- @param   attr            the attribtue to be un-registered
             ["Unregister"]      = function(attr)
                 for i, v in ipairs, _RegisteredAttrs, 0 do
                     if v == attr then
-                        Trace("Attribtue %q is unregistered", tostring(attr))
+                        Debug("[attribute][Unregister] %s", tostring(attr))
                         return tremove(_RegisteredAttrs, i)
                     end
                 end
             end;
 
-            -- Validate whether the target is an attribute
-            ["ValidateValue"]   = function(attr)
-                return getAttributeUsage(attr) and attr or nil
+            --- Validate whether the attribute is valid or the attribute' type
+            -- is the given one
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   attribtue
+            -- @format  (attr[, attrType])
+            -- @param   attr            the attribute to be validated
+            -- @param   attrType        the attribute type
+            -- @return  validated       true if the attribute is valid
+            ["ValidateValue"]   = function(attr, attrType)
+                if attrType then
+                    return attribute.Validate(attrType) and attrType == getmetatable(attr) and attr or nil
+                else
+                    -- May use the default usage settings
+                    local atype     = type(attr)
+                    return (atype == "table" or atype == "userdata") and attr or nil
+                end
             end;
 
-            -- Validate whether the target is an attribute type
+            --- Validate whether the target is an attribute type
+            -- @static
+            -- @method  Validate
+            -- @owner   attribtue
+            -- @param   attrType        the attribtue type to be validated
+            -- @return  validated       true if the attribute type is valid
             ["Validate"]        = function(attrtype)
                 local info      = _AttrTargetData[attrtype]
                 return info and info[attribute] and attrtype or nil
@@ -987,10 +1351,46 @@ do
 end
 
 -------------------------------------------------------------------------------
---                                environment                                --
---                                                                           --
--- The environment is designed to be private environments for codes or type  --
--- building.                                                                 --
+-- The environment is designed to be private and standalone for codes(Module)
+-- or type building(class and etc). It provide features like keyword accessing,
+-- namespace management, get/set management and etc.
+--
+--      -- Module is an environment type for codes works like _G
+--      Module "Test" "v1.0.0"
+--
+--      -- Declare the namespace for the module
+--      namespace "NS.Test"
+--
+--      -- Import other namespaces to the module
+--      import "System.Threading"
+--
+--      -- By using the get/set management we can use attributes for features
+--      -- like functions.
+--      __Thread__()
+--      function DoThreadTask()
+--      end
+--
+--      -- The function with _ENV will be called within a private environment
+--      -- where the class A's definition will be processed. The class A also
+--      -- will be saved to the namespace NS.Test since its defined in the Test
+--      -- Module.
+--      class "A" (function(_ENV)
+--          -- So the Score's path should be NS.Test.A.Score since it's defined
+--          -- in the class A's definition environment whose namespace is the
+--          -- class A.
+--          enum "Score" { "A", "B", "C", "D" }
+--      end)
+--
+-- @prototype   environment
+-- @usage       -- The environment also can be used to call a function within a
+--              -- private environment
+--              environment(function(_ENV)
+--                  import "System.Threading"
+--
+--                  __Thread__()
+--                  function DoTask()
+--                  end
+--              end)
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -999,11 +1399,11 @@ do
     ATTRIBUTE_TARGETS_FUNCTION  = attribute.RegisterTargetType("Function")
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
     -- Registered Keywords
-    local _ENVKeys              = {}    -- Keywords for environment type
-    local _GlobalKeys           = {}    -- Global keywords
+    local _ContextKeywords      = {}    -- Keywords for environment type
+    local _GlobalKeywords       = {}    -- Global keywords
 
     -- Keyword visitor
     local _KeyVisitor                   -- The environment that access the next keyword
@@ -1017,138 +1417,65 @@ do
     local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
 
     -- Share Helpers
-    local saferawset            = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED
-        and function(self, key, value, stack)
-            Error("Environment's auto-cache is disabled, you need use local for the %q variable", (stack or 1) + 1, key)
-            rawset(self, key, value)    -- Block next error message, may cause lua error
-        end or rawset
-
-    local saferawget            = function (self, key) return self[key] end     -- Just a joke
-
-    local parseParams           = function (keyword, ...)
-        local env, target, definition, flag, stack
-        local keyvisitor    = keyword and environment.GetKeywordVisitor(keyword)
-
-        for i = 1, select('#', ...) do
-            local v = select(i, ...)
-            local t = type(v)
-
-            if t == "boolean" then
-                if flag == nil then flag = v end
-            elseif t == "number" then
-                stack = stack or v
-            elseif t == "function" then
-                definition = definition or v
-            elseif t == "string" then
-                v   = strtrim(v)
-                if strfind(v, "^%S+$") then
-                    target = target or v
-                else
-                    definition = definition or v
-                end
-            elseif t == "userdata" then
-                if namespace.Validate(v) then
-                    target = target or v
-                end
-            elseif t == "table" then
-                if namespace.Validate(v) then
-                    target = target or v
-                else
-                    -- Check if it's environment or the definition, well it's a little complex
-                    if getmetatable(v) ~= nil or v == _G then
-                        env = env or v
-                    elseif not env then
-                        if target then
-                            -- env should be given before the target
-                            definition = definition or v
-                        else
-                            -- We should check later
-                            env = env or v
-                        end
-                    else
-                        definition = definition or v
-                    end
-                end
+    local saferawset            = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD
+        and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED
+        and (PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN
+            and function(self, key, value, stack)
+                Error("Environment's auto-cache is disabled, you need use local for the %q variable", (stack or 1) + 1, key)
+                rawset(self, key, value)    -- Block next error message, may cause lua error
             end
-        end
-
-        stack = stack or 2
-
-        if not definition and env and not target and (getmetatable(env) == nil and env ~= _G) then
-            -- Anonymous
-            definition, env = env, nil
-        end
-
-        env = env or getfenv(stack + 2) or keyvisitor or _G
-
-        if type(definition) == "string" then
-            local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
-            if def then
-                def, msg    = pcall(def)
-                if def then
-                    definition = msg
-                else
-                    error(msg, stack + 2)
-                end
-            else
-                error(msg, stack + 2)
+            or  function(self, key, value, stack)
+                error(("Environment's auto-cache is disabled, you need use local for the %q variable"):format(key), (stack or 1) + 1)
             end
-        end
+        ) or rawset
 
-        return env, target, definition, flag, stack, keyvisitor
-    end
+    local saferawget            = function (self, key) return self[key] end
 
-    GetDefinitionParams         = function (self, ...)
-        local _, _, definition, _, stack = parseParams(nil, self, ...)
-        return definition, stack
-    end
-
-    -- Used for features like property, event, member and namespace
-    GetFeatureParams            = function (ftype, ...)
-        local env, name, definition, flag, stack, keyvisitor = parseParams(ftype, ...)
-        return env, name, definition, flag, stack, keyvisitor
-    end
-
-    -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
-    GetTypeParams               = function (nType, prototype, ...)
-        local env, target, definition, flag, stack, visitor = parseParams(nType, ...)
-
-        if target then
-            if type(target) == "string" then
-                target = namespace.GenerateNameSpace(environment.GetNameSpace(visitor or env), target, prototype)
-                if visitor then rawset(visitor, namespace.GetNameSpaceName(target, true), target) end
-                if env and env ~= visitor then rawset(env, namespace.GetNameSpaceName(target, true), target) end
-            else
-                target = nType.Validate(target)
-            end
-        else
-            target = namespace.GenerateNameSpace(nil, nil, prototype)
-        end
-
-        return env, target, definition, flag, stack, visitor
-    end
-
-    -- Prototypes
+    -----------------------------------------------------------------------
+    --                            environment                            --
+    -----------------------------------------------------------------------
     environment                 = prototype "environment" {
         __index                 = {
+            --- Get the namespace from the environment
+            -- @static
+            -- @method  GetNameSpace
+            -- @owner   environment
+            -- @param   env:table       the environment
+            -- @return  ns              the namespace of the environment
             ["GetNameSpace"]    = function(env)
                 return namespace.Validate(type(env) == "table" and rawget(env, ENV_NS_OWNER))
             end;
 
+            --- Get the parent environment from the environment
+            -- @static
+            -- @method  GetParent
+            -- @owner   environment
+            -- @param   env:table       the environment
+            -- @return  parentEnv       the parent of the environment
             ["GetParent"]       = function(env)
                 return type(env) == "table" and rawget(env, ENV_BASE_ENV) or nil
             end;
 
-            -- Get value for env, also auto-cache the value to env if auto-cache is true
-            ["GetValue"]        = function(env, name, autocache, stack)
-                local value
+            --- Get the value from the environment based on its namespace and
+            -- parent settings(normally be used in __newindex for environment),
+            -- the keywords also must be fetched through it.
+            -- @static
+            -- @method  GetValue
+            -- @owner   environment
+            -- @format  (env, name, [noautocache][, stack])
+            -- @param   env:table       the environment
+            -- @param   name            the key of the value
+            -- @param   noautocache     true if don't save the value to the environment, the keyword won't be saved
+            -- @param   stack           the stack level
+            -- @return  value           the value of the name in the environment
+            ["GetValue"]        = function(env, name, noautocache, stack)
                 if type(name) == "string" and type(env) == "table" then
                     -- Check Global Keywords
-                    value           = _GlobalKeys[name]
+                    local value     = _GlobalKeywords[name]
 
                     -- Check environment special keywords
                     if not value then
-                        local keys  = _ENVKeys[getmetatable(env)]
+                        local keys  = _ContextKeywords[getmetatable(env)]
                         value       = keys and keys[name]
                     end
 
@@ -1184,7 +1511,7 @@ do
 
                         -- Check parent
                         if value == nil then
-                            local parent    = rawget(env, ENV_BASE_ENV)
+                            local parent    = rawget(env, ENV_BASE_ENV) or _G
                             if type(parent) == "table" then
                                 if ENV_ALLOW_NIL_GLBVAR then
                                     value   = parent[name]
@@ -1197,37 +1524,92 @@ do
                         end
 
                         -- Auto-Cache
-                        if value ~= nil and autocache then
-                            Trace("The %s is auto saving for %s", 3, name, tostring(env))
-                            saferawset(env, name, value, (stack or 1) + 1)
+                        if value ~= nil and not noautocache then
+                            stack = (stack or 1) + 1
+                            Trace("The %s is auto saving to %s", stack, name, tostring(env))
+                            saferawset(env, name, value, stack)
                         end
                     end
+                    return value
                 end
-                return value
             end;
 
+            --- Get the environment that visit the given keyword. The visitor
+            -- use @environment.GetValue to access the keywords, so the system
+            -- know where the keyword is called, this method is normally called
+            -- by the keywords.
+            -- @static
+            -- @method  GetKeywordVisitor
+            -- @owner   environment
+            -- @param   keyword         the keyword
+            -- @return  visitor         the keyword visitor(environment)
             ["GetKeywordVisitor"] = function(keyword)
                 local visitor
-                if _AccessKey == keyword then visitor = _KeyVisitor end
+                if _AccessKey  == keyword then visitor = _KeyVisitor end
                 _KeyVisitor     = nil
                 _AccessKey      = nil
                 return visitor
             end;
 
-            -- Import namespace to env
-            ["ImportNameSpace"] = function(env, ns)
+            --- Import namespace to environment
+            -- @static
+            -- @method  ImportNameSpace
+            -- @owner   environment
+            -- @format  (env, ns[, stack])
+            -- @param   env             the environment
+            -- @param   ns              the namespace, it can be the namespace itself or its name path
+            -- @param   stack           the stack level
+            ["ImportNameSpace"] = function(env, ns, stack)
                 ns = namespace.Validate(ns)
-                if type(env) ~= "table" then error("Usage: environment.ImportNameSpace(env, namespace) - the env must be a table", 2) end
-                if not ns then error("Usage: environment.ImportNameSpace(env, namespace) - The namespace is not provided", 2) end
+                if type(env) ~= "table" then error("Usage: environment.ImportNameSpace(env, namespace) - the env must be a table", (stack or 1) + 1) end
+                if not ns then error("Usage: environment.ImportNameSpace(env, namespace) - The namespace is not provided", (stack or 1) + 1) end
 
                 local imports   = rawget(env, ENV_NS_IMPORTS)
-                if not imports then imports = setmetatable({}, WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
+                if not imports then imports = newStorage(WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
                 for _, v in ipairs, imports, 0 do if v == ns then return end end
                 tinsert(imports, ns)
             end;
 
+            --- Register a context keyword, like property must be used in the
+            -- definition of a class or interface.
+            -- @static
+            -- @method  RegisterContextKeyword
+            -- @owner   environment
+            -- @format  (ctxType, [key, ]keyword)
+            -- @param   ctxType         the context environment's type
+            -- @param   key:string      the keyword's name, it'd be applied if the keyword is a function
+            -- @param   keyword         the keyword entity
+            -- @format  (ctxType, keywords)
+            -- @param   keywords:table  a collection of the keywords like : { import = import , class, struct }
+            ["RegisterContextKeyword"]= function(ctxType, key, keyword)
+                if not ctxType or (type(ctxType) ~= "table" and type(ctxType) ~= "userdata") then
+                    error("Usage: environment.RegisterContextKeyword(ctxType, key[, keyword]) - the ctxType isn't valid", 2)
+                end
+                _ContextKeywords[ctxType] = _ContextKeywords[ctxType] or {}
+                local keywords            = _ContextKeywords[ctxType]
+
+                if type(key) == "table" and getmetatable(key) == nil then
+                    for k, v in pairs, key do
+                        if type(k) ~= "string" then k = tostring(v) end
+                        if not keywords[k] and v then keywords[k] = v end
+                    end
+                else
+                    if type(key) ~= "string" then key, keyword= tostring(key), key end
+                    if key and not keywords[key] and keyword then keywords[key] = keyword end
+                end
+            end;
+
+            --- Register a global keyword
+            -- @static
+            -- @method  RegisterGlobalKeyword
+            -- @owner   environment
+            -- @format  ([key, ]keyword)
+            -- @param   key:string      the keyword's name, it'd be applied if the keyword is a function
+            -- @param   keyword         the keyword entity
+            -- @format  (keywords)
+            -- @param   keywords:table  a collection of the keywords like : { import = import , class, struct }
             ["RegisterGlobalKeyword"] = function(key, keyword)
-                local keywords      = _GlobalKeys
+                local keywords      = _GlobalKeywords
 
                 if type(key) == "table" and getmetatable(key) == nil then
                     for k, v in pairs, key do
@@ -1235,65 +1617,123 @@ do
                         if not keywords[k] and v then keywords[k] = v end
                     end
                 else
-                    if type(key) ~= "string" then key, keyword= tostring(key), key end
+                    if type(key) ~= "string" then key, keyword = tostring(key), key end
                     if key and not keywords[key] and keyword then keywords[key] = keyword end
                 end
             end;
 
-            ["RegisterContextKeyword"] = function(envtype, key, keyword)
-                if not envtype or (type(envtype) ~= "table" and type(envtype) ~= "userdata") then error("Usage: environment.RegisterContextKeyword(envtype, key[, keyword]) - the envtype isn't valid", 2) end
-                _ENVKeys[envtype]   = _ENVKeys[envtype] or {}
-                local keywords      = _ENVKeys[envtype]
+            --- Save the value to the environment, useful to save attribtues for functions
+            -- @static
+            -- @method  SaveValue
+            -- @owner   environment
+            -- @format  (env, name, value[, stack])
+            -- @param   env             the environment
+            -- @param   name            the key
+            -- @param   value           the value
+            -- @param   stack           the stack level
+            ["SaveValue"]       = function(env, key, value, stack)
+                if type(key)   == "string" and type(value) == "function" then
+                    attribute.SaveAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, (stack or 1) + 1)
 
-                if type(key) == "table" and getmetatable(key) == nil then
-                    for k, v in pairs, key do
-                        if type(k) ~= "string" then k = tostring(v) end
-                        if not keywords[k] and v then keywords[k] = v end
+                    local final = attribute.InitDefinition(value, ATTRIBUTE_TARGETS_FUNCTION, value, env, key)
+
+                    if type(final) == "function" and final ~= value then
+                        attribute.ToggleTarget(value, final)
+                        value   = final
                     end
-                else
-                    if type(key) ~= "string" then key, keyword= tostring(key), key end
-                    if key and not keywords[key] and keyword then keywords[key] = keyword end
+                    attribute.ApplyAttributes (value, ATTRIBUTE_TARGETS_FUNCTION, env, key)
+                    attribute.AttachAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, env, key)
                 end
+                return rawset(env, key, value)
             end;
 
-            ["SetNameSpace"]    = function(env, ns)
-                if type(env) ~= "table" then error("Usage: environment.SetNameSpace(env, namespace) - the env must be a table", 2) end
+            --- Set the namespace to the environment
+            -- @static
+            -- @method  SetNameSpace
+            -- @owner   environment
+            -- @format  (env, ns[, stack])
+            -- @param   env             the environment
+            -- @param   ns              the namespace, it can be the namespace itself or its name path
+            -- @param   stack           the stack level
+            ["SetNameSpace"]    = function(env, ns, stack)
+                if type(env) ~= "table" then error("Usage: environment.SetNameSpace(env, namespace) - the env must be a table", (stack or 1) + 1) end
                 rawset(env, ENV_NS_OWNER, namespace.Validate(ns))
             end;
 
-            ["SetParent"]       = function(env, base)
-                if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", 2) end
-                if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", 2) end
+            --- Set the parent environment to the environment
+            -- @static
+            -- @method  SetParent
+            -- @owner   environment
+            -- @format  (env, base[, stack])
+            -- @param   env             the environment
+            -- @param   base            the base environment
+            -- @param   stack           the stack level
+            ["SetParent"]       = function(env, base, stack)
+                if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", (stack or 1) + 1) end
+                if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", (stack or 1) + 1) end
                 rawset(env, ENV_BASE_ENV, base or nil)
             end;
         },
         __newindex              = readOnly,
+        __call                  = function(self, definition)
+            if definition then return prototype.NewObject(tenvironment)(definition) else return prototype.NewObject(tenvironment) end
+        end,
     }
 
-    -- Key feature : import "System"
+    -----------------------------------------------------------------------
+    -- import namespace to current environment
+    --
+    -- @keyword     import
+    -- @usage       import "System.Threading"
+    -----------------------------------------------------------------------
     import                      = function (...)
-        local env, name, _, flag, stack, visitor = GetFeatureParams(import, ...)
+        local visitor, env, name, _, flag, stack  = GetFeatureParams(import, ...)
 
         name = namespace.Validate(name)
-        if not env  then error("Usage: import(namespace) - The system can't figure out the environment", stack) end
-        if not name then error("Usage: import(namespace) - The namespace is not provided", stack) end
+        if not env  then error("Usage: import(namespace) - The system can't figure out the environment", stack + 1) end
+        if not name then error("Usage: import(namespace) - The namespace is not provided", stack + 1) end
 
         if visitor then
-            environment.ImportNameSpace(visitor, name)
+            return environment.ImportNameSpace(visitor, name)
         else
-            namespace.ExportNameSpace(env, name, flag)
+            return namespace.ExportNameSpace(env, name, flag)
         end
     end
 
-    -- Simple environment
-    tenvironment                = prototype "tenvironment" {
+    -----------------------------------------------------------------------
+    --                           tenvironment                            --
+    -----------------------------------------------------------------------
+    tenvironment                = prototype {
         __index                 = environment.GetValue,
-        __tostring              = false, -- Environment's value maybe used as lock key, so keep __tostring nil
+        __newindex              = environment.SaveValue,
+        __tostring              = false,
+        __call                  = function(self, definition)
+            if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
+            setfenv(definition, self)
+            return definition(self)
+        end,
     }
 end
 
 -------------------------------------------------------------------------------
---                                 namespace                                 --
+-- The namespaces are used to organize feature types. Same name features can be
+-- saved in different namespaces so there won't be any conflict. Environment
+-- can have a root namespace so all features defined in it will be saved to the
+-- root namespace, also it can import several other namespaces, features that
+-- defined in them can be used in the environment directly.
+--
+-- @prototype   namespace
+-- @usage       -- Normally should be used within private code environment
+--              environment(function(_ENV)
+--                  namespace "NS.Test"
+--
+--                  class "A" {}  -- NS.Test.A
+--              end)
+--
+--              -- Also you can use a pure namespace like using environment
+--              NS.Test (function(_ENV)
+--                  class "A" {}  -- NS.Test.A
+--              end)
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -1302,27 +1742,37 @@ do
     ATTRIBUTE_TARGETS_NAMESPACE = attribute.RegisterTargetType("Namespace")
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
-    local _NSTree               = setmetatable({}, WEAK_KEY)
-    local _NSName               = setmetatable({}, WEAK_KEY)
+    local _NSTree               = newStorage(WEAK_KEY)
+    local _NSName               = newStorage(WEAK_KEY)
 
     -- Shortcut
     local Validate
     local GetNameSpace
 
-    -- Prototype
+    -----------------------------------------------------------------------
+    --                             namespace                             --
+    -----------------------------------------------------------------------
     namespace                   = prototype "namespace" {
         __index     = {
-            -- Export a namespace and its children to an environment
-            ["ExportNameSpace"] = function(env, ns, override)
+            --- Export a namespace and its children to an environment
+            -- @static
+            -- @method  ExportNameSpace
+            -- @owner   namespace
+            -- @format  (env, ns[, override][, stack])
+            -- @param   env             the environment
+            -- @param   ns              the namespace
+            -- @param   override        whether override the existed value in the environment, Default false
+            -- @param   stack           the stack level
+            ["ExportNameSpace"] = function(env, ns, override, stack)
+                if type(env)   ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", (stack or 1) + 1) end
                 ns  = Validate(ns)
-                if type(env) ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", 2) end
-                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", 2) end
+                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", (stack or 1) + 1) end
 
                 local nsname    = _NSName[ns]
                 if nsname then
-                    nsname      = strmatch(nsname, "[^%s%.]+$")
+                    nsname      = strmatch(nsname, "[^%s%p]+$")
                     if override or rawget(env, nsname) == nil then rawset(env, nsname, ns) end
                 end
 
@@ -1333,115 +1783,169 @@ do
                 end
             end;
 
-            -- Generate namespace by access name(if it is nil, anonymous namespace could be created)
-            ["GenerateNameSpace"] = function(parent, name, prototype)
-                if type(parent) == "string" then name, prototype, parent = parent, name, nil end
-                prototype = prototype and prototype.Validate(prototype) or tnamespace
-
-                if type(name) == "string" then
-                    if parent ~= nil then
-                        parent = Validate(parent)
-                        if not parent then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent must be a namespace", 2) end
-                        if not _NSName[parent] then error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - parent can't be anonymous", 2) end
-                    else
-                        parent = ROOT_NAMESPACE
-                    end
-
-                    local ns    = parent
-                    local iter  = strgmatch(name, "[^%s%.]+")
-                    local sn    = iter()
-
-                    while sn do
-                        _NSTree[ns] = _NSTree[ns] or {}
-
-                        local sns = _NSTree[ns][sn]
-                        local nxt = iter()
-
-                        if not sns then
-                            sns = _NSTree[ns][sn]
-
-                            if not sns then
-                                sns = prototype.NewProxy(nxt and tnamespace or prototype)
-                                _NSName[sns] = _NSName[ns] and _NSName[ns] .. "." .. sn or sn
-                                _NSTree[ns][sn] = sns
-                            end
-                        end
-
-                        ns, sn = sns, nxt
-                    end
-
-                    if ns ~= parent then return ns end
-                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string like 'System.Collections.List'", 2)
-                elseif name == nil then
-                    local ns = prototype.NewProxy(prototype)
-                    _NSName[ns] = false
-                    return ns
+            --- Get the namespace by path
+            -- @static
+            -- @method  GetNameSpace
+            -- @owner   namespace
+            -- @format  ([root, ]path)
+            -- @param   root            the root namespace
+            -- @param   path:string     the namespace path
+            -- @return  ns              the namespace
+            ["GetNameSpace"]    = function(root, path)
+                if type(root)  == "string" then
+                    root, path  = ROOT_NAMESPACE, root
+                elseif root    == nil then
+                    root        = ROOT_NAMESPACE
                 else
-                    error("Usage: namespace.GenerateNameSpace([parent, ][name[, prototype]]) - name must be a string or nil", 2)
+                    root        = Validate(root)
+                end
+
+                if root and type(path) == "string" then
+                    local iter      = strgmatch(path, "[^%s%p]+")
+                    local subname   = iter()
+
+                    while subname do
+                        local nodes = _NSTree[root]
+                        root        = nodes and nodes[subname]
+                        if not root then return end
+
+                        local nxt   = iter()
+                        if not nxt  then return root end
+
+                        subname     = nxt
+                    end
                 end
             end;
 
-            -- Get the namespace by name
-            ["GetNameSpace"]    = function(parent, name)
-                if type(parent) == "string" then
-                    name, parent = parent, nil
-                elseif type(name)   ~= "string" then
-                    error("Usage: namespace.GetNameSpace([parent, ]name) - name must be a string", 2)
-                end
-                if parent ~= nil then
-                    parent = Validate(parent)
-                    if not parent then error("Usage: namespace.GetNameSpace([parent, ]name) - parent must be a namespace", 2) end
-                    if not _NSName[parent] then error("Usage: namespace.GetNameSpace([parent, ]name) - parent can't be anonymous", 2) end
-                else
-                    parent = ROOT_NAMESPACE
-                end
-                local ns = parent
-                for sn in strgmatch(name, "[^%s%.]+") do
-                    ns = _NSTree[ns] and _NSTree[ns][sn]
-                    if not ns then return nil end
-                end
-                return ns ~= parent and ns or nil
-            end;
-
-            -- Get the namespace's name
-            ["GetNameSpaceName"]= function(ns, last)
+            --- Get the namespace's path
+            -- @static
+            -- @method  GetNameSpaceName
+            -- @owner   namespace
+            -- @format  (ns[, lastOnly])
+            -- @param   ns              the namespace
+            -- @parma   lastOnly        whether only the last name of the namespace's path
+            -- @return  string          the path of the namespace or the name of it if lastOnly is true
+            ["GetNameSpaceName"]= function(ns, onlyLast)
                 local name = _NSName[Validate(ns)]
-                if name ~= nil then return name and (last and strmatch(name, "[^%s%.]+$") or name) or "Anonymous" end
+                return name and (onlyLast and strmatch(name, "[^%s%p]+$") or name) or "Anonymous"
             end;
 
-            ["IsResourceType"]  = function(ns)
+            --- Save feature to the namespace
+            -- @static
+            -- @method  SaveNameSpace
+            -- @owner   namespace
+            -- @format  ([root, ]path, feature[, stack])
+            -- @param   root            the root namespace
+            -- @param   path:string     the path of the feature
+            -- @param   feature         the feature, must be table or userdata
+            -- @param   stack           the stack level
+            ["SaveNameSpace"]   = function(root, path, feature, stack)
+                if type(root)  == "string" then
+                    root, path, feature, stack = ROOT_NAMESPACE, root, path, feature
+                elseif root    == nil then
+                    root        = ROOT_NAMESPACE
+                else
+                    root        = Validate(root)
+                end
+
+                if stack ~= nil and type(stack) ~= "number" then
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the stack must be number", 2)
+                end
+                if root == nil then
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the root must be namespace", (stack or 1) + 1)
+                end
+                if type(path) ~= "string" or strtrim(path) == "" then
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the path must be string", (stack or 1) + 1)
+                else
+                    path    = strtrim(path)
+                end
+                if type(feature) ~= "table" and type(feature) ~= "userdata" then
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the feature should be userdata or table", (stack or 1) + 1)
+                end
+
+                local iter      = strgmatch(path, "[^%s%p]+")
+                local subname   = iter()
+
+                while subname do
+                    local nodes = _NSTree[root]
+                    if not nodes then
+                        nodes   = {}
+                        _NSTree = saveStorage(_NSTree, root, nodes)
+                    end
+
+                    local subns = nodes[subname]
+                    local nxt   = iter()
+
+                    if not nxt then
+                        if subns then
+                            if subns == feature then return end
+                            error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the namespace path has already be used by others", (stack or 1) + 1)
+                        else
+                            _NSName         = saveStorage(_NSName, feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                            _NSTree[root]   = saveStorage(nodes, subname, feature)
+                        end
+                    elseif not subns then
+                        subns = prototype.NewProxy(tnamespace)
+
+                        _NSName             = saveStorage(_NSName, subns, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                        _NSTree[root]       = saveStorage(nodes, subname, subns)
+                    end
+
+                    root, subname = subns, nxt
+                end
+            end;
+
+            --- Whether the target is a namespace
+            -- @static
+            -- @method  Validate
+            -- @owner   namespace
+            -- @param   target          the query feature
+            -- @return  target          nil if not namespace
+            ["Validate"]        = function(target)
+                if type(target) == "string" then return GetNameSpace(target) end
+                return _NSName[target] ~= nil and target or nil
+            end;
+
+            --- Whether the target is a pure namespace(not any other types)
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   namespace
+            -- @param   target          the query feature
+            -- @return  target          nil if not pure namespace
+            ["ValidateValue"]  = function(ns)
                 ns = Validate(ns)
-                return ns and getmetatable(ns) ~= namespace or false
-            end;
-
-            -- Validate whether the arg is a namespace
-            ["Validate"]        = function(ns)
-                if type(ns) == "string" then ns = GetNameSpace(ns) end
-                return _NSName[ns] ~= nil and ns or nil
+                return ns and getmetatable(ns) == namespace and ns or nil
             end;
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
-            local env, name, _, flag, stack, visitor = GetFeatureParams(namespace, ...)
+            local visitor, env, target, _, flag, stack = GetFeatureParams(namespace, ...)
 
-            if not env and not visitor then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the environment", stack) end
+            if not env then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the environment", stack + 1) end
 
-            if name ~= nil then
-                if type(name) == "string" then
-                    name = namespace.GenerateNameSpace(name)
+            if target ~= nil then
+                if type(target) == "string" then
+                    local ns    = GetNameSpace(target)
+                    if not ns then
+                        ns = prototype.NewProxy(tnamespace)
+                        attribute.SaveAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE, stack + 1)
+                        namespace.SaveNameSpace(target, ns, stack + 1)
+                        attribute.AttachAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE)
+                        target    = ns
+                    end
                 else
-                    name = namespace.Validate(name)
+                    target = Validate(target)
                 end
 
-                if not name then error("Usage: namespace([env, ][name[, stack]]) - the system can't figure out the namespace", stack) end
-
-                attribute.ConsumeAttributes(name, ATTRIBUTE_TARGETS_NAMESPACE, nil, nil, stack + 1)
-                attribute.ApplyAttributes  (name, ATTRIBUTE_TARGETS_NAMESPACE)
-                attribute.ApplyAfterDefine (name, ATTRIBUTE_TARGETS_NAMESPACE)
+                if not target then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the namespace", stack + 1) end
             end
 
-            environment.SetNameSpace(env, name)
-            return name
+            if not flag then
+                if visitor then environment.SetNameSpace(visitor, target) end
+                if env and env ~= visitor then  environment.SetNameSpace(env, target) end
+            end
+
+            return target
         end,
     }
 
@@ -1455,14 +1959,49 @@ do
         __newindex              = readOnly,
         __tostring              = namespace.GetNameSpaceName,
         __metatable             = namespace,
+        __concat                = typeconcat,
+        __call                  = function(self, definition)
+            local env           = prototype.NewObject(tenvironment)
+            environment.SetNameSpace(env, self)
+            if definition then
+                return env(definition)
+            else
+                return env
+            end
+        end,
     }
 
-    -- Init the root namespace, anonymous namespace can be be collected as garbage
-    ROOT_NAMESPACE              = namespace.GenerateNameSpace()
+    -- Init the root namespace
+    ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
+    _NSName[ROOT_NAMESPACE]     = false
 end
 
 -------------------------------------------------------------------------------
---                                enumeration                                --
+-- An enumeration is a data type consisting of a set of named values called
+-- elements, The enumerator names are usually identifiers that behave as
+-- constants.
+--
+-- To define an enum within the PLoop, the syntax is
+--
+--      enum "Name" { -- key-value pairs }
+--
+-- In the table, for each key-value pair, if the key is string, the key would
+-- be used as the element's name and the value is the element's value. If the
+-- key is a number and the value is string, the value would be used as both the
+-- element's name and value, othwise the key-value pair will be ignored.
+--
+-- Use enumeration[elementname] to fetch or validate the enum element's value,
+-- also can use enumeration(value) to fetch the element name from value. Here
+-- is an example :
+--
+--      enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
+--      print(Direction.South) -- 3
+--      print(Direction[3])    -- 3
+--      print(Direction.NoDir) -- nil
+--
+--      print(Direction(3))    -- South
+--
+-- @prototype   enum
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -1471,11 +2010,12 @@ do
     ATTRIBUTE_TARGETS_ENUM      = attribute.RegisterTargetType("Enum")
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
-    local _EnumInfo             = setmetatable({}, WEAK_KEY)
-    local _EnumBuilderInfo      = setmetatable({}, WEAK_KEY)
+    local _EnumInfo             = newStorage(WEAK_KEY)
 
+    -- BUILD CACHE
+    local _EnumBuilderInfo      = setmetatable({}, WEAK_KEY)
     local _EnumValidMap         = {}
 
     -- FEATURE MODIFIER
@@ -1521,23 +2061,22 @@ do
             tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[
                 return function(info, value)
-                local cache = info[]] .. FLD_ENUM_CACHE .. [[]
+                    local cache = info[]] .. FLD_ENUM_CACHE .. [[]
+                    if cache[value] then return value end
             ]])
 
-            tinsert(body, [[if cache[value] then return value end]])
+            if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
+                tinsert(body, [[
+                    local vtype = type(value)
+                    if vtype == "string" then
+                ]])
 
-            tinsert(body, [[local vtype = type(value)]])
-
-            tinsert(body, [[if vtype == "string" then]])
-
-            if validateFlags(FLG_CASE_IGNORED, token) then
-                tinsert(body, [[value = strupper(value)]])
+                if validateFlags(FLG_CASE_IGNORED, token) then
+                    tinsert(body, [[value = strupper(value)]])
+                end
             end
 
-            tinsert(body, [[
-                value = info[]] .. FLD_ENUM_ITEMS .. [[][value]
-                return value, value == nil and info[]] .. FLD_ENUM_ERRMSG .. [[] or nil
-            ]])
+            tinsert(body, [[value = info[]] .. FLD_ENUM_ITEMS .. [[][value] ]])
 
             if validateFlags(FLG_FLAGS_ENUM, token) then
                 tinsert(body, [[
@@ -1550,12 +2089,18 @@ do
                 ]])
             end
 
-            tinsert(body, [[
-                end
-                return nil, info[]] .. FLD_ENUM_ERRMSG .. [[]
-            ]])
+            if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
+                tinsert(body, [[
+                    else
+                        value = nil
+                    end
+                ]])
+            end
 
-            tinsert(body, [[end]])
+            tinsert(body, [[
+                    return value, value == nil and info[]] .. FLD_ENUM_ERRMSG .. [[] or nil
+                end
+            ]])
 
             _EnumValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
 
@@ -1565,11 +2110,20 @@ do
         info[FLD_ENUM_VALID] = _EnumValidMap[token]
     end
 
+    -----------------------------------------------------------------------
+    --                               enum                                --
+    -----------------------------------------------------------------------
     enum                        = prototype "enum" {
         __index                 = {
+            --- Begin the enumeration's definition
+            -- @static
+            -- @method  BeginDefinition
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   stack           the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack   = type(stack) == "number" and stack or 2
-
+                stack   = type(stack) == "number" and stack or 1
                 target  = enum.Validate(target)
                 if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
 
@@ -1578,95 +2132,52 @@ do
                 -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _EnumBuilderInfo[target]  = info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
-                    [FLD_ENUM_MOD]        = MOD_ENUM_INIT,
-                    [FLD_ENUM_ITEMS]      = {},
-                    [FLD_ENUM_CACHE]      = {},
-                    [FLD_ENUM_ERRMSG]     = "%s must be a value of [" .. tostring(target) .."]",
-                    [FLD_ENUM_VALID]      = false,
-                    [FLD_ENUM_MAXVAL]     = false,
-                    [FLD_ENUM_DEFAULT]    = nil,
+                _EnumBuilderInfo[target]= info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                    [FLD_ENUM_MOD    ]  = MOD_ENUM_INIT,
+                    [FLD_ENUM_ITEMS  ]  = {},
+                    [FLD_ENUM_CACHE  ]  = {},
+                    [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
+                    [FLD_ENUM_VALID  ]  = false,
+                    [FLD_ENUM_MAXVAL ]  = false,
+                    [FLD_ENUM_DEFAULT]  = nil,
                 }
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_ENUM, nil, nil, stack + 1)
+                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_ENUM, stack + 1)
             end;
 
+            --- End the enumeration's definition
+            -- @static
+            -- @method  EndDefinition
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   stack           the stack level
             ["EndDefinition"]   = function(target, stack)
                 local ninfo     = _EnumBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
-                -- If don't use the enumbuilder
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_ENUM)
 
                 _EnumBuilderInfo[target] = nil
 
+                local enums = ninfo[FLD_ENUM_ITEMS]
+                local cache = wipe(ninfo[FLD_ENUM_CACHE])
+
+                for k, v in pairs, enums do cache[v] = k end
+
                 -- Check Flags Enumeration
                 if validateFlags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
-                    local enums = ninfo[FLD_ENUM_ITEMS]
-                    local cache = wipe(ninfo[FLD_ENUM_CACHE])
-                    local count = 0
-                    local max   = 0
-
-                    -- Scan
-                    for k, v in pairs, enums do
-                        v       = tonumber(v)
-
-                        if v then
-                            if v == 0 then
-                                if cache[0] then
-                                    error(strformat("The %s and %s can't be the same value", k, cache[0]), stack)
-                                else
-                                    cache[0] = k
-                                end
-                            elseif v > 0 then
-                                count   = count + 1
-
-                                local n = mlog(v) / mlog(2)
-                                if floor(n) == n then
-                                    if cache[2^n] then
-                                        error(strformat("The %s and %s can't be the same value", k, cache[2^n]), stack)
-                                    else
-                                        cache[2^n]  = k
-                                        max         = n > max and n or max
-                                    end
-                                else
-                                    error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
-                                end
-                            else
-                                error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
-                            end
-                        else
-                            count       = count + 1
-                            enums[k]    = -1
-                        end
-                    end
-
-                    -- So the definition would be more precisely
-                    if max >= count then error("The flags enumeration's value can't be greater than 2^(count - 1)", stack) end
-
-                    -- Auto-gen values
-                    local n     = 0
-                    for k, v in pairs, enums do
-                        if v == -1 then
-                            while cache[2^n] do n = n + 1 end
-                            cache[2^n]  = k
-                            enums[k]    = 2^n
-                        end
-                    end
-
                     -- Mark the max value
-                    ninfo[FLD_ENUM_MAXVAL] = 2^count - 1
-                else
-                    local enums = ninfo[FLD_ENUM_ITEMS]
-                    local cache = ninfo[FLD_ENUM_CACHE]
-
-                    ninfo[FLD_ENUM_MOD] = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
-
+                    local max = 1
                     for k, v in pairs, enums do
-                        cache[v] = k
+                        while v >= max do max = max * 2 end
                     end
+
+                    ninfo[FLD_ENUM_MAXVAL] = max - 1
+                else
+                    ninfo[FLD_ENUM_MOD] = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
                 end
 
                 genEnumValidator(ninfo)
@@ -1675,23 +2186,38 @@ do
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
                     ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo, ninfo[FLD_ENUM_DEFAULT])
                     if ninfo[FLD_ENUM_DEFAULT] == nil then
-                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack)
+                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack + 1)
                     end
                 end
 
                 -- Save as new enumeration's info
-                _EnumInfo[target] = ninfo
+                _EnumInfo       = saveStorage(_EnumInfo, target, ninfo)
 
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_ENUM)
+                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_ENUM)
 
                 return target
             end;
 
+            --- Get the default value from the enumeration
+            -- @static
+            -- @method  GetDefault
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  default         the default value
             ["GetDefault"]      = function(target)
                 local info      = getEnumTargetInfo(target)
                 return info and info[FLD_ENUM_DEFAULT]
             end;
 
+            --- Get the elements from the enumeration
+            -- @static
+            -- @method  GetEnumValues
+            -- @owner   enum
+            -- @format  (enumeration[, cache])
+            -- @param   enumeration     the enumeration
+            -- @param   cache           the table used to cache those elements
+            -- @rformat (iter, enum)    If cache is nil, the iterator will be returned
+            -- @rformat (cache)         the cache table if used
             ["GetEnumValues"]   = function(target, cache)
                 local info      = _EnumInfo[target]
                 if info then
@@ -1704,24 +2230,59 @@ do
                 end
             end;
 
+            --- Whether the enumeration is case ignored
+            -- @static
+            -- @method  IsCaseIgnored
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  boolean         true if the enumeration is case ignored
             ["IsCaseIgnored"]   = function(target)
                 local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) or false
             end;
 
+            --- Whether the enumeration element values only are flags
+            -- @static
+            -- @method  IsFlagsEnum
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  boolean         true if the enumeration element values only are flags
             ["IsFlagsEnum"]     = function(target)
                 local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
+            --- Whether the enumeration is sealed, so can't be re-defined
+            -- @static
+            -- @method  IsSealed
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  boolean         true if the enumeration is sealed
             ["IsSealed"]        = function(target)
                 local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
+            --- Whether the enumeration is sub-type of others, always false, needed by struct system
+            -- @static
+            -- @method  IsSubType
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @param   super           the super type
+            -- @return  false
             ["IsSubType"]       = function() return false end;
 
-            -- Parse the value to enumeration name
+            --- Parse the element value to element name
+            -- @static
+            -- @method  Parse
+            -- @owner   enum
+            -- @format  (enumeration, value[, cache])
+            -- @param   enumeration     the enumeration
+            -- @param   value           the value
+            -- @param   cache           the table used to cache the result, only used when the enumeration is flag enum
+            -- @rformat (name)          only if the enumeration is not flags enum
+            -- @rformat (iter, enum)    If cache is nil and the enumeration is flags enum, the iterator will be returned
+            -- @rformat (cache)         if the cache existed and the enumeration is flags enum
             ["Parse"]           = function(target, value, cache)
                 local info      = _EnumInfo[target]
                 if info then
@@ -1767,48 +2328,72 @@ do
                 end
             end;
 
+            --- Set the enumeration's default value
+            -- @static
+            -- @method  SetDefault
+            -- @owner   enum
+            -- @format  (enumeration, default[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   default         the default value or name
+            -- @param   stack           the stack level
             ["SetDefault"]      = function(target, default, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
                 if info then
-                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
                     info[FLD_ENUM_DEFAULT] = default
                 else
-                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
+                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack + 1)
                 end
             end;
 
+            --- Set key-value pair to the enumeration
+            -- @static
+            -- @method  SetEnumValue
+            -- @owner   enum
+            -- @format  (enumeration, key, value[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   key             the element name
+            -- @param   value           the element value
+            -- @param   stack           the stack level
             ["SetEnumValue"]    = function(target, key, value, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
                 if info then
-                    if not def then error(strformat("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                    if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack) end
+                    if not def then error(strformat("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
+                    if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack + 1) end
 
                     for k, v in pairs, info[FLD_ENUM_ITEMS] do
                         if strupper(k) == strupper(key) then
                             if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
-                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key already existed", stack)
+                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key already existed", stack + 1)
                         elseif v == value then
-                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack)
+                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack + 1)
                         end
                     end
 
                     info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
                 else
-                    error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
+                    error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack + 1)
                 end
             end;
 
+            --- Set the enumeration as case ignored
+            -- @static
+            -- @method  SetCaseIgnored
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   stack           the stack level
             ["SetCaseIgnored"]  = function(target, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
                 if info then
                     if not validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD])
 
                         local enums     = info[FLD_ENUM_ITEMS]
@@ -1818,40 +2403,70 @@ do
                         _Cache(enums)
                     end
                 else
-                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack)
+                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack + 1)
                 end
             end;
 
+            --- Set the enumeration as flags enum
+            -- @static
+            -- @method  SetFlagsEnum
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   stack           the stack level
             ["SetFlagsEnum"]    = function(target, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
                 if info then
                     if not validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
+                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
+                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack + 1) end
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
-                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
+                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack + 1)
                 end
             end;
 
+            --- Seal the enumeration, so it can't be re-defined
+            -- @static
+            -- @method  SetSealed
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   stack           the stack level
             ["SetSealed"]       = function(target, stack)
                 local info      = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = type(stack) == "number" and stack or 1
 
                 if info then
                     if not validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
-                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", stack)
+                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", stack + 1)
                 end
             end;
 
+            --- Whether the check value contains the target flag value
+            -- @static
+            -- @method  ValidateFlags
+            -- @owner   enum
+            -- @param   target          the target value only should be 2^n
+            -- @param   check           the check value
+            -- @param   boolean         true if the check value contains the target value
+            -- @usage   print(enum.ValidateFlags(4, 7)) -- true : 7 = 1 + 2 + 4
             ["ValidateFlags"]   = validateFlags;
 
+            --- Whether the value is the enumeration's element's name or value
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @param   value           the value
+            -- @return  value           the element value, nil if not pass the validation
+            -- @return  errormessage    the error message if not pass
             ["ValidateValue"]   = function(target, value)
                 local info      = _EnumInfo[target]
                 if info then
@@ -1861,14 +2476,19 @@ do
                 end
             end;
 
-            -- Validate whether the value is an enum type
+            --- Whether the value is an enumeration
+            -- @static
+            -- @method  Validate
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  enumeration     nil if not pass the validation
             ["Validate"]        = function(target)
                 return getmetatable(target) == enum and target or nil
             end;
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
-            local env, target, definition, flag, stack, visitor = GetTypeParams(enum, tenum, ...)
+            local visitor, env, target, definition, flag, stack  = GetTypeParams(enum, tenum, ...)
             if not target then
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack)
             elseif definition ~= nil and type(definition) ~= "table" then
@@ -1898,15 +2518,18 @@ do
     enumbuilder                 = prototype "enumbuilder" {
         __index                 = writeOnly,
         __newindex              = readOnly,
-        __call                  = function(self, ...)
-            local definition, stack = GetDefinitionParams(self, ...)
+        __call                  = function(self, definition, stack)
             if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
             if not owner then error("The enumeration can't be found", stack) end
             if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
 
-            attribute.ApplyAttributes(owner, ATTRIBUTE_TARGETS_ENUM, definition)
+            local final = attribute.InitDefinition(owner, ATTRIBUTE_TARGETS_ENUM, definition)
+
+            if type(final) == "table" then
+                definition = final
+            end
 
             stack   = stack + 1
 
@@ -1933,7 +2556,7 @@ do
     -----------------------------------------------------------------------
     ATTRIBUTE_TARGETS_STRUCT    = attribute.RegisterTargetType("Struct")
     ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
-    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member", true)
+    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member")
 
     -----------------------------------------------------------------------
     --                          public constants                         --
@@ -1943,7 +2566,7 @@ do
     STRUCT_TYPE_CUSTOM          = "CUSTOM"
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
     local _StrtInfo             = setmetatable({}, WEAK_KEY)
     local _DependenceMap        = setmetatable({}, WEAK_KEY)
@@ -2034,7 +2657,7 @@ do
                     end
                     return true
                 end
-            elseif namespace.IsResourceType(value) then
+            elseif not namespace.ValidateValue(value) then
                 if key == STRUCT_KEYWORD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
                 else
@@ -2048,7 +2671,7 @@ do
         elseif tkey == "number" then
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
-            elseif namespace.IsResourceType(value) then
+            elseif not namespace.ValidateValue(value) then
                 struct.SetArrayElement(owner, value, stack)
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
@@ -2595,7 +3218,7 @@ do
                     local minfo = _Cache()
                     minfo[FLD_MEMBER_NAME] = name
 
-                    attribute.ConsumeAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name, stack + 1)
+                    attribute.SaveAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, stack + 1)
 
                     local smem  = nil
 
@@ -2617,7 +3240,7 @@ do
                             k = strlower(k)
 
                             if k == "type" then
-                                local tpValid = namespace.IsResourceType(v) and getmetatable(v).ValidateValue
+                                local tpValid = not namespace.ValidateValue(v) and getmetatable(v).ValidateValue
 
                                 if tpValid then
                                     minfo[FLD_MEMBER_TYPE] = v
@@ -2653,7 +3276,7 @@ do
 
                     info[idx] = minfo
 
-                    attribute.ApplyAfterDefine(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name)
+                    attribute.AttachAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name)
                 else
                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid", stack)
                 end
@@ -2673,7 +3296,7 @@ do
                         error(strformat("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished, the method can't be overridden", tostring(target)), stack)
                     end
 
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name, stack + 1)
+                    attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
 
                     local sfunc
 
@@ -2695,7 +3318,7 @@ do
                         info[name]  = func
                     end
 
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, target, name)
+                    attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name)
 
                     if not def and not hasMethod then
                         -- Need re-generate validator
@@ -2722,7 +3345,7 @@ do
                     [FLD_STRUCT_NAME]   = tostring(target),
                 }
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, stack + 1)
+                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_STRUCT, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -2871,7 +3494,7 @@ do
                 -- Save as new structure's info
                 _StrtInfo[target]   = ninfo
 
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_STRUCT)
+                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_STRUCT)
 
                 -- Refresh structs depended on this
                 if _DependenceMap[target] then
@@ -3065,7 +3688,7 @@ do
 
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local tpValid   = namespace.IsResourceType(eleType) and getmetatable(eleType).ValidateValue
+                    local tpValid   = not namespace.ValidateValue(eleType) and getmetatable(eleType).ValidateValue
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
                     info[FLD_STRUCT_ARRAY]  = eleType
@@ -3182,7 +3805,7 @@ do
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
-            local env, target, definition, keepenv, stack, visitor = GetTypeParams(struct, tstruct, ...)
+            local visitor, env, target, definition, keepenv, stack  = GetTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
             struct.BeginDefinition(target, stack + 1)
@@ -3236,8 +3859,7 @@ do
                 return rawset(self, key, value)
             end
         end,
-        __call                  = function(self, ...)
-            local definition, stack = GetDefinitionParams(self, ...)
+        __call                  = function(self, definition, stack)
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
@@ -3291,9 +3913,9 @@ do
         __newindex              = readOnly,
         __call                  = function(self, ...)
             if self == member then
-                local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(member, ...)
-                local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
-                if not owner or not keyvisitor then error([[Usage: member "name" {...} - can't be used here.]], stack) end
+                local visitor, env, name, definition, flag, stack  = GetFeatureParams(member, ...)
+                local owner = visitor and environment.GetNameSpace(visitor)
+                if not owner or not visitor then error([[Usage: member "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: member "name" {...} - the name can't be an empty string.]], stack) end
@@ -3306,7 +3928,7 @@ do
                 end
             else
                 local owner, name       = self.owner, self.name
-                local definition, stack = GetDefinitionParams(self, ...)
+                local definition, stack = ...
 
                 if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -3320,26 +3942,26 @@ do
 
     -- Key feature : endstruct "Number"
     endstruct                   = function (...)
-        local env, name, definition, flag, stack, keyvisitor = GetFeatureParams(endstruct, ...)
-        local owner = keyvisitor and environment.GetNameSpace(keyvisitor)
+        local visitor, env, name, definition, flag, stack  = GetFeatureParams(endstruct, ...)
+        local owner = visitor and environment.GetNameSpace(visitor)
 
-        if not owner or not keyvisitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
+        if not owner or not visitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
         struct.EndDefinition(owner, stack + 1)
 
-        _StructBuilderInDefine[keyvisitor]  = nil
-        environment.ToggleDefineMode(keyvisitor, false)
+        _StructBuilderInDefine[visitor]  = nil
+        environment.ToggleDefineMode(visitor, false)
 
-        local newMethod     = rawget(keyvisitor, STRUCT_BUILDER_NEWMTD)
+        local newMethod     = rawget(visitor, STRUCT_BUILDER_NEWMTD)
         if newMethod then
             for k in pairs(newMethod) do
-                rawset(keyvisitor, k, struct.GetMethod(owner, k))
+                rawset(visitor, k, struct.GetMethod(owner, k))
             end
-            rawset(keyvisitor, STRUCT_BUILDER_NEWMTD, nil)
+            rawset(visitor, STRUCT_BUILDER_NEWMTD, nil)
         end
 
-        local baseEnv       = environment.GetParent(keyvisitor) or _G
+        local baseEnv       = environment.GetParent(visitor) or _G
 
         setfenv(stack, baseEnv)
 
@@ -3361,7 +3983,7 @@ do
     ATTRIBUTE_TARGETS_CTOR      = attribute.RegisterTargetType("Constructor")
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
     local _ICInfo   = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
     local _BDInfo   = setmetatable({}, WEAK_KEY)        -- TYPE BUILDER INFO
@@ -3782,7 +4404,7 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[
                         if type(value) == "function" then
-                            attribute.ConsumeAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, self, name, 3)
+                            attribute.SaveAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, 3)
                             value = attribute.ApplyAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, nil, self, name)
                         end
                     ]])
@@ -3798,7 +4420,7 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[)
                         if type(value) == "function" then
-                            attribute.ApplyAfterDefine(value, ATTRIBUTE_TARGETS_FUNCTION, self, name)
+                            attribute.AttachAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, self, name)
                         end
                     ]])
                 end
@@ -4110,7 +4732,7 @@ do
     local function reDefineChildren(target, stack)
         if _CLDInfo[target] then
             for _, child in ipairs, _CLDInfo[target], 0 do
-                if not _BDInfo[child] then  -- Not in defintion mode
+                if not _BDInfo[child] then  -- Not in definition mode
                     if interface.Validate(child) then
                         interface.RefreshDefinition(child, stack + 1)
                     else
@@ -4259,7 +4881,7 @@ do
         if type(func) ~= "function" then error(strformat("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
 
         -- Consume before type's re-definition
-        attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name, stack + 1)
+        attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
 
         if not def then
             -- This means a simple but required re-definition
@@ -4278,7 +4900,7 @@ do
             info[name]      = func
         end
 
-        attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METHOD, target, name)
+        attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name)
 
         if not def then
             tType.EndDefinition(target, stack + 1)
@@ -4299,7 +4921,7 @@ do
         if name == MTD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'", tostring(tType), tostring(tType)), stack) end
 
         if tfunc == "function" then
-            attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name, stack + 1)
+            attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, stack + 1)
             func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
         end
 
@@ -4312,7 +4934,7 @@ do
         if tfunc == "table" then
             info[FD_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
         elseif tfunc == "function" then
-            attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name)
+            attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name)
         end
     end
 
@@ -4461,7 +5083,7 @@ do
                     struct.AddMethod(owner, key, value, stack)
                     return true
                 end
-            elseif namespace.IsResourceType(value) then
+            elseif not namespace.ValidateValue(value) then
                 if key == MTD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
                 else
@@ -4475,7 +5097,7 @@ do
         elseif tkey == "number" then
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
-            elseif namespace.IsResourceType(value) then
+            elseif not namespace.ValidateValue(value) then
                 struct.SetArrayElement(owner, value, stack)
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
@@ -4522,7 +5144,7 @@ do
 
                 _BDInfo[target] = ninfo
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, nil, nil, stack + 1)
+                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -4554,7 +5176,7 @@ do
                 -- Save as new interface's info
                 _ICInfo[target] = ninfo
 
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_INTERFACE)
+                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_INTERFACE)
 
                 -- Release the lock, so other threads can be used to define interface or class
                 endDefinition(target, stack + 1)
@@ -5009,7 +5631,7 @@ do
         },
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = GetTypeParams(interface, tinterface, ...)
+            local visitor, env, target, definition, keepenv, stack = GetTypeParams(interface, tinterface, ...)
             if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][, stack]) - the interface type can't be created", stack) end
 
             interface.BeginDefinition(target, stack + 1)
@@ -5076,7 +5698,7 @@ do
 
                 _BDInfo[target] = ninfo
 
-                attribute.ConsumeAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, stack + 1)
+                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_CLASS, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
@@ -5197,7 +5819,7 @@ do
                 -- Release the lock to allow other threads continue to define class or interface
                 endDefinition(target, stack + 1)
 
-                attribute.ApplyAfterDefine(target, ATTRIBUTE_TARGETS_CLASS)
+                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_CLASS)
 
                 return target
             end;
@@ -5322,12 +5944,12 @@ do
                     if not def then error(strformat("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function", stack) end
 
-                    attribute.ConsumeAttributes(func, ATTRIBUTE_TARGETS_CTOR, target, name, stack + 1)
+                    attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_CTOR, stack + 1)
                     func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CTOR, nil, target, name)
 
                     info[FD_INIT] = func
 
-                    attribute.ApplyAfterDefine(func, ATTRIBUTE_TARGETS_CTOR, target, name)
+                    attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_CTOR, target, name)
                 else
                     error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid", stack)
                 end
@@ -5407,7 +6029,7 @@ do
         },
         __newindex  = readOnly,
         __call      = function(self, ...)
-            local env, target, definition, keepenv, stack = GetTypeParams(class, tclass, ...)
+            local visitor, env, target, definition, keepenv, stack = GetTypeParams(class, tclass, ...)
             if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][, stack]) - the class type can't be created", stack) end
 
             class.BeginDefinition(target, stack + 1)
@@ -5604,8 +6226,7 @@ do
             end
             return rawset(self, key, value)
         end,
-        __call      = function(self, ...)
-            local definition, stack = GetDefinitionParams(self, ...)
+        __call      = function(self, definition, stack)
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
@@ -5662,7 +6283,7 @@ do
     ATTRIBUTE_TARGETS_EVENT     = attribute.RegisterTargetType("Event", true)
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
     local _EvtInfo  = setmetatable({}, WEAK_KEY)
 
@@ -5678,14 +6299,14 @@ do
                 local evt       = prototype "name" (tevent)
                 _EvtInfo[evt]   = setmetatable({ [FD_NAME] = name, [FD_OWNER] = owner, [FD_INDEF] = true }, WEAK_KEY)
 
-                attribute.ConsumeAttributes(evt, ATTRIBUTE_TARGETS_EVENT, owner, name, stack + 1)
+                attribute.SaveAttributes(evt, ATTRIBUTE_TARGETS_EVENT, stack + 1)
                 attribute.ApplyAttributes  (evt, ATTRIBUTE_TARGETS_EVENT, nil, owner, name, super)
 
                 return evt
             end;
 
             ["EndDefinition"]   = function(feature, owner, name)
-                attribute.ApplyAfterDefine (feature, ATTRIBUTE_TARGETS_EVENT, owner, name)
+                attribute.AttachAttributes (feature, ATTRIBUTE_TARGETS_EVENT, owner, name)
 
                 local info      = _EvtInfo[feature]
                 if info then info[FD_INDEF] = nil end
@@ -5726,8 +6347,8 @@ do
         },
         __call      = function(self, ...)
             if self == event then
-                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(event, ...)
-                if not owner or not tarenv then error([[Usage: event "name" - can't be used here.]], stack) end
+                local owner,env, name, definition, flag, stack = GetFeatureParams(event, ...)
+                if not owner then error([[Usage: event "name" - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: event "name" - the name must be a string.]], stack) end
                 name = strtrim(name)
                 if name == "" then error([[Usage: event "name" - the name can't be an empty string.]], stack) end
@@ -5754,7 +6375,7 @@ do
     ATTRIBUTE_TARGETS_PROPERTY  = attribute.RegisterTargetType("Property", true)
 
     -----------------------------------------------------------------------
-    --                         private variables                         --
+    --                          private storage                          --
     -----------------------------------------------------------------------
 
     -----------------------------------------------------------------------
@@ -5771,7 +6392,7 @@ do
         },
         __call      = function(self, ...)
             if self == property then
-                local env, name, definition, flag, stack, owner, tarenv = GetFeatureParams(property, ...)
+                local owner, env, name, definition, flag, stack = GetFeatureParams(property, ...)
                 if not owner or not tarenv then error([[Usage: property "name" {...} - can't be used here.]], stack) end
                 if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -5785,7 +6406,7 @@ do
                 end
             else
                 local owner, name       = self.owner, self.name
-                local definition, stack = GetDefinitionParams(self, ...)
+                local definition, stack = ...
 
                 if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
                 name = strtrim(name)
@@ -5804,39 +6425,32 @@ end
 --                           Feature Installation                            --
 -------------------------------------------------------------------------------
 do
-    environment.RegisterContextKeyword(structbuilder, {
+    environment.RegisterGlobalKeyword {
         import          = import,
-        member          = member,
-        endstruct       = endstruct,
         enum            = enum,
         struct          = struct,
         class           = class,
         interface       = interface,
+    }
+
+    environment.RegisterContextKeyword(structbuilder, {
+        member          = member,
+        endstruct       = endstruct,
     })
 
     environment.RegisterContextKeyword(interfacebuilder, {
-        import          = import,
-        --extend          = extend,
+        extend          = extend,
         event           = event,
         property        = property,
-        --endinterface    = endinterface,
-        enum            = enum,
-        struct          = struct,
-        class           = class,
-        interface       = interface,
+        endinterface    = endinterface,
     })
 
     environment.RegisterContextKeyword(classbuilder, {
-        import          = import,
-        --inherit         = inherit,
-        --extend          = extend,
+        inherit         = inherit,
+        extend          = extend,
         event           = event,
         property        = property,
-        --endclass        = endclass,
-        enum            = enum,
-        struct          = struct,
-        class           = class,
-        interface       = interface,
+        endclass        = endclass,
     })
 
     _G.PLoop = prototype "PLoop" {
