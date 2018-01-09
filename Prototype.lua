@@ -174,6 +174,15 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         ENUM_GLOBAL_IGNORE_CASE             = false,
 
+        --- Whether allow old style of type definitions like :
+        --      class "A"
+        --          -- xxx
+        --      endclass "A"
+        --
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        TYPE_DEFINITION_WITH_OLD_STYLE      = false,
+
         --- Whether all old objects keep using new features when their
         -- classes or extend interfaces are re-defined.
         -- Default false
@@ -249,7 +258,18 @@ do
 
     newStorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
     saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_HOTPATCH_ENABLED
-                                    and function(self, key, value) if self[key] ~= nil then self[key] = value return self else return tblclone(self, { [key] = value } ) end end
+                                    and function(self, key, value)
+                                        local new
+                                        if value == nil then
+                                            if self[key] == nil then return end
+                                            new  = {}
+                                        else
+                                            if self[key] ~= nil then self[key] = value return self end
+                                            new  = { [key] = value }
+                                        end
+                                        for k, v in pairs, self do if k ~= key then new[k] = v end
+                                        return new
+                                    end
                                     or  function(self, key, value) self[key] = value return self end
 
     -----------------------------------------------------------------------
@@ -553,7 +573,7 @@ do
                 end
 
                 if not nType.Validate(target) then
-                    target == nil
+                    target  = nil
                 else
                     if visitor then rawset(visitor, namespace.GetNameSpaceName(target, true), target) end
                     if env and env ~= visitor then rawset(env, namespace.GetNameSpaceName(target, true), target) end
@@ -562,6 +582,7 @@ do
         else
             -- Anonymous
             target = prototype.NewProxy(ptype)
+            namespace.SaveAnonymousNameSpace(target)
         end
 
         return visitor, env, target, definition, flag, stack
@@ -591,7 +612,7 @@ end
 --
 -- The prototypes are simple userdata generated like:
 --
---      proxy = prototype "proxy" {
+--      proxy = prototype {
 --          __index = function(self, key) return rawget(self, "__" .. key) end,
 --          __newindex = function(self, key, value)
 --              rawset(self, "__" .. key, value)
@@ -608,26 +629,26 @@ end
 -- All meta-table settings will be copied to the result's meta-table, and there
 -- are two fields whose default value is provided by the prototype system :
 --      * __metatable : if nil, the prototype itself would be used.
---      * __tostring  : if nil, the prototype's name would be used if the name
---          existed, if false, __tostring will be set to nil.
+--      * __tostring  : if its value is string, it'll be converted to a function
+--              that return the value, if the prototype name is provided and the
+--              __tostring is nil, the name would be used.
 --
 -- The prototype system also support a simple inheritance system like :
 --
---      cproxy = prototype "cproxy" (proxy, {
+--      cproxy = prototype (proxy, {
 --          __call = function(self, ...) end,
 --      })
 --
 -- The new prototype's meta-table will copy meta-settings from its super except
--- the __metatable and __tostring.
+-- the __metatable.
 --
 -- The complete definition syntaxes are
 --
---      val = prototype (["name",][super,][definiton][,nodeepclone][,stack])
---      val = prototype "name" ([super,][definiton][,nodeepclone][,stack])
+--      val = prototype ([name][super,]definiton[,nodeepclone][,stack])
 --
 -- The params :
---      * name          : string, the prototype's name, if ommit, must have
---              super or definiton to define an anonymous prototype.
+--      * name          : string, the prototype's name, it'd be used in the
+--              __tostring, if it's not provided.
 --
 --      * super         : prototype, the super prototype whose meta-settings
 --              would be copied to the new one.
@@ -652,9 +673,7 @@ do
     -----------------------------------------------------------------------
     --                              Helpers                              --
     -----------------------------------------------------------------------
-    local newPrototypeName      = nil
-
-    local parsePrototypeArgs    = function(...)
+    local newPrototype          = function (...)
         local name, meta, super, nodeepclone, stack
 
         for i = 1, select("#", ...) do
@@ -673,32 +692,23 @@ do
                 elseif _Prototype[value] then
                     super       = value
                 end
+            elseif vtype == "userdata" and _Prototype[value] then
+                super           = value
             end
         end
-
-        return name, meta, super, nodeepclone or false, stack or 1
-    end
-
-    local newPrototype          = function (...)
-        local name, meta, super, nodeepclone, stack = parsePrototypeArgs(...)
-
-        name                    = name or newPrototypeName
-        newPrototypeName        = nil
 
         local prototype         = newproxy(true)
         local pmeta             = getmetatable(prototype)
         _Prototype[prototype]   = pmeta
 
         -- Default
-        if meta                         then tblclone(meta, pmeta, not nodeepclone, true) end
-        if pmeta.__metatable   == nil   then pmeta.__metatable  = prototype end
-        if pmeta.__tostring    == nil   then pmeta.__tostring   = name and (function() return name end) or false end
+        if meta                                 then tblclone(meta, pmeta, not nodeepclone, true) end
+        if pmeta.__metatable        == nil      then pmeta.__metatable      = prototype end
+        if type(pmeta.__tostring)   == "string" then name, pmeta.__tostring = pmeta.__tostring, nil end
+        if pmeta.__tostring         == nil      then pmeta.__tostring       = name and function() return name end end
 
         -- Inherit
-        if super                        then tblclone(_Prototype[super], pmeta, true, false) end
-
-        -- Clear
-        if pmeta.__tostring    == false then pmeta.__tostring   = nil end
+        if super                                then tblclone(_Prototype[super], pmeta, true, false) end
 
         Debug("[prototype] %s created", (stack or 1) + 1, name or "anonymous")
 
@@ -708,7 +718,8 @@ do
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
-    prototype                   = newPrototype ("prototype", {
+    prototype                   = newPrototype {
+        __tostring              = "prototype",
         __index                 = {
             --- Get the methods of the prototype
             -- @static
@@ -784,20 +795,8 @@ do
             ["Validate"]        = function(self) return _Prototype[self] and self or nil end,
         },
         __newindex              = readOnly,
-        __call                  = function(...)
-            local name, meta, super, nodeepclone, stack = parsePrototypeArgs(...)
-
-            if meta or super then
-                local prototype = newPrototype(name, meta, super, nodeepclone, stack + 1)
-                return prototype
-            elseif name then
-                newPrototypeName= name
-                return newPrototype
-            else
-                error([["Usage: prototype "name" { meta-settings }]], 2)
-            end
-        end,
-    })
+        __call                  = newPrototype,
+    }
 end
 
 -------------------------------------------------------------------------------
@@ -979,7 +978,8 @@ do
     -----------------------------------------------------------------------
     --                             attribute                             --
     -----------------------------------------------------------------------
-    attribute                   = prototype "attribute" {
+    attribute                   = prototype {
+        __tostring              = "attribute",
         __index                 = {
             --- Use the registered attributes to init the target's definition
             -- @static
@@ -1434,7 +1434,8 @@ do
     -----------------------------------------------------------------------
     --                            environment                            --
     -----------------------------------------------------------------------
-    environment                 = prototype "environment" {
+    environment                 = prototype {
+        __tostring              = "environment",
         __index                 = {
             --- Get the namespace from the environment
             -- @static
@@ -1443,6 +1444,7 @@ do
             -- @param   env:table       the environment
             -- @return  ns              the namespace of the environment
             ["GetNameSpace"]    = function(env)
+                env = env or getfenv(2)
                 return namespace.Validate(type(env) == "table" and rawget(env, ENV_NS_OWNER))
             end;
 
@@ -1706,7 +1708,6 @@ do
     tenvironment                = prototype {
         __index                 = environment.GetValue,
         __newindex              = environment.SaveValue,
-        __tostring              = false,
         __call                  = function(self, definition)
             if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
             setfenv(definition, self)
@@ -1754,8 +1755,9 @@ do
     -----------------------------------------------------------------------
     --                             namespace                             --
     -----------------------------------------------------------------------
-    namespace                   = prototype "namespace" {
-        __index     = {
+    namespace                   = prototype {
+        __tostring              = "namespace",
+        __index                 = {
             --- Export a namespace and its children to an environment
             -- @static
             -- @method  ExportNameSpace
@@ -1863,6 +1865,17 @@ do
                     error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the feature should be userdata or table", (stack or 1) + 1)
                 end
 
+                if _NSName[feature] ~= nil then
+                    local epath = _Cache()
+                    if _NSName[root] then tinsert(epath, _NSName[root]) end
+                    path:gsub("[^%s%p]+", function(name) tinsert(epath, name) end)
+                    if tblconcat(epath, ".") == _NSName[feature] then
+                        return
+                    else
+                        error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - already registered as " .. (_NSName[feature] or "Anonymous"), (stack or 1) + 1)
+                    end
+                end
+
                 local iter      = strgmatch(path, "[^%s%p]+")
                 local subname   = iter()
 
@@ -1893,6 +1906,26 @@ do
 
                     root, subname = subns, nxt
                 end
+            end;
+
+            --- Save anonymous namespace, anonymous namespace also can be used
+            -- as new root of another namespace tree.
+            -- @static
+            -- @method  SaveAnonymousNameSpace
+            -- @owner   namespace
+            -- @param   feature         the feature, must be table or userdata
+            -- @param   stack           the stack level
+            ["SaveAnonymousNameSpace"] = function(feature, stack)
+                if stack ~= nil and type(stack) ~= "number" then
+                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the stack must be number", 2)
+                end
+                if type(feature) ~= "table" and type(feature) ~= "userdata" then
+                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature should be userdata or table", (stack or 1) + 1)
+                end
+                if _NSName[feature] then
+                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], (stack or 1) + 1)
+                end
+                _NSName[feature] = false
             end;
 
             --- Whether the target is a namespace
@@ -1954,7 +1987,7 @@ do
     GetNameSpace                = namespace.GetNameSpace
 
     -- default type for namespace
-    tnamespace                  = prototype "tnamespace" {
+    tnamespace                  = prototype {
         __index                 = GetNameSpace,
         __newindex              = readOnly,
         __tostring              = namespace.GetNameSpaceName,
@@ -1973,7 +2006,7 @@ do
 
     -- Init the root namespace
     ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
-    _NSName[ROOT_NAMESPACE]     = false
+    namespace.SaveAnonymousNameSpace(ROOT_NAMESPACE)
 end
 
 -------------------------------------------------------------------------------
@@ -2015,7 +2048,7 @@ do
     local _EnumInfo             = newStorage(WEAK_KEY)
 
     -- BUILD CACHE
-    local _EnumBuilderInfo      = setmetatable({}, WEAK_KEY)
+    local _EnumBuilderInfo      = newStorage(WEAK_KEY)
     local _EnumValidMap         = {}
 
     -- FEATURE MODIFIER
@@ -2113,8 +2146,41 @@ do
     -----------------------------------------------------------------------
     --                               enum                                --
     -----------------------------------------------------------------------
-    enum                        = prototype "enum" {
+    enum                        = prototype {
+        __tostring              = "enum",
         __index                 = {
+            --- Add key-value pair to the enumeration
+            -- @static
+            -- @method  AddElement
+            -- @owner   enum
+            -- @format  (enumeration, key, value[, stack])
+            -- @param   enumeration     the enumeration
+            -- @param   key             the element name
+            -- @param   value           the element value
+            -- @param   stack           the stack level
+            ["AddElement"]    = function(target, key, value, stack)
+                local info, def = getEnumTargetInfo(target)
+                stack = type(stack) == "number" and stack or 1
+
+                if info then
+                    if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
+                    if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack + 1) end
+
+                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
+                        if strupper(k) == strupper(key) then
+                            if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack + 1)
+                        elseif v == value then
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack + 1)
+                        end
+                    end
+
+                    info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
+                else
+                    error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack + 1)
+                end
+            end;
+
             --- Begin the enumeration's definition
             -- @static
             -- @method  BeginDefinition
@@ -2125,14 +2191,14 @@ do
             ["BeginDefinition"] = function(target, stack)
                 stack   = type(stack) == "number" and stack or 1
                 target  = enum.Validate(target)
-                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
+                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack + 1) end
 
                 local info      = _EnumInfo[target]
 
-                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack + 1) end
+                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack + 1) end
 
-                _EnumBuilderInfo[target]= info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
                     [FLD_ENUM_MOD    ]  = MOD_ENUM_INIT,
                     [FLD_ENUM_ITEMS  ]  = {},
                     [FLD_ENUM_CACHE  ]  = {},
@@ -2140,7 +2206,7 @@ do
                     [FLD_ENUM_VALID  ]  = false,
                     [FLD_ENUM_MAXVAL ]  = false,
                     [FLD_ENUM_DEFAULT]  = nil,
-                }
+                })
 
                 attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_ENUM, stack + 1)
             end;
@@ -2160,7 +2226,7 @@ do
 
                 attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_ENUM)
 
-                _EnumBuilderInfo[target] = nil
+                _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, nil)
 
                 local enums = ninfo[FLD_ENUM_ITEMS]
                 local cache = wipe(ninfo[FLD_ENUM_CACHE])
@@ -2175,9 +2241,10 @@ do
                         while v >= max do max = max * 2 end
                     end
 
-                    ninfo[FLD_ENUM_MAXVAL] = max - 1
+                    ninfo[FLD_ENUM_MAXVAL]  = max - 1
                 else
-                    ninfo[FLD_ENUM_MOD] = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
+                    ninfo[FLD_ENUM_MAXVAL]  = false
+                    ninfo[FLD_ENUM_MOD]     = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
                 end
 
                 genEnumValidator(ninfo)
@@ -2348,38 +2415,6 @@ do
                 end
             end;
 
-            --- Set key-value pair to the enumeration
-            -- @static
-            -- @method  SetEnumValue
-            -- @owner   enum
-            -- @format  (enumeration, key, value[, stack])
-            -- @param   enumeration     the enumeration
-            -- @param   key             the element name
-            -- @param   value           the element value
-            -- @param   stack           the stack level
-            ["SetEnumValue"]    = function(target, key, value, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
-
-                if info then
-                    if not def then error(strformat("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
-                    if type(key) ~= "string" then error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key must be a string", stack + 1) end
-
-                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
-                        if strupper(k) == strupper(key) then
-                            if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
-                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The key already existed", stack + 1)
-                        elseif v == value then
-                            error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The value already existed", stack + 1)
-                        end
-                    end
-
-                    info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
-                else
-                    error("Usage: enum.SetEnumValue(enumeration, key, value[, stack]) - The enumeration is not valid", stack + 1)
-                end
-            end;
-
             --- Set the enumeration as case ignored
             -- @static
             -- @method  SetCaseIgnored
@@ -2490,9 +2525,9 @@ do
         __call                  = function(self, ...)
             local visitor, env, target, definition, flag, stack  = GetTypeParams(enum, tenum, ...)
             if not target then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack)
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack + 1)
             elseif definition ~= nil and type(definition) ~= "table" then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack)
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack + 1)
             end
 
             enum.BeginDefinition(target, stack + 1)
@@ -2509,16 +2544,17 @@ do
         end,
     }
 
-    tenum                       = prototype "tenum" (tnamespace, {
+    tenum                       = prototype (tnamespace, {
         __index                 = enum.ValidateValue,
         __call                  = enum.Parse,
         __metatable             = enum,
     })
 
-    enumbuilder                 = prototype "enumbuilder" {
+    enumbuilder                 = prototype {
         __index                 = writeOnly,
         __newindex              = readOnly,
         __call                  = function(self, definition, stack)
+            stack   = (type(stack) == "number" and stack or 1) + 1
             if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
@@ -2531,13 +2567,11 @@ do
                 definition = final
             end
 
-            stack   = stack + 1
-
             for k, v in pairs, definition do
                 if type(k) == "string" then
-                    enum.SetEnumValue(owner, k, v, stack)
+                    enum.AddElement(owner, k, v, stack)
                 elseif type(v) == "string" then
-                    enum.SetEnumValue(owner, v, v, stack)
+                    enum.AddElement(owner, v, v, stack)
                 end
             end
 
@@ -2548,7 +2582,40 @@ do
 end
 
 -------------------------------------------------------------------------------
---                                 structure                                 --
+-- The structure are used to define data types. The struct prototype provides
+-- three data types :
+--
+--      1. custom data type     The basic data types like number, string and
+--          more advance types like nature number. If a struct is defined with
+--          only the validation method, it's a custom data type.
+--
+--              struct "Number" {
+--                  function (value)
+--                      if type(value) == "number" then return value end
+--                      return nil, "The %s must be number"
+--                  end,
+--              }
+--
+--      2. member data type     The member data type provide tables with fixed
+--          fields of certain types.
+--
+--              struct "Location" (function(_ENV)
+--                  x = Number
+--                  y = Number
+--              end)
+--
+--              loc = Location(100, 20)
+--              print(loc.x, loc.y)
+--
+--      3. array data type      The array data type provide array tables that
+--          contains a list of same type items.
+--
+--              struct "Locations" { Location }
+--
+-- The struct types are normally used as value validation or simple value's
+-- creation.
+--
+-- @prototype   struct
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -2568,10 +2635,12 @@ do
     -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _StrtInfo             = setmetatable({}, WEAK_KEY)
-    local _DependenceMap        = setmetatable({}, WEAK_KEY)
-    local _StructBuilderInfo    = setmetatable({}, WEAK_KEY)
-    local _StructBuilderInDefine= setmetatable({}, WEAK_KEY)
+    local _StrtInfo             = newStorage(WEAK_KEY)
+    local _DependenceMap        = newStorage(WEAK_KEY)
+
+    -- TYPE BUILDING
+    local _StructBuilderInfo    = newStorage(WEAK_KEY)
+    local _StructBuilderInDefine= newStorage(WEAK_KEY)
 
     local _StructValidMap       = {}
     local _StructCtorMap        = {}
@@ -2617,6 +2686,7 @@ do
     local FLG_STRUCT_MULTI_REQ  = 2^9       -- MULTI  FIELD  REQUIRE FLAG
     local FLG_STRUCT_FIRST_TYPE = 2^10      -- FIRST  MEMBER TYPE    FLAG
 
+    local STRUCT_KEYWORD_VALD   = "__valid" -- For anonymous
     local STRUCT_KEYWORD_INIT   = "__init"
     local STRUCT_KEYWORD_BASE   = "__base"
 
