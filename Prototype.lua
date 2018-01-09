@@ -121,6 +121,7 @@ do
             traceback           = debug and debug.traceback or false,
             setfenv             = setfenv or debug and debug.setfenv or false,
             getfenv             = getfenv or debug and debug.getfenv or false,
+            collectgarbage      = collectgarbage,
 
             -- Share API
             fakefunc            = function() end,
@@ -267,7 +268,7 @@ do
                                             if self[key] ~= nil then self[key] = value return self end
                                             new  = { [key] = value }
                                         end
-                                        for k, v in pairs, self do if k ~= key then new[k] = v end
+                                        for k, v in pairs, self do if k ~= key then new[k] = v end end
                                         return new
                                     end
                                     or  function(self, key, value) self[key] = value return self end
