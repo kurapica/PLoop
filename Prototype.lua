@@ -272,6 +272,7 @@ do
                                         return new
                                     end
                                     or  function(self, key, value) self[key] = value return self end
+    safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -490,8 +491,10 @@ do
             function(msg, stack, ...)
                 if type(stack) == "number" then
                     msg = prefix .. strformat(msg, ...) .. (getCallLine(stack + 1) or "")
-                else
+                elseif stack then
                     msg = prefix .. strformat(msg, stack, ...)
+                else
+                    msg = prefix .. msg
                 end
                 return handler(msg, loglvl)
             end
@@ -672,38 +675,16 @@ do
     local _Prototype            = newStorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
-    --                              Helpers                              --
+    --                          private helpers                          --
     -----------------------------------------------------------------------
-    local newPrototype          = function (...)
-        local name, meta, super, nodeepclone, stack
-
-        for i = 1, select("#", ...) do
-            local value         = select(i, ...)
-            local vtype         = type(value)
-
-            if vtype == "boolean" then
-                nodeepclone     = value
-            elseif vtype == "number" then
-                stack           = value
-            elseif vtype == "string" and strtrim(value) ~= "" then
-                name            = strtrim(value)
-            elseif vtype == "table" then
-                if getmetatable(value) == nil then
-                    meta        = value
-                elseif _Prototype[value] then
-                    super       = value
-                end
-            elseif vtype == "userdata" and _Prototype[value] then
-                super           = value
-            end
-        end
-
+    local savePrototype         = function (meta, super, nodeepclone, stack)
+        local name
         local prototype         = newproxy(true)
         local pmeta             = getmetatable(prototype)
-        _Prototype[prototype]   = pmeta
+        _Prototype              = saveStorage(_Prototype, prototype, pmeta)
 
         -- Default
-        if meta                                 then tblclone(meta, pmeta, not nodeepclone, true) end
+        if meta                                 then tblclone(meta, pmeta,  not nodeepclone, true) end
         if pmeta.__metatable        == nil      then pmeta.__metatable      = prototype end
         if type(pmeta.__tostring)   == "string" then name, pmeta.__tostring = pmeta.__tostring, nil end
         if pmeta.__tostring         == nil      then pmeta.__tostring       = name and function() return name end end
@@ -719,7 +700,7 @@ do
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
-    prototype                   = newPrototype {
+    prototype                   = savePrototype {
         __tostring              = "prototype",
         __index                 = {
             --- Get the methods of the prototype
@@ -796,7 +777,31 @@ do
             ["Validate"]        = function(self) return _Prototype[self] and self or nil end,
         },
         __newindex              = readOnly,
-        __call                  = newPrototype,
+        __call                  = function (self, ...)
+            local meta, super, nodeepclone, stack
+
+            for i = 1, select("#", ...) do
+                local value         = select(i, ...)
+                local vtype         = type(value)
+
+                if vtype == "boolean" then
+                    nodeepclone     = value
+                elseif vtype == "number" then
+                    stack           = value
+                elseif vtype == "table" then
+                    if getmetatable(value) == nil then
+                        meta        = value
+                    elseif _Prototype[value] then
+                        super       = value
+                    end
+                elseif vtype == "userdata" and _Prototype[value] then
+                    super           = value
+                end
+            end
+
+            local prototype         = savePrototype(meta, super, nodeepclone, (stack or 1) + 1)
+            return prototype
+        end,
     }
 end
 
@@ -914,13 +919,13 @@ do
     --                          public constants                         --
     -----------------------------------------------------------------------
     -- ATTRIBUTE TARGETS
-    ATTRIBUTE_TARGETS_ALL       = 0
+    ATTRTAR_ALL                 = 0
 
     -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
     -- Attribute Data
-    local _AttrTargetTypes      = { [ATTRIBUTE_TARGETS_ALL] = "All" }
+    local _AttrTargetTypes      = { [ATTRTAR_ALL] = "All" }
 
     -- Attribute Target Data
     local _AttrTargetData       = newStorage(WEAK_KEY)
@@ -929,10 +934,10 @@ do
     -- Temporary Cache
     local _RegisteredAttrs      = {}
     local _RegisteredAttrsStack = {}
-    local _TargetAttrs          = setmetatable({}, WEAK_KEY)
+    local _TargetAttrs          = newStorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
-    --                              Helpers                              --
+    --                          private helpers                          --
     -----------------------------------------------------------------------
     local _UseWarnInstreadErr   = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
@@ -977,7 +982,7 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                             attribute                             --
+    --                             prototype                             --
     -----------------------------------------------------------------------
     attribute                   = prototype {
         __tostring              = "attribute",
@@ -995,7 +1000,7 @@ do
             -- @return  definition      the target's new definition, nil means no change, false means cancel the target's definition, it may be done by the attribute, these may not be supported by the target type
             ["InitDefinition"]  = function(target, targetType, definition, owner, name)
                 local tarAttrs  = _TargetAttrs[target]
-                if not tarAttrs then return end
+                if not tarAttrs then return definition end
 
                 -- Apply the attribute to the target
                 Debug("[attribute][InitDefinition] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
@@ -1172,9 +1177,9 @@ do
                     local super = select(i, ...)
                     if super and _AttrTargetInrt[super] then
                         for _, sattr in pairs, _AttrTargetInrt[super] do
-                            local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
+                            local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                            if aTar == ATTRIBUTE_TARGETS_ALL or validateFlags(targetType, aTar) then
+                            if aTar == ATTRTAR_ALL or validateFlags(targetType, aTar) then
                                 Trace("Inherit attribtue %s", tostring(sattr))
                                 tarAttrs = tarAttrs or _Cache()
                                 addAttribute(tarAttrs, sattr, true)
@@ -1222,14 +1227,14 @@ do
                 Debug("[attribute][RegisterAttributeType] %s", tostring(attrType))
 
                 -- Default usage data for attributes
-                attrusage.InitDefinition    = getAttrUsageField(usage,  "InitDefinition",   nil,                   "function")
-                attrusage.ApplyAttribute    = getAttrUsageField(usage,  "ApplyAttribute",   nil,                   "function")
-                attrusage.AttachAttribute   = getAttrUsageField(usage,  "AttachAttribute",  nil,                   "function")
-                attrusage.AttributeTarget   = getAttrUsageField(usage,  "AttributeTarget",  ATTRIBUTE_TARGETS_ALL, "number")
+                attrusage.InitDefinition    = getAttrUsageField(usage,  "InitDefinition",   nil,        "function")
+                attrusage.ApplyAttribute    = getAttrUsageField(usage,  "ApplyAttribute",   nil,        "function")
+                attrusage.AttachAttribute   = getAttrUsageField(usage,  "AttachAttribute",  nil,        "function")
+                attrusage.AttributeTarget   = getAttrUsageField(usage,  "AttributeTarget",  ATTRTAR_ALL,"number")
                 attrusage.Inheritable       = getAttrUsageField(usage,  "Inheritable",      false)
                 attrusage.Overridable       = getAttrUsageField(usage,  "Overridable",      true)
-                attrusage.Priority          = getAttrUsageField(usage,  "Priority",         0,                     "number")
-                attrusage.SubLevel          = getAttrUsageField(usage,  "SubLevel",         0,                     "number")
+                attrusage.Priority          = getAttrUsageField(usage,  "Priority",         0,          "number")
+                attrusage.SubLevel          = getAttrUsageField(usage,  "SubLevel",         0,          "number")
 
                 -- A special data for attribute usage, so the attribute usage won't be overridden
                 attrusage.Final             = getAttrUsageField(usage,  "Final",            false)
@@ -1270,9 +1275,9 @@ do
 
                 for i = #regAttrs, 1, -1 do
                     local attr  = regAttrs[i]
-                    local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRIBUTE_TARGETS_ALL, "number")
+                    local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                    if aTar ~= ATTRIBUTE_TARGETS_ALL and not validateFlags(targetType, aTar) then
+                    if aTar ~= ATTRTAR_ALL and not validateFlags(targetType, aTar) then
                         if _UseWarnInstreadErr then
                             Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", tostring(target))
                             tremove(regAttrs, i)
@@ -1397,7 +1402,17 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_FUNCTION  = attribute.RegisterTargetType("Function")
+    ATTRTAR_FUNCTION            = attribute.RegisterTargetType("Function")
+
+    -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    -- Environment Special Field
+    local ENV_NS_OWNER          = "__PLOOP_ENV_OWNNS"
+    local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
+    local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
+
+    local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -1410,14 +1425,9 @@ do
     local _KeyVisitor                   -- The environment that access the next keyword
     local _AccessKey                    -- The next keyword
 
-    -- Environment Special Field
-    local ENV_NS_OWNER          = "__PLOOP_ENV_OWNNS"
-    local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
-    local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
-
-    local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
-
-    -- Share Helpers
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
     local saferawset            = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD
         and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED
         and (PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN
@@ -1433,7 +1443,7 @@ do
     local saferawget            = function (self, key) return self[key] end
 
     -----------------------------------------------------------------------
-    --                            environment                            --
+    --                             prototype                             --
     -----------------------------------------------------------------------
     environment                 = prototype {
         __tostring              = "environment",
@@ -1636,16 +1646,16 @@ do
             -- @param   stack           the stack level
             ["SaveValue"]       = function(env, key, value, stack)
                 if type(key)   == "string" and type(value) == "function" then
-                    attribute.SaveAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, (stack or 1) + 1)
+                    attribute.SaveAttributes(value, ATTRTAR_FUNCTION, (stack or 1) + 1)
 
-                    local final = attribute.InitDefinition(value, ATTRIBUTE_TARGETS_FUNCTION, value, env, key)
+                    local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key)
 
                     if type(final) == "function" and final ~= value then
                         attribute.ToggleTarget(value, final)
                         value   = final
                     end
-                    attribute.ApplyAttributes (value, ATTRIBUTE_TARGETS_FUNCTION, env, key)
-                    attribute.AttachAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, env, key)
+                    attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key)
+                    attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key)
                 end
                 return rawset(env, key, value)
             end;
@@ -1683,6 +1693,19 @@ do
         end,
     }
 
+    tenvironment                = prototype {
+        __index                 = environment.GetValue,
+        __newindex              = environment.SaveValue,
+        __call                  = function(self, definition)
+            if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
+            setfenv(definition, self)
+            return definition(self)
+        end,
+    }
+
+    -----------------------------------------------------------------------
+    --                             keywords                              --
+    -----------------------------------------------------------------------
     -----------------------------------------------------------------------
     -- import namespace to current environment
     --
@@ -1702,19 +1725,6 @@ do
             return namespace.ExportNameSpace(env, name, flag)
         end
     end
-
-    -----------------------------------------------------------------------
-    --                           tenvironment                            --
-    -----------------------------------------------------------------------
-    tenvironment                = prototype {
-        __index                 = environment.GetValue,
-        __newindex              = environment.SaveValue,
-        __call                  = function(self, definition)
-            if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
-            setfenv(definition, self)
-            return definition(self)
-        end,
-    }
 end
 
 -------------------------------------------------------------------------------
@@ -1741,7 +1751,7 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_NAMESPACE = attribute.RegisterTargetType("Namespace")
+    ATTRTAR_NAMESPACE           = attribute.RegisterTargetType("Namespace")
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -1754,7 +1764,7 @@ do
     local GetNameSpace
 
     -----------------------------------------------------------------------
-    --                             namespace                             --
+    --                             prototype                             --
     -----------------------------------------------------------------------
     namespace                   = prototype {
         __tostring              = "namespace",
@@ -1926,7 +1936,7 @@ do
                 if _NSName[feature] then
                     error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], (stack or 1) + 1)
                 end
-                _NSName[feature] = false
+                _NSName         = saveStorage(_NSName, feature, false)
             end;
 
             --- Whether the target is a namespace
@@ -1962,9 +1972,9 @@ do
                     local ns    = GetNameSpace(target)
                     if not ns then
                         ns = prototype.NewProxy(tnamespace)
-                        attribute.SaveAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE, stack + 1)
+                        attribute.SaveAttributes(ns, ATTRTAR_NAMESPACE, stack + 1)
                         namespace.SaveNameSpace(target, ns, stack + 1)
-                        attribute.AttachAttributes(ns, ATTRIBUTE_TARGETS_NAMESPACE)
+                        attribute.AttachAttributes(ns, ATTRTAR_NAMESPACE)
                         target    = ns
                     end
                 else
@@ -1983,13 +1993,9 @@ do
         end,
     }
 
-    -- Shortcut Assignment
-    Validate                    = namespace.Validate
-    GetNameSpace                = namespace.GetNameSpace
-
     -- default type for namespace
     tnamespace                  = prototype {
-        __index                 = GetNameSpace,
+        __index                 = namespace.GetNameSpace,
         __newindex              = readOnly,
         __tostring              = namespace.GetNameSpaceName,
         __metatable             = namespace,
@@ -2004,6 +2010,13 @@ do
             end
         end,
     }
+
+    -----------------------------------------------------------------------
+    --                            Initialize                             --
+    -----------------------------------------------------------------------
+    -- Shortcut Assignment
+    Validate                    = namespace.Validate
+    GetNameSpace                = namespace.GetNameSpace
 
     -- Init the root namespace
     ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
@@ -2041,17 +2054,11 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_ENUM      = attribute.RegisterTargetType("Enum")
+    ATTRTAR_ENUM                = attribute.RegisterTargetType("Enum")
 
     -----------------------------------------------------------------------
-    --                          private storage                          --
+    --                         private constants                         --
     -----------------------------------------------------------------------
-    local _EnumInfo             = newStorage(WEAK_KEY)
-
-    -- BUILD CACHE
-    local _EnumBuilderInfo      = newStorage(WEAK_KEY)
-    local _EnumValidMap         = {}
-
     -- FEATURE MODIFIER
     local MOD_SEALED_ENUM       = 2^0   -- SEALED
     local MOD_FLAGS_ENUM        = 2^1   -- FLAGS
@@ -2073,6 +2080,18 @@ do
     local FLG_FLAGS_ENUM        = 2^0
     local FLG_CASE_IGNORED      = 2^1
 
+    -----------------------------------------------------------------------
+    --                          private storage                          --
+    -----------------------------------------------------------------------
+    local _EnumInfo             = newStorage(WEAK_KEY)
+
+    -- BUILD CACHE
+    local _EnumBuilderInfo      = newStorage(WEAK_KEY)
+    local _EnumValidMap         = {}
+
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
     local getEnumTargetInfo     = function (target)
         local info  = _EnumBuilderInfo[target]
         if info then return info, true else return _EnumInfo[target], false end
@@ -2145,7 +2164,7 @@ do
     end
 
     -----------------------------------------------------------------------
-    --                               enum                                --
+    --                             prototype                             --
     -----------------------------------------------------------------------
     enum                        = prototype {
         __tostring              = "enum",
@@ -2209,7 +2228,7 @@ do
                     [FLD_ENUM_DEFAULT]  = nil,
                 })
 
-                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_ENUM, stack + 1)
+                attribute.SaveAttributes(target, ATTRTAR_ENUM, stack + 1)
             end;
 
             --- End the enumeration's definition
@@ -2225,7 +2244,7 @@ do
 
                 stack = type(stack) == "number" and stack or 1
 
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_ENUM)
+                attribute.ApplyAttributes(target, ATTRTAR_ENUM)
 
                 _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, nil)
 
@@ -2261,7 +2280,7 @@ do
                 -- Save as new enumeration's info
                 _EnumInfo       = saveStorage(_EnumInfo, target, ninfo)
 
-                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_ENUM)
+                attribute.AttachAttributes(target, ATTRTAR_ENUM)
 
                 return target
             end;
@@ -2318,6 +2337,16 @@ do
             ["IsFlagsEnum"]     = function(target)
                 local info      = getEnumTargetInfo(target)
                 return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
+            end;
+
+            --- Whether the enum's value is immutable through the validation, always false.
+            -- @static
+            -- @method  IsImmutable
+            -- @owner   enum
+            -- @param   enumeration     the enumeration
+            -- @return  false
+            ["IsImmutable"]     = function(target)
+                return false
             end;
 
             --- Whether the enumeration is sealed, so can't be re-defined
@@ -2562,7 +2591,7 @@ do
             if not owner then error("The enumeration can't be found", stack) end
             if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
 
-            local final = attribute.InitDefinition(owner, ATTRIBUTE_TARGETS_ENUM, definition)
+            local final = attribute.InitDefinition(owner, ATTRTAR_ENUM, definition)
 
             if type(final) == "table" then
                 definition = final
@@ -2592,8 +2621,7 @@ end
 --
 --              struct "Number" {
 --                  function (value)
---                      if type(value) == "number" then return value end
---                      return nil, "The %s must be number"
+--                      return type(value) ~= "number" and "The %s must be number"
 --                  end,
 --              }
 --
@@ -2622,9 +2650,9 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_STRUCT    = attribute.RegisterTargetType("Struct")
-    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
-    ATTRIBUTE_TARGETS_MEMBER    = attribute.RegisterTargetType("Member")
+    ATTRTAR_STRUCT              = attribute.RegisterTargetType("Struct")
+    ATTRTAR_MEMBER              = attribute.RegisterTargetType("Member")
+    ATTRTAR_STRUCT_METHOD       = attribute.RegisterTargetType("StructMethod")
 
     -----------------------------------------------------------------------
     --                          public constants                         --
@@ -2634,20 +2662,11 @@ do
     STRUCT_TYPE_CUSTOM          = "CUSTOM"
 
     -----------------------------------------------------------------------
-    --                          private storage                          --
+    --                         private constants                         --
     -----------------------------------------------------------------------
-    local _StrtInfo             = newStorage(WEAK_KEY)
-    local _DependenceMap        = newStorage(WEAK_KEY)
-
-    -- TYPE BUILDING
-    local _StructBuilderInfo    = newStorage(WEAK_KEY)
-    local _StructBuilderInDefine= newStorage(WEAK_KEY)
-
-    local _StructValidMap       = {}
-    local _StructCtorMap        = {}
-
     -- FEATURE MODIFIER
     local MOD_SEALED_STRUCT     = 2^0       -- SEALED
+    local MOD_IMMUTABLE_STRUCT  = 2^1       -- IMMUTABLE
 
     -- FIELD INDEX
     local FLD_STRUCT_MOD        = -1        -- FIELD MODIFIER
@@ -2667,11 +2686,12 @@ do
     local FLD_STRUCT_INITSTART  =  20000    -- FIELD START INDEX OF INITIALIZE
 
     -- MEMBER FIELD INDEX
-    local FLD_MEMBER_NAME       =  1        -- MEMBER FIELD NAME
-    local FLD_MEMBER_TYPE       =  2        -- MEMBER FIELD TYPE
-    local FLD_MEMBER_VALID      =  3        -- MEMBER FIELD TYPE VALIDATOR
-    local FLD_MEMBER_DEFAULT    =  4        -- MEMBER FIELD DEFAULT
-    local FLD_MEMBER_DEFTFACTORY=  5        -- MEMBER FIELD AS DEFAULT FACTORY
+    local FLD_MEMBER_OBJ        =  1        -- MEMBER FIELD OBJECT
+    local FLD_MEMBER_NAME       =  2        -- MEMBER FIELD NAME
+    local FLD_MEMBER_TYPE       =  3        -- MEMBER FIELD TYPE
+    local FLD_MEMBER_VALID      =  4        -- MEMBER FIELD TYPE VALIDATOR
+    local FLD_MEMBER_DEFAULT    =  5        -- MEMBER FIELD DEFAULT
+    local FLD_MEMBER_DEFTFACTORY=  6        -- MEMBER FIELD AS DEFAULT FACTORY
     local FLD_MEMBER_REQUIRE    =  0        -- MEMBER FIELD REQUIRED
 
     -- TYPE FLAGS
@@ -2686,6 +2706,7 @@ do
     local FLG_STRUCT_VALIDCACHE = 2^8       -- VALID  CACHE  FLAG
     local FLG_STRUCT_MULTI_REQ  = 2^9       -- MULTI  FIELD  REQUIRE FLAG
     local FLG_STRUCT_FIRST_TYPE = 2^10      -- FIRST  MEMBER TYPE    FLAG
+    local FLG_STRUCT_IMMUTABLE  = 2^11      -- IMMUTABLE     FLAG
 
     local STRUCT_KEYWORD_VALD   = "__valid" -- For anonymous
     local STRUCT_KEYWORD_INIT   = "__init"
@@ -2693,14 +2714,34 @@ do
 
     local STRUCT_BUILDER_NEWMTD = "__PLOOP_BD_NEWMTD"
 
-    local getEnumTargetInfo     = function (target)
+    -----------------------------------------------------------------------
+    --                          private storage                          --
+    -----------------------------------------------------------------------
+    local _StructInfo           = newStorage(WEAK_KEY)
+    local _MemberInfo           = newStorage(WEAK_KEY)
+    local _DependenceMap        = newStorage(WEAK_KEY)
+
+    -- TYPE BUILDING
+    local _StructBuilderInfo    = newStorage(WEAK_KEY)
+    local _StructBuilderInDefine= newStorage(WEAK_KEY)
+
+    local _StructValidMap       = {}
+    local _StructCtorMap        = {}
+
+    -- Temp
+    local _MemberAccessInfo     = {}
+
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
+    local getStructTargetInfo   = function (target)
         local info  = _StructBuilderInfo[target]
-        if info then return info, true else return _StrtInfo[target], false end
+        if info then return info, true else return _StructInfo[target], false end
     end
 
     local setStructBuilderValue = function (self, key, value, stack, notnewindex)
         local owner = environment.GetNameSpace(self)
-        if not (owner and _StructBuilderInDefine[self]) then error("The structure's definition is finished", stack) end
+        if not (owner and _StructBuilderInDefine[self]) then return end
 
         local tkey  = type(key)
         local tval  = type(value)
@@ -2712,7 +2753,7 @@ do
                 if key == STRUCT_KEYWORD_INIT then
                     struct.SetInitializer(owner, value, stack)
                     return true
-                elseif key == namespace.GetNameSpaceName(owner, true) then
+                elseif key == STRUCT_KEYWORD_VALD or key == namespace.GetNameSpaceName(owner, true) then
                     struct.SetValidator(owner, value, stack)
                     return true
                 else
@@ -2728,13 +2769,15 @@ do
                     end
                     return true
                 end
-            elseif not namespace.ValidateValue(value) then
-                if key == STRUCT_KEYWORD_BASE then
-                    struct.SetBaseStruct(owner, value, stack)
-                else
-                    struct.AddMember(owner, key, { Type = value }, stack)
+            elseif namespace.Validate(value) then
+                if not namespace.ValidateValue(value) then
+                    if key == STRUCT_KEYWORD_BASE then
+                        struct.SetBaseStruct(owner, value, stack)
+                    else
+                        struct.AddMember(owner, key, { Type = value }, stack)
+                    end
+                    return true
                 end
-                return true
             elseif tval == "table" and notnewindex then
                 struct.AddMember(owner, key, value, stack)
                 return true
@@ -2742,21 +2785,27 @@ do
         elseif tkey == "number" then
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
-            elseif not namespace.ValidateValue(value) then
-                struct.SetArrayElement(owner, value, stack)
+                return true
+            elseif namespace.Validate(value) then
+                if not namespace.ValidateValue(value) then
+                    struct.SetArrayElement(owner, value, stack)
+                    return true
+                end
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
+                return true
             else
                 struct.SetDefault(owner, value, stack)
+                return true
             end
-            return true
         end
     end
 
     -- Update dependence
-    local notAllSealedStruct    = function (target)
+    local notAllSealedStruct
+    notAllSealedStruct          = function (target)
         if target and struct.Validate(target) then
-            local info, def = getEnumTargetInfo(target)
+            local info, def     = getStructTargetInfo(target)
 
             if def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
                 return true
@@ -2766,9 +2815,7 @@ do
                 return notAllSealedStruct(info[FLD_STRUCT_ARRAY])
             elseif info[FLD_STRUCT_MEMBERSTART] then
                 for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                    if notAllSealedStruct(m) then
-                        return true
-                    end
+                    if notAllSealedStruct(m) then return true end
                 end
             end
         end
@@ -2777,7 +2824,7 @@ do
     local checkStructDependence = function (target, chkType)
         if target ~= chkType then
             if notAllSealedStruct(chkType) then
-                _DependenceMap[chkType]         = _DependenceMap[chkType] or setmetatable({}, WEAK_KEY)
+                _DependenceMap[chkType]         = _DependenceMap[chkType] or newStorage(WEAK_KEY)
                 _DependenceMap[chkType][target] = true
             elseif chkType and _DependenceMap[chkType] then
                 _DependenceMap[chkType][target] = nil
@@ -2787,7 +2834,7 @@ do
     end
 
     local updateStructDependence= function (target, info)
-        info = info or getEnumTargetInfo(target)
+        info = info or getStructTargetInfo(target)
 
         if info[FLD_STRUCT_ARRAY] then
             checkStructDependence(target, info[FLD_STRUCT_ARRAY])
@@ -2798,15 +2845,46 @@ do
         end
     end
 
-    -- Cache required
-    local checkRepeatStructType = function (target, info)
-        if info[FLD_STRUCT_ARRAY] then
-            if info[FLD_STRUCT_ARRAY] == target then return true end
-            return checkRepeatStructType(target, getEnumTargetInfo(info[FLD_STRUCT_ARRAY]))
+    -- Immutable
+    local checkStructImmutable  = function(info)
+        if info[FLD_STRUCT_INITSTART]  then return false end
+        if info[FLD_STRUCT_TYPEMETHOD] then for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do if v then return false end end end
+
+        local arrtype = info[FLD_STRUCT_ARRAY]
+        if arrtype then
+            local isImmutable       = getmetatable(arrtype).IsImmutable
+            return isImmutable and isImmutable(arrtype) or false
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                if m == target or checkRepeatStructType(target, getEnumTargetInfo(m)) then
-                    return true
+                local mtype         = m[FLD_MEMBER_TYPE]
+                local isImmutable   = mtype and getmetatable(mtype).IsImmutable
+                if not (isImmutable and isImmutable(mtype)) then return false end
+            end
+        end
+        return true
+    end
+
+    local updateStructImmutable = function(target, info)
+        info = info or getStructTargetInfo(target)
+        if checkStructImmutable(info) then
+            info[FLD_STRUCT_MOD]= turnOnFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
+        else
+            info[FLD_STRUCT_MOD]= turnOffFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
+        end
+    end
+
+    -- Cache required
+    local checkRepeatStructType
+    checkRepeatStructType       = function (target, info)
+        if info then
+            if info[FLD_STRUCT_ARRAY] then
+                if info[FLD_STRUCT_ARRAY] == target then return true end
+                return checkRepeatStructType(target, getStructTargetInfo(info[FLD_STRUCT_ARRAY]))
+            elseif info[FLD_STRUCT_MEMBERSTART] then
+                for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
+                    if m == target or checkRepeatStructType(target, getStructTargetInfo(m)) then
+                        return true
+                    end
                 end
             end
         end
@@ -2820,7 +2898,7 @@ do
         local upval = _Cache()
 
         if info[FLD_STRUCT_VALIDCACHE] then
-            token = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
+            token   = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
         end
 
         if info[FLD_STRUCT_MEMBERSTART] then
@@ -2875,8 +2953,8 @@ do
 
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
                 tinsert(body, [[
-                    if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table." end
-                    if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table." end
+                    if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table" end
+                    if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table" end
                 ]])
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
@@ -2975,9 +3053,11 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) then
+            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) or validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
                 tinsert(body, [[if onlyValid then return value end]])
+            end
 
+            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) then
                 if validateFlags(FLG_STRUCT_SINGLE_INIT, token) then
                     tinsert(body, [[
                         local ret = info[]] .. FLD_STRUCT_INITSTART .. [[](value)
@@ -3063,15 +3143,26 @@ do
             tinsert(upval, i - 1)
             if r then
                 token = turnOnFlags(FLG_STRUCT_MULTI_REQ, token)
-            elseif info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE] then
-                token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
-                tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE])
-                tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
+            else
+                local ftype = info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE]
+                if ftype then
+                    token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
+                    tinsert(upval, ftype)
+                    tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
+                    local isImmutable = getmetatable(ftype).IsImmutable
+                    tinsert(upval, isImmutable and isImmutable(ftype) or false)
+                end
             end
         elseif info[FLD_STRUCT_ARRAY] then
             token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
+            local isImmutable = getmetatable(info[FLD_STRUCT_ARRAY]).IsImmutable
+            tinsert(upval, isImmutable and isImmutable(info[FLD_STRUCT_ARRAY]) or false)
         else
             token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
+        end
+
+        if validateFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) then
+            token           = turnOnFlags(FLG_STRUCT_IMMUTABLE, token)
         end
 
         -- Build the validator generator
@@ -3096,18 +3187,18 @@ do
                         if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
                             tinsert(header, "ftype")
                             tinsert(header, "fvalid")
+                            tinsert(header, "fimtbl")
                             tinsert(body, [[
                                 local _, fmatch = fvalid(ftype, first, true) fmatch = not fmatch
                             ]])
                         else
-                            tinsert(body, [[
-                                local fmatch = true
-                            ]])
+                            tinsert(body, [[local fmatch, fimtbl = true, true]])
                         end
                     else
-                        tinsert(body, [[local fmatch = false]])
+                        tinsert(body, [[local fmatch, fimtbl = false, false]])
                     end
-                elseif validateFlags(FLG_ARRAY_STRUCT, token) then
+                else
+                    tinsert(header, "fimtbl")
                     tinsert(body, [[
                         local _, fmatch = info[]] .. FLD_STRUCT_ARRVALID .. [[](info[]] .. FLD_STRUCT_ARRAY .. [[], first, true) fmatch = not fmatch
                     ]])
@@ -3116,30 +3207,32 @@ do
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
                     tinsert(body, [[
                         local cache = _Cache()
-                        ret, msg    = ivalid(info, first, fmatch, cache)
+                        ret, msg    = ivalid(info, first, fmatch and not fimtbl, cache)
                         for k, v in pairs, cache do cache[k] = nil _Cache(v) end _Cache(cache)
                     ]])
                 else
-                    tinsert(body, [[ret, msg = ivalid(info, first, fmatch)]])
+                    tinsert(body, [[ret, msg = ivalid(info, first, fmatch and not fimtbl)]])
+                end
+
+                tinsert(body, [[if not msg then]])
+
+                if not validateFlags(FLG_STRUCT_IMMUTABLE, token) then
+                    tinsert(body, [[if fmatch and not fimtbl then]])
+
+                    if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                        tinsert(body, [[
+                            local cache = _Cache()
+                            ret, msg = ivalid(info, first, false, cache)
+                            for k, v in pairs, cache do cache[k] = nil _Cache(v) end _Cache(cache)
+                        ]])
+                    else
+                        tinsert(body, [[ret, msg = ivalid(info, first, false)]])
+                    end
+
+                    tinsert(body, [[end]])
                 end
 
                 tinsert(body, [[
-                        if not msg then
-                            if fmatch then
-                ]])
-
-                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
-                    tinsert(body, [[
-                        local cache = _Cache()
-                        ret, msg = ivalid(info, first, false, cache)
-                        for k, v in pairs, cache do cache[k] = nil _Cache(v) end _Cache(cache)
-                    ]])
-                else
-                    tinsert(body, [[ret, msg = ivalid(info, first, false)]])
-                end
-
-                tinsert(body, [[
-                            end
                             return ret
                         elseif not fmatch then
                             error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
@@ -3209,7 +3302,7 @@ do
             end
 
             _Cache(header)
-            _Cache(vbody)
+            _Cache(body)
         end
 
         if #upval > 0 then
@@ -3232,20 +3325,17 @@ do
                 if not cache[t] then
                     cache[t] = true
 
-                    local info, def = getEnumTargetInfo(t)
+                    local info, def = getStructTargetInfo(t)
                     if not def then
+                        info[FLD_STRUCT_VALIDCACHE] = checkRepeatStructType(t, info)
+
                         updateStructDependence(t, info)
+                        updateStructImmutable (t, info)
 
-                        local nVcache = checkRepeatStructType(t, info)
+                        genStructValidator  (info)
+                        genStructConstructor(info)
 
-                        if nVcache ~= info[FLD_STRUCT_VALIDCACHE] then
-                            info[FLD_STRUCT_VALIDCACHE] = nVcache
-
-                            genStructValidator(info)
-                            genStructConstructor(info)
-                        end
-
-                        updateStructDepends(t, cache)
+                        updateStructDepends (t, cache)
                     end
                 end
             end
@@ -3254,10 +3344,23 @@ do
         end
     end
 
-    struct                      = prototype "struct" {
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    struct                      = prototype {
+        __tostring              = "struct",
         __index                 = {
+            --- Add a member to the structure
+            -- @static
+            -- @method  AddMember
+            -- @owner   struct
+            -- @format  (structure[, name], definition[, stack])
+            -- @param   structure       the structure
+            -- @param   name            the member's name
+            -- @param   definition      the member's definition like { type = [Value type], default = [value], require = [boolean], name = [string] }
+            -- @param   stack           the stack level
             ["AddMember"]       = function(target, name, definition, stack)
-                local info, def = getEnumTargetInfo(target)
+                local info, def = getStructTargetInfo(target)
 
                 if type(name) == "table" then
                     definition, stack, name = name, definition, nil
@@ -3268,7 +3371,7 @@ do
                         end
                     end
                 end
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -3281,48 +3384,48 @@ do
                     local idx = FLD_STRUCT_MEMBERSTART
                     while info[idx] do
                         if info[idx][FLD_MEMBER_NAME] == name then
-                            error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is a existed member with the name : %q", name), stack)
+                            error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is an existed member with the name : %q", name), stack)
                         end
                         idx = idx + 1
                     end
 
+                    local mobj  = prototype.NewProxy(member)
                     local minfo = _Cache()
-                    minfo[FLD_MEMBER_NAME] = name
+                    _MemberInfo[mobj]       = minfo
+                    minfo[FLD_MEMBER_OBJ]   = mobj
+                    minfo[FLD_MEMBER_NAME]  = name
 
-                    attribute.SaveAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, stack + 1)
+                    -- Save attributes
+                    attribute.SaveAttributes(mobj, ATTRTAR_MEMBER, stack + 1)
 
-                    local smem  = nil
-
-                    if info[FLD_STRUCT_BASE] and _StrtInfo[info[FLD_STRUCT_BASE]] then
-                        local sinfo = _StrtInfo[info[FLD_STRUCT_BASE]]
-                        local si    = FLD_STRUCT_MEMBERSTART
-                        while sinfo[si] do
-                            if sinfo[i][FLD_MEMBER_NAME] == name then
-                                smem = sinfo[i][FLD_MEMBER_NAME]
-                                break
-                            end
-                        end
+                    -- Inherit attributes
+                    if info[FLD_STRUCT_BASE] then
+                        local smem  = struct.GetMember(info[FLD_STRUCT_BASE], name)
+                        if smem  then attribute.InheritAttributes(mobj, ATTRTAR_MEMBER, smem) end
                     end
 
-                    attribute.ApplyAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, definition, target, name, smem)
+                    -- Init the definition with attributes
+                    definition = attribute.InitDefinition(mobj, ATTRTAR_MEMBER, definition, target, name)
 
+                    -- Parse the definition
                     for k, v in pairs, definition do
                         if type(k) == "string" then
                             k = strlower(k)
 
                             if k == "type" then
-                                local tpValid = not namespace.ValidateValue(v) and getmetatable(v).ValidateValue
+                                local protype = namespace.Validate(v) and getmetatable(v)
+                                local tpValid = protype and protype.ValidateValue
 
                                 if tpValid then
-                                    minfo[FLD_MEMBER_TYPE] = v
+                                    minfo[FLD_MEMBER_TYPE]  = v
                                     minfo[FLD_MEMBER_VALID] = tpValid
                                 else
                                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The member's type is not valid", stack)
                                 end
                             elseif k == "require" and v then
-                                minfo[FLD_MEMBER_REQUIRE]  = true
+                                minfo[FLD_MEMBER_REQUIRE]   = true
                             elseif k == "default" then
-                                minfo[FLD_MEMBER_DEFAULT] = v
+                                minfo[FLD_MEMBER_DEFAULT]   = v
                             end
                         end
                     end
@@ -3331,114 +3434,126 @@ do
                         minfo[FLD_MEMBER_DEFAULT] = nil
                     elseif minfo[FLD_MEMBER_TYPE] then
                         if minfo[FLD_MEMBER_DEFAULT] ~= nil then
-                            local valid, msg = minfo[FLD_MEMBER_VALID](minfo[FLD_MEMBER_TYPE], minfo[FLD_MEMBER_DEFAULT])
-                            if valid ~= nil then
-                                minfo[FLD_MEMBER_DEFAULT] = valid
+                            local ret, msg  = minfo[FLD_MEMBER_VALID](minfo[FLD_MEMBER_TYPE], minfo[FLD_MEMBER_DEFAULT])
+                            if not msg then
+                                minfo[FLD_MEMBER_DEFAULT]       = ret
                             elseif type(minfo[FLD_MEMBER_DEFAULT]) == "function" then
-                                minfo[FLD_MEMBER_DEFTFACTORY] = true
+                                minfo[FLD_MEMBER_DEFTFACTORY]   = true
                             else
                                 error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The default value is not valid", stack)
                             end
                         end
                         if minfo[FLD_MEMBER_DEFAULT] == nil then
-                            minfo[FLD_MEMBER_DEFAULT] = getmetatable(minfo[FLD_MEMBER_TYPE]).GetDefault(minfo[FLD_MEMBER_TYPE])
+                            local getDefault            = getmetatable(minfo[FLD_MEMBER_TYPE]).GetDefault
+                            minfo[FLD_MEMBER_DEFAULT]   = getDefault and getDefault(minfo[FLD_MEMBER_TYPE])
                         end
                     end
 
                     info[idx] = minfo
-
-                    attribute.AttachAttributes(minfo, ATTRIBUTE_TARGETS_MEMBER, target, name)
+                    attribute.ApplyAttributes (mobj, ATTRTAR_MEMBER, target, name)
+                    attribute.AttachAttributes(mobj, ATTRTAR_MEMBER, target, name)
                 else
                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid", stack)
                 end
             end;
 
+            --- Add an object method to the structure
+            -- @static
+            -- @method  AddMethod
+            -- @owner   struct
+            -- @format  (structure, name, func[, stack])
+            -- @param   structure       the structure
+            -- @param   name            the method'a name
+            -- @param   func            the method's definition
+            -- @param   stack           the stack level
             ["AddMethod"]       = function(target, name, func, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
+                    if not def then error(strformat("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(name) ~= "string" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The name must be a string", stack) end
                     name = strtrim(name)
                     if name == "" then error("Usage: Usage: struct.AddMethod(structure, name, func[, stack]) - The name can't be empty", stack) end
                     if type(func) ~= "function" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The func must be a function", stack) end
 
-                    if not def and struct.GetMethod(target, name) then
-                        error(strformat("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished, the method can't be overridden", tostring(target)), stack)
-                    end
-
-                    attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
-
-                    local sfunc
+                    attribute.SaveAttributes(func, ATTRTAR_STRUCT_METHOD, stack)
 
                     if info[FLD_STRUCT_BASE] and not info[name] then
-                        if not struct.IsStaticMethod(info[FLD_STRUCT_BASE], name) then
-                            sfunc = struct.GetMethod(info[FLD_STRUCT_BASE], name)
-                        end
+                        local sfunc = struct.GetObjectMethod(info[FLD_STRUCT_BASE], name)
+                        if sfunc then attribute.InheritAttributes(func, ATTRTAR_STRUCT_METHOD, sfunc) end
                     end
 
-                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, sfunc)
-
-                    local hasMethod= false
-                    if not def and info[FLD_STRUCT_TYPEMETHOD] then for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do if v then hasMethod = true break end end end
+                    local ret = attribute.InitDefinition(func, ATTRTAR_STRUCT_METHOD, func, target, name)
+                    if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
                     if not info[name] then
-                        info[FLD_STRUCT_TYPEMETHOD] = info[FLD_STRUCT_TYPEMETHOD] or _Cache()
-                        info[FLD_STRUCT_TYPEMETHOD][name] = func
+                        info[FLD_STRUCT_TYPEMETHOD]         = info[FLD_STRUCT_TYPEMETHOD] or _Cache()
+                        info[FLD_STRUCT_TYPEMETHOD][name]   = func
                     else
                         info[name]  = func
                     end
 
-                    attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name)
-
-                    if not def and not hasMethod then
-                        -- Need re-generate validator
-                        genStructValidator(info)
-                    end
+                    attribute.ApplyAttributes (func, ATTRTAR_STRUCT_METHOD, target, name)
+                    attribute.AttachAttributes(func, ATTRTAR_STRUCT_METHOD, target, name)
                 else
                     error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
                 end
             end;
 
+            --- Begin the structure's definition
+            -- @static
+            -- @method  BeginDefinition
+            -- @owner   struct
+            -- @format  (structure[, stack])
+            -- @param   structure       the structure
+            -- @param   stack           the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 target          = struct.Validate(target)
                 if not target then error("Usage: struct.BeginDefinition(structure[, stack]) - The structure not existed", stack) end
 
-                local info      = _StrtInfo[target]
+                local info      = _StructInfo[target]
 
                 if info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _StructBuilderInfo[target] = {
+                _StructBuilderInfo[target]  = {
                     [FLD_STRUCT_MOD ]   = 0,
                     [FLD_STRUCT_NAME]   = tostring(target),
                 }
 
-                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_STRUCT, stack + 1)
+                attribute.SaveAttributes(target, ATTRTAR_STRUCT, stack)
             end;
 
+            --- End the structure's definition
+            -- @static
+            -- @method  EndDefinition
+            -- @owner   struct
+            -- @format  (structure[, stack])
+            -- @param   structure       the structure
+            -- @param   stack           the stack level
             ["EndDefinition"]   = function(target, stack)
                 local ninfo     = _StructBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_STRUCT, nil, nil, nil, ninfo[FLD_STRUCT_BASE])
+                attribute.ApplyAttributes(target, ATTRTAR_STRUCT)
 
                 _StructBuilderInfo[target] = nil
 
                 -- Install base struct's features
                 if ninfo[FLD_STRUCT_BASE] then
                     -- Check conflict, some should be handled by the author
-                    local binfo     = _StrtInfo[ninfo[FLD_STRUCT_BASE]]
+                    local binfo = _StructInfo[ninfo[FLD_STRUCT_BASE]]
 
-                    if ninfo[FLD_STRUCT_ARRAY] then     -- Array
+                    if ninfo[FLD_STRUCT_ARRAY] then             -- Array
                         if not binfo[FLD_STRUCT_ARRAY] then
                             error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct isn't an array structure", tostring(target)), stack)
                         end
-                    elseif ninfo[FLD_STRUCT_MEMBERSTART] then -- Member
+                    elseif ninfo[FLD_STRUCT_MEMBERSTART] then   -- Member
                         if binfo[FLD_STRUCT_ARRAY] then
                             error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure", tostring(target)), stack)
                         elseif binfo[FLD_STRUCT_MEMBERSTART] then
@@ -3477,7 +3592,7 @@ do
 
                             _Cache(cache)
                         end
-                    else                        -- Custom
+                    else                                        -- Custom
                         if binfo[FLD_STRUCT_ARRAY] then
                             ninfo[FLD_STRUCT_ARRAY] = binfo[FLD_STRUCT_ARRAY]
                             ninfo[FLD_STRUCT_ARRVALID]= binfo[FLD_STRUCT_ARRVALID]
@@ -3547,6 +3662,7 @@ do
                 ninfo[FLD_STRUCT_VALIDCACHE]    = checkRepeatStructType(target, ninfo)
 
                 updateStructDependence(target, ninfo)
+                updateStructImmutable(target, ninfo)
 
                 genStructValidator(ninfo)
                 genStructConstructor(ninfo)
@@ -3563,9 +3679,9 @@ do
                 end
 
                 -- Save as new structure's info
-                _StrtInfo[target]   = ninfo
+                _StructInfo[target]   = ninfo
 
-                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_STRUCT)
+                attribute.AttachAttributes(target, ATTRTAR_STRUCT)
 
                 -- Refresh structs depended on this
                 if _DependenceMap[target] then
@@ -3578,54 +3694,80 @@ do
                 return target
             end;
 
+            --- Get the array structure's element type
+            -- @static
+            -- @method  GetArrayElement
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  type            the array element's type
             ["GetArrayElement"] = function(target)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and info[FLD_STRUCT_ARRAY]
             end;
 
+            --- Get the structure's base struct type
+            -- @static
+            -- @method  GetBaseStruct
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  type            the base struct
             ["GetBaseStruct"]   = function(target)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and info[FLD_STRUCT_BASE]
             end;
 
+            --- Get the custom structure's default value
+            -- @static
+            -- @method  GetDefault
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  value           the default value
             ["GetDefault"]      = function(target)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and info[FLD_STRUCT_DEFAULT]
             end;
 
+            --- Get the member of the structure with given name
+            -- @static
+            -- @method  GetMember
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   name            the member's name
+            -- @return  member          the member
             ["GetMember"]       = function(target, name)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
-                    local idx   = FLD_STRUCT_MEMBERSTART
-                    local minfo = info[idx]
-                    while minfo do
-                        if idx == name or minfo[FLD_MEMBER_NAME] == name then
-                            return minfo[FLD_MEMBER_TYPE], minfo[FLD_MEMBER_DEFAULT], minfo[FLD_MEMBER_REQUIRE]
+                    for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
+                        if m[FLD_MEMBER_NAME] == name then
+                            return m[FLD_MEMBER_OBJ]
                         end
-                        idx     = idx + 1
-                        minfo   = info[idx]
                     end
                 end
             end;
 
+            --- Get the members of the structure
+            -- @static
+            -- @method  GetMembers
+            -- @owner   struct
+            -- @format  (structure[, cache])
+            -- @param   structure       the structure
+            -- @param   cache           the table used to save the result
+            -- @rformat (cache)         the cache that contains the member list
+            -- @rformat (iter, struct)  without the cache parameter, used in generic for
             ["GetMembers"]      = function(target, cache)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
-                        local i = FLD_STRUCT_MEMBERSTART
-                        local m = info[i]
-                        while m do
-                            tinsert(cache, m[FLD_MEMBER_NAME])
-                            i   = i + 1
-                            m   = info[i]
+                        for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
+                            tinsert(cache, m[FLD_MEMBER_OBJ])
                         end
                         return cache
                     else
                         return function(self, i)
                             i   = i and (i + 1) or FLD_STRUCT_MEMBERSTART
                             if info[i] then
-                                return i, info[i][FLD_MEMBER_NAME]
+                                return i, info[i][FLD_MEMBER_OBJ]
                             end
                         end, target
                     end
@@ -3637,23 +3779,53 @@ do
                 end
             end;
 
+            --- Get the method of the structure with given name
+            -- @static
+            -- @method  GetMethod
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   name            the method's name
+            -- @return  function        the method
             ["GetMethod"]       = function(target, name)
-                local info, def = getEnumTargetInfo(target)
+                local info, def = getStructTargetInfo(target)
                 return info and type(name) == "string" and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or nil
             end;
 
+            --- Get the object method of the structure with given name
+            -- @static
+            -- @method  GetObjectMethod
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   name            the method's name
+            -- @return  function        the method
             ["GetObjectMethod"] = function(target, name)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and type(name) == "string" and info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] or nil
             end;
 
+            --- Get the static method of the structure with given name
+            -- @static
+            -- @method  GetStaticMethod
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   name            the method's name
+            -- @return  function        the method
             ["GetStaticMethod"] = function(target, name)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and type(name) == "string" and info[name] or nil
             end;
 
+            --- Get all the methods of the structure
+            -- @static
+            -- @method  GetMethods
+            -- @owner   struct
+            -- @format  (structure[, cache])
+            -- @param   structure       the structure
+            -- @param   cache           the table used to save the result
+            -- @rformat (cache)         the cache that contains the method list
+            -- @rformat (iter, struct)  without the cache parameter, used in generic for
             ["GetMethods"]      = function(target, cache)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -3674,8 +3846,17 @@ do
                 end
             end;
 
+            --- Get all the object methods of the structure
+            -- @static
+            -- @method  GetObjectMethods
+            -- @owner   struct
+            -- @format  (structure[, cache])
+            -- @param   structure       the structure
+            -- @param   cache           the table used to save the result
+            -- @rformat (cache)         the cache that contains the method list
+            -- @rformat (iter, struct)  without the cache parameter, used in generic for
             ["GetObjectMethods"]= function(target, cache)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -3697,8 +3878,17 @@ do
                 end
             end;
 
+            --- Get all the static methods of the structure
+            -- @static
+            -- @method  GetObjectMethods
+            -- @owner   struct
+            -- @format  (structure[, cache])
+            -- @param   structure       the structure
+            -- @param   cache           the table used to save the result
+            -- @rformat (cache)         the cache that contains the method list
+            -- @rformat (iter, struct)  without the cache parameter, used in generic for
             ["GetStaticMethods"]= function(target, cache)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
                     local objm  = info[FLD_STRUCT_TYPEMETHOD]
                     if cache then
@@ -3720,8 +3910,14 @@ do
                 end
             end;
 
+            --- Get the struct type of the structure
+            -- @static
+            -- @method  GetStructType
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  string          the structure's type: CUSTOM|ARRAY|MEMBER
             ["GetStructType"]   = function(target)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 if info then
                     if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
                     if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
@@ -3729,62 +3925,118 @@ do
                 end
             end;
 
+            --- Whether the struct's value is immutable through the validation, means no object method, no initializer
+            -- @static
+            -- @method  IsImmutable
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  boolean         true if the value should be immutable
+            ["IsImmutable"]     = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and validateFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) or false
+            end;
+
+            --- Whether a structure use the other as its base structure
+            -- @static
+            -- @method  IsSubType
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   base            the base structure
+            -- @return  boolean         true if the structure use the target structure as base
             ["IsSubType"]       = function(target, base)
                 if struct.Validate(base) then
                     while target do
                         if target == base then return true end
-                        local i = getEnumTargetInfo(target)
+                        local i = getStructTargetInfo(target)
                         target  = i and i[FLD_STRUCT_BASE]
                     end
                 end
                 return false
             end;
 
+            --- Whether the structure is sealed, can't be re-defined
+            -- @static
+            -- @method  IsSealed
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @return  boolean         true if the structure is sealed
             ["IsSealed"]        = function(target)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
             end;
 
+            --- Whether the structure's given name method is static
+            -- @static
+            -- @method  IsStaticMethod
+            -- @owner   struct
+            -- @param   structure       the structure
+            -- @param   name            the method's name
+            -- @return  boolean         true if the method is static
             ["IsStaticMethod"]  = function(target, name)
-                local info      = getEnumTargetInfo(target)
+                local info      = getStructTargetInfo(target)
                 return info and type(name) == "string" and info[name] and true or false
             end;
 
+            --- Set the structure's array element type
+            -- @static
+            -- @method  SetArrayElement
+            -- @owner   struct
+            -- @format  (structure, elementType[, stack])
+            -- @param   structure       the structure
+            -- @param   elementType     the element's type
+            -- @param   stack           the stack level
             ["SetArrayElement"] = function(target, eleType, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local tpValid   = not namespace.ValidateValue(eleType) and getmetatable(eleType).ValidateValue
+                    local protype = namespace.Validate(eleType) and getmetatable(eleType)
+                    local tpValid = protype and protype.ValidateValue
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
-                    info[FLD_STRUCT_ARRAY]  = eleType
-                    info[FLD_STRUCT_ARRVALID] = tpValid
+                    info[FLD_STRUCT_ARRAY]      = eleType
+                    info[FLD_STRUCT_ARRVALID]   = tpValid
                 else
                     error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid", stack)
                 end
             end;
 
+            --- Set the structure's base structure
+            -- @static
+            -- @method  SetBaseStruct
+            -- @owner   struct
+            -- @format  (structure, base[, stack])
+            -- @param   structure       the structure
+            -- @param   base            the base structure
+            -- @param   stack           the stack level
             ["SetBaseStruct"]   = function(target, base, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetBaseStruct(structure, base) - The %s's definition is finished", tostring(target)), stack) end
                     if not struct.Validate(base) then error("Usage: struct.SetBaseStruct(structure, base) - The base must be a structure", stack) end
                     info[FLD_STRUCT_BASE] = base
+                    attribute.InheritAttributes(target, ATTRTAR_STRUCT, base)
                 else
                     error("Usage: struct.SetBaseStruct(structure, base[, stack]) - The structure is not valid", stack)
                 end
             end;
 
+            --- Set the structure's default value, only for custom struct type
+            -- @static
+            -- @method  SetDefault
+            -- @owner   struct
+            -- @format  (structure, default[, stack])
+            -- @param   structure       the structure
+            -- @param   default         the default value
+            -- @param   stack           the stack level
             ["SetDefault"]      = function(target, default, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetDefault(structure, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -3794,9 +4046,17 @@ do
                 end
             end;
 
+            --- Set the structure's validator
+            -- @static
+            -- @method  SetValidator
+            -- @owner   struct
+            -- @format  (structure, func[, stack])
+            -- @param   structure       the structure
+            -- @param   func            the validator
+            -- @param   stack           the stack level
             ["SetValidator"]    = function(target, func, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -3807,9 +4067,17 @@ do
                 end
             end;
 
+            --- Set the structure's initializer
+            -- @static
+            -- @method  SetInitializer
+            -- @owner   struct
+            -- @format  (structure, func[, stack])
+            -- @param   structure       the structure
+            -- @param   func            the initializer
+            -- @param   stack           the stack level
             ["SetInitializer"]  = function(target, func, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetInitializer(structure, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -3820,9 +4088,16 @@ do
                 end
             end;
 
+            --- Seal the structure
+            -- @static
+            -- @method  SetSealed
+            -- @owner   struct
+            -- @format  (structure[, stack])
+            -- @param   structure       the structure
+            -- @param   stack           the stack level
             ["SetSealed"]       = function(target, stack)
-                local info      = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info      = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
@@ -3833,9 +4108,17 @@ do
                 end
             end;
 
+            --- Mark a structure's method as static
+            -- @static
+            -- @method  SetStaticMethod
+            -- @owner   struct
+            -- @format  (structure, name[, stack])
+            -- @param   structure       the structure
+            -- @param   name            the method's name
+            -- @param   stack           the stack level
             ["SetStaticMethod"] = function(target, name, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                local info, def = getStructTargetInfo(target)
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if type(name) ~= "string" then error("Usage: struct.SetStaticMethod(structure, name) - the name must be a string", stack) end
@@ -3853,8 +4136,20 @@ do
                 end
             end;
 
+            --- Validate the value with a structure
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   struct
+            -- @format  (structure, value[, onlyValid[, stack]])
+            -- @param   structure       the structure
+            -- @param   value           the value used to validate
+            -- @param   onlyValid       Only validate the value, no value modifiy(The initializer and object methods won't be applied)
+            -- @param   stack           the stack level
+            -- @rfomat  (value[, message])
+            -- @return  value           the validated value
+            -- @return  message         the error message if the validation is failed
             ["ValidateValue"]   = function(target, value, onlyValid, cache)
-                local info  = _StrtInfo[target]
+                local info  = _StructInfo[target]
                 if info then
                     if not cache and info[FLD_STRUCT_VALIDCACHE] then
                         cache = _Cache()
@@ -3869,7 +4164,12 @@ do
                 end
             end;
 
-            -- Validate whether the value is a struct type
+            -- Whether the value is a struct type
+            -- @static
+            -- @method  Validate
+            -- @owner   struct
+            -- @param   value           the value used to validate
+            -- @return  value           return the value if it's a struct type, otherwise nil will be return
             ["Validate"]        = function(target)
                 return getmetatable(target) == struct and target or nil
             end;
@@ -3879,66 +4179,62 @@ do
             local visitor, env, target, definition, keepenv, stack  = GetTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
-            struct.BeginDefinition(target, stack + 1)
+            stack           = stack + 1
 
-            local tarenv = prototype.NewObject(structbuilder)
-            environment.SetNameSpace(tarenv, target)
-            environment.SetParent(tarenv, env)
-            environment.ToggleDefineMode(tarenv, true)
+            struct.BeginDefinition(target, stack)
 
-            _StructBuilderInDefine[tarenv] = true
+            local builder   = prototype.NewObject(structbuilder)
+            environment.SetNameSpace(builder, target)
+            environment.SetParent   (builder, env)
+
+            _StructBuilderInDefine[builder] = true
 
             if definition then
-                tarenv(definition, stack + 1)
+                builder(definition, stack)
                 return target
             else
-                if not keepenv then setfenv(stack, tarenv) end
-                return tarenv
+                if not keepenv then safesetfenv(stack, builder) end
+                return builder
             end
         end,
     }
 
-    tstruct                     = prototype "tstruct" (tnamespace, {
+    tstruct                     = prototype (tnamespace, {
         __index                 = function(self, name)
             if type(name) == "string" then
-                local info  = _StrtInfo[self]
+                local info  = _StructInfo[self]
                 return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNameSpace(self, name)
             end
         end,
-        __newindex              = function(self, key, value)
-            if type(key) == "string" and type(value) == "function" then
-                struct.AddMethod(self, key, value, 3)
-                return
-            end
-            error("The struct type is readonly", 2)
-        end,
         __call                  = function(self, ...)
-            local info  = _StrtInfo[self]
+            local info  = _StructInfo[self]
             local ret   = info[FLD_STRUCT_CTOR](info, ...)
             return ret
         end,
         __metatable             = struct,
     })
 
-    structbuilder               = prototype "structbuilder" {
+    structbuilder               = prototype {
         __index                 = function(self, key)
-            local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
-            return newMethod and newMethod[key] and struct.GetMethod(environment.GetNameSpace(self), key) or environment.GetValue(self, key)
+            local value         = environment.GetValue(self, key, _StructBuilderInDefine[self], 2)
+            return value
         end,
         __newindex              = function(self, key, value)
-            if not setStructBuilderValue(self, key, value, 3) then
+            if not setStructBuilderValue(self, key, value, 2) then
                 return rawset(self, key, value)
             end
         end,
         __call                  = function(self, definition, stack)
+            stack = (type(stack) == "number" and stack or 1) + 1
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
             if not (owner and _StructBuilderInDefine[self] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
 
-            stack = stack + 1
+            definition = attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition)
 
             if type(definition) == "function" then
+                setfenv(definition, self)
                 definition(self)
             else
                 -- Check base struct first
@@ -3959,10 +4255,8 @@ do
                 end
             end
 
-            struct.EndDefinition(owner, stack)
-
             _StructBuilderInDefine[self]    = nil
-            environment.ToggleDefineMode(self, false)
+            struct.EndDefinition(owner, stack)
 
             local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             if newMethod then
@@ -3972,57 +4266,90 @@ do
                 rawset(self, STRUCT_BUILDER_NEWMTD, nil)
             end
 
-            setfenv(stack - 1, environment.GetParent(self) or _G)
+            if getfenv(stack) == self then
+                safesetfenv(stack, environment.GetParent(self) or _G)
+            end
 
             return owner
         end,
     }
 
-    -- Key feature : member "Name" { Type = String, Default = "Anonymous", Require = false}
-    member                      = prototype "member" {
-        __index                 = writeOnly,
+    -----------------------------------------------------------------------
+    --                             keywords                              --
+    -----------------------------------------------------------------------
+
+    -----------------------------------------------------------------------
+    -- Declare a new member for the structure
+    --
+    -- @keyword     member
+    -- @usage       member "Name" { Type = String, Default = "Anonymous", Require = false }
+    -----------------------------------------------------------------------
+    member                      = prototype {
+        __tostring              = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_NAME] end,
+        __index                 = {
+            ["GetType"]         = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_TYPE] end;
+            ["IsRequire"]       = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_REQUIRE] or false end;
+            ["GetName"]         = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_NAME] end;
+            ["GetDefault"]      = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEFAULT] end;
+        },
         __newindex              = readOnly,
         __call                  = function(self, ...)
             if self == member then
                 local visitor, env, name, definition, flag, stack  = GetFeatureParams(member, ...)
                 local owner = visitor and environment.GetNameSpace(visitor)
-                if not owner or not visitor then error([[Usage: member "name" {...} - can't be used here.]], stack) end
-                if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
-                name = strtrim(name)
-                if name == "" then error([[Usage: member "name" {...} - the name can't be an empty string.]], stack) end
 
-                if definition then
-                    if type(definition) ~= "table" then error([[Usage: member ("name", {...}) - the definition must be a table.]], stack) end
-                    struct.AddMember(owner, name, definition, stack + 1)
-                else
-                    return prototype.NewObject(member, { name = name, owner = owner })
+                if owner and name then
+                    if type(definition) == "table" then
+                        wipe(_MemberAccessInfo)
+                        struct.AddMember(owner, name, definition, stack + 1)
+                        return
+                    else
+                        _MemberAccessInfo.Owner = owner
+                        _MemberAccessInfo.Name  = name
+                        return self
+                    end
+                elseif type(definition) == "table" then
+                    name    = _MemberAccessInfo.Name
+                    owner   = owner or _MemberAccessInfo.Owner
+
+                    wipe(_MemberAccessInfo)
+
+                    if owner then
+                        if name then
+                            struct.AddMember(owner, name, definition, stack + 1)
+                        else
+                            struct.AddMember(owner, definition, stack + 1)
+                        end
+                        return
+                    end
                 end
-            else
-                local owner, name       = self.owner, self.name
-                local definition, stack = ...
 
-                if type(name) ~= "string" then error([[Usage: member "name" {...} - the name must be a string.]], stack) end
-                name = strtrim(name)
-                if name == "" then error([[Usage: member "name" {...} - the name can't be an empty string.]], stack) end
-                if type(definition) ~= "table" then error([[Usage: member ("name", {...}) - the definition must be a table.]], stack) end
-
-                struct.AddMember(owner, name, definition, stack + 1)
+                error([[Usage: member "name" {...}]], stack + 1)
             end
         end,
     }
 
-    -- Key feature : endstruct "Number"
-    endstruct                   = function (...)
+    -----------------------------------------------------------------------
+    -- End the definition of the structure
+    --
+    -- @keyword     member
+    -- @usage       struct "Number"
+    --                  function Number(val)
+    --                      return type(val) ~= "number" and "%s must be number"
+    --                  end
+    --              endstruct "Number"
+    -----------------------------------------------------------------------
+    endstruct                   = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
         local visitor, env, name, definition, flag, stack  = GetFeatureParams(endstruct, ...)
         local owner = visitor and environment.GetNameSpace(visitor)
+
+        stack = stack + 1
 
         if not owner or not visitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
-        struct.EndDefinition(owner, stack + 1)
-
         _StructBuilderInDefine[visitor]  = nil
-        environment.ToggleDefineMode(visitor, false)
+        struct.EndDefinition(owner, stack)
 
         local newMethod     = rawget(visitor, STRUCT_BUILDER_NEWMTD)
         if newMethod then
@@ -4037,7 +4364,7 @@ do
         setfenv(stack, baseEnv)
 
         return baseEnv
-    end
+    end or nil
 end
 
 -------------------------------------------------------------------------------
@@ -4047,11 +4374,12 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_INTERFACE = attribute.RegisterTargetType("Interface")
-    ATTRIBUTE_TARGETS_CLASS     = attribute.RegisterTargetType("Class")
-    ATTRIBUTE_TARGETS_METHOD    = attribute.RegisterTargetType("Method")
-    ATTRIBUTE_TARGETS_METAMETHOD= attribute.RegisterTargetType("Metamethod")
-    ATTRIBUTE_TARGETS_CTOR      = attribute.RegisterTargetType("Constructor")
+    ATTRTAR_INTERFACE           = attribute.RegisterTargetType("Interface")
+    ATTRTAR_CLASS               = attribute.RegisterTargetType("Class")
+    ATTRTAR_CLASS_METHOD        = attribute.RegisterTargetType("ClassMethod")
+    ATTRTAR_INTERFACE_METHOD    = attribute.RegisterTargetType("InterfaceMethod")
+    ATTRTAR_METAMETHOD          = attribute.RegisterTargetType("Metamethod")
+    ATTRTAR_CTOR                = attribute.RegisterTargetType("Constructor")
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -4475,8 +4803,8 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[
                         if type(value) == "function" then
-                            attribute.SaveAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, 3)
-                            value = attribute.ApplyAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, nil, self, name)
+                            attribute.SaveAttributes(value, ATTRTAR_FUNCTION, 3)
+                            value = attribute.ApplyAttributes(value, ATTRTAR_FUNCTION, nil, self, name)
                         end
                     ]])
                 end
@@ -4491,7 +4819,7 @@ do
                 if validateFlags(FL_OBJATR, token) then
                     tinsert(body, [[)
                         if type(value) == "function" then
-                            attribute.AttachAttributes(value, ATTRIBUTE_TARGETS_FUNCTION, self, name)
+                            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, name)
                         end
                     ]])
                 end
@@ -4952,7 +5280,7 @@ do
         if type(func) ~= "function" then error(strformat("Usage: %s.AddMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
 
         -- Consume before type's re-definition
-        attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METHOD, stack + 1)
+        attribute.SaveAttributes(func, ATTRTAR_METHOD, stack + 1)
 
         if not def then
             -- This means a simple but required re-definition
@@ -4962,7 +5290,7 @@ do
 
         local nStatic   = not info[name]
 
-        func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METHOD, nil, target, name, nStatic and getSuperMethod(info, name) or nil)
+        func = attribute.ApplyAttributes(func, ATTRTAR_METHOD, nil, target, name, nStatic and getSuperMethod(info, name) or nil)
 
         if nStatic then
             info[FD_TYPMTD] = info[FD_TYPMTD] or _Cache()
@@ -4971,7 +5299,7 @@ do
             info[name]      = func
         end
 
-        attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METHOD, target, name)
+        attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
 
         if not def then
             tType.EndDefinition(target, stack + 1)
@@ -4992,8 +5320,8 @@ do
         if name == MTD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'", tostring(tType), tostring(tType)), stack) end
 
         if tfunc == "function" then
-            attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, stack + 1)
-            func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, nil, target, name)
+            attribute.SaveAttributes(func, ATTRTAR_METAMETHOD, stack + 1)
+            func = attribute.ApplyAttributes(func, ATTRTAR_METAMETHOD, nil, target, name)
         end
 
         info[FD_TYPMTM]                     = info[FD_TYPMTM] or _Cache()
@@ -5005,7 +5333,7 @@ do
         if tfunc == "table" then
             info[FD_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
         elseif tfunc == "function" then
-            attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_METAMETHOD, target, name)
+            attribute.AttachAttributes(func, ATTRTAR_METAMETHOD, target, name)
         end
     end
 
@@ -5198,7 +5526,7 @@ do
             end;
 
             ["BeginDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.BeginDefinition(interface[, stack]) - interface not existed", stack) end
@@ -5215,16 +5543,16 @@ do
 
                 _BDInfo[target] = ninfo
 
-                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, stack + 1)
+                attribute.SaveAttributes(target, ATTRTAR_INTERFACE, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
                 local ninfo     = _BDInfo[target]
                 if not ninfo then return end
 
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_INTERFACE, nil, nil, nil, unpack(ninfo, FD_STEXT))
+                attribute.ApplyAttributes(target, ATTRTAR_INTERFACE, nil, nil, nil, unpack(ninfo, FD_STEXT))
 
                 -- End new type feature's definition
                 endDefinitionForNewFeatures(target, stack + 1)
@@ -5247,7 +5575,7 @@ do
                 -- Save as new interface's info
                 _ICInfo[target] = ninfo
 
-                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_INTERFACE)
+                attribute.AttachAttributes(target, ATTRTAR_INTERFACE)
 
                 -- Release the lock, so other threads can be used to define interface or class
                 endDefinition(target, stack + 1)
@@ -5256,7 +5584,7 @@ do
             end;
 
             ["RefreshDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.RefreshDefinition(interface[, stack]) - interface not existed", stack) end
@@ -5589,7 +5917,7 @@ do
 
             ["SetInitializer"]  = function(target, func, stack)
                 local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: interface.SetInitializer(interface, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -5601,7 +5929,7 @@ do
             end;
 
             ["SetRequireClass"] = function(target, cls, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if not interface.Validate(target) then error("Usage: interface.SetRequireClass(interface, requireclass[, stack]) - the interface is not valid", stack) end
 
@@ -5620,7 +5948,7 @@ do
 
             ["SetRequireFeature"]= function(target, name)
                 local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if type(name) ~= "string" then error("Usage: interface.SetRequireFeature(interface, name[, stack]) - the name must be a string", stack) end
@@ -5740,7 +6068,7 @@ do
             end;
 
             ["BeginDefinition"] = function(target, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: class.BeginDefinition(class[, stack]) - class not existed", stack) end
@@ -5769,16 +6097,16 @@ do
 
                 _BDInfo[target] = ninfo
 
-                attribute.SaveAttributes(target, ATTRIBUTE_TARGETS_CLASS, stack + 1)
+                attribute.SaveAttributes(target, ATTRTAR_CLASS, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
                 local ninfo     = _BDInfo[target]
                 if not ninfo then return end
 
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
-                attribute.ApplyAttributes(target, ATTRIBUTE_TARGETS_CLASS, nil, nil, nil, unpack(ninfo, ninfo[FD_SUPCLS] and FD_SUPCLS or FD_STEXT))
+                attribute.ApplyAttributes(target, ATTRTAR_CLASS, nil, nil, nil, unpack(ninfo, ninfo[FD_SUPCLS] and FD_SUPCLS or FD_STEXT))
 
                 -- End new type feature's definition
                 endDefinitionForNewFeatures(target, stack + 1)
@@ -5890,7 +6218,7 @@ do
                 -- Release the lock to allow other threads continue to define class or interface
                 endDefinition(target, stack + 1)
 
-                attribute.AttachAttributes(target, ATTRIBUTE_TARGETS_CLASS)
+                attribute.AttachAttributes(target, ATTRTAR_CLASS)
 
                 return target
             end;
@@ -6009,18 +6337,18 @@ do
 
             ["SetConstructor"]  = function(target, func, stack)
                 local info, def = getTargetInfo(target)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if info then
                     if not def then error(strformat("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function", stack) end
 
-                    attribute.SaveAttributes(func, ATTRIBUTE_TARGETS_CTOR, stack + 1)
-                    func = attribute.ApplyAttributes(func, ATTRIBUTE_TARGETS_CTOR, nil, target, name)
+                    attribute.SaveAttributes(func, ATTRTAR_CTOR, stack + 1)
+                    func = attribute.ApplyAttributes(func, ATTRTAR_CTOR, nil, target, name)
 
                     info[FD_INIT] = func
 
-                    attribute.AttachAttributes(func, ATTRIBUTE_TARGETS_CTOR, target, name)
+                    attribute.AttachAttributes(func, ATTRTAR_CTOR, target, name)
                 else
                     error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid", stack)
                 end
@@ -6055,7 +6383,7 @@ do
             end;
 
             ["SetSuperClass"]   = function(target, cls, stack)
-                stack = type(stack) == "number" and stack or 2
+                stack = (type(stack) == "number" and stack or 1) + 1
 
                 if not class.Validate(target) then error("Usage: class.SetSuperClass(class, superclass[, stack]) - the class is not valid", stack) end
 
@@ -6351,7 +6679,7 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_EVENT     = attribute.RegisterTargetType("Event", true)
+    ATTRTAR_EVENT               = attribute.RegisterTargetType("Event")
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -6370,14 +6698,14 @@ do
                 local evt       = prototype "name" (tevent)
                 _EvtInfo[evt]   = setmetatable({ [FD_NAME] = name, [FD_OWNER] = owner, [FD_INDEF] = true }, WEAK_KEY)
 
-                attribute.SaveAttributes(evt, ATTRIBUTE_TARGETS_EVENT, stack + 1)
-                attribute.ApplyAttributes  (evt, ATTRIBUTE_TARGETS_EVENT, nil, owner, name, super)
+                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack + 1)
+                attribute.ApplyAttributes  (evt, ATTRTAR_EVENT, nil, owner, name, super)
 
                 return evt
             end;
 
             ["EndDefinition"]   = function(feature, owner, name)
-                attribute.AttachAttributes (feature, ATTRIBUTE_TARGETS_EVENT, owner, name)
+                attribute.AttachAttributes (feature, ATTRTAR_EVENT, owner, name)
 
                 local info      = _EvtInfo[feature]
                 if info then info[FD_INDEF] = nil end
@@ -6443,7 +6771,7 @@ do
     -----------------------------------------------------------------------
     --                         attribute targets                         --
     -----------------------------------------------------------------------
-    ATTRIBUTE_TARGETS_PROPERTY  = attribute.RegisterTargetType("Property", true)
+    ATTRTAR_PROPERTY            = attribute.RegisterTargetType("Property")
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -6506,14 +6834,14 @@ do
 
     environment.RegisterContextKeyword(structbuilder, {
         member          = member,
-        endstruct       = endstruct,
+        endstruct       = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endstruct,
     })
 
     environment.RegisterContextKeyword(interfacebuilder, {
         extend          = extend,
         event           = event,
         property        = property,
-        endinterface    = endinterface,
+        endinterface    = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endinterface,
     })
 
     environment.RegisterContextKeyword(classbuilder, {
@@ -6521,7 +6849,7 @@ do
         extend          = extend,
         event           = event,
         property        = property,
-        endclass        = endclass,
+        endclass        = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endclass,
     })
 
     _G.PLoop = prototype "PLoop" {
@@ -6537,6 +6865,13 @@ do
     _G.enum             = enum
     _G.import           = import
     _G.struct           = struct
+end
+
+-------------------------------------------------------------------------------
+--                                  System                                   --
+-------------------------------------------------------------------------------
+do
+
 end
 
 return ROOT_NAMESPACE
