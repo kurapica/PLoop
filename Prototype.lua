@@ -164,11 +164,10 @@ do
         ATTR_USE_WARN_INSTEAD_ERROR         = false,
 
         --- Whether the environmet allow global variable be nil, if false,
-        -- things like ture(spell error) could be notified, but it require
-        -- more usage for pcall and error.
-        -- Default false
+        -- things like ture(spell error) could trigger error.
+        -- Default true
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        ENV_ALLOW_GLOBAL_VAR_BE_NIL         = false,
+        ENV_ALLOW_GLOBAL_VAR_BE_NIL         = true,
 
         --- Whether all enumerations are case ignored.
         -- Default false
@@ -233,16 +232,14 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD_LUA_LOCK_APPLIED    = false,
 
-        --- Whether the system is used in a platform where hot-patch is
-        -- enabled, so the PLoop need use clone-replace mechanism instead
-        -- of rawset for the system storages.
-        -- Default false
+        --- Whether the system send warning messages when the system is used
+        -- in a platform where multi os threads share one lua-state, and
+        -- global variables are saved not to the environment but an inner
+        -- cache, it'd solve the thread conflict, but the environment need
+        -- fetch them by __index meta-call, so it's better to declare local
+        -- variables to hold them for best access speed.
+        -- Default true
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        MULTI_OS_THREAD_HOTPATCH_ENABLED    = false,
-
-        --- Whether use warning instead of error when using environment's
-        -- auto cache mechanism, the check only used when MULTI_OS_THREAD
-        -- is true and MULTI_OS_THREAD_LUA_LOCK_APPLIED is false.
         MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = true,
     }
 
@@ -258,8 +255,7 @@ do
     writeOnly                   = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
 
     newStorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
-    saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_HOTPATCH_ENABLED
-                                    and function(self, key, value)
+    saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
                                         local new
                                         if value == nil then
                                             if self[key] == nil then return end
@@ -333,14 +329,14 @@ do
     if LUA_VERSION > 5.1 then
         loadSnippet             = function (chunk, source, env)
             Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
-            Trace(source)
+            Trace(chunk)
             Trace("[core][loadSnippet] <== %s", source or "anonymous")
             return loadstring(chunk, source, nil, env or _PLoopEnv)
         end
     else
         loadSnippet             = function (chunk, source, env)
             Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
-            Trace(source)
+            Trace(chunk)
             Trace("[core][loadSnippet] <== %s", source or "anonymous")
             local v, err = loadstring(chunk, source)
             if v then setfenv(v, env or _PLoopEnv) end
@@ -1411,8 +1407,7 @@ do
     local ENV_NS_OWNER          = "__PLOOP_ENV_OWNNS"
     local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
     local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
-
-    local ENV_ALLOW_NIL_GLBVAR  = PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL
+    local ENV_GLOBAL_CACHE      = "__PLOOP_ENV_GLBCA"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -1424,23 +1419,6 @@ do
     -- Keyword visitor
     local _KeyVisitor                   -- The environment that access the next keyword
     local _AccessKey                    -- The next keyword
-
-    -----------------------------------------------------------------------
-    --                          private helpers                          --
-    -----------------------------------------------------------------------
-    local saferawset            = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD
-        and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED
-        and (PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN
-            and function(self, key, value, stack)
-                Error("Environment's auto-cache is disabled, you need use local for the %q variable", (stack or 1) + 1, key)
-                rawset(self, key, value)    -- Block next error message, may cause lua error
-            end
-            or  function(self, key, value, stack)
-                error(("Environment's auto-cache is disabled, you need use local for the %q variable"):format(key), (stack or 1) + 1)
-            end
-        ) or rawset
-
-    local saferawget            = function (self, key) return self[key] end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -1481,71 +1459,139 @@ do
             -- @param   noautocache     true if don't save the value to the environment, the keyword won't be saved
             -- @param   stack           the stack level
             -- @return  value           the value of the name in the environment
-            ["GetValue"]        = function(env, name, noautocache, stack)
-                if type(name) == "string" and type(env) == "table" then
-                    -- Check Global Keywords
-                    local value     = _GlobalKeywords[name]
+            ["GetValue"]        = (function()
+                local head              = _Cache()
+                local body              = _Cache()
+                local upval             = _Cache()
 
-                    -- Check environment special keywords
-                    if not value then
-                        local keys  = _ContextKeywords[getmetatable(env)]
-                        value       = keys and keys[name]
-                    end
+                tinsert(body, "")
+                tinsert(body, [[
+                    return function(env, name, noautocache, stack)
+                        local value
+                ]])
 
-                    if value then
-                        -- Register the keyword visitor
-                        _KeyVisitor = env
-                        _AccessKey  = value
-                    else
-                        -- Check current namespace
-                        local ns    = namespace.Validate(rawget(env, ENV_NS_OWNER))
-                        if ns then
-                            value   = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
-                        end
-
-                        -- Check imported namespaces
-                        if value == nil then
-                            local imp   = rawget(env, ENV_NS_IMPORTS)
-                            if type(imp) == "table" then
-                                for _, sns in ipairs, imp, 0 do
-                                    sns = namespace.Validate(sns)
-                                    if sns then
-                                        value   = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
-                                        if value ~= nil then break end
-                                    end
-                                end
-                            end
-                        end
-
-                        -- Check root namespaces
-                        if value == nil then
-                            value   = namespace.GetNameSpace(name)
-                        end
-
-                        -- Check parent
-                        if value == nil then
-                            local parent    = rawget(env, ENV_BASE_ENV) or _G
-                            if type(parent) == "table" then
-                                if ENV_ALLOW_NIL_GLBVAR then
-                                    value   = parent[name]
-                                else
-                                    local ok, ret = pcall(saferawget, parent, name)
-                                    if not ok or ret == nil then error(("The global variable %q can't be nil."):format(name), (stack or 1) + 1) end
-                                    value   = ret
-                                end
-                            end
-                        end
-
-                        -- Auto-Cache
-                        if value ~= nil and not noautocache then
-                            stack = (stack or 1) + 1
-                            Trace("The %s is auto saving to %s", stack, name, tostring(env))
-                            saferawset(env, name, value, stack)
-                        end
-                    end
-                    return value
+                if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
+                    -- Don't cache global variables in the environment to avoid conflict
+                    -- The cache should be full-hit during runtime after several operations
+                    tinsert(body, [[
+                        value = env["]] .. ENV_GLOBAL_CACHE .. [["][name]
+                        if value ~= nil then return value end
+                    ]])
                 end
-            end;
+
+                tinsert(body, [[if type(name) == "string" then]])
+
+                -- Check the keywords
+                tinsert(head, "_GlobalKeywords")
+                tinsert(upval, _GlobalKeywords)
+
+                tinsert(head, "_ContextKeywords")
+                tinsert(upval, _ContextKeywords)
+
+                tinsert(head, "regKeyVisitor")
+                tinsert(upval, function(env, keyword) _KeyVisitor, _AccessKey = env, keyword return keyword end)
+                tinsert(body, [[
+                    value = _GlobalKeywords[name]
+                    if not value then
+                        local keys = _ContextKeywords[getmetatable(env)]
+                        value = keys and keys[name]
+                    end
+                    if value then
+                        return regKeyVisitor(env, value)
+                    end
+                ]])
+
+                -- Check current namespace
+                tinsert(body, [[
+                    local ns = namespace.Validate(rawget(env, "]] .. ENV_NS_OWNER .. [["))
+                    if ns then
+                        value = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
+                    end
+                ]])
+
+                -- Check imported namespaces
+                tinsert(body, [[
+                    if value == nil then
+                        local imp = rawget(env, "]] .. ENV_NS_IMPORTS .. [[")
+                        if type(imp) == "table" then
+                            for _, sns in ipairs, imp, 0 do
+                                sns = namespace.Validate(sns)
+                                if sns then
+                                    value = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
+                                    if value ~= nil then break end
+                                end
+                            end
+                        end
+                    end
+                ]])
+
+                -- Check root namespaces
+                tinsert(body, [[
+                    if value == nil then
+                        value = namespace.GetNameSpace(name)
+                    end
+                ]])
+
+                -- Check base environment
+                tinsert(body, [[
+                    if value == nil then
+                        local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[") or _G
+                        if type(parent) == "table" then
+                ]])
+                if not PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL then
+                    tinsert(head, "saferawget")
+                    tinsert(body, function(self, key) return self[key] end)
+                    tinsert(body, [[
+                            local ok, ret = pcall(saferawget, parent, name)
+                            if not ok or ret == nil then error(("The global variable %q can't be nil."):format(name), (stack or 1) + 1) end
+                            value = ret
+                    ]])
+                else
+                    tinsert(body, [[
+                            value = parent[name]
+                    ]])
+                end
+                tinsert(body, [[
+                        end
+                    end
+                ]])
+
+                -- Auto-Cache
+                tinsert(body, [[
+                    if value ~= nil and not noautocache then
+                ]])
+
+                if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
+                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = saveStorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
+                    if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
+                        tinsert(body, [[Warn("The %q is auto saved to %s", (stack or 1) + 1, name, tostring(env))]])
+                    end
+                else
+                    tinsert(body, [[rawset(env, name, value)]])
+                end
+
+                tinsert(body, [[
+                    end
+                ]])
+
+                tinsert(body, [[
+                        end
+                        return value
+                    end
+                ]])
+
+                if #head > 0 then
+                    body[1] = "local " .. tblconcat(head, ",") .. "= ..."
+                end
+
+                local func = loadSnippet(tblconcat(body, "\n"), "environment.GetValue")(unpack(upval))
+
+                _Cache(head)
+                _Cache(body)
+                _Cache(upval)
+
+                return func
+            end)();
 
             --- Get the environment that visit the given keyword. The visitor
             -- use @environment.GetValue to access the keywords, so the system
@@ -1582,6 +1628,15 @@ do
                 for _, v in ipairs, imports, 0 do if v == ns then return end end
                 tinsert(imports, ns)
             end;
+
+            --- Initialize the environment
+            -- @static
+            -- @method  Initialize
+            -- @owner   environment
+            -- @param   env             the environment
+            ["Initialize"]      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED and function(env)
+                if type(env) == "table" then rawset(env, ENV_GLOBAL_CACHE, {}) end
+            end or fakefunc;
 
             --- Register a context keyword, like property must be used in the
             -- definition of a class or interface.
@@ -1689,7 +1744,13 @@ do
         },
         __newindex              = readOnly,
         __call                  = function(self, definition)
-            if definition then return prototype.NewObject(tenvironment)(definition) else return prototype.NewObject(tenvironment) end
+            local env           = prototype.NewObject(tenvironment)
+            environment.Initialize(env)
+            if definition then
+                return env(definition)
+            else
+                return env
+            end
         end,
     }
 
@@ -2002,6 +2063,7 @@ do
         __concat                = typeconcat,
         __call                  = function(self, definition)
             local env           = prototype.NewObject(tenvironment)
+            environment.Initialize(env)
             environment.SetNameSpace(env, self)
             if definition then
                 return env(definition)
@@ -2612,10 +2674,10 @@ do
 end
 
 -------------------------------------------------------------------------------
--- The structure are used to define data types. The struct prototype provides
--- three data types :
+-- The structures are types for basic and complex organized datas and also the
+-- data contracts for value validation.
 --
---      1. custom data type     The basic data types like number, string and
+-- 1. Custom    The basic data types like number, string and
 --          more advance types like nature number. If a struct is defined with
 --          only the validation method, it's a custom data type.
 --
@@ -2625,7 +2687,7 @@ end
 --                  end,
 --              }
 --
---      2. member data type     The member data type provide tables with fixed
+-- 2. Member    The member data type provide tables with fixed
 --          fields of certain types.
 --
 --              struct "Location" (function(_ENV)
@@ -2636,7 +2698,7 @@ end
 --              loc = Location(100, 20)
 --              print(loc.x, loc.y)
 --
---      3. array data type      The array data type provide array tables that
+-- 3. Array     The array data type provide array tables that
 --          contains a list of same type items.
 --
 --              struct "Locations" { Location }
@@ -4184,6 +4246,7 @@ do
             struct.BeginDefinition(target, stack)
 
             local builder   = prototype.NewObject(structbuilder)
+            environment.Initialize  (builder)
             environment.SetNameSpace(builder, target)
             environment.SetParent   (builder, env)
 
@@ -4215,6 +4278,10 @@ do
     })
 
     structbuilder               = prototype {
+        __tostring              = function(self)
+            local owner         = environment.GetNameSpace(self)
+            return"[structbuilder]" .. (owner and tostring(owner) or "anonymous")
+        end,
         __index                 = function(self, key)
             local value         = environment.GetValue(self, key, _StructBuilderInDefine[self], 2)
             return value
@@ -4231,7 +4298,7 @@ do
             local owner = environment.GetNameSpace(self)
             if not (owner and _StructBuilderInDefine[self] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
 
-            definition = attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition)
+            definition = ParseDefinition(attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition), self, stack)
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -6036,6 +6103,7 @@ do
             interface.BeginDefinition(target, stack + 1)
 
             local tarenv = prototype.NewObject(interfacebuilder)
+            environment.Initialize(tarenv)
             environment.SetNameSpace(tarenv, target)
             environment.SetParent(env)
 
@@ -6434,6 +6502,7 @@ do
             class.BeginDefinition(target, stack + 1)
 
             local tarenv = prototype.NewObject(classbuilder)
+            environment.Initialize(tarenv)
             environment.SetNameSpace(tarenv, target)
             environment.SetParent(env)
 
