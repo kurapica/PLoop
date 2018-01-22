@@ -2010,17 +2010,6 @@ do
                 if type(target) == "string" then return GetNameSpace(target) end
                 return _NSName[target] ~= nil and target or nil
             end;
-
-            --- Whether the target is a pure namespace(not any other types)
-            -- @static
-            -- @method  ValidateValue
-            -- @owner   namespace
-            -- @param   target          the query feature
-            -- @return  target          nil if not pure namespace
-            ["ValidateValue"]  = function(ns)
-                ns = Validate(ns)
-                return ns and getmetatable(ns) == namespace and ns or nil
-            end;
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
@@ -2675,36 +2664,224 @@ end
 
 -------------------------------------------------------------------------------
 -- The structures are types for basic and complex organized datas and also the
--- data contracts for value validation.
+-- data contracts for value validation. There are three struct types:
 --
--- 1. Custom    The basic data types like number, string and
---          more advance types like nature number. If a struct is defined with
---          only the validation method, it's a custom data type.
+--  i. Custom    The basic data types like number, string and more advanced
+--          types like nature number. Take the Number as an example:
 --
---              struct "Number" {
---                  function (value)
---                      return type(value) ~= "number" and "The %s must be number"
---                  end,
---              }
+--                  struct "Number" (function(_ENV)
+--                      function Number(value)
+--                          return type(value) ~= "number" and "%s must be number"
+--                      end
+--                  end)
 --
--- 2. Member    The member data type provide tables with fixed
---          fields of certain types.
+--                  v = Number(true)  -- Error : the value must be number
 --
---              struct "Location" (function(_ENV)
---                  x = Number
---                  y = Number
---              end)
+--              Unlike the enumeration, the structure's definition is a little
+--          complex, the definition body is a function with _ENV as its first
+--          parameter, the pattern is designed to make sure the PLoop works
+--          with Lua 5.1 and all above versions. The code in the body function
+--          will be processed in a private context used to define the struct.
 --
---              loc = Location(100, 20)
---              print(loc.x, loc.y)
+--              The function with the struct's name is the validator, also you
+--          can use `__valid` instead of the struct's name(There are anonymous
+--          structs). The validator would be called with the target value, if
+--          the return value is non-false, that means the target value don't
+--          pass the validation, normally the return value should be an error
+--          message, the `%s` in the message'll be replaced by words based on
+--          where it's used, if the return value is true, the system would
+--          generte an error message for it.
 --
--- 3. Array     The array data type provide array tables that
---          contains a list of same type items.
+--              If the struct has only the validator, it's an immutable struct
+--          that won't modify the validated value. We also need mutable struct
+--          like Boolean :
 --
---              struct "Locations" { Location }
+--                  struct "Boolean" (function(_ENV)
+--                      function __init(value)
+--                          return value and true or fale
+--                      end
+--                  end)
 --
--- The struct types are normally used as value validation or simple value's
--- creation.
+--                  print(Boolean(1))  -- true
+--
+--              The function named `__init` is the initializer, it's used to
+--          modify the target value, if the return value is non-nil, it'll be
+--          used as the new value of the target.
+--
+--              The struct can have one base struct so it will inherit the base
+--          struct's validator and initializer, the base struct's validator and
+--          initializer should be called before the struct's:
+--
+--                  struct "Integer" (function(_ENV)
+--                      __base = Number
+--
+--                      local floor = math.floor
+--
+--                      function Integer(value)
+--                          return floor(value) ~= value and "%s must be integer"
+--                      end
+--                  end)
+--
+--                  v = Integer(true)  -- Error : the value must be number
+--                  v = Integer(1.23)  -- Error : the value must be integer
+--
+--
+-- ii. Member   The member structure represent tables with fixed fields of
+--          certain types. Take an example to start:
+--
+--                  struct "Location" (function(_ENV)
+--                      x = Number
+--                      y = Number
+--                  end)
+--
+--                  loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
+--                  loc = Location(100, 20)
+--                  print(loc.x, loc.y)         -- 100  20
+--
+--              The member sturt can also be used as value constructor(and only
+--          the member struct can be used as constructor), the argument order
+--          is the same order as the declaration of it members.
+--
+--              The `x = Number` is the simplest way to declare a member to the
+--          struct, but there are other details to be filled in, here is the
+--          formal version:
+--
+--                  struct "Location" (function(_ENV)
+--                      member "x" { Type = Number, Require = true }
+--                      member "y" { Type = Number, Default = 0    }
+--                  end)
+--
+--                  loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
+--                  loc = Location(100)
+--                  print(loc.x, loc.y)         -- 100  0
+--
+--              The member is a keyword can only be used in the definition body
+--          of a struct, it need a member name and a table contains several
+--          settings(the field is case ignored) for the member:
+--                  * Type      - The member's type, it could be any enum, struct,
+--                      class or interface, also could be 3rd party types that
+--                      follow rules(the type's prototype must provide a method
+--                      named ValidateValue).
+--                  * Require   - Whether the member can't be nil.
+--                  * Default   - The default value of the member.
+--
+--              The member struct also support the validator and initializer :
+--
+--                  struct "MinMax" (function(_ENV)
+--                      member "min" { Type = Number, Require = true }
+--                      member "max" { Type = Number, Require = true }
+--
+--                      function MinMax(val)
+--                          return val.min > val.max and "%s.min can't be greater than %s.max"
+--                      end
+--                  end)
+--
+--                  v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
+--
+--              Since the member struct's value are tables, we also can define
+--          struct methods that would be saved to those values:
+--
+--                  struct "Location" (function(_ENV)
+--                      member "x" { Type = Number, Require = true }
+--                      member "y" { Type = Number, Default = 0    }
+--
+--                      function GetRange(val)
+--                          return math.sqrt(val.x^2 + val.y^2)
+--                      end
+--                  end)
+--
+--                  print(Location(3, 4):GetRange()) -- 5
+--
+--              We can also declare static methods that can only be used by the
+--          struct itself(also for the custom struct):
+--
+--                  struct "Location" (function(_ENV)
+--                      member "x" { Type = Number, Require = true }
+--                      member "y" { Type = Number, Default = 0    }
+--
+--                      __Static__()
+--                      function GetRange(val)
+--                          return math.sqrt(val.x^2 + val.y^2)
+--                      end
+--                  end)
+--
+--                  print(Location.GetRange{x = 3, y = 4}) -- 5
+--
+--              The `__Static__` is an attribtue, it's used here to declare the
+--          next defined method is a static one.
+--
+--              In the example, we decalre the default value of the member in
+--          the member's definition, but we also can provide the default value
+--          in the custom struct like :
+--
+--                  struct "Number" (function(_ENV)
+--                      __default = 0
+--
+--                      function Number(value)
+--                          return type(value) ~= "number" and "%s must be number"
+--                      end
+--                  end)
+--
+--                  struct "Location" (function(_ENV)
+--                      x = Number
+--                      y = Number
+--                  end)
+--
+--                  loc = Location()
+--                  print(loc.x, loc.y)         -- 0    0
+--
+--              The member struct can also have base struct, it will inherit
+--          members, non-static methods, validator and initializer, but it's
+--          not recommended.
+--
+--iii. Array    The array structure represent tables that contains a list of
+--          same type items. Here is an example to decalre an array:
+--
+--                  struct "Locations" (function(_ENV)
+--                      __array = Location
+--                  end)
+--
+--                  v = Locations{ {x = true} } -- Usage: Locations(...) - [1].x must be number
+--
+--              The array structure also support methods, static methods, base
+--          struct, validator and initializer.
+--
+-- To simplify the definition of the struct, table can be used instead of the
+-- function as the definition body.
+--
+--                  -- Custom struct
+--                  struct "Number" {
+--                      __default = 0,  -- The default value
+--                      -- the function with number index would be used as validator
+--                      function (val) return type(val) ~= "number" end,
+--                      -- Or you can clearly declare it
+--                      __valid = function (val) return type(val) ~= "number" end,
+--                  }
+--
+--                  struct "Boolean" {
+--                      __init = function(val) return val and true or false end,
+--                  }
+--
+--                  -- Member struct
+--                  struct "Location" {
+--                      -- Like use the member keyword, just with a name field
+--                      { Name = "x", Type = Number, Require = true },
+--                      { Name = "y", Type = Number, Require = true },
+--
+--                      -- Define methods
+--                      GetRange = function(val) return math.sqrt(val.x^2 + val.y^2) end,
+--                  }
+--
+--                  -- Array struct
+--                  -- A valid type with number index, also can use the __array as the key
+--                  struct "Locations" { Location }
+--
+-- If a data type's prototype can provide *ValidateValue(type, value)* method,
+-- it'd be marked as a value type, the value type can be used in many places,
+-- like the member's type, the array's element type, and class's property type.
+--
+-- The prototype has provided four value type's prototype: enum, struct, class
+-- and interface.
 --
 -- @prototype   struct
 -------------------------------------------------------------------------------
@@ -2773,6 +2950,8 @@ do
     local STRUCT_KEYWORD_VALD   = "__valid" -- For anonymous
     local STRUCT_KEYWORD_INIT   = "__init"
     local STRUCT_KEYWORD_BASE   = "__base"
+    local STRUCT_KEYWORD_DFLT   = "__default"
+    local STRUCT_KEYWORD_ARRAY  = "__array"
 
     local STRUCT_BUILDER_NEWMTD = "__PLOOP_BD_NEWMTD"
 
@@ -2801,6 +2980,16 @@ do
         if info then return info, true else return _StructInfo[target], false end
     end
 
+    local safeget               = function(self, key) return self[key] end
+
+    local getTypeValueValidate  = function(target)
+        local protype = getmetatable(target)
+        if protype then
+            local ok, ret = pcall(safeget, protype, "ValidateValue")
+            return ok and ret
+        end
+    end
+
     local setStructBuilderValue = function (self, key, value, stack, notnewindex)
         local owner = environment.GetNameSpace(self)
         if not (owner and _StructBuilderInDefine[self]) then return end
@@ -2811,7 +3000,10 @@ do
         stack       = stack + 1
 
         if tkey == "string" and not tonumber(key) then
-            if tval == "function" then
+            if key == STRUCT_KEYWORD_DFLT then
+                struct.SetDefault(owner, value, stack)
+                return true
+            elseif tval == "function" then
                 if key == STRUCT_KEYWORD_INIT then
                     struct.SetInitializer(owner, value, stack)
                     return true
@@ -2831,15 +3023,16 @@ do
                     end
                     return true
                 end
-            elseif namespace.Validate(value) then
-                if not namespace.ValidateValue(value) then
-                    if key == STRUCT_KEYWORD_BASE then
-                        struct.SetBaseStruct(owner, value, stack)
-                    else
-                        struct.AddMember(owner, key, { Type = value }, stack)
-                    end
+            elseif getTypeValueValidate(value) then
+                if key == STRUCT_KEYWORD_ARRAY then
+                    struct.SetArrayElement(owner, value, stack)
                     return true
+                elseif key == STRUCT_KEYWORD_BASE then
+                    struct.SetBaseStruct(owner, value, stack)
+                else
+                    struct.AddMember(owner, key, { Type = value }, stack)
                 end
+                return true
             elseif tval == "table" and notnewindex then
                 struct.AddMember(owner, key, value, stack)
                 return true
@@ -2848,11 +3041,9 @@ do
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
                 return true
-            elseif namespace.Validate(value) then
-                if not namespace.ValidateValue(value) then
-                    struct.SetArrayElement(owner, value, stack)
-                    return true
-                end
+            elseif getTypeValueValidate(value) then
+                struct.SetArrayElement(owner, value, stack)
+                return true
             elseif tval == "table" then
                 struct.AddMember(owner, value, stack)
                 return true
@@ -3217,8 +3408,6 @@ do
             end
         elseif info[FLD_STRUCT_ARRAY] then
             token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
-            local isImmutable = getmetatable(info[FLD_STRUCT_ARRAY]).IsImmutable
-            tinsert(upval, isImmutable and isImmutable(info[FLD_STRUCT_ARRAY]) or false)
         else
             token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
         end
@@ -3234,7 +3423,7 @@ do
 
             tinsert(body, "")
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+            if validateFlags(FLG_MEMBER_STRUCT, token) then
                 tinsert(body, [[
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
@@ -3242,28 +3431,21 @@ do
                         if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
                 ]])
 
-                if validateFlags(FLG_MEMBER_STRUCT, token) then
-                    tinsert(header, "count")
-                    if not validateFlags(FLG_STRUCT_MULTI_REQ, token) then
-                        -- So, it may be the first member
-                        if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
-                            tinsert(header, "ftype")
-                            tinsert(header, "fvalid")
-                            tinsert(header, "fimtbl")
-                            tinsert(body, [[
-                                local _, fmatch = fvalid(ftype, first, true) fmatch = not fmatch
-                            ]])
-                        else
-                            tinsert(body, [[local fmatch, fimtbl = true, true]])
-                        end
+                tinsert(header, "count")
+                if not validateFlags(FLG_STRUCT_MULTI_REQ, token) then
+                    -- So, it may be the first member
+                    if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
+                        tinsert(header, "ftype")
+                        tinsert(header, "fvalid")
+                        tinsert(header, "fimtbl")
+                        tinsert(body, [[
+                            local _, fmatch = fvalid(ftype, first, true) fmatch = not fmatch
+                        ]])
                     else
-                        tinsert(body, [[local fmatch, fimtbl = false, false]])
+                        tinsert(body, [[local fmatch, fimtbl = true, true]])
                     end
                 else
-                    tinsert(header, "fimtbl")
-                    tinsert(body, [[
-                        local _, fmatch = info[]] .. FLD_STRUCT_ARRVALID .. [[](info[]] .. FLD_STRUCT_ARRAY .. [[], first, true) fmatch = not fmatch
-                    ]])
+                    tinsert(body, [[local fmatch, fimtbl = false, false]])
                 end
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
@@ -3303,9 +3485,9 @@ do
                 ]])
             else
                 tinsert(body, [[
-                    return function(info, first)
+                    return function(info, ret)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
-                        local ret, msg
+                        local msg
                 ]])
             end
 
@@ -3319,12 +3501,6 @@ do
                         j = j + 1
                     end
                 ]])
-            elseif validateFlags(FLG_ARRAY_STRUCT, token) then
-                tinsert(body, [[
-                    ret = { first, ... }
-                ]])
-            else
-                tinsert(body, [[ret = first]])
             end
 
             if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
@@ -3475,8 +3651,7 @@ do
                             k = strlower(k)
 
                             if k == "type" then
-                                local protype = namespace.Validate(v) and getmetatable(v)
-                                local tpValid = protype and protype.ValidateValue
+                                local tpValid = getTypeValueValidate(v)
 
                                 if tpValid then
                                     minfo[FLD_MEMBER_TYPE]  = v
@@ -4055,8 +4230,7 @@ do
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local protype = namespace.Validate(eleType) and getmetatable(eleType)
-                    local tpValid = protype and protype.ValidateValue
+                    local tpValid = getTypeValueValidate(eleType)
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
                     info[FLD_STRUCT_ARRAY]      = eleType
@@ -4327,7 +4501,7 @@ do
 
             local newMethod     = rawget(self, STRUCT_BUILDER_NEWMTD)
             if newMethod then
-                for k in pairs(newMethod) do
+                for k in pairs, newMethod do
                     rawset(self, k, struct.GetMethod(owner, k))
                 end
                 rawset(self, STRUCT_BUILDER_NEWMTD, nil)
@@ -4420,7 +4594,7 @@ do
 
         local newMethod     = rawget(visitor, STRUCT_BUILDER_NEWMTD)
         if newMethod then
-            for k in pairs(newMethod) do
+            for k in pairs, newMethod do
                 rawset(visitor, k, struct.GetMethod(owner, k))
             end
             rawset(visitor, STRUCT_BUILDER_NEWMTD, nil)
@@ -4911,7 +5085,7 @@ do
     end
 
     local function loadInitTable(obj, initTable)
-        for name, value in pairs(initTable) do obj[name] = value end
+        for name, value in pairs, initTable do obj[name] = value end
     end
 
     local function generateConstructor(target, info)
@@ -5532,46 +5706,7 @@ do
     end
 
     local function setBuilderOwnerValue(owner, key, value, stack, notnewindex)
-        local tkey  = type(key)
-        local tval  = type(value)
 
-        stack       = stack + 1
-
-        if tkey == "string" and not tonumber(key) then
-            if tval == "function" then
-                if key == MTD_INIT then
-                    struct.SetInitializer(owner, value, stack)
-                    return true
-                elseif key == namespace.GetNameSpaceName(owner, true) then
-                    struct.SetValidator(owner, value, stack)
-                    return true
-                else
-                    struct.AddMethod(owner, key, value, stack)
-                    return true
-                end
-            elseif not namespace.ValidateValue(value) then
-                if key == MTD_BASE then
-                    struct.SetBaseStruct(owner, value, stack)
-                else
-                    struct.AddMember(owner, key, { Type = value }, stack)
-                end
-                return true
-            elseif tval == "table" and notnewindex then
-                struct.AddMember(owner, key, value, stack)
-                return true
-            end
-        elseif tkey == "number" then
-            if tval == "function" then
-                struct.SetValidator(owner, value, stack)
-            elseif not namespace.ValidateValue(value) then
-                struct.SetArrayElement(owner, value, stack)
-            elseif tval == "table" then
-                struct.AddMember(owner, value, stack)
-            else
-                struct.SetDefault(owner, value, stack)
-            end
-            return true
-        end
     end
 
     interface       = prototype "interface" {
