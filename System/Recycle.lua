@@ -102,6 +102,7 @@ class "Recycle" (function(_ENV)
     ]]
     function Push(self, obj)
         if obj then
+            for i, v in ipairs(self) do if v == obj then return end end
             -- Won't check obj because using cache means want quick-using.
             tinsert(self, obj)
 
