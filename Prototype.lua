@@ -384,9 +384,9 @@ do
             end
         ]] ()
     elseif (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
-        local band              = _G.bit32 and bit32.band or bit.band
-        local bor               = _G.bit32 and bit32.bor  or bit.bor
-        local bnot              = _G.bit32 and bit32.bnot or bit.bnot
+        local band              = _G.bit32 and _G.bit32.band or _G.bit.band
+        local bor               = _G.bit32 and _G.bit32.bor  or _G.bit.bor
+        local bnot              = _G.bit32 and _G.bit32.bnot or _G.bit.bnot
 
         validateFlags           = function (checkValue, targetValue)
             return band(checkValue, targetValue or 0) > 0
@@ -3083,29 +3083,52 @@ do
         end
     end
 
-    -- Update dependence
-    local notAllSealedStruct
-    notAllSealedStruct          = function (target)
-        if target and struct.Validate(target) then
-            local info, def     = getStructTargetInfo(target)
+    -- Check struct inner states
+    local chkStructContent
+    chkStructContent            = function (target, filter, cache)
+        local info              = getStructTargetInfo(target)
+        _Cache[target]          = true
+        if not info then return end
 
-            if def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
-                return true
-            end
-
-            if info[FLD_STRUCT_ARRAY] then
-                return notAllSealedStruct(info[FLD_STRUCT_ARRAY])
-            elseif info[FLD_STRUCT_MEMBERSTART] then
-                for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                    if notAllSealedStruct(m) then return true end
+        if info[FLD_STRUCT_ARRAY] then
+            local array         = info[FLD_STRUCT_ARRAY]
+            if _Cache[array] then return false end
+            return struct.Validate(array) and (filter(array) or chkStructContent(array, filter, cache))
+        elseif info[FLD_STRUCT_MEMBERSTART] then
+            for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
+                m               = m[FLD_MEMBER_TYPE]
+                if not _Cache[m] then
+                    if struct.Validate(m) and (filter(m) or chkStructContent(m, filter, cache)) then
+                        return true
+                    end
                 end
             end
         end
     end
 
+    local chkStructContents     = function(target, filter, incself)
+        local cache             = _Cache()
+
+        if incself then
+            if filter(target) then return true end
+        end
+
+        local ret               = chkStructContent(target, filter, cache)
+        _Cache(cache)
+        return ret
+    end
+
+    local isNotSealedStruct     = function (target)
+        local info, def         = getStructTargetInfo(target)
+
+        if info and (def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])) then
+            return true
+        end
+    end
+
     local checkStructDependence = function (target, chkType)
         if target ~= chkType then
-            if notAllSealedStruct(chkType) then
+            if chkStructContents(chkType, isNotSealedStruct, true) then
                 _DependenceMap[chkType]         = _DependenceMap[chkType] or newStorage(WEAK_KEY)
                 _DependenceMap[chkType][target] = true
             elseif chkType and _DependenceMap[chkType] then
@@ -3122,7 +3145,7 @@ do
             checkStructDependence(target, info[FLD_STRUCT_ARRAY])
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                checkStructDependence(target, m)
+                checkStructDependence(target, m[FLD_MEMBER_TYPE])
             end
         end
     end
@@ -3156,15 +3179,17 @@ do
     end
 
     -- Cache required
-    local checkRepeatStructType
-    checkRepeatStructType       = function (target, info)
+    local checkRepeatStructType = function(target, info)
         if info then
+            local filter        = function(chkType) return chkType == target end
+
             if info[FLD_STRUCT_ARRAY] then
-                if info[FLD_STRUCT_ARRAY] == target then return true end
-                return checkRepeatStructType(target, getStructTargetInfo(info[FLD_STRUCT_ARRAY]))
+                local array     = info[FLD_STRUCT_ARRAY]
+                return array == target or (struct.Validate(array) and chkStructContents(array, filter))
             elseif info[FLD_STRUCT_MEMBERSTART] then
                 for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                    if m[FLD_MEMBER_TYPE] == target or checkRepeatStructType(target, getStructTargetInfo(m)) then
+                    m           = m[FLD_MEMBER_TYPE]
+                    if m == target or (struct.Validate(m) and chkStructContents(m, filter)) then
                         return true
                     end
                 end
