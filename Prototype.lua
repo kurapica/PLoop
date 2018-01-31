@@ -2169,12 +2169,12 @@ do
     local genEnumValidator      = function (info)
         local token = 0
 
-        if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
-            token   = turnOnFlags(FLG_CASE_IGNORED, token)
-        end
-
         if validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
             token   = turnOnFlags(FLG_FLAGS_ENUM, token)
+        end
+
+        if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
+            token   = turnOnFlags(FLG_CASE_IGNORED, token)
         end
 
         if not _EnumValidMap[token] then
@@ -3011,10 +3011,10 @@ do
         if info then return info, true else return _StructInfo[target], false end
     end
 
-    local getTypeValueValidate  = function(target)
+    local getPrototypeMethod    = function (target, key)
         local protype = getmetatable(target)
         if protype then
-            local ok, ret = pcall(safeget, protype, "ValidateValue")
+            local ok, ret = pcall(safeget, protype, key)
             return ok and ret
         end
     end
@@ -3052,7 +3052,7 @@ do
                     end
                     return true
                 end
-            elseif getTypeValueValidate(value) then
+            elseif getPrototypeMethod(value, "ValidateValue") then
                 if key == STRUCT_KEYWORD_ARRAY then
                     struct.SetArrayElement(owner, value, stack)
                     return true
@@ -3070,7 +3070,7 @@ do
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
                 return true
-            elseif getTypeValueValidate(value) then
+            elseif getPrototypeMethod(value, "ValidateValue") then
                 struct.SetArrayElement(owner, value, stack)
                 return true
             elseif tval == "table" then
@@ -3087,32 +3087,25 @@ do
     local chkStructContent
     chkStructContent            = function (target, filter, cache)
         local info              = getStructTargetInfo(target)
-        _Cache[target]          = true
+        cache[target]           = true
         if not info then return end
 
         if info[FLD_STRUCT_ARRAY] then
             local array         = info[FLD_STRUCT_ARRAY]
-            if _Cache[array] then return false end
-            return struct.Validate(array) and (filter(array) or chkStructContent(array, filter, cache))
+            return not cache[array] and struct.Validate(array) and (filter(array) or chkStructContent(array, filter, cache))
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 m               = m[FLD_MEMBER_TYPE]
-                if not _Cache[m] then
-                    if struct.Validate(m) and (filter(m) or chkStructContent(m, filter, cache)) then
-                        return true
-                    end
+                if not cache[m] and struct.Validate(m) and (filter(m) or chkStructContent(m, filter, cache)) then
+                    return true
                 end
             end
         end
     end
 
-    local chkStructContents     = function(target, filter, incself)
+    local chkStructContents     = function (target, filter, incself)
         local cache             = _Cache()
-
-        if incself then
-            if filter(target) then return true end
-        end
-
+        if incself and filter(target) then return true end
         local ret               = chkStructContent(target, filter, cache)
         _Cache(cache)
         return ret
@@ -3120,10 +3113,7 @@ do
 
     local isNotSealedStruct     = function (target)
         local info, def         = getStructTargetInfo(target)
-
-        if info and (def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])) then
-            return true
-        end
+        return info and (def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]))
     end
 
     local checkStructDependence = function (target, chkType)
@@ -3157,12 +3147,12 @@ do
 
         local arrtype = info[FLD_STRUCT_ARRAY]
         if arrtype then
-            local isImmutable       = getmetatable(arrtype).IsImmutable
+            local isImmutable       = getPrototypeMethod(arrtype, "IsImmutable")
             return isImmutable and isImmutable(arrtype) or false
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 local mtype         = m[FLD_MEMBER_TYPE]
-                local isImmutable   = mtype and getmetatable(mtype).IsImmutable
+                local isImmutable   = mtype and getPrototypeMethod(mtype, "IsImmutable")
                 if not (isImmutable and isImmutable(mtype)) then return false end
             end
         end
@@ -3485,7 +3475,7 @@ do
                     token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
                     tinsert(upval, ftype)
                     tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
-                    local isImmutable = getmetatable(ftype).IsImmutable
+                    local isImmutable = getPrototypeMethod(ftype, "IsImmutable")
                     tinsert(upval, isImmutable and isImmutable(ftype) or false)
                 end
             end
@@ -3761,7 +3751,7 @@ do
                             k = strlower(k)
 
                             if k == "type" then
-                                local tpValid = getTypeValueValidate(v)
+                                local tpValid = getPrototypeMethod(v, "ValidateValue")
 
                                 if tpValid then
                                     minfo[FLD_MEMBER_TYPE]  = v
@@ -3791,7 +3781,7 @@ do
                             end
                         end
                         if minfo[FLD_MEMBER_DEFAULT] == nil then
-                            local getDefault            = getmetatable(minfo[FLD_MEMBER_TYPE]).GetDefault
+                            local getDefault            = getPrototypeMethod(minfo[FLD_MEMBER_TYPE], "GetDefault")
                             minfo[FLD_MEMBER_DEFAULT]   = getDefault and getDefault(minfo[FLD_MEMBER_TYPE])
                         end
                     end
@@ -4340,7 +4330,7 @@ do
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local tpValid = getTypeValueValidate(eleType)
+                    local tpValid = getPrototypeMethod(eleType, "ValidateValue")
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
                     info[FLD_STRUCT_ARRAY]      = eleType
