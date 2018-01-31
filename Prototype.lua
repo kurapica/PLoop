@@ -183,11 +183,16 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         TYPE_DEFINITION_WITH_OLD_STYLE      = false,
 
+        --- Whether the type validation should be disabled. The value should be
+        -- false during development, toggling it to true will make the system
+        -- ignore the value valiation in several conditions for speed.
+        TYPE_VALIDATION_DISABLED            = false,
+
         --- Whether all old objects keep using new features when their
         -- classes or extend interfaces are re-defined.
         -- Default false
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        CLASS_ALL_SIMPLE_VERSION            = false,
+        CLASS_NO_MULTI_VERSION_CLASS        = false,
 
         --- Whether all interfaces & classes only use the classic format
         -- `Super.Method(obj, ...)` to call super's features, don't use new
@@ -197,7 +202,18 @@ do
         --      Super[obj]:Greet("King")
         -- Default false
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        CLASS_ALL_OLD_SUPER_STYLE           = false,
+        CLASS_NO_SUPER_OBJECT               = false,
+
+        --- Whether all class objects can't save value to fields directly,
+        -- So only init fields, properties, events can be set during runtime.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        OBJECT_NO_RAWSEST                   = false,
+
+
+        --- Whether all class objects can't fetch nil value from it, combine it
+        -- with @OBJ_NO_RAWSEST will force a strict mode for development.
+        OBJECT_NO_NIL_ACCESS                = false,
 
         --- The Log level used in the Prototype core part.
         --          1 : Trace
@@ -269,6 +285,8 @@ do
                                     end
                                     or  function(self, key, value) self[key] = value return self end
     safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
+    safeget                     = function (self, key) return self[key] end
+    distinsert                  = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end return tinsert(self, val) end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -2160,6 +2178,7 @@ do
         end
 
         if not _EnumValidMap[token] then
+            local apis      = _Cache()
             local body      = _Cache()
 
             tinsert(body, "")   -- Remain for closure values
@@ -2170,12 +2189,14 @@ do
             ]])
 
             if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
+                distinsert(apis, "type")
                 tinsert(body, [[
                     local vtype = type(value)
                     if vtype == "string" then
                 ]])
 
                 if validateFlags(FLG_CASE_IGNORED, token) then
+                    distinsert(apis, "strupper")
                     tinsert(body, [[value = strupper(value)]])
                 end
             end
@@ -2183,6 +2204,7 @@ do
             tinsert(body, [[value = info[]] .. FLD_ENUM_ITEMS .. [[][value] ]])
 
             if validateFlags(FLG_FLAGS_ENUM, token) then
+                distinsert(apis, "floor")
                 tinsert(body, [[
                     elseif vtype == "number" then
                         if value == 0 then
@@ -2206,12 +2228,16 @@ do
                 end
             ]])
 
-            _EnumValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
+            local upvalue       = tblconcat(apis, ", ")
+            body[1]             = upvalue and #upvalue > 0 and ("local %s = %s"):format(upvalue, upvalue) or ""
 
+            _EnumValidMap[token]= loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
+
+            _Cache(apis)
             _Cache(body)
         end
 
-        info[FLD_ENUM_VALID] = _EnumValidMap[token]
+        info[FLD_ENUM_VALID]    = _EnumValidMap[token]
     end
 
     -----------------------------------------------------------------------
@@ -2309,7 +2335,7 @@ do
                     -- Mark the max value
                     local max = 1
                     for k, v in pairs, enums do
-                        while v >= max do max = max * 2 end
+                        while type(v) == "number" and v >= max do max = max * 2 end
                     end
 
                     ninfo[FLD_ENUM_MAXVAL]  = max - 1
@@ -2611,13 +2637,17 @@ do
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack + 1)
             end
 
-            enum.BeginDefinition(target, stack + 1)
+            stack = stack + 1
+
+            enum.BeginDefinition(target, stack)
+
+            Debug("[enum] %s created", stack, tostring(target))
 
             local builder = prototype.NewObject(enumbuilder)
             environment.SetNameSpace(builder, target)
 
             if definition then
-                builder(definition, stack + 1)
+                builder(definition, stack)
                 return target
             else
                 return builder
@@ -2891,7 +2921,7 @@ do
     -----------------------------------------------------------------------
     ATTRTAR_STRUCT              = attribute.RegisterTargetType("Struct")
     ATTRTAR_MEMBER              = attribute.RegisterTargetType("Member")
-    ATTRTAR_STRUCT_METHOD       = attribute.RegisterTargetType("StructMethod")
+    ATTRTAR_METHOD              = attribute.RegisterTargetType("Method")
 
     -----------------------------------------------------------------------
     --                          public constants                         --
@@ -2980,8 +3010,6 @@ do
         local info  = _StructBuilderInfo[target]
         if info then return info, true else return _StructInfo[target], false end
     end
-
-    local safeget               = function(self, key) return self[key] end
 
     local getTypeValueValidate  = function(target)
         local protype = getmetatable(target)
@@ -3136,7 +3164,7 @@ do
                 return checkRepeatStructType(target, getStructTargetInfo(info[FLD_STRUCT_ARRAY]))
             elseif info[FLD_STRUCT_MEMBERSTART] then
                 for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                    if m == target or checkRepeatStructType(target, getStructTargetInfo(m)) then
+                    if m[FLD_MEMBER_TYPE] == target or checkRepeatStructType(target, getStructTargetInfo(m)) then
                         return true
                     end
                 end
@@ -3199,19 +3227,24 @@ do
 
         -- Build the validator generator
         if not _StructValidMap[token] then
+            local apis      = _Cache()
             local header    = _Cache()
             local body      = _Cache()
 
-            tinsert(body, "")   -- Remain for closure values
+            tinsert(body, "")   -- APIS
+            tinsert(body, [[return function(%s)]])
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+                distinsert(apis, "type")
+                distinsert(apis, "getmetatable")
                 tinsert(body, [[
                     if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table" end
                     if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table" end
                 ]])
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                    distinsert(apis, "_Cache")
                     tinsert(body, [[
                         -- Cache to block recursive validation
                         local vcache = cache[info]
@@ -3227,6 +3260,12 @@ do
             end
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
+                distinsert(apis, "strformat")
+                distinsert(apis, "strgsub")
+                distinsert(apis, "clone")
+                distinsert(apis, "type")
+                distinsert(apis, "tostring")
+
                 tinsert(header, "count")
                 tinsert(body, [[
                     if onlyValid then
@@ -3274,6 +3313,12 @@ do
                     end
                 ]])
             elseif validateFlags(FLG_ARRAY_STRUCT, token) then
+                distinsert(apis, "ipairs")
+                distinsert(apis, "type")
+                distinsert(apis, "strgsub")
+                distinsert(apis, "strformat")
+                distinsert(apis, "tostring")
+
                 tinsert(body, [[
                     local array = info[]] .. FLD_STRUCT_ARRAY .. [[]
                     local avalid= info[]] .. FLD_STRUCT_ARRVALID .. [[]
@@ -3293,11 +3338,17 @@ do
             end
 
             if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
+                distinsert(apis, "type")
+                distinsert(apis, "strformat")
+
                 tinsert(body, [[
                     local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
                     if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                 ]])
             elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
+                distinsert(apis, "type")
+                distinsert(apis, "strformat")
+
                 tinsert(header, "mvalid")
                 tinsert(body, [[
                     for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
@@ -3335,9 +3386,10 @@ do
 
             if validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
                 if validateFlags(FLG_CUSTOM_STRUCT, token) then
+                    distinsert(apis, "type")
                     tinsert(body, [[if type(value) == "table" then]])
                 end
-
+                distinsert(apis, "pairs")
                 tinsert(body, [[
                     for k, v in pairs, info[]] .. FLD_STRUCT_TYPEMETHOD .. [[] do
                         if v and value[k] == nil then value[k] = v end
@@ -3350,20 +3402,25 @@ do
             end
 
             tinsert(body, [[
-                    return value
+                        return value
+                    end
                 end
             ]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            if #apis > 0 then
+                local upvalue = tblconcat(apis, ", ")
+                body[1] = ("local %s = %s"):format(upvalue, upvalue)
             end
 
-            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
+            body[2] = body[2]:format(tblconcat(header, ",") or "")
+
+            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)()
 
             if #header == 0 then
                 _StructValidMap[token] = _StructValidMap[token]()
             end
 
+            _Cache(apis)
             _Cache(header)
             _Cache(body)
         end
@@ -3419,12 +3476,18 @@ do
 
         -- Build the validator generator
         if not _StructCtorMap[token] then
+            local apis      = _Cache()
             local header    = _Cache()
             local body      = _Cache()
 
-            tinsert(body, "")
+            tinsert(body, "")   -- APIS
+            tinsert(body, [[return function(%s)]])
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
+                distinsert(apis, "select")
+                distinsert(apis, "type")
+                distinsert(apis, "getmetatable")
+
                 tinsert(body, [[
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
@@ -3450,6 +3513,9 @@ do
                 end
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                    distinsert(apis, "_Cache")
+                    distinsert(apis, "pairs")
+
                     tinsert(body, [[
                         local cache = _Cache()
                         ret, msg    = ivalid(info, first, fmatch and not fimtbl, cache)
@@ -3465,6 +3531,9 @@ do
                     tinsert(body, [[if fmatch and not fimtbl then]])
 
                     if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                        distinsert(apis, "_Cache")
+                        distinsert(apis, "pairs")
+
                         tinsert(body, [[
                             local cache = _Cache()
                             ret, msg = ivalid(info, first, false, cache)
@@ -3477,6 +3546,7 @@ do
                     tinsert(body, [[end]])
                 end
 
+                distinsert(apis, "strgsub")
                 tinsert(body, [[
                             return ret
                         elseif not fmatch then
@@ -3505,6 +3575,9 @@ do
             end
 
             if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                distinsert(apis, "_Cache")
+                distinsert(apis, "pairs")
+
                 tinsert(body, [[
                     local cache = _Cache()
                     ret, msg = ivalid(info, ret, false, cache)
@@ -3518,7 +3591,10 @@ do
 
             tinsert(body, [[if not msg then return ret end]])
 
+            distinsert(apis, "error")
+            distinsert(apis, "strgsub")
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+                distinsert(apis, "type")
                 tinsert(body, [[
                     error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                 ]])
@@ -3528,18 +3604,25 @@ do
                 ]])
             end
 
-            tinsert(body, [[end]])
+            tinsert(body, [[
+                    end
+                end
+            ]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            if #apis > 0 then
+                local upvalue = tblconcat(apis, ", ")
+                body[1] = ("local %s = %s"):format(upvalue, upvalue)
             end
 
-            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
+            body[2] = body[2]:format(tblconcat(header, ",") or "")
+
+            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)()
 
             if #header == 0 then
                 _StructCtorMap[token] = _StructCtorMap[token]()
             end
 
+            _Cache(apis)
             _Cache(header)
             _Cache(body)
         end
@@ -3554,7 +3637,8 @@ do
     end
 
     -- Refresh Depends
-    local updateStructDepends   = function (target, cache)
+    local updateStructDepends
+    updateStructDepends         = function (target, cache)
         local map = _DependenceMap[target]
 
         if map then
@@ -3715,14 +3799,14 @@ do
                     if name == "" then error("Usage: Usage: struct.AddMethod(structure, name, func[, stack]) - The name can't be empty", stack) end
                     if type(func) ~= "function" then error("Usage: struct.AddMethod(structure, name, func[, stack]) - The func must be a function", stack) end
 
-                    attribute.SaveAttributes(func, ATTRTAR_STRUCT_METHOD, stack)
+                    attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
                     if info[FLD_STRUCT_BASE] and not info[name] then
                         local sfunc = struct.GetObjectMethod(info[FLD_STRUCT_BASE], name)
-                        if sfunc then attribute.InheritAttributes(func, ATTRTAR_STRUCT_METHOD, sfunc) end
+                        if sfunc then attribute.InheritAttributes(func, ATTRTAR_METHOD, sfunc) end
                     end
 
-                    local ret = attribute.InitDefinition(func, ATTRTAR_STRUCT_METHOD, func, target, name)
+                    local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name)
                     if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
                     if not info[name] then
@@ -3732,8 +3816,8 @@ do
                         info[name]  = func
                     end
 
-                    attribute.ApplyAttributes (func, ATTRTAR_STRUCT_METHOD, target, name)
-                    attribute.AttachAttributes(func, ATTRTAR_STRUCT_METHOD, target, name)
+                    attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name)
+                    attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
                 else
                     error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
                 end
@@ -4420,6 +4504,8 @@ do
 
             struct.BeginDefinition(target, stack)
 
+            Debug("[struct] %s created", stack, tostring(target))
+
             local builder   = prototype.NewObject(structbuilder)
             environment.Initialize  (builder)
             environment.SetNameSpace(builder, target)
@@ -4620,72 +4706,55 @@ do
     -----------------------------------------------------------------------
     ATTRTAR_INTERFACE           = attribute.RegisterTargetType("Interface")
     ATTRTAR_CLASS               = attribute.RegisterTargetType("Class")
-    ATTRTAR_CLASS_METHOD        = attribute.RegisterTargetType("ClassMethod")
-    ATTRTAR_INTERFACE_METHOD    = attribute.RegisterTargetType("InterfaceMethod")
-    ATTRTAR_META_METHOD         = attribute.RegisterTargetType("Metamethod")
-    ATTRTAR_CLASS_CONSTRUCTOR   = attribute.RegisterTargetType("Constructor")
+    ATTRTAR_METHOD              = rawget(_PLoopEnv, "ATTRTAR_METHOD") or attribute.RegisterTargetType("Method")
+    ATTRTAR_METAMETHOD          = attribute.RegisterTargetType("MetaMethod")
+    ATTRTAR_CONSTRUCTOR         = attribute.RegisterTargetType("Constructor")
 
     -----------------------------------------------------------------------
-    --                          private storage                          --
+    --                         private constants                         --
     -----------------------------------------------------------------------
-    local _ICInfo               = setmetatable({}, WEAK_KEY)        -- INTERFACE & CLASS INFO
-    local _BDInfo               = setmetatable({}, WEAK_KEY)        -- TYPE BUILDER INFO
-    local _CLDInfo              = {}                                -- CHILDREN MAP
-    local _ThisMap              = setmetatable({}, WEAK_ALL)        -- THIS  -> CLASS
-    local _SuperMap             = setmetatable({}, WEAK_ALL)        -- SUPER -> CLASS | INTERFACE
-
-    local _IndexMap             = {}
-    local _NewIdxMap            = {}
-    local _CtorMap              = {}
-
-    local _InDef                = setmetatable({}, WEAK_KEY)
-
     -- FEATURE MODIFIER
-    local MOD_SEAL_IC           = 2^0           -- SEALED TYPE
+    local MOD_SEALED_IC         = 2^0           -- SEALED TYPE
     local MOD_FINAL_IC          = 2^1           -- FINAL TYPE
-    local MOD_ABSCLS_IC         = 2^2           -- ABSTRACT CLASS
-    local MOD_ATCACHE_IC        = 2^3           -- AUTO CACHE CLASS
-    local MOD_OBJMDAT_IC        = 2^4           -- ENABLE OBJECT METHOD ATTRIBUTE
-    local MOD_NRAWSET_IC        = 2^5           -- NO RAW SET FOR OBJECTS
-    local MOD_ASSPCLS_IC        = 2^6           -- AS A SIMPLE CLASS
-    local MOD_SIMPVER_IC        = 2^7           -- SIMPLE VERSION CLASS - NO VERSION CONTROL
-    local MOD_ODSUPER_IC        = 2^8           -- OLD SUPER STYLE
-    local MOD_THDSAFE_IC        = 2^9           --  @todo: THREAD SAFE, can't be all controlled by the system
+    local MOD_ABSTRACT_CLS      = 2^2           -- ABSTRACT CLASS
+    local MOD_AUTOCACHE_CLS     = 2^3           -- AUTO CACHE CLASS
+    local MOD_ISSIMPLE_CLS      = 2^4           -- IS A SIMPLE CLASS
+    local MOD_ASSIMPLE_CLS      = 2^5           -- AS A SIMPLE CLASS
+    local MOD_SINGLEVER_CLS     = 2^6           -- SINGLE VERSION CLASS - NO MULTI VERSION
+    local MOD_MTDATTR_OBJ       = 2^7           -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
+    local MOD_NORAWSET_OBJ      = 2^8           -- NO RAW SET FOR OBJECTS
+    local MOD_NONILVAL_OBJ      = 2^9           -- NO NIL FIELD ACCESS
+    local MOD_NOSUPER_OBJ       = 2^10           -- OLD SUPER STYLE
 
-    local MOD_INITVAL_IC        = (function()
-        local v
-        if PLOOP_PLATFORM_SETTINGS.CLASS_ALL_SIMPLE_VERSION then
-            v = turnOnFlags(0, MOD_SIMPVER_IC)
-        end
-        if PLOOP_PLATFORM_SETTINGS.CLASS_ALL_OLD_SUPER_STYLE then
-            return turnOnFlags(v or 0, MOD_ODSUPER_IC)
-        end
-    end)()
+    local MOD_INITVAL_IC        = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS and MOD_SINGLEVER_CLS or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT        and MOD_NOSUPER_OBJ   or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_RAWSEST            and MOD_NORAWSET_OBJ  or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_NIL_ACCESS         and MOD_NONILVAL_OBJ  or 0)
 
     -- FIELDS
-    local FLD_IC_MOD            = -1            -- FIELD MODIFIER
-    local FLD_IC_SUPCLS         =  0            -- FIELD SUPER CLASS
-    local FLD_IC_STEXT          =  1            -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
-    local FLD_IC_INIT           = -2            -- FIELD INITIALIZER
-    local FLD_IC_DISPOSE        = -3            -- FIELD DISPOSE
-    local FLD_IC_TYPFTR         = -4            -- FILED TYPE FEATURES
-    local FLD_IC_TYPMTD         = -5            -- FIELD TYPE METHODS
-    local FLD_IC_TYPMTM         = -6            -- FIELD TYPE META-METHODS
-    local FLD_IC_INHRTP         = -7            -- FIELD INHERITANCE PRIORITY
-    local FLD_IC_STAFTR         = -8            -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJFTR         = -9            -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJMTD         =-10            -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM         =-11            -- FIELD OBJECT META-METHODS
-    local FLD_IC_REQCLS         =-12            -- FIELD REQUIR CLASS FOR INTERFACE
-    local FLD_IC_ONEVRM         =-13            -- FIELD WHETHER ONE VIRTUAL-METHOD INTERFACE
-    local FLD_IC_ANYMSCL        =-14            -- FIELD ANONYMOUS CLASS FOR INTERFACE
-    local FLD_IC_SIMPCLS        =-15            -- FIELD CLASS IS A SIMPLE CLASS
-    local FLD_IC_SUPINFO        =-16            -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPCACH        =-17            -- FIELD SUPER CACHE
-    local FLD_IC_NEWFTR         =-18            -- FIELD TYPE NEW FEATURES
+    local FLD_IC_MOD            = -1                -- FIELD MODIFIER
+    local FLD_IC_SUPCLS         =  0                -- FIELD SUPER CLASS
+    local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
+    local FLD_IC_INITIALIZER    = -2                -- FIELD INITIALIZER
+    local FLD_IC_INITFIELD      = -3                -- FIELD INIT FIELDS
+    local FLD_IC_DISPOSE        = -4                -- FIELD DISPOSE
+    local FLD_IC_TYPFTR         = -5                -- FILED TYPE FEATURES
+    local FLD_IC_TYPMTD         = -6                -- FIELD TYPE METHODS
+    local FLD_IC_TYPMTM         = -7                -- FIELD TYPE META-METHODS
+    local FLD_IC_INHRTP         = -8                -- FIELD INHERITANCE PRIORITY
+    local FLD_IC_STAFTR         = -9                -- FIELD STATIC TYPE FEATURES
+    local FLD_IC_OBJFTR         =-10                -- FIELD OBJECT FEATURES
+    local FLD_IC_OBJMTD         =-11                -- FIELD OBJECT METHODS
+    local FLD_IC_OBJMTM         =-12                -- FIELD OBJECT META-METHODS
+    local FLD_IC_REQCLS         =-13                -- FIELD REQUIR CLASS FOR INTERFACE
+    local FLD_IC_ONEVRM         =-14                -- FIELD WHETHER ONE VIRTUAL-METHOD INTERFACE
+    local FLD_IC_ANYMSCL        =-15                -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FLD_IC_SUPINFO        =-16                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPCACH        =-17                -- FIELD SUPER CACHE
+    local FLD_IC_NEWFTR         =-18                -- FIELD TYPE NEW FEATURES
 
     -- Ctor & Dispose
-    local FLD_IC_CTOR           = 10^4          -- FIELD THE CONSTRUCTOR
+    local FLD_IC_CTOR           = 10^4              -- FIELD THE CONSTRUCTOR
     local FLD_IC_CLINIT         = FLD_IC_CTOR + 1   -- FEILD THE CLASS INITIALIZER
     local FLD_IC_ENDISP         = FLD_IC_CTOR - 1   -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
     local FLD_IC_STINIT         = FLD_IC_CLINIT + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
@@ -4696,31 +4765,34 @@ do
     local INRT_PRIORITY_VIRTUAL = -1
 
     -- Flags for object accessing
-    local FLG_IC_OBJMTD         = 2^0           -- HAS OBJECT METHOD
-    local FLG_IC_OBJFTR         = 2^1           -- HAS OBJECT FEATURE
-    local FLG_IC_ATCACH         = 2^2           -- IS  AUTO CACHE
-    local FLG_IC_IDXFUN         = 2^3           -- HAS INDEX FUNCTION
-    local FLG_IC_IDXTBL         = 2^4           -- HAS INDEX TABLE
-    local FLG_IC_NEWIDX         = 2^5           -- HAS NEW INDEX
-    local FLG_IC_OBJATR         = 2^6           -- ENABLE OBJECT METHOD ATTRIBUTE
-    local FLG_IC_NRAWST         = 2^7           -- ENABLE NO RAW SET
-    local FLG_IC_SUPACC         = 2^8           -- HAS SUPER METHOD OR FEATURE
-    local FLG_IC_TDSAFE         = 2^9           -- THREAD SAFE
+    local FLG_IC_OBJMTD         = 2^0               -- HAS OBJECT METHOD
+    local FLG_IC_OBJFTR         = 2^1               -- HAS OBJECT FEATURE
+    local FLG_IC_ATCACH         = 2^2               -- IS  AUTO CACHE
+    local FLG_IC_IDXFUN         = 2^3               -- HAS INDEX FUNCTION
+    local FLG_IC_IDXTBL         = 2^4               -- HAS INDEX TABLE
+    local FLG_IC_NEWIDX         = 2^5               -- HAS NEW INDEX
+    local FLG_IC_OBJATR         = 2^6               -- ENABLE OBJECT METHOD ATTRIBUTE
+    local FLG_IC_NRAWST         = 2^7               -- ENABLE NO RAW SET
+    local FLG_IC_SUPACC         = 2^8               -- HAS SUPER METHOD OR FEATURE
+    local FLG_IC_TDSAFE         = 2^9               -- THREAD SAFE
 
     -- Flags for constructor
-    local FLG_IC_EXTOBJ         = 2^2           -- HAS __exist
-    local FLG_IC_NEWOBJ         = 2^3           -- HAS __new
-    local FLG_IC_SIMCLS         = 2^4           -- SIMPLE CLASS
-    local FLG_IC_ASSIMP         = 2^5           -- AS SIMPLE CLASS
-    local FLG_IC_HSCLIN         = 2^6           -- HAS CLASS INITIALIZER
-    local FLG_IC_HASIFS         = 2^7           -- NEED CALL INTERFACE'S INITIALIZER
+    local FLG_IC_EXTOBJ         = 2^2               -- HAS __exist
+    local FLG_IC_NEWOBJ         = 2^3               -- HAS __new
+    local FLG_IC_SIMCLS         = 2^4               -- SIMPLE CLASS
+    local FLG_IC_ASSIMP         = 2^5               -- AS SIMPLE CLASS
+    local FLG_IC_HSCLIN         = 2^6               -- HAS CLASS INITIALIZER
+    local FLG_IC_HASIFS         = 2^7               -- NEED CALL INTERFACE'S INITIALIZER
 
-    -- Meta-Methods
+    -- Keywords
     local IC_KEYWORD_EXIST      = "__exist"
     local IC_KEYWORD_NEW        = "__new"
-    local IC_KEYWORD_INDEX      = "__index"
-    local IC_KEYWORD_NEWIDX     = "__newindex"
-    local IC_KEYWORD_META       = "__metatable"
+    local IC_KEYWORD_INITTABLE  = "__init"
+
+    -- Meta-Methods
+    local IC_META_INDEX         = "__index"
+    local IC_META_NEWIDX        = "__newindex"
+    local IC_META_TABLE         = "__metatable"
 
     -- Dispose Method
     local IC_KEYWORD_DISPOB     = "Dispose"
@@ -4731,7 +4803,7 @@ do
     local SP_ACCESS             = "__PLOOP_SUPER_ACCESS"
 
     -- Type Builder
-    local IC_BUILDER_NEWMTD              = "__PLOOP_BD_NEWMTD"
+    local IC_BUILDER_NEWMTD     = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS             = {
         __add                   = "__add",      -- a + b
@@ -4766,14 +4838,30 @@ do
         __new                   = "__new",      -- return a raw table as the object
     }
 
+    -----------------------------------------------------------------------
+    --                          private storage                          --
+    -----------------------------------------------------------------------
+    local _ICInfo               = newStorage(WEAK_KEY)      -- INTERFACE & CLASS INFO
+    local _ThisMap              = newStorage(WEAK_ALL)      -- THIS  -> CLASS
+    local _SuperMap             = newStorage(WEAK_ALL)      -- SUPER -> CLASS | INTERFACE
+
+    -- TYPE BUILDING
+    local _ICBuilderInDefine    = newStorage(WEAK_KEY)
+    local _ICBuilderInfo        = newStorage(WEAK_KEY)      -- TYPE BUILDER INFO
+    local _ICDependsMap         = {}                        -- CHILDREN MAP
+
+    local _ICIndexMap           = {}
+    local _ICNewIdxMap          = {}
+    local _ClassCtorMap         = {}
+
     -- Helpers
     local function getICTargetInfo(target)
-        local info  = _BDInfo[target]
+        local info  = _ICBuilderInfo[target]
         if info then return info, true else return _ICInfo[target], false end
     end
 
     local function getSuperInfo(info, target)
-        return info[FLD_IC_SUPINFO] and info[FLD_IC_SUPINFO][target] or _BDInfo[target] or _ICInfo[target]
+        return info[FLD_IC_SUPINFO] and info[FLD_IC_SUPINFO][target] or _ICBuilderInfo[target] or _ICInfo[target]
     end
 
     local function getSuperInfoIter(info, reverse)
@@ -4915,7 +5003,7 @@ do
         local upval = _Cache()
         local meta  = info[FLD_IC_OBJMTM]
 
-        if validateFlags(MOD_ATCACHE_IC, info[FLD_IC_MOD]) then
+        if validateFlags(MOD_AUTOCACHE_CLS, info[FLD_IC_MOD]) then
             token   = turnOnFlags(FLG_IC_ATCACH, token)
         end
 
@@ -4929,23 +5017,23 @@ do
             tinsert(upval, info[FLD_IC_OBJMTD])
         end
 
-        if meta[IC_KEYWORD_INDEX] then
-            if type(meta[IC_KEYWORD_INDEX]) == "function" then
+        if meta[IC_META_INDEX] then
+            if type(meta[IC_META_INDEX]) == "function" then
                 token = turnOnFlags(FLG_IC_IDXFUN, token)
             else
                 token = turnOnFlags(FLG_IC_IDXTBL, token)
             end
-            tinsert(upval, meta[IC_KEYWORD_INDEX])
+            tinsert(upval, meta[IC_META_INDEX])
         end
 
         -- No __index generated
-        if token == 0                               then meta[IC_KEYWORD_INDEX] = nil      return _Cache(upval) end
+        if token == 0                               then meta[IC_META_INDEX] = nil      return _Cache(upval) end
         -- Use the object method cache directly
-        if token == FLG_IC_OBJMTD                       then meta[IC_KEYWORD_INDEX] = objmtd   return _Cache(upval) end
+        if token == FLG_IC_OBJMTD                       then meta[IC_META_INDEX] = objmtd   return _Cache(upval) end
         -- Use the custom __index directly
         if token == FLG_IC_IDXFUN or token == FLG_IC_IDXTBL then                            return _Cache(upval) end
 
-        if not _IndexMap[token] then
+        if not _ICIndexMap[token] then
             local header    = _Cache()
             local body      = _Cache()
 
@@ -4990,13 +5078,13 @@ do
                 body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            _IndexMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Index_" .. token)
+            _ICIndexMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Index_" .. token)
 
             _Cache(header)
             _Cache(body)
         end
 
-        meta[IC_KEYWORD_INDEX] = _IndexMap[token](unpack(upval))
+        meta[IC_META_INDEX] = _ICIndexMap[token](unpack(upval))
         _Cache(upval)
     end
 
@@ -5005,11 +5093,11 @@ do
         local upval = _Cache()
         local meta  = info[FLD_IC_OBJMTM]
 
-        if validateFlags(MOD_OBJMDAT_IC, info[FLD_IC_MOD]) then
+        if validateFlags(MOD_MTDATTR_OBJ, info[FLD_IC_MOD]) then
             token   = turnOnFlags(FLG_IC_OBJATR, token)
         end
 
-        if validateFlags(MOD_NRAWSET_IC, info[FLD_IC_MOD]) then
+        if validateFlags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) then
             token   = turnOnFlags(FLG_IC_NRAWST, token)
         end
 
@@ -5018,17 +5106,17 @@ do
             tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
-        if meta[IC_KEYWORD_NEWIDX] then
+        if meta[IC_META_NEWIDX] then
             token   = turnOnFlags(FLG_IC_NEWIDX, token)
-            tinsert(upval, meta[IC_KEYWORD_NEWIDX])
+            tinsert(upval, meta[IC_META_NEWIDX])
         end
 
         -- No __newindex generated
-        if token == 0         then meta[IC_KEYWORD_NEWIDX] = nil   return _Cache(upval) end
+        if token == 0         then meta[IC_META_NEWIDX] = nil   return _Cache(upval) end
         -- Use the custom __newindex directly
         if token == FLG_IC_NEWIDX then                          return _Cache(upval) end
 
-        if not _NewIdxMap[token] then
+        if not _ICNewIdxMap[token] then
             local header    = _Cache()
             local body      = _Cache()
 
@@ -5077,13 +5165,13 @@ do
                 body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            _NewIdxMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token)
+            _ICNewIdxMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token)
 
             _Cache(header)
             _Cache(body)
         end
 
-        meta[IC_KEYWORD_NEWIDX] = _NewIdxMap[token](unpack(upval))
+        meta[IC_META_NEWIDX] = _ICNewIdxMap[token](unpack(upval))
         _Cache(upval)
     end
 
@@ -5096,7 +5184,7 @@ do
         local upval = _Cache()
         local meta  = info[FLD_IC_OBJMTM]
 
-        if validateFlags(MOD_ABSCLS_IC, info[FLD_IC_MOD]) then
+        if validateFlags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) then
             local msg = strformat("The %s is abstract, can't be used to create objects", tostring(target))
             info[FLD_IC_CTOR] = function() error(msg, 3) end
             return _Cache(upval)
@@ -5116,9 +5204,9 @@ do
             tinsert(upval, meta[IC_KEYWORD_NEW])
         end
 
-        if info[FLD_IC_SIMPCLS] then
+        if validateFlags(MOD_ISSIMPLE_CLS,  info[FLD_IC_MOD]) then
             token   = turnOnFlags(FLG_IC_SIMCLS, token)
-        elseif validateFlags(MOD_ASSPCLS_IC, info[FLD_IC_MOD]) then
+        elseif validateFlags(MOD_ASSIMPLE_CLS, info[FLD_IC_MOD]) then
             token   = turnOnFlags(FLG_IC_ASSIMP, token)
 
             if info[FLD_IC_OBJFTR] and next(info[FLD_IC_OBJFTR]) then
@@ -5141,7 +5229,7 @@ do
             tinsert(upval, i)
         end
 
-        if not _CtorMap[token] then
+        if not _ClassCtorMap[token] then
             local header    = _Cache()
             local body      = _Cache()
 
@@ -5265,13 +5353,13 @@ do
                 body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            _CtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)
+            _ClassCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)
 
             _Cache(header)
             _Cache(body)
         end
 
-        info[FLD_IC_CTOR] = _CtorMap[token](unpack(upval))
+        info[FLD_IC_CTOR] = _ClassCtorMap[token](unpack(upval))
         _Cache(upval)
     end
 
@@ -5326,8 +5414,8 @@ do
             end
             info[FLD_IC_ONEVRM] = onevtm or nil
         else
-            if not validateFlags(MOD_ABSCLS_IC, info[FLD_IC_MOD]) then
-                objmeta[IC_KEYWORD_META]   = target
+            if not validateFlags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) then
+                objmeta[IC_META_TABLE]   = target
 
                 info[FLD_IC_OBJMTM]     = objmeta
                 info[FLD_IC_OBJFTR]     = objftr
@@ -5373,9 +5461,9 @@ do
     end
 
     local function reDefineChildren(target, stack)
-        if _CLDInfo[target] then
-            for _, child in ipairs, _CLDInfo[target], 0 do
-                if not _BDInfo[child] then  -- Not in definition mode
+        if _ICDependsMap[target] then
+            for _, child in ipairs, _ICDependsMap[target], 0 do
+                if not _ICBuilderInfo[child] then  -- Not in definition mode
                     if interface.Validate(child) then
                         interface.RefreshDefinition(child, stack + 1)
                     else
@@ -5387,9 +5475,9 @@ do
     end
 
     local function beginDefinition(target, stack)
-        if not _BDInfo[0] then
+        if not _ICBuilderInfo[0] then
             Lock(interface)
-            _BDInfo[0] = target
+            _ICBuilderInfo[0] = target
             return true
         end
         return false
@@ -5399,8 +5487,8 @@ do
         -- Update children
         if not noChildUpdate then reDefineChildren(target, stack + 1) end
 
-        if _BDInfo[0] == target then
-            _BDInfo[0] = nil
+        if _ICBuilderInfo[0] == target then
+            _ICBuilderInfo[0] = nil
             Release(interface)
         end
     end
@@ -5408,13 +5496,13 @@ do
     local function addSuperType(info, target, supType)
         local isIF          = interface.Validate(supType)
 
-        -- Clear _CLDInfo for old extend interfaces
+        -- Clear _ICDependsMap for old extend interfaces
         for i = #info, FLD_IC_STEXT, -1 do
             local extif     = info[i]
 
             if interface.IsSubType(supType, extif) then
-                for k, v in ipairs, _CLDInfo[extif], 0 do
-                    if v == target then tremove(_CLDInfo[extif], k) break end
+                for k, v in ipairs, _ICDependsMap[extif], 0 do
+                    if v == target then tremove(_ICDependsMap[extif], k) break end
                 end
             end
 
@@ -5427,9 +5515,9 @@ do
             info[FLD_IC_SUPCLS] = supType
         end
 
-        -- Register the _CLDInfo
-        _CLDInfo[supType]   = _CLDInfo[supType] or {}
-        tinsert(_CLDInfo[supType], target)
+        -- Register the _ICDependsMap
+        _ICDependsMap[supType]= _ICDependsMap[supType] or {}
+        tinsert(_ICDependsMap[supType], target)
 
         -- Re-generate the interface order list
         local lstIF         = generateSuperInfo(info, _Cache())
@@ -5560,12 +5648,12 @@ do
 
         local tfunc = type(func)
 
-        if name ~= IC_KEYWORD_INDEX and tfunc ~= "function" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
-        if name == IC_KEYWORD_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'", tostring(tType), tostring(tType)), stack) end
+        if name ~= IC_META_INDEX and tfunc ~= "function" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function", tostring(tType), tostring(tType)), stack) end
+        if name == IC_META_INDEX and tfunc ~= "function" and tfunc ~= "table" then error(strformat("Usage: %s.AddMetaMethod(%s, name, func[, stack]) - the func must be a function or table for '__index'", tostring(tType), tostring(tType)), stack) end
 
         if tfunc == "function" then
-            attribute.SaveAttributes(func, ATTRTAR_META_METHOD, stack + 1)
-            func = attribute.ApplyAttributes(func, ATTRTAR_META_METHOD, nil, target, name)
+            attribute.SaveAttributes(func, ATTRTAR_METAMETHOD, stack + 1)
+            func = attribute.ApplyAttributes(func, ATTRTAR_METAMETHOD, nil, target, name)
         end
 
         info[FLD_IC_TYPMTM]                     = info[FLD_IC_TYPMTM] or _Cache()
@@ -5577,7 +5665,7 @@ do
         if tfunc == "table" then
             info[FLD_IC_TYPMTM][META_KEYS[name]]= function(self, key) return func[key] end
         elseif tfunc == "function" then
-            attribute.AttachAttributes(func, ATTRTAR_META_METHOD, target, name)
+            attribute.AttachAttributes(func, ATTRTAR_METAMETHOD, target, name)
         end
     end
 
@@ -5736,8 +5824,8 @@ do
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.BeginDefinition(interface[, stack]) - interface not existed", stack) end
 
-                if _ICInfo[target] and validateFlags(MOD_SEAL_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _BDInfo[target] then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                if _ICInfo[target] and validateFlags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _ICBuilderInfo[target] then error(strformat("Usage: interface.BeginDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 -- Only one thread can be allowed to define class or interface
                 beginDefinition(target, stack + 1)
@@ -5746,13 +5834,13 @@ do
 
                 ninfo[FLD_IC_SUPCACH] = nil
 
-                _BDInfo[target] = ninfo
+                _ICBuilderInfo[target] = ninfo
 
                 attribute.SaveAttributes(target, ATTRTAR_INTERFACE, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _BDInfo[target]
+                local ninfo     = _ICBuilderInfo[target]
                 if not ninfo then return end
 
                 stack = (type(stack) == "number" and stack or 1) + 1
@@ -5775,7 +5863,7 @@ do
                 generateTypeCaches(target, ninfo)
 
                 -- End interface's definition
-                _BDInfo[target] = nil
+                _ICBuilderInfo[target] = nil
 
                 -- Save as new interface's info
                 _ICInfo[target] = ninfo
@@ -5793,7 +5881,7 @@ do
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.RefreshDefinition(interface[, stack]) - interface not existed", stack) end
-                if _BDInfo[target] then error(strformat("Usage: interface.RefreshDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                if _ICBuilderInfo[target] then error(strformat("Usage: interface.RefreshDefinition(interface[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 -- Only one thread can be allowed to define class or interface
                 beginDefinition(target, stack + 1)
@@ -6082,7 +6170,7 @@ do
 
             ["IsSealed"]        = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_SEAL_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_SEALED_IC, info[FLD_IC_MOD]) or false
             end;
 
             ["IsRequireFeature"]= function(target, name)
@@ -6127,7 +6215,7 @@ do
                 if info then
                     if not def then error(strformat("Usage: interface.SetInitializer(interface, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: interface.SetInitializer(interface, initializer) - The initializer must be a function", stack) end
-                    info[FLD_IC_INIT] = func
+                    info[FLD_IC_INITIALIZER] = func
                 else
                     error("Usage: interface.SetInitializer(interface, initializer[, stack]) - The interface is not valid", stack)
                 end
@@ -6211,7 +6299,7 @@ do
             end;
 
             ["SetSealed"]       = function(target, stack)
-                setModifiedFlag(interface, target, MOD_SEAL_IC, "SetSealed", stack)
+                setModifiedFlag(interface, target, MOD_SEALED_IC, "SetSealed", stack)
             end;
 
             ["SetStaticFeature"]= function(target, name, stack)
@@ -6281,8 +6369,8 @@ do
 
                 local info      = _ICInfo[target]
 
-                if info and validateFlags(MOD_SEAL_IC, info[FLD_IC_MOD]) then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _BDInfo[target] then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                if info and validateFlags(MOD_SEALED_IC, info[FLD_IC_MOD]) then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _ICBuilderInfo[target] then error(strformat("Usage: class.BeginDefinition(class[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 -- Only one thread can be allowed to define class or interface
                 beginDefinition(target, stack + 1)
@@ -6301,13 +6389,13 @@ do
                 ninfo[FLD_IC_OBJFTR]    = nil
                 ninfo[FLD_IC_OBJMTM]    = nil
 
-                _BDInfo[target] = ninfo
+                _ICBuilderInfo[target] = ninfo
 
                 attribute.SaveAttributes(target, ATTRTAR_CLASS, stack + 1)
             end;
 
             ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _BDInfo[target]
+                local ninfo     = _ICBuilderInfo[target]
                 if not ninfo then return end
 
                 stack = (type(stack) == "number" and stack or 1) + 1
@@ -6321,7 +6409,7 @@ do
                 local initIdx   = FLD_IC_STINIT
                 local dispIdx   = FLD_IC_ENDISP
 
-                if validateFlags(MOD_ABSCLS_IC, ninfo[FLD_IC_MOD]) then
+                if validateFlags(MOD_ABSTRACT_CLS, ninfo[FLD_IC_MOD]) then
                     local lst   = generateSuperInfo(ninfo, _Cache())
                     local idxIF = FLD_IC_STEXT + #lst
 
@@ -6331,7 +6419,6 @@ do
 
                     _Cache(lst)
 
-                    ninfo[FLD_IC_SIMPCLS]   = nil
                     ninfo[FLD_IC_SUPINFO]   = nil
                     ninfo[FLD_IC_CTOR ]   = nil
                     ninfo[FLD_IC_CLINIT ]   = nil
@@ -6367,8 +6454,8 @@ do
                         local sinfo     = spc[extif]
                         saveFeatureFromSuper(ninfo, sinfo, meta)
 
-                        if sinfo[FLD_IC_INIT] then
-                            ninfo[initIdx]  = sinfo[FLD_IC_INIT]
+                        if sinfo[FLD_IC_INITIALIZER] then
+                            ninfo[initIdx]  = sinfo[FLD_IC_INITIALIZER]
                             initIdx         = initIdx + 1
                         end
 
@@ -6382,7 +6469,7 @@ do
 
                     -- Save features from super classes
                     for i, sinfo in ipairs, spc, 0 do
-                        rlCtor  = sinfo[FLD_IC_INIT] or rlCtor
+                        rlCtor  = sinfo[FLD_IC_INITIALIZER] or rlCtor
                         saveFeatureFromSuper(ninfo, sinfo, meta)
                     end
 
@@ -6391,8 +6478,10 @@ do
 
                     -- Saving informations
                     tblclone(ninfo[FLD_IC_TYPMTM], meta, false, true)
-                    ninfo[FLD_IC_CLINIT]    = ninfo[FLD_IC_INIT] or rlCtor
-                    ninfo[FLD_IC_SIMPCLS]   = not (ninfo[FLD_IC_CLINIT] or ninfo[FLD_IC_OBJFTR]) or nil
+                    ninfo[FLD_IC_CLINIT]    = ninfo[FLD_IC_INITIALIZER] or rlCtor
+                    if not (ninfo[FLD_IC_CLINIT] or ninfo[FLD_IC_OBJFTR]) then
+                        ninfo[FLD_IC_MOD]   = turnOnFlags(MOD_ISSIMPLE_CLS, ninfo[FLD_IC_MOD])
+                    end
                     ninfo[FLD_IC_SUPINFO]   = spc
                     if ninfo[FLD_IC_OBJFTR] and not next(ninfo[FLD_IC_OBJFTR]) then _Cache(ninfo[FLD_IC_OBJFTR]) ninfo[FLD_IC_OBJFTR]= nil end
 
@@ -6406,7 +6495,7 @@ do
 
                     generateMetaIndex   (ninfo, meta)
                     generateMetaNewIndex(ninfo, meta)
-                    meta[IC_KEYWORD_META]    = target
+                    meta[IC_META_TABLE]    = target
 
                     generateConstructor(ninfo, meta)
                 end
@@ -6416,7 +6505,7 @@ do
                 while ninfo[dispIdx] do ninfo[dispIdx] = nil dispIdx = dispIdx - 1 end
 
                 -- Finish the definition
-                _BDInfo[target] = nil
+                _ICBuilderInfo[target] = nil
 
                 -- Save as new class's info
                 _ICInfo[target]   = ninfo
@@ -6483,62 +6572,57 @@ do
 
             ["IsAbstract"]      = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ABSCLS_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) or false
             end;
 
             ["IsAutoCache"]     = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ATCACHE_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_AUTOCACHE_CLS, info[FLD_IC_MOD]) or false
             end;
 
             ["IsFinal"]         = interface.IsFinal;
 
             ["IsObjMethodAttrEnabled"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_OBJMDAT_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_MTDATTR_OBJ, info[FLD_IC_MOD]) or false
             end;
 
-            ["IsOldSuperStyleClass"] = function(target)
+            ["IsNoSuperObject"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ODSUPER_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             ["IsRawSetBlocked"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_NRAWSET_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             ["IsSealed"]        = interface.IsSealed;
 
             ["IsSimpleClass"]   = function(target)
                 local info      = getAttributeInfo(target)
-                return info and (info[FLD_IC_SIMPCLS] or validateFlags(MOD_ASSPCLS_IC, info[FLD_IC_MOD])) or false
+                return info and (validateFlags(MOD_ISSIMPLE_CLS, info[FLD_IC_MOD]) or validateFlags(MOD_ASSIMPLE_CLS, info[FLD_IC_MOD])) or false
             end;
 
-            ["IsSimpleVersion"] = function(target)
+            ["IsSingleVersion"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_SIMPVER_IC, info[FLD_IC_MOD]) or false
+                return info and validateFlags(MOD_SINGLEVER_CLS, info[FLD_IC_MOD]) or false
             end;
 
             ["IsStaticFeature"] = interface.IsStaticFeature;
 
             ["IsStaticMethod"]  = interface.IsStaticMethod;
 
-            ["IsThreadSafe"]    = function(target)
-                local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_THDSAFE_IC, info[FLD_IC_MOD]) or false
-            end;
-
             ["SetAbstract"]     = function(target, stack)
-                setModifiedFlag(class, target, MOD_ABSCLS_IC, "SetAbstract", stack)
+                setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack)
             end;
 
             ["SetAutoCache"]    = function(target, stack)
-                setModifiedFlag(class, target, MOD_ATCACHE_IC, "SetAutoCache", stack)
+                setModifiedFlag(class, target, MOD_AUTOCACHE_CLS, "SetAutoCache", stack)
             end;
 
             ["SetAsSimpleClass"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_ASSPCLS_IC, "SetAsSimpleClass", stack)
+                setModifiedFlag(class, target, MOD_ASSIMPLE_CLS, "SetAsSimpleClass", stack)
             end;
 
             ["SetConstructor"]  = function(target, func, stack)
@@ -6549,12 +6633,12 @@ do
                     if not def then error(strformat("Usage: class.SetConstructor(class, constructor[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(func) ~= "function" then error("Usage: class.SetConstructor(class, constructor) - The constructor must be a function", stack) end
 
-                    attribute.SaveAttributes(func, ATTRTAR_CLASS_CONSTRUCTOR, stack + 1)
-                    func = attribute.ApplyAttributes(func, ATTRTAR_CLASS_CONSTRUCTOR, nil, target, name)
+                    attribute.SaveAttributes(func, ATTRTAR_CONSTRUCTOR, stack + 1)
+                    func = attribute.ApplyAttributes(func, ATTRTAR_CONSTRUCTOR, nil, target, name)
 
-                    info[FLD_IC_INIT] = func
+                    info[FLD_IC_INITIALIZER] = func
 
-                    attribute.AttachAttributes(func, ATTRTAR_CLASS_CONSTRUCTOR, target, name)
+                    attribute.AttachAttributes(func, ATTRTAR_CONSTRUCTOR, target, name)
                 else
                     error("Usage: class.SetConstructor(class, constructor[, stack]) - The class is not valid", stack)
                 end
@@ -6569,23 +6653,23 @@ do
             end;
 
             ["SetObjMethodAttrEnabled"] = function(target, stack)
-                setModifiedFlag(class, target, MOD_OBJMDAT_IC, "SetObjMethodAttrEnabled", stack)
+                setModifiedFlag(class, target, MOD_MTDATTR_OBJ, "SetObjMethodAttrEnabled", stack)
             end;
 
-            ["SetOldSuperStyle"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_ODSUPER_IC, "SetOldSuperStyle", stack)
+            ["SetNoSuperObject"]= function(target, stack)
+                setModifiedFlag(class, target, MOD_NOSUPER_OBJ, "SetNoSuperObject", stack)
             end;
 
             ["SetRawSetBlocked"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_NRAWSET_IC, "SetRawSetBlocked", stack)
+                setModifiedFlag(class, target, MOD_NORAWSET_OBJ, "SetRawSetBlocked", stack)
             end;
 
             ["SetSealed"]       = function(target, stack)
-                setModifiedFlag(class, target, MOD_SEAL_IC, "SetSealed", stack)
+                setModifiedFlag(class, target, MOD_SEALED_IC, "SetSealed", stack)
             end;
 
-            ["SetSimpleVersion"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_SIMPVER_IC, "SetSimpleVersion", stack)
+            ["SetSingleVersion"]= function(target, stack)
+                setModifiedFlag(class, target, MOD_SINGLEVER_CLS, "SetSingleVersion", stack)
             end;
 
             ["SetSuperClass"]   = function(target, cls, stack)
@@ -6614,10 +6698,6 @@ do
 
             ["SetStaticMethod"] = function(target, name, stack)
                 setStaticMethod(class, target, name, stack)
-            end;
-
-            ["SetThreadSafe"]   = function(target, stack)
-                setModifiedFlag(class, target, MOD_THDSAFE_IC, "SetThreadSafe", stack)
             end;
 
             ["ValidateValue"]   = function(cls, value)
@@ -6818,14 +6898,14 @@ do
             local m     = info and (info[name] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name])
             if m then return m, true end
             return environment.GetValue(self, name)
-            if val ~= nil and cache and not _BDInfo[environment.GetNameSpace(self)] then
+            if val ~= nil and cache and not _ICBuilderInfo[environment.GetNameSpace(self)] then
                 rawset(self, key, val)
             end
             return val
         end,
         __newindex  = function(self, key, value)
             local owner = environment.GetNameSpace(self)
-            if _BDInfo[owner] then
+            if _ICBuilderInfo[owner] then
                 if setBuilderOwnerValue(owner, key, value, 3) then
                     return
                 end
