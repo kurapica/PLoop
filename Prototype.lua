@@ -286,7 +286,6 @@ do
                                     or  function(self, key, value) self[key] = value return self end
     safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
     safeget                     = function (self, key) return self[key] end
-    distinsert                  = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end return tinsert(self, val) end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -2178,10 +2177,8 @@ do
         end
 
         if not _EnumValidMap[token] then
-            local apis      = _Cache()
             local body      = _Cache()
 
-            tinsert(body, "")   -- Remain for closure values
             tinsert(body, [[
                 return function(info, value)
                     local cache = info[]] .. FLD_ENUM_CACHE .. [[]
@@ -2189,14 +2186,12 @@ do
             ]])
 
             if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
-                distinsert(apis, "type")
                 tinsert(body, [[
                     local vtype = type(value)
                     if vtype == "string" then
                 ]])
 
                 if validateFlags(FLG_CASE_IGNORED, token) then
-                    distinsert(apis, "strupper")
                     tinsert(body, [[value = strupper(value)]])
                 end
             end
@@ -2204,7 +2199,6 @@ do
             tinsert(body, [[value = info[]] .. FLD_ENUM_ITEMS .. [[][value] ]])
 
             if validateFlags(FLG_FLAGS_ENUM, token) then
-                distinsert(apis, "floor")
                 tinsert(body, [[
                     elseif vtype == "number" then
                         if value == 0 then
@@ -2228,12 +2222,8 @@ do
                 end
             ]])
 
-            local upvalue       = tblconcat(apis, ", ")
-            body[1]             = upvalue and #upvalue > 0 and ("local %s = %s"):format(upvalue, upvalue) or ""
-
             _EnumValidMap[token]= loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
 
-            _Cache(apis)
             _Cache(body)
         end
 
@@ -3242,24 +3232,19 @@ do
 
         -- Build the validator generator
         if not _StructValidMap[token] then
-            local apis      = _Cache()
             local header    = _Cache()
             local body      = _Cache()
 
-            tinsert(body, "")   -- APIS
-            tinsert(body, [[return function(%s)]])
+            tinsert(body, "")   -- remain for closure
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
-                distinsert(apis, "type")
-                distinsert(apis, "getmetatable")
                 tinsert(body, [[
                     if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table" end
                     if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table" end
                 ]])
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
-                    distinsert(apis, "_Cache")
                     tinsert(body, [[
                         -- Cache to block recursive validation
                         local vcache = cache[info]
@@ -3275,12 +3260,6 @@ do
             end
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
-                distinsert(apis, "strformat")
-                distinsert(apis, "strgsub")
-                distinsert(apis, "clone")
-                distinsert(apis, "type")
-                distinsert(apis, "tostring")
-
                 tinsert(header, "count")
                 tinsert(body, [[
                     if onlyValid then
@@ -3328,12 +3307,6 @@ do
                     end
                 ]])
             elseif validateFlags(FLG_ARRAY_STRUCT, token) then
-                distinsert(apis, "ipairs")
-                distinsert(apis, "type")
-                distinsert(apis, "strgsub")
-                distinsert(apis, "strformat")
-                distinsert(apis, "tostring")
-
                 tinsert(body, [[
                     local array = info[]] .. FLD_STRUCT_ARRAY .. [[]
                     local avalid= info[]] .. FLD_STRUCT_ARRVALID .. [[]
@@ -3353,17 +3326,11 @@ do
             end
 
             if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
-                distinsert(apis, "type")
-                distinsert(apis, "strformat")
-
                 tinsert(body, [[
                     local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
                     if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                 ]])
             elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
-                distinsert(apis, "type")
-                distinsert(apis, "strformat")
-
                 tinsert(header, "mvalid")
                 tinsert(body, [[
                     for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
@@ -3401,10 +3368,8 @@ do
 
             if validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
                 if validateFlags(FLG_CUSTOM_STRUCT, token) then
-                    distinsert(apis, "type")
                     tinsert(body, [[if type(value) == "table" then]])
                 end
-                distinsert(apis, "pairs")
                 tinsert(body, [[
                     for k, v in pairs, info[]] .. FLD_STRUCT_TYPEMETHOD .. [[] do
                         if v and value[k] == nil then value[k] = v end
@@ -3417,25 +3382,20 @@ do
             end
 
             tinsert(body, [[
-                        return value
-                    end
+                    return value
                 end
             ]])
 
-            if #apis > 0 then
-                local upvalue = tblconcat(apis, ", ")
-                body[1] = ("local %s = %s"):format(upvalue, upvalue)
+            if #header > 0 then
+                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            body[2] = body[2]:format(tblconcat(header, ",") or "")
-
-            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)()
+            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
 
             if #header == 0 then
                 _StructValidMap[token] = _StructValidMap[token]()
             end
 
-            _Cache(apis)
             _Cache(header)
             _Cache(body)
         end
@@ -3491,18 +3451,12 @@ do
 
         -- Build the validator generator
         if not _StructCtorMap[token] then
-            local apis      = _Cache()
             local header    = _Cache()
             local body      = _Cache()
 
-            tinsert(body, "")   -- APIS
-            tinsert(body, [[return function(%s)]])
+            tinsert(body, "")   -- remain for closure
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
-                distinsert(apis, "select")
-                distinsert(apis, "type")
-                distinsert(apis, "getmetatable")
-
                 tinsert(body, [[
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
@@ -3528,9 +3482,6 @@ do
                 end
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
-                    distinsert(apis, "_Cache")
-                    distinsert(apis, "pairs")
-
                     tinsert(body, [[
                         local cache = _Cache()
                         ret, msg    = ivalid(info, first, fmatch and not fimtbl, cache)
@@ -3546,9 +3497,6 @@ do
                     tinsert(body, [[if fmatch and not fimtbl then]])
 
                     if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
-                        distinsert(apis, "_Cache")
-                        distinsert(apis, "pairs")
-
                         tinsert(body, [[
                             local cache = _Cache()
                             ret, msg = ivalid(info, first, false, cache)
@@ -3561,7 +3509,6 @@ do
                     tinsert(body, [[end]])
                 end
 
-                distinsert(apis, "strgsub")
                 tinsert(body, [[
                             return ret
                         elseif not fmatch then
@@ -3590,9 +3537,6 @@ do
             end
 
             if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
-                distinsert(apis, "_Cache")
-                distinsert(apis, "pairs")
-
                 tinsert(body, [[
                     local cache = _Cache()
                     ret, msg = ivalid(info, ret, false, cache)
@@ -3606,10 +3550,7 @@ do
 
             tinsert(body, [[if not msg then return ret end]])
 
-            distinsert(apis, "error")
-            distinsert(apis, "strgsub")
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
-                distinsert(apis, "type")
                 tinsert(body, [[
                     error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                 ]])
@@ -3619,25 +3560,18 @@ do
                 ]])
             end
 
-            tinsert(body, [[
-                    end
-                end
-            ]])
+            tinsert(body, [[end]])
 
-            if #apis > 0 then
-                local upvalue = tblconcat(apis, ", ")
-                body[1] = ("local %s = %s"):format(upvalue, upvalue)
+            if #header > 0 then
+                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
             end
 
-            body[2] = body[2]:format(tblconcat(header, ",") or "")
-
-            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)()
+            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
 
             if #header == 0 then
                 _StructCtorMap[token] = _StructCtorMap[token]()
             end
 
-            _Cache(apis)
             _Cache(header)
             _Cache(body)
         end
