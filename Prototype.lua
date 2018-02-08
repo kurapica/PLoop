@@ -257,6 +257,18 @@ do
         -- Default true
         -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = true,
+
+        --- Whether the system use tables for the types of namespace, class and
+        -- others, and save the type's meta data in themselves. Normally it's
+        -- not recommended.
+        --
+        -- When the @MULTI_OS_THREAD is true, to avoid the thread conflict, the
+        -- system would use a clone-replace mechanism for inner storage, it'd
+        -- leave many tables to be collected during the definition time, turn
+        -- on the unsafe mode will greatly save the time.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        UNSAFE_MODE = false,
     }
 
     -----------------------------------------------------------------------
@@ -285,7 +297,8 @@ do
                                     end
                                     or  function(self, key, value) self[key] = value return self end
     safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
-    safeget                     = function (self, key) return self[key] end
+    getfield                    = function (self, key) return self[key] end
+    safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -423,7 +436,7 @@ do
     -----------------------------------------------------------------------
     --                             newproxy                              --
     -----------------------------------------------------------------------
-    newproxy                    = newproxy or (function ()
+    newproxy                    = not PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and newproxy or (function ()
         local falseMeta         = { __metatable = false }
         local proxymap          = newStorage(WEAK_ALL)
 
@@ -683,18 +696,30 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    local FLD_PROTOTYPE_META    = "__PLOOP_PROTOTYPE_META"
+
+    -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _Prototype            = newStorage(WEAK_ALL)
+    local _Prototype            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, { __index = function(_, p) return type(p) == "table" and rawget(p, FLD_PROTOTYPE_META) or nil end })
+                                    or  newStorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
-    local savePrototype         = function (meta, super, nodeepclone, stack)
+    local savePrototype         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function(p, meta) rawset(p, FLD_PROTOTYPE_META, meta) end
+                                    or  function(p, meta) _Prototype = saveStorage(_Prototype, p, meta) end
+
+    local newPrototype          = function (meta, super, nodeepclone, stack)
         local name
         local prototype         = newproxy(true)
         local pmeta             = getmetatable(prototype)
-        _Prototype              = saveStorage(_Prototype, prototype, pmeta)
+
+        savePrototype(prototype, pmeta)
 
         -- Default
         if meta                                 then tblclone(meta, pmeta,  not nodeepclone, true) end
@@ -713,7 +738,7 @@ do
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
-    prototype                   = savePrototype {
+    prototype                   = newPrototype {
         __tostring              = "prototype",
         __index                 = {
             --- Get the methods of the prototype
@@ -812,7 +837,7 @@ do
                 end
             end
 
-            local prototype         = savePrototype(meta, super, nodeepclone, (stack or 1) + 1)
+            local prototype         = newPrototype(meta, super, nodeepclone, (stack or 1) + 1)
             return prototype
         end,
     }
@@ -942,6 +967,7 @@ do
 
     -- Attribute Target Data
     local _AttrTargetData       = newStorage(WEAK_KEY)
+    local _AttrOwnerSubData     = newStorage(WEAK_KEY)
     local _AttrTargetInrt       = newStorage(WEAK_KEY)
 
     -- Temporary Cache
@@ -954,13 +980,24 @@ do
     -----------------------------------------------------------------------
     local _UseWarnInstreadErr   = PLOOP_PLATFORM_SETTINGS.ATTR_USE_WARN_INSTEAD_ERROR
 
+    local getAttributeData      = function (attrType, target, owner)
+        local adata
+        if owner then
+            adata               = _AttrOwnerSubData[attrType]
+            adata               = adata and adata[owner]
+        else
+            adata               = _AttrTargetData[attrType]
+        end
+        if adata then return adata[target] end
+    end
+
     local getAttributeUsage     = function (attr)
-        local info  = _AttrTargetData[getmetatable(attr)]
-        return info and info[attribute]
+        local attrData          = _AttrTargetData[attribute]
+        return attrData and attrData[getmetatable(attr)]
     end
 
     local getAttrUsageField     = function (obj, field, default, chkType)
-        local val   = obj and obj[field]
+        local val   = obj and safeget(obj, field)
         if val ~= nil and (not chkType or type(val) == chkType) then return val end
         return default
     end
@@ -992,6 +1029,14 @@ do
         end
 
         tinsert(list, idx, attr)
+    end
+
+    local saveAttributeData     = function (attrType, target, data, owner)
+        if owner then
+            _AttrOwnerSubData   = saveStorage(_AttrOwnerSubData, attrType, saveStorage(_AttrOwnerSubData[attrType] or newStorage(WEAK_KEY), owner, saveStorage(_AttrOwnerSubData[attrType] and _AttrOwnerSubData[attrType][owner] or newStorage(WEAK_KEY), target, data)))
+        else
+            _AttrTargetData     = saveStorage(_AttrTargetData, attrType, saveStorage(_AttrTargetData[attrType] or newStorage(WEAK_KEY), target, data))
+        end
     end
 
     -----------------------------------------------------------------------
@@ -1079,9 +1124,7 @@ do
                 local tarAttrs  = _TargetAttrs[target]
                 if not tarAttrs then return else _TargetAttrs[target] = nil end
 
-                local extAttrs  = _AttrTargetData[target] and tblclone(_AttrTargetData[target], _Cache())
                 local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
-                local newAttrs  = false
                 local newInhrt  = false
 
                 -- Apply the attribute to the target
@@ -1095,15 +1138,13 @@ do
                     local inhr  = getAttributeInfo (attr, "Inheritable",    false,  nil,        ausage)
 
                     -- Try attach the attribute
-                    if attach and (ovrd or extAttrs == nil or extAttrs[aType] == nil) then
+                    if attach and (ovrd or getAttributeData(aType, target, owner) == nil) then
                         Trace("Call %s.AttachAttribute", tostring(attr))
 
                         local ret = attach(attr, target, targetType, owner, name)
 
                         if ret ~= nil then
-                            extAttrs        = extAttrs or _Cache()
-                            extAttrs[aType] = ret
-                            newAttrs        = true
+                            saveAttributeData(aType, target, ret, owner)
                         end
                     end
 
@@ -1121,11 +1162,6 @@ do
                 _Cache(tarAttrs)
 
                 -- Save
-                if newAttrs then
-                    _AttrTargetData = saveStorage(_AttrTargetData, target, extAttrs)
-                elseif extAttrs then
-                    _Cache(extAttrs)
-                end
                 if newInhrt then
                     _AttrTargetInrt = saveStorage(_AttrTargetInrt, target, extInhrt)
                 elseif extInhrt then
@@ -1137,11 +1173,61 @@ do
             -- @static
             -- @method  GetAttachedData
             -- @owner   attribute
-            -- @param   target          the target
+            -- @format  attributeType, target[, owner]
             -- @param   attributeType   the attribute type
-            ["GetAttachedData"] = function(target, aType)
-                local info      = _AttrTargetData[target]
-                return info and clone(info[aType], true, true)
+            -- @param   target          the target
+            -- @param   owner           the target's owner
+            -- @return  any             the attached data
+            ["GetAttachedData"] = function(aType, target, owner)
+                return clone(getAttributeData(aType, target, owner), true, true)
+            end;
+
+            --- Get all targets have attached data of the attribtue
+            -- @static
+            -- @method  GetAttributeTargets
+            -- @owner   attribute
+            -- @format  attributeType[, cache]
+            -- @param   attributeType   the attribute type
+            -- @param   cache           the cache to save the result
+            -- @rformat (cache)         the cache that contains the targets
+            -- @rformat (iter, attr)    without the cache parameter, used in generic for
+            ["GetAttributeTargets"] = function(aType, cache)
+                local adata         = _AttrTargetData[aType]
+                if cache then
+                    cache   = type(cache) == "table" and wipe(cache) or {}
+                    if adata then for k in pairs, adata do tinsert(cache, k) end end
+                    return cache
+                elseif adata then
+                    return function(self, n)
+                        return (next(adata, n))
+                    end, aType
+                else
+                    return fakefunc, aType
+                end
+            end;
+
+            --- Get all target's owners that have attached data of the attribtue
+            -- @static
+            -- @method  GetAttributeTargetOwners
+            -- @owner   attribute
+            -- @format  attributeType[, cache]
+            -- @param   attributeType   the attribute type
+            -- @param   cache           the cache to save the result
+            -- @rformat (cache)         the cache that contains the targets
+            -- @rformat (iter, attr)    without the cache parameter, used in generic for
+            ["GetAttributeTargetOwners"] = function(aType, cache)
+                local adata         = _AttrOwnerSubData[aType]
+                if cache then
+                    cache   = type(cache) == "table" and wipe(cache) or {}
+                    if adata then for k in pairs, adata do tinsert(cache, k) end end
+                    return cache
+                elseif adata then
+                    return function(self, n)
+                        return (next(adata, n))
+                    end, aType
+                else
+                    return fakefunc, aType
+                end
             end;
 
             --- Call a definition function within a standalone attribute system
@@ -1151,10 +1237,12 @@ do
             -- @static
             -- @method  IndependentCall
             -- @owner   attribtue
+            -- @format  definition[, stack]
             -- @param   definition      the function to be processed
-            ["IndependentCall"] = function(definition)
+            -- @param   stack           the stack level
+            ["IndependentCall"] = function(definition, static)
                 if type(definition) ~= "function" then
-                    error("Usage : attribute.Register(definition) - the definition must be a function", 2)
+                    error("Usage : attribute.Register(definition) - the definition must be a function", (stack or 1) + 1)
                 end
 
                 tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
@@ -1210,31 +1298,31 @@ do
             -- @static
             -- @method  Register
             -- @owner   attribute
-            -- @format  attr[, noSameType]
+            -- @format  attr[, unique][, stack]
             -- @param   attr            the attribute to be registered
-            -- @param   noSameType      whether don't register the attribute if there is another attribute with the same type
-            ["Register"]        = function(attr, noSameType)
-                local attr      = attribute.ValidateValue(attr)
-                if not attr then error("Usage : attribute.Register(attr) - the attr is not valid", 2) end
+            -- @param   unique          whether don't register the attribute if there is another attribute with the same type
+            -- @param   stack           the stack level
+            ["Register"]        = function(attr, unique, stack)
+                if type(attr) ~= "table" and type(attr) ~= "userdata" then error("Usage : attribute.Register(attr[, unique][, stack]) - the attr is not valid", (stack or 1) + 1) end
                 Debug("[attribute][Register] %s", tostring(attr))
-                return addAttribute(_RegisteredAttrs, attr, noSameType)
+                return addAttribute(_RegisteredAttrs, attr, unique)
             end;
 
             --- Register an attribute type with usage information
             -- @static
             -- @method  RegisterAttributeType
             -- @owner   attribute
+            -- @format  attribtueType, usage[, stack]
             -- @param   attributeType   the attribute type
-            -- @param   usages          the attribute usages
-            ["RegisterAttributeType"] = function(attrType, usage)
+            -- @param   usage           the attribute usage
+            -- @param   stack           the stack level
+            ["RegisterAttributeType"] = function(attrType, usage, stack)
                 if not attrType then
-                    error("Usage: attribute.RegisterAttributeType(attrType, usage) - The attrType can't be nil", 2)
+                    error("Usage: attribute.RegisterAttributeType(attrType, usage[, stack]) - The attrType can't be nil", (stack or 1) + 1)
                 end
-                if _AttrTargetData[attrType] and _AttrTargetData[attrType][attribute] and _AttrTargetData[attrType][attribute].Final then
-                    return
-                end
+                local extUsage  = getAttributeData(attribute, attrType)
+                if extUsage and extUsage.Final then return end
 
-                local extAttrs  = tblclone(_AttrTargetData[attrType], _Cache())
                 local attrusage = _Cache()
 
                 Debug("[attribute][RegisterAttributeType] %s", tostring(attrType))
@@ -1252,8 +1340,7 @@ do
                 -- A special data for attribute usage, so the attribute usage won't be overridden
                 attrusage.Final             = getAttrUsageField(usage,  "Final",            false)
 
-                extAttrs[attribute]         = attrusage
-                _AttrTargetData             = saveStorage(_AttrTargetData, attrType, extAttrs)
+                saveAttributeData(attribute, attrType, attrusage)
             end;
 
             --- Register attribute target type
@@ -1274,7 +1361,7 @@ do
             -- @static
             -- @method  SaveAttributes
             -- @owner   attribtue
-            -- @format  (target, targetType, [owner], [name][, stack])
+            -- @format  (target, targetType[, stack])
             -- @param   target          the target
             -- @param   targetType      the target type
             -- @param   stack           the stack level
@@ -1333,36 +1420,6 @@ do
                         return tremove(_RegisteredAttrs, i)
                     end
                 end
-            end;
-
-            --- Validate whether the attribute is valid or the attribute' type
-            -- is the given one
-            -- @static
-            -- @method  ValidateValue
-            -- @owner   attribtue
-            -- @format  (attr[, attrType])
-            -- @param   attr            the attribute to be validated
-            -- @param   attrType        the attribute type
-            -- @return  validated       true if the attribute is valid
-            ["ValidateValue"]   = function(attr, attrType)
-                if attrType then
-                    return attribute.Validate(attrType) and attrType == getmetatable(attr) and attr or nil
-                else
-                    -- May use the default usage settings
-                    local atype     = type(attr)
-                    return (atype == "table" or atype == "userdata") and attr or nil
-                end
-            end;
-
-            --- Validate whether the target is an attribute type
-            -- @static
-            -- @method  Validate
-            -- @owner   attribtue
-            -- @param   attrType        the attribtue type to be validated
-            -- @return  validated       true if the attribute type is valid
-            ["Validate"]        = function(attrtype)
-                local info      = _AttrTargetData[attrtype]
-                return info and info[attribute] and attrtype or nil
             end;
         },
         __newindex              = readOnly,
@@ -1832,14 +1889,60 @@ do
     ATTRTAR_NAMESPACE           = attribute.RegisterTargetType("Namespace")
 
     -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    local FLD_NS_SUBNS          = "__PLOOP_NS_SUBNS"
+    local FLD_NS_NAME           = "__PLOOP_NS_NAME"
+
+    -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _NSTree               = newStorage(WEAK_KEY)
-    local _NSName               = newStorage(WEAK_KEY)
+    local _NSTree               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, ns) return type(ns) == "table" and rawget(ns, FLD_NS_SUBNS) or nil end})
+                                    or  newStorage(WEAK_KEY)
+    local _NSName               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, ns) return type(ns) == "table" and rawget(ns, FLD_NS_NAME) or nil end})
+                                    or  newStorage(WEAK_KEY)
 
-    -- Shortcut
-    local Validate
-    local GetNameSpace
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
+    local getNameSpace          = function(root, path)
+        if type(root)  == "string" then
+            root, path  = ROOT_NAMESPACE, root
+        elseif root    == nil then
+            root        = ROOT_NAMESPACE
+        end
+
+        if _NSName[root] ~= nil and type(path) == "string" then
+            local iter      = strgmatch(path, "[^%s%p]+")
+            local subname   = iter()
+
+            while subname do
+                local nodes = _NSTree[root]
+                root        = nodes and nodes[subname]
+                if not root then return end
+
+                local nxt   = iter()
+                if not nxt  then return root end
+
+                subname     = nxt
+            end
+        end
+    end
+
+    local getValidatedNS        = function(target)
+        if type(target) == "string" then return getNameSpace(target) end
+        return _NSName[target] ~= nil and target or nil
+    end
+
+    local saveSubNameSpace      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function(root, name, subns) rawset(root, FLD_NS_SUBNS, saveStorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) rawset(subns, FLD_NS_SUBNS, false) end
+                                    or  function(root, name, subns) _NSTree = saveStorage(_NSTree, root, saveStorage(_NSTree[root] or {}, name, subns)) end
+
+    local saveNameSpaceName     = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function(ns, name) rawset(ns, FLD_NS_NAME, name) end
+                                    or  function(ns, name) _NSName = saveStorage(_NSName, ns, name) end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -1858,7 +1961,7 @@ do
             -- @param   stack           the stack level
             ["ExportNameSpace"] = function(env, ns, override, stack)
                 if type(env)   ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", (stack or 1) + 1) end
-                ns  = Validate(ns)
+                ns  = getValidatedNS(ns)
                 if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", (stack or 1) + 1) end
 
                 local nsname    = _NSName[ns]
@@ -1867,8 +1970,9 @@ do
                     if override or rawget(env, nsname) == nil then rawset(env, nsname, ns) end
                 end
 
-                if _NSTree[ns] then
-                    for name, sns in pairs, _NSTree[ns] do
+                local nodes = _NSTree[ns]
+                if nodes then
+                    for name, sns in pairs, nodes do
                         if override or rawget(env, name) == nil then rawset(env, name, sns) end
                     end
                 end
@@ -1882,31 +1986,7 @@ do
             -- @param   root            the root namespace
             -- @param   path:string     the namespace path
             -- @return  ns              the namespace
-            ["GetNameSpace"]    = function(root, path)
-                if type(root)  == "string" then
-                    root, path  = ROOT_NAMESPACE, root
-                elseif root    == nil then
-                    root        = ROOT_NAMESPACE
-                else
-                    root        = Validate(root)
-                end
-
-                if root and type(path) == "string" then
-                    local iter      = strgmatch(path, "[^%s%p]+")
-                    local subname   = iter()
-
-                    while subname do
-                        local nodes = _NSTree[root]
-                        root        = nodes and nodes[subname]
-                        if not root then return end
-
-                        local nxt   = iter()
-                        if not nxt  then return root end
-
-                        subname     = nxt
-                    end
-                end
-            end;
+            ["GetNameSpace"]    = getNameSpace;
 
             --- Get the namespace's path
             -- @static
@@ -1917,7 +1997,7 @@ do
             -- @parma   lastOnly        whether only the last name of the namespace's path
             -- @return  string          the path of the namespace or the name of it if lastOnly is true
             ["GetNameSpaceName"]= function(ns, onlyLast)
-                local name = _NSName[Validate(ns)]
+                local name = _NSName[ns]
                 return name and (onlyLast and strmatch(name, "[^%s%p]+$") or name) or "Anonymous"
             end;
 
@@ -1936,7 +2016,7 @@ do
                 elseif root    == nil then
                     root        = ROOT_NAMESPACE
                 else
-                    root        = Validate(root)
+                    root        = getValidatedNS(root)
                 end
 
                 if stack ~= nil and type(stack) ~= "number" then
@@ -1970,12 +2050,7 @@ do
 
                 while subname do
                     local nodes = _NSTree[root]
-                    if not nodes then
-                        nodes   = {}
-                        _NSTree = saveStorage(_NSTree, root, nodes)
-                    end
-
-                    local subns = nodes[subname]
+                    local subns = nodes and nodes[subname]
                     local nxt   = iter()
 
                     if not nxt then
@@ -1983,14 +2058,14 @@ do
                             if subns == feature then return end
                             error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the namespace path has already be used by others", (stack or 1) + 1)
                         else
-                            _NSName         = saveStorage(_NSName, feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
-                            _NSTree[root]   = saveStorage(nodes, subname, feature)
+                            saveNameSpaceName(feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                            saveSubNameSpace(root, subname, feature)
                         end
                     elseif not subns then
                         subns = prototype.NewProxy(tnamespace)
 
-                        _NSName             = saveStorage(_NSName, subns, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
-                        _NSTree[root]       = saveStorage(nodes, subname, subns)
+                        saveNameSpaceName(subns, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                        saveSubNameSpace(root, subname, subns)
                     end
 
                     root, subname = subns, nxt
@@ -2014,7 +2089,7 @@ do
                 if _NSName[feature] then
                     error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], (stack or 1) + 1)
                 end
-                _NSName         = saveStorage(_NSName, feature, false)
+                saveNameSpaceName(feature, false)
             end;
 
             --- Whether the target is a namespace
@@ -2023,10 +2098,7 @@ do
             -- @owner   namespace
             -- @param   target          the query feature
             -- @return  target          nil if not namespace
-            ["Validate"]        = function(target)
-                if type(target) == "string" then return GetNameSpace(target) end
-                return _NSName[target] ~= nil and target or nil
-            end;
+            ["Validate"]        = getValidatedNS;
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
@@ -2036,7 +2108,7 @@ do
 
             if target ~= nil then
                 if type(target) == "string" then
-                    local ns    = GetNameSpace(target)
+                    local ns    = getNameSpace(target)
                     if not ns then
                         ns = prototype.NewProxy(tnamespace)
                         attribute.SaveAttributes(ns, ATTRTAR_NAMESPACE, stack + 1)
@@ -2082,11 +2154,6 @@ do
     -----------------------------------------------------------------------
     --                            Initialize                             --
     -----------------------------------------------------------------------
-    -- Shortcut Assignment
-    Validate                    = namespace.Validate
-    GetNameSpace                = namespace.GetNameSpace
-
-    -- Init the root namespace
     ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
     namespace.SaveAnonymousNameSpace(ROOT_NAMESPACE)
 end
@@ -2148,10 +2215,15 @@ do
     local FLG_FLAGS_ENUM        = 2^0
     local FLG_CASE_IGNORED      = 2^1
 
+    -- UNSAFE FIELD
+    local FLD_ENUM_META         = "__PLOOP_ENUM_META"
+
     -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _EnumInfo             = newStorage(WEAK_KEY)
+    local _EnumInfo             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, e) return type(e) == "table" and rawget(e, FLD_ENUM_META) or nil end})
+                                    or  newStorage(WEAK_KEY)
 
     -- BUILD CACHE
     local _EnumBuilderInfo      = newStorage(WEAK_KEY)
@@ -2229,6 +2301,10 @@ do
 
         info[FLD_ENUM_VALID]    = _EnumValidMap[token]
     end
+
+    local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function (e, meta) rawset(e, FLD_ENUM_META, meta) end
+                                    or  function (e, meta) _EnumInfo = saveStorage(_EnumInfo, e, meta) end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -2345,7 +2421,7 @@ do
                 end
 
                 -- Save as new enumeration's info
-                _EnumInfo       = saveStorage(_EnumInfo, target, ninfo)
+                saveEnumMeta(target, ninfo)
 
                 attribute.AttachAttributes(target, ATTRTAR_ENUM)
 
@@ -2975,11 +3051,19 @@ do
 
     local STRUCT_BUILDER_NEWMTD = "__PLOOP_BD_NEWMTD"
 
+    -- UNSAFE MODE FIELDS
+    local FLD_STRUCT_META       = "__PLOOP_STRUCT_META"
+    local FLD_MEMBER_META       = "__PLOOP_STRUCT_MEMBER_META"
+
     -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _StructInfo           = newStorage(WEAK_KEY)
-    local _MemberInfo           = newStorage(WEAK_KEY)
+    local _StructInfo           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, s) return type(s) == "table" and rawget(s, FLD_STRUCT_META) or nil end})
+                                    or  newStorage(WEAK_KEY)
+    local _MemberInfo           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, s) return type(s) == "table" and rawget(s, FLD_MEMBER_META) or nil end})
+                                    or  newStorage(WEAK_KEY)
     local _DependenceMap        = newStorage(WEAK_KEY)
 
     -- TYPE BUILDING
@@ -3003,10 +3087,7 @@ do
 
     local getPrototypeMethod    = function (target, key)
         local protype = getmetatable(target)
-        if protype then
-            local ok, ret = pcall(safeget, protype, key)
-            return ok and ret
-        end
+        if protype then return safeget(protype, key) end
     end
 
     local setStructBuilderValue = function (self, key, value, stack, notnewindex)
@@ -3131,7 +3212,7 @@ do
     end
 
     -- Immutable
-    local checkStructImmutable  = function(info)
+    local checkStructImmutable  = function (info)
         if info[FLD_STRUCT_INITSTART]  then return false end
         if info[FLD_STRUCT_TYPEMETHOD] then for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do if v then return false end end end
 
@@ -3149,7 +3230,7 @@ do
         return true
     end
 
-    local updateStructImmutable = function(target, info)
+    local updateStructImmutable = function (target, info)
         info = info or getStructTargetInfo(target)
         if checkStructImmutable(info) then
             info[FLD_STRUCT_MOD]= turnOnFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
@@ -3159,7 +3240,7 @@ do
     end
 
     -- Cache required
-    local checkRepeatStructType = function(target, info)
+    local checkRepeatStructType = function (target, info)
         if info then
             local filter        = function(chkType) return chkType == target end
 
@@ -3616,6 +3697,15 @@ do
         end
     end
 
+    -- Save Meta
+    local saveStructMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end
+                                    or  function (s, meta) _StructInfo = saveStorage(_StructInfo, s, meta) end
+
+    local saveMemberMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function (m, meta) rawset(m, FLD_MEMBER_META, meta) end
+                                    or  function (m, meta) _MemberInfo = saveStorage(_MemberInfo, m, meta) end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -3663,7 +3753,7 @@ do
 
                     local mobj  = prototype.NewProxy(member)
                     local minfo = _Cache()
-                    _MemberInfo = saveStorage(_MemberInfo, mobj, minfo)
+                    saveMemberMeta(mobj, minfo)
                     minfo[FLD_MEMBER_OBJ]   = mobj
                     minfo[FLD_MEMBER_NAME]  = name
 
@@ -3938,6 +4028,9 @@ do
                 genStructValidator(ninfo)
                 genStructConstructor(ninfo)
 
+                -- Save as new structure's info
+                saveStructMeta(target, ninfo)
+
                 -- Check the default value is it's custom struct
                 if ninfo[FLD_STRUCT_DEFAULT] ~= nil then
                     local deft      = ninfo[FLD_STRUCT_DEFAULT]
@@ -3948,9 +4041,6 @@ do
                         if not msg then ninfo[FLD_STRUCT_DEFAULT] = ret end
                     end
                 end
-
-                -- Save as new structure's info
-                _StructInfo     = saveStorage(_StructInfo, target, ninfo)
 
                 attribute.AttachAttributes(target, ATTRTAR_STRUCT)
 
@@ -4663,17 +4753,17 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_IC         = 2^0           -- SEALED TYPE
-    local MOD_FINAL_IC          = 2^1           -- FINAL TYPE
-    local MOD_ABSTRACT_CLS      = 2^2           -- ABSTRACT CLASS
-    local MOD_AUTOCACHE_CLS     = 2^3           -- AUTO CACHE CLASS
-    local MOD_ISSIMPLE_CLS      = 2^4           -- IS A SIMPLE CLASS
-    local MOD_ASSIMPLE_CLS      = 2^5           -- AS A SIMPLE CLASS
-    local MOD_SINGLEVER_CLS     = 2^6           -- SINGLE VERSION CLASS - NO MULTI VERSION
-    local MOD_MTDATTR_OBJ       = 2^7           -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
-    local MOD_NORAWSET_OBJ      = 2^8           -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ      = 2^9           -- NO NIL FIELD ACCESS
-    local MOD_NOSUPER_OBJ       = 2^10           -- OLD SUPER STYLE
+    local MOD_SEALED_IC         = 2^0               -- SEALED TYPE
+    local MOD_FINAL_IC          = 2^1               -- FINAL TYPE
+    local MOD_ABSTRACT_CLS      = 2^2               -- ABSTRACT CLASS
+    local MOD_AUTOCACHE_CLS     = 2^3               -- AUTO CACHE CLASS
+    local MOD_ISSIMPLE_CLS      = 2^4               -- IS A SIMPLE CLASS
+    local MOD_ASSIMPLE_CLS      = 2^5               -- AS A SIMPLE CLASS
+    local MOD_SINGLEVER_CLS     = 2^6               -- SINGLE VERSION CLASS - NO MULTI VERSION
+    local MOD_MTDATTR_OBJ       = 2^7               -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
+    local MOD_NORAWSET_OBJ      = 2^8               -- NO RAW SET FOR OBJECTS
+    local MOD_NONILVAL_OBJ      = 2^9               -- NO NIL FIELD ACCESS
+    local MOD_NOSUPER_OBJ       = 2^10              -- OLD SUPER STYLE
 
     local MOD_INITVAL_IC        = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT        and MOD_NOSUPER_OBJ   or 0) +
@@ -4685,7 +4775,7 @@ do
     local FLD_IC_SUPCLS         =  0                -- FIELD SUPER CLASS
     local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
     local FLD_IC_INITIALIZER    = -2                -- FIELD INITIALIZER
-    local FLD_IC_INITFIELD      = -3                -- FIELD INIT FIELDS
+    local FLD_IC_FIELD          = -3                -- FIELD INIT FIELDS
     local FLD_IC_DISPOSE        = -4                -- FIELD DISPOSE
     local FLD_IC_TYPFTR         = -5                -- FILED TYPE FEATURES
     local FLD_IC_TYPMTD         = -6                -- FIELD TYPE METHODS
@@ -4722,29 +4812,29 @@ do
     local FLG_IC_NEWIDX         = 2^5               -- HAS NEW INDEX
     local FLG_IC_OBJATR         = 2^6               -- ENABLE OBJECT METHOD ATTRIBUTE
     local FLG_IC_NRAWST         = 2^7               -- ENABLE NO RAW SET
-    local FLG_IC_SUPACC         = 2^8               -- HAS SUPER METHOD OR FEATURE
-    local FLG_IC_TDSAFE         = 2^9               -- THREAD SAFE
+    local FLG_IC_NNILVL         = 2^8               -- NO NIL VALUE ACCESS
+    local FLG_IC_SUPACC         = 2^9               -- HAS SUPER METHOD OR FEATURE
+    local FLG_IC_NSPOBJ         = 2^10              -- NO SUPER OBJECT
 
     -- Flags for constructor
     local FLG_IC_EXTOBJ         = 2^2               -- HAS __exist
     local FLG_IC_NEWOBJ         = 2^3               -- HAS __new
-    local FLG_IC_SIMCLS         = 2^4               -- SIMPLE CLASS
-    local FLG_IC_ASSIMP         = 2^5               -- AS SIMPLE CLASS
-    local FLG_IC_HSCLIN         = 2^6               -- HAS CLASS INITIALIZER
-    local FLG_IC_HASIFS         = 2^7               -- NEED CALL INTERFACE'S INITIALIZER
+    local FLG_IC_INIFLD         = 2^4               -- HAS INIT FILEDS
+    local FLG_IC_SIMCLS         = 2^5               -- SIMPLE CLASS
+    local FLG_IC_ASSIMP         = 2^6               -- AS SIMPLE CLASS
+    local FLG_IC_HSCLIN         = 2^7               -- HAS CLASS INITIALIZER
+    local FLG_IC_HASIFS         = 2^8               -- NEED CALL INTERFACE'S INITIALIZER
 
     -- Keywords
+    local IC_KEYWORD_DISPOB     = "Dispose"
     local IC_KEYWORD_EXIST      = "__exist"
+    local IC_KEYWORD_FIELD      = "__field"
     local IC_KEYWORD_NEW        = "__new"
-    local IC_KEYWORD_INITTABLE  = "__init"
 
     -- Meta-Methods
     local IC_META_INDEX         = "__index"
     local IC_META_NEWIDX        = "__newindex"
     local IC_META_TABLE         = "__metatable"
-
-    -- Dispose Method
-    local IC_KEYWORD_DISPOB     = "Dispose"
 
     -- Super & This
     local AL_SUPER              = "Super"
@@ -4755,36 +4845,37 @@ do
     local IC_BUILDER_NEWMTD     = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS             = {
-        __add                   = "__add",      -- a + b
-        __sub                   = "__sub",      -- a - b
-        __mul                   = "__mul",      -- a * b
-        __div                   = "__div",      -- a / b
-        __mod                   = "__mod",      -- a % b
-        __pow                   = "__pow",      -- a ^ b
-        __unm                   = "__unm",      -- - a
-        __idiv                  = "__idiv",     -- // floor division
-        __band                  = "__band",     -- & bitwise and
-        __bor                   = "__bor",      -- | bitwise or
-        __bxor                  = "__bxor",     -- ~ bitwise exclusive or
-        __bnot                  = "__bnot",     -- ~ bitwise unary not
-        __shl                   = "__shl",      -- << bitwise left shift
-        __shr                   = "__shr",      -- >> bitwise right shift
-        __concat                = "__concat",   -- a..b
-        __len                   = "__len",      -- #a
-        __eq                    = "__eq",       -- a == b
-        __lt                    = "__lt",       -- a < b
-        __le                    = "__le",       -- a <= b
-        __index                 = "___index",   -- return a[b]
-        __newindex              = "___newindex",-- a[b] = v
-        __call                  = "__call",     -- a()
-        __gc                    = "__gc",       -- dispose a
-        __tostring              = "__tostring", -- tostring(a)
-        __ipairs                = "__ipairs",   -- ipairs(a)
-        __pairs                 = "__pairs",    -- pairs(a)
+        __add                   = "__add",          -- a + b
+        __sub                   = "__sub",          -- a - b
+        __mul                   = "__mul",          -- a * b
+        __div                   = "__div",          -- a / b
+        __mod                   = "__mod",          -- a % b
+        __pow                   = "__pow",          -- a ^ b
+        __unm                   = "__unm",          -- - a
+        __idiv                  = "__idiv",         -- // floor division
+        __band                  = "__band",         -- & bitwise and
+        __bor                   = "__bor",          -- | bitwise or
+        __bxor                  = "__bxor",         -- ~ bitwise exclusive or
+        __bnot                  = "__bnot",         -- ~ bitwise unary not
+        __shl                   = "__shl",          -- << bitwise left shift
+        __shr                   = "__shr",          -- >> bitwise right shift
+        __concat                = "__concat",       -- a..b
+        __len                   = "__len",          -- #a
+        __eq                    = "__eq",           -- a == b
+        __lt                    = "__lt",           -- a < b
+        __le                    = "__le",           -- a <= b
+        __index                 = "__index",        -- return a[b]
+        __newindex              = "__newindex",     -- a[b] = v
+        __call                  = "__call",         -- a()
+        __gc                    = "__gc",           -- dispose a
+        __tostring              = "__tostring",     -- tostring(a)
+        __ipairs                = "__ipairs",       -- ipairs(a)
+        __pairs                 = "__pairs",        -- pairs(a)
 
         -- Ploop only meta-methods
-        __exist                 = "__exist",    -- return object if existed
-        __new                   = "__new",      -- return a raw table as the object
+        __exist                 = "__exist",        -- return object if existed
+        __new                   = "__new",          -- return a raw table as the object
+        __field                 = "__field",        -- the init fields of the object
     }
 
     -----------------------------------------------------------------------
@@ -4795,15 +4886,17 @@ do
     local _SuperMap             = newStorage(WEAK_ALL)      -- SUPER -> CLASS | INTERFACE
 
     -- TYPE BUILDING
-    local _ICBuilderInDefine    = newStorage(WEAK_KEY)
     local _ICBuilderInfo        = newStorage(WEAK_KEY)      -- TYPE BUILDER INFO
+    local _ICBuilderInDefine    = newStorage(WEAK_KEY)
     local _ICDependsMap         = {}                        -- CHILDREN MAP
 
     local _ICIndexMap           = {}
     local _ICNewIdxMap          = {}
     local _ClassCtorMap         = {}
 
-    -- Helpers
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
     local function getICTargetInfo(target)
         local info  = _ICBuilderInfo[target]
         if info then return info, true else return _ICInfo[target], false end
@@ -4844,7 +4937,7 @@ do
             end
         else
             return function(root, idx)
-                if type(idx) == "table" then
+                if not tonumber(idx) then
                     local scls  = idx[FLD_IC_SUPCLS]
                     if scls then
                         idx     = getSuperInfo(info, scls)
@@ -4889,7 +4982,7 @@ do
     end
 
     local function getTypeMetaMethod(info, name)
-        return info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][META_KEYS[name]]
+        return info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][name]
     end
 
     local function getSuperMethod(info, name)
@@ -4947,6 +5040,7 @@ do
         end
     end
 
+    -- @todo
     local function generateMetaIndex(info)
         local token = 0
         local upval = _Cache()
@@ -5037,6 +5131,7 @@ do
         _Cache(upval)
     end
 
+    -- @todo
     local function generateMetaNewIndex(info)
         local token = 0
         local upval = _Cache()
@@ -5128,6 +5223,7 @@ do
         for name, value in pairs, initTable do obj[name] = value end
     end
 
+    -- @todo
     local function generateConstructor(target, info)
         local token = 0
         local upval = _Cache()
