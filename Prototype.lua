@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/01/23                                               --
--- Version      :   1.0.0-alpha.003                                          --
+-- Update Date  :   2018/02/23                                               --
+-- Version      :   1.0.0-alpha.023                                          --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -130,6 +130,7 @@ do
             __metatable         = true,
         }
     )
+    _PLoopEnv._PLoopEnv         = _PLoopEnv
     if setfenv then setfenv(1, _PLoopEnv) else _ENV = _PLoopEnv end
 
     -----------------------------------------------------------------------
@@ -204,6 +205,12 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_NO_SUPER_OBJECT_STYLE         = false,
 
+        --- Whether all interfaces has anonymous class, so it can be used
+        -- to generate object
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        INTERFACE_ALL_ANONYMOUS_CLASS       = false,
+
         --- Whether all class objects can't save value to fields directly,
         -- So only init fields, properties, events can be set during runtime.
         -- Default false
@@ -271,6 +278,11 @@ do
         UNSAFE_MODE = false,
     }
 
+    -- Special constraint
+    if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD then
+        PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS = false
+    end
+
     -----------------------------------------------------------------------
     --                               share                               --
     -----------------------------------------------------------------------
@@ -300,7 +312,8 @@ do
     getfield                    = function (self, key) return self[key] end
     safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
     loadInitTable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
-
+    getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
+    getobjectvalue              = function (target, method, useobjectmethod) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target) end end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -3122,12 +3135,7 @@ do
         if info then return info, true else return _StructInfo[target], false end
     end
 
-    local getPrototypeMethod    = function (target, key)
-        local protype = getmetatable(target)
-        if protype then return safeget(protype, key) end
-    end
-
-    local setStructBuilderValue = function (self, key, value, stack, notnewindex)
+    local setStructBuilderValue = function (self, key, value, stack, notenvset)
         local owner = environment.GetNameSpace(self)
         if not (owner and _StructBuilderInDefine[self]) then return end
 
@@ -3151,7 +3159,7 @@ do
                     struct.AddMethod(owner, key, value, stack)
                     return true
                 end
-            elseif getPrototypeMethod(value, "ValidateValue") then
+            elseif getprototypemethod(value, "ValidateValue") then
                 if key == STRUCT_KEYWORD_ARRAY then
                     struct.SetArrayElement(owner, value, stack)
                     return true
@@ -3161,7 +3169,7 @@ do
                     struct.AddMember(owner, key, { Type = value }, stack)
                 end
                 return true
-            elseif tval == "table" and notnewindex then
+            elseif tval == "table" and notenvset then
                 struct.AddMember(owner, key, value, stack)
                 return true
             end
@@ -3169,7 +3177,7 @@ do
             if tval == "function" then
                 struct.SetValidator(owner, value, stack)
                 return true
-            elseif getPrototypeMethod(value, "ValidateValue") then
+            elseif getprototypemethod(value, "ValidateValue") then
                 struct.SetArrayElement(owner, value, stack)
                 return true
             elseif tval == "table" then
@@ -3246,13 +3254,10 @@ do
 
         local arrtype = info[FLD_STRUCT_ARRAY]
         if arrtype then
-            local isImmutable       = getPrototypeMethod(arrtype, "IsImmutable")
-            return isImmutable and isImmutable(arrtype) or false
+            return getobjectvalue(arrtype, "IsImmutable") or false
         elseif info[FLD_STRUCT_MEMBERSTART] then
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                local mtype         = m[FLD_MEMBER_TYPE]
-                local isImmutable   = mtype and getPrototypeMethod(mtype, "IsImmutable")
-                if not (isImmutable and isImmutable(mtype)) then return false end
+                if not getobjectvalue(m[FLD_MEMBER_TYPE], "IsImmutable") then return false end
             end
         end
         return true
@@ -3544,8 +3549,7 @@ do
                     token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
                     tinsert(upval, ftype)
                     tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
-                    local isImmutable = getPrototypeMethod(ftype, "IsImmutable")
-                    tinsert(upval, isImmutable and isImmutable(ftype) or false)
+                    tinsert(upval, getobjectvalue(ftype, "IsImmutable") or false)
                 end
             end
         elseif info[FLD_STRUCT_ARRAY] then
@@ -3803,7 +3807,7 @@ do
                             k = strlower(k)
 
                             if k == "type" then
-                                local tpValid = getPrototypeMethod(v, "ValidateValue")
+                                local tpValid = getprototypemethod(v, "ValidateValue")
 
                                 if tpValid then
                                     minfo[FLD_MEMBER_TYPE]  = v
@@ -3833,8 +3837,7 @@ do
                             end
                         end
                         if minfo[FLD_MEMBER_DEFAULT] == nil then
-                            local getDefault            = getPrototypeMethod(minfo[FLD_MEMBER_TYPE], "GetDefault")
-                            minfo[FLD_MEMBER_DEFAULT]   = getDefault and getDefault(minfo[FLD_MEMBER_TYPE])
+                            minfo[FLD_MEMBER_DEFAULT] = getobjectvalue(minfo[FLD_MEMBER_TYPE], "GetDefault")
                         end
                     end
 
@@ -4304,7 +4307,7 @@ do
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
-                    local tpValid = getPrototypeMethod(eleType, "ValidateValue")
+                    local tpValid = getprototypemethod(eleType, "ValidateValue")
                     if not tpValid then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The element type is not valid", stack) end
 
                     info[FLD_STRUCT_ARRAY]      = eleType
@@ -4670,7 +4673,7 @@ do
     -----------------------------------------------------------------------
     -- End the definition of the structure
     --
-    -- @keyword     member
+    -- @keyword     endstruct
     -- @usage       struct "Number"
     --                  function Number(val)
     --                      return type(val) ~= "number" and "%s must be number"
@@ -4707,7 +4710,6 @@ do
     ATTRTAR_INTERFACE           = attribute.RegisterTargetType("Interface")
     ATTRTAR_CLASS               = attribute.RegisterTargetType("Class")
     ATTRTAR_METHOD              = rawget(_PLoopEnv, "ATTRTAR_METHOD") or attribute.RegisterTargetType("Method")
-    ATTRTAR_FIELD               = attribute.RegisterTargetType("Field")
 
     -----------------------------------------------------------------------
     --                         private constants                         --
@@ -4723,11 +4725,14 @@ do
     local MOD_NORAWSET_OBJ      = 2^7               -- NO RAW SET FOR OBJECTS
     local MOD_NONILVAL_OBJ      = 2^8               -- NO NIL FIELD ACCESS
     local MOD_NOSUPER_OBJ       = 2^9               -- OLD SUPER ACCESS STYLE
+    local MOD_ANYMOUS_CLS       = 2^10              -- HAS ANONYMOUS CLASS
 
-    local MOD_INITVAL_IC        = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS and MOD_SINGLEVER_CLS or 0) +
-                                  (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE  and MOD_NOSUPER_OBJ   or 0) +
-                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_RAWSEST            and MOD_NORAWSET_OBJ  or 0) +
-                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_NIL_ACCESS         and MOD_NONILVAL_OBJ  or 0)
+    local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_RAWSEST             and MOD_NORAWSET_OBJ  or 0) +
+                                  (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_NIL_ACCESS          and MOD_NONILVAL_OBJ  or 0)
+
+    local MOD_INITVAL_IF        = (PLOOP_PLATFORM_SETTINGS.INTERFACE_ALL_ANONYMOUS_CLASS and MOD_ANYMOUS_CLS   or 0)
 
     -- STATIC FIELDS
     local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
@@ -4866,6 +4871,8 @@ do
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_TYPE) or nil end})
                                     or  newStorage(WEAK_ALL)
 
+    local _Parser               = {}
+
     -- TYPE BUILDING
     local _ICBuilderInfo        = newStorage(WEAK_KEY)      -- TYPE BUILDER INFO
     local _ICBuilderInDefine    = newStorage(WEAK_KEY)
@@ -4997,9 +5004,9 @@ do
         return lst, super
     end
 
-    local genCacheOnPriority    = function (source, target, objpri, inhrtp, super, ismeta, isfeature, objfeature)
+    local genCacheOnPriority    = function (source, target, objpri, inhrtp, super, ismeta, isfeature, objfeature, stack)
         for k, v in pairs, source do
-            if v and not (ismeta and META_KEYS[k] == nil) and not (isfeature and v:IsStatic()) then
+            if v and not (ismeta and META_KEYS[k] == nil) and not (isfeature and getobjectvalue(v, "IsStatic", true)) then
                 local priority  = inhrtp and inhrtp[k] or INRT_PRIORITY_NORMAL
                 if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
                     if super and target[k] and (objpri[k] or INRT_PRIORITY_NORMAL) > INRT_PRIORITY_ABSTRACT then
@@ -5014,10 +5021,14 @@ do
                     objpri[k]   = priority
 
                     if isfeature then
-                        if v:IsShareable() and objfeature and objfeature[k] then
+                        if getobjectvalue(v, "IsShareable", true) and objfeature and objfeature[k] then
                             target[k]   = objfeature[k]
                         else
-                            target[k]   = v:GetAccessor() or v
+                            v           = getobjectvalue(v, "GetAccessor", true) or v
+                            if type(safeget(v, "Get")) ~= "function" or type(safeget(v, "Set")) ~= "function" then
+                                error(strformat("the feature named %q is not valid", k), stack + 1)
+                            end
+                            target[k]   = v
                         end
                     elseif ismeta then
                         target[k]       = v
@@ -5470,15 +5481,15 @@ do
         end
 
         if #upval > 0 then
-            info[FLD_IC_CTOR] = _ClassCtorMap[token](unpack(upval))
+            info[FLD_IC_OBCTOR] = _ClassCtorMap[token](unpack(upval))
         else
-            info[FLD_IC_CTOR] = _ClassCtorMap[token]
+            info[FLD_IC_OBCTOR] = _ClassCtorMap[token]
         end
 
         _Cache(upval)
     end
 
-    local genTypeCaches         = function (target, info)
+    local genTypeCaches         = function (target, info, stack)
         local isclass   = clsss.Validate(target)
         local realCls   = isclass and not class.IsAbstract(target)
         local objpri    = _Cache()
@@ -5489,6 +5500,8 @@ do
 
         -- Re-generate the extended interfaces order list
         local spcache   = reOrderExtendIF(info, realCls and _Cache())
+
+        stack           = stack + 1
 
         -- The init & dispose link for extended interfaces & super classes
         local initIdx   = FLD_IC_STINIT
@@ -5520,15 +5533,15 @@ do
             local inhrtp    = sinfo[FLD_IC_INHRTP]
 
             if sinfo[FLD_IC_TYPMTD] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPMTD], objmtd, objpri, inhrtp)
+                genCacheOnPriority(sinfo[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, nil, nil, nil, nil, stack)
             end
 
             if sinfo[FLD_IC_TYPMTM] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, nil, true)
+                genCacheOnPriority(sinfo[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, nil, true, nil, nil, stack)
             end
 
             if sinfo[FLD_IC_TYPFTR] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, false, true, sinfo[FLD_IC_OBJFTR])
+                genCacheOnPriority(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, false, true, sinfo[FLD_IC_OBJFTR], stack)
             end
 
             if realCls then
@@ -5558,28 +5571,33 @@ do
         local super     = _Cache()
 
         if info[FLD_IC_TYPMTD] then
-            genCacheOnPriority(info[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, super)
+            genCacheOnPriority(info[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, super, nil, nil, nil, stack)
         end
 
         if info[FLD_IC_TYPMTM] then
-            genCacheOnPriority(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, true)
+            genCacheOnPriority(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, true, nil, nil, stack)
         end
 
         if next(super) then info[FLD_IC_SUPMTD] = super else _Cache(super) end
 
         if info[FLD_IC_TYPFTR] then
             super       = _Cache()
-            genCacheOnPriority(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, false, true, info[FLD_IC_OBJFTR])
+            genCacheOnPriority(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, false, true, info[FLD_IC_OBJFTR], stack)
             if next(super) then info[FLD_IC_SUPFTR] = super else _Cache(super) end
 
             -- Check static features
             local staftr= info[FLD_IC_STAFTR]
 
             for name, ftr in pairs, typftr do
-                if ftr:IsStatic() then
-                    if not (staftr and staftr[name] and ftr:IsShareable()) then
+                if getobjectvalue(ftr, "IsStatic", true) then
+                    if not (staftr and staftr[name] and getobjectvalue(ftr, "IsShareable", true)) then
                         staftr      = staftr or {}
-                        staftr[name]= ftr:GetAccessor() or ftr
+
+                        ftr         = getobjectvalue(ftr, "GetAccessor", true) or ftr
+                        if type(safeget(ftr, "Get")) ~= "function" or type(safeget(ftr, "Set")) ~= "function" then
+                            error(strformat("the feature named %q is not valid", k), stack + 1)
+                        end
+                        staftr[name]= ftr
                     end
                 end
             end
@@ -5593,7 +5611,7 @@ do
         -- Generate super if needed, include the interface
         if not info[FLD_IC_SUPER] and (info[FLD_IC_SUPFTR] or info[FLD_IC_SUPMTD] or
             (isclass and info[FLD_IC_CTOR] and info[FLD_IC_SUPCLS] and (_ICInfo[info[FLD_IC_SUPCLS]][FLD_IC_CTOR] or _ICInfo[info[FLD_IC_SUPCLS]][FLD_IC_CLINIT]))) then
-            info[FLD_IC_SUPER] = prototype.NewProxy(isclass and tSuperClass or tSuperInterface)
+            info[FLD_IC_SUPER] = prototype.NewProxy(isclass and tsuperclass or tsuperinterface)
             saveSuperMap(info[FLD_IC_SUPER], target)
         end
 
@@ -5619,7 +5637,30 @@ do
             if not next(objftr) then _Cache(objftr) objftr = nil end
 
             info[FLD_IC_OBJFTR] = objftr
+
+            -- Gen anonymous class
+            if validateFlags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) and not info[FLD_IC_ANYMSCL] then
+                local aycls     = prototype.newPrototype(tclass)
+                local ainfo     = getInitICInfo(aycls, true)
+
+                ainfo[FLD_IC_MOD]   = turnOnFlags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
+                ainfo[FLD_IC_STEXT] = target
+
+                -- Register the _ICDependsMap
+                _ICDependsMap[target]   = _ICDependsMap[target] or {}
+                tinsert(_ICDependsMap[target], aycls)
+
+                -- Save the anonymous class
+                saveICInfo(aycls, ainfo)
+
+                info[FLD_IC_ANYMSCL] = aycls
+            end
         else
+            if not info[FLD_IC_THIS] and info[FLD_IC_CTOR] then
+                info[FLD_IC_THIS] = prototype.NewProxy(tthisclass)
+                saveThisMap(info[FLD_IC_THIS], target)
+            end
+
             if not realCls then
                 _Cache(objpri)
                 _Cache(objmeta)
@@ -5672,6 +5713,15 @@ do
 
                 genMetaIndex(info)
                 genMetaNewIndex(info)
+
+                -- Copy the metatable if the class is single version
+                if class.IsSingleVersion(target) then
+                    local oinfo     = _ICInfo[oinfo]
+
+                    if oinfo and oinfo[FLD_IC_OBJMTM] then
+                        info[FLD_IC_OBJMTM] = tblclone(objmeta, oinfo[FLD_IC_OBJMTM], false, true)
+                    end
+                end
             end
             genConstructor(target, info)
         end
@@ -5692,20 +5742,21 @@ do
     end
 
     local saveObjectMethod
-        saveObjectMethod        = function (target, name, func)
+        saveObjectMethod        = function (target, name, func, child)
         local info, def         = getICTargetInfo(target)
 
         if def then return end
 
-        if info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
+        if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
 
         if info[FLD_IC_OBJMTD] then
             info[FLD_IC_OBJMTD] = saveStorage(info[FLD_IC_OBJMTD], name, func)
+            genMetaIndex(info)
         end
 
         if _ICDependsMap[target] then
             for _, child in ipairs, _ICDependsMap[target], 0 do
-                saveObjectMethod(child, name, func)
+                saveObjectMethod(child, name, func, true)
             end
         end
     end
@@ -5716,7 +5767,7 @@ do
         local ninfo             = {
             -- STATIC FIELDS
             [FLD_IC_SUPCLS]     = info and info[FLD_IC_SUPCLS],
-            [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_IC or 0,
+            [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_CLS or MOD_INITVAL_IF,
             [FLD_IC_CTOR]       = info and info[FLD_IC_CTOR],
             [FLD_IC_DTOR]       = info and info[FLD_IC_DTOR],
             [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD] and tblclone(info[FLD_IC_FIELD], {}),
@@ -5904,7 +5955,6 @@ do
         local info, name, stack, msg = preDefineCheck(target, name, stack)
 
         if msg then return msg, stack end
-        if not prototype.IsSubType(getmetatable(ftr), feature) then return "the feature is not valid", stack end
         if META_KEYS[name] ~= nil then return strformat("the %s can't be used as feature name", name), stack end
 
         info[FLD_IC_TYPFTR]         = info[FLD_IC_TYPFTR] or _Cache()
@@ -5915,6 +5965,14 @@ do
         elseif info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][name] then
             info[FLD_IC_OBJFTR][name] = nil
         end
+    end
+
+    local addFields             = function (target, fields, stack)
+        local info, name, stack, msg = preDefineCheck(target, nil, stack)
+        if not info then return msg, stack end
+        if type(fields) ~= "table" then return "the fields must be a table", stack end
+
+        info[FLD_IC_FIELD]      = tblclone(rs, info[FLD_IC_FIELD] or _Cache(), true, true)
     end
 
     local setRequireClass       = function (target, cls, stack)
@@ -5943,17 +6001,6 @@ do
         if info[FLD_IC_SUPCLS] then return end
 
         addSuperType(info, target, super)
-    end
-
-    local setFields             = function (target, fields, stack)
-        local info, name, stack, msg = preDefineCheck(target, nil, stack)
-        if not info then return msg, stack end
-        if type(fields) ~= "table" then return "the fields must be a table", stack end
-
-        attribute.SaveAttributes(fields, ATTRTAR_FIELD, stack + 2)
-        local rs = attribute.InitDefinition(fields, ATTRTAR_FIELD, fields)
-        attribute.ReleaseTargetAttributes(fields)
-        info[FLD_IC_FIELD]      = tblclone(rs, _Cache(), true)
     end
 
     local setModifiedFlag       = function (tType, target, flag, methodName, stack)
@@ -5988,7 +6035,7 @@ do
         if not ftr then
             return strformat("the %s has no feature named %q", tostring(target), name), stack
         else
-            if ftr:IsStatic() then
+            if getobjectvalue(ftr, "IsStatic", true) then
                 return strformat("the %s's %q is static, can't change its priority", tostring(target), name), stack
             end
         end
@@ -6030,27 +6077,115 @@ do
     end
 
     -- Buidler helpers
-    local getIfBuilderValue     = function (self, name)
-        -- Access methods
-        local info = getICTargetInfo(environment.GetNameSpace(self))
-        if info and info[name] then return info[name], true end
-        return environment.GetValue(self, name)
+    local setIFBuilderValue     = function (self, key, value, stack, notenvset)
+        local owner = environment.GetNameSpace(self)
+        if not (owner and _ICBuilderInDefine[self]) then return end
+
+        local tkey  = type(key)
+        local tval  = type(value)
+
+        stack       = stack + 1
+
+        if tkey == "string" and not tonumber(key) then
+            if META_KEYS[tkey] then
+                interface.AddMetaData(owner, key, value, stack)
+                return true
+            elseif tkey == namespace.GetNameSpaceName(owner, true) then
+                interface.SetInitializer(owner, value, stack)
+                return true
+            elseif tval == "function" then
+                interface.AddMethod(owner, key, value, stack)
+                return true
+            end
+
+            if notenvset then
+                for parser in pairs, _Parser do
+                    if parser:Parse(owner, key, value, stack) then
+                        return true
+                    end
+                end
+            end
+        elseif tkey == "number" then
+            if tval == "table" or tval == "userdata" then
+                if class.Validate(value) then
+                    interface.SetRequireClass(owner, value, stack)
+                    return true
+                elseif interface.Validate(value) then
+                    interface.AddExtend(owner, value, stack)
+                    return true
+                end
+            elseif tval == "function" then
+                interface.SetInitializer(owner, value, stack)
+                return true
+            end
+
+            if notenvset then
+                for parser in pairs, _Parser do
+                    if parser:Parse(owner, key, value, stack) then
+                        return true
+                    end
+                end
+            end
+        end
     end
 
-    local getClsBuilderValue    = function (self, name)
-        -- Access methods
-        local info = getICTargetInfo(environment.GetNameSpace(self))
-        if info and info[name] then return info[name], true end
-        return environment.GetValue(self, name)
-    end
+    local setClassBuilderValue  = function (self, key, value, stack, notenvset)
+        local owner = environment.GetNameSpace(self)
+        if not (owner and _ICBuilderInDefine[self]) then return end
 
-    local setBuilderOwnerValue  = function (owner, key, value, stack, notnewindex)
+        local tkey  = type(key)
+        local tval  = type(value)
+
+        stack       = stack + 1
+
+        if tkey == "string" and not tonumber(key) then
+            if META_KEYS[tkey] then
+                class.AddMetaData(owner, key, value, stack)
+                return true
+            elseif tkey == namespace.GetNameSpaceName(owner, true) then
+                class.SetConstructor(owner, value, stack)
+                return true
+            elseif tval == "function" then
+                class.AddMethod(owner, key, value, stack)
+                return true
+            end
+
+            if notenvset then
+                for parser in pairs, _Parser do
+                    if parser:Parse(owner, key, value, stack) then
+                        return true
+                    end
+                end
+            end
+        elseif tkey == "number" then
+            if tval == "table" or tval == "userdata" then
+                if class.Validate(value) then
+                    class.SetSuperClass(owner, value, stack)
+                    return true
+                elseif interface.Validate(value) then
+                    class.AddExtend(owner, value, stack)
+                    return true
+                end
+            elseif tval == "function" then
+                class.SetConstructor(owner, value, stack)
+                return true
+            end
+
+            if notenvset then
+                for parser in pairs, _Parser do
+                    if parser:Parse(owner, key, value, stack) then
+                        return true
+                    end
+                end
+            end
+        end
     end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
-    interface                   = prototype "interface" {
+    interface                   = prototype {
+        __tostring              = "interface",
         __index                 = {
             --- Add an interface to be extended
             -- @static
@@ -6077,6 +6212,19 @@ do
             ["AddFeature"]      = function(target, name, feature, stack)
                 local msg, stack= addFeature(target, name, feature, stack)
                 if msg then error("Usage: interface.AddFeature(target, name, feature[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Add init fields to the interface
+            -- @static
+            -- @method  AddFields
+            -- @owner   interface
+            -- @format  (target, fields[, stack])
+            -- @param   target                      the target interface
+            -- @param   fields:table                the init-fields
+            -- @param   stack                       the stack level
+            ["AddFields"]       = function(target, fields, stack)
+                local msg, stack= addFields(target, fields, stack)
+                if msg then error("Usage: interface.AddFields(target, fields[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Add a meta data to the interface
@@ -6147,7 +6295,7 @@ do
                 -- End interface's definition
                 _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
 
-                genTypeCaches(target, ninfo)
+                genTypeCaches(target, ninfo, stack)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -6175,7 +6323,7 @@ do
 
                 local ninfo     = getInitICInfo(target, false)
 
-                genTypeCaches(target, ninfo)
+                genTypeCaches(target, ninfo, stack)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -6329,6 +6477,28 @@ do
                 return info and info[FLD_IC_REQCLS]
             end;
 
+            --- Get the super refer of the target interface
+            -- @static
+            -- @method  GetSuperRefer
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @return  super                       the super refer
+            ["GetSuperRefer"]   = function(target)
+                local info      = getICTargetInfo(target)
+                return info and info[FLD_IC_SUPER]
+            end;
+
+            --- Whether the interface has anonymous class
+            -- @static
+            -- @method  HasAnonymousClass
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @return  boolean                     true if the interface has anonymous class
+            ["HasAnonymousClass"] = function(target)
+                local info      = getICTargetInfo(target)
+                return info and validateFlags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) or false
+            end;
+
             --- Whether the target interface is a sub-type of another interface
             -- @static
             -- @method  IsSubType
@@ -6387,6 +6557,32 @@ do
                 return info and type(name) == "string" and info[name] and true or false
             end;
 
+            --- Register a parser to analyse key-value pair as definition for the class or interface
+            -- @static
+            -- @method  IsStaticMethod
+            -- @owner   interface
+            -- @format  parser[, stack]
+            -- @param   parser                      the parser
+            -- @param   stack                       the stack level
+            -- @return  boolean                     true if the key-value pair is accepted as definition
+            ["RegisterParser"]  = function(parser, stack)
+                stack           = (type(stack) == "number" and stack or 1) + 1
+                if not prototype.Validate(parser)           then error("Usage: interface.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
+                if not getprototypemethod(parser, "Parse")  then error("Usage: interface.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
+                _Parser         = saveStorage(_Parser, parser, true)
+            end;
+
+            --- Set the interface to have anonymous class
+            -- @static
+            -- @method  SetAnonymousClass
+            -- @owner   interface
+            -- @format  (target[, stack])
+            -- @param   target                      the target interface
+            -- @param   stack                       the stack level
+            ["SetAnonymousClass"] = function(target, stack)
+                setModifiedFlag(interface, target, MOD_ANYMOUS_CLS, "SetAnonymousClass", stack)
+            end;
+
             --- Set the interface as final
             -- @static
             -- @method  SetFinal
@@ -6409,19 +6605,6 @@ do
             ["SetDestructor"]   = function(target, func, stack)
                 local msg, stack= addMetaData(target, IC_META_DTOR, func, stack)
                 if msg then error("Usage: interface.SetDestructor(target, func[, stack]) - " .. msg, stack + 1) end
-            end;
-
-            --- Set the interface's init-fields
-            -- @static
-            -- @method  SetFields
-            -- @owner   interface
-            -- @format  (target, fields[, stack])
-            -- @param   target                      the target interface
-            -- @param   fields:table                the init-fields
-            -- @param   stack                       the stack level
-            ["SetFields"]       = function(target, fields, stack)
-                local msg, stack= setFields(target, fields, stack)
-                if msg then error("Usage: interface.SetFields(target, fields[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Set the interface's initializer
@@ -6523,7 +6706,8 @@ do
         end,
     }
 
-    class                       = prototype "class" {
+    class                       = prototype {
+        __tostring              = "class",
         __index                 = {
             --- Add an interface to be extended
             -- @static
@@ -6550,6 +6734,19 @@ do
             ["AddFeature"]      = function(target, name, feature, stack)
                 local msg, stack= addFeature(target, name, feature, stack)
                 if msg then error("Usage: class.AddFeature(target, name, feature[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Add init fields to the class
+            -- @static
+            -- @method  AddFields
+            -- @owner   class
+            -- @format  (target, fields[, stack])
+            -- @param   target                      the target class
+            -- @param   fields:table                the init-fields
+            -- @param   stack                       the stack level
+            ["AddFields"]       = function(target, fields, stack)
+                local msg, stack= addFields(target, fields, stack)
+                if msg then error("Usage: class.AddFields(target, fields[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Add a meta data to the class
@@ -6621,7 +6818,7 @@ do
                 _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
 
                 -- Generate caches and constructor
-                genTypeCaches(target, ninfo)
+                genTypeCaches(target, ninfo, stack)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -6650,7 +6847,7 @@ do
                 local ninfo     = getInitICInfo(target, true)
 
                 -- Generate caches and constructor
-                genTypeCaches(target, ninfo)
+                genTypeCaches(target, ninfo, stack)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -6725,6 +6922,25 @@ do
             ["GetSuperClass"]   = function(target)
                 local info      = getICTargetInfo(target)
                 return info and info[FLD_IC_SUPCLS]
+            end;
+
+            --- Get the super refer of the target class
+            -- @static
+            -- @method  GetSuperRefer
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  super                       the super refer
+            ["GetSuperRefer"]   = interface.GetSuperRefer;
+
+            --- Get the this refer of the target class
+            -- @static
+            -- @method  GetThisRefer
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  this                        the this refer
+            ["GetThisRefer"]    = function(target)
+                local info      = getICTargetInfo(target)
+                return info and info[FLD_IC_THIS]
             end;
 
             --- Whether the target class is a sub-type of another interface or class
@@ -6850,7 +7066,7 @@ do
             -- @owner   class
             -- @param   target                      the target class
             -- @return  boolean                     true if the class is a single version class
-            ["IsSingleVersion"] = function(target)
+            ["IsSingleVersion"] = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return false end or function(target)
                 local info      = getICTargetInfo(target)
                 return info and validateFlags(MOD_SINGLEVER_CLS, info[FLD_IC_MOD]) or false
             end;
@@ -6863,6 +7079,21 @@ do
             -- @param   name                        the method's name
             -- @return  boolean                     true if the method is static
             ["IsStaticMethod"]  = interface.IsStaticMethod;
+
+            --- Register a parser to analyse key-value pair as definition for the class or interface
+            -- @static
+            -- @method  IsStaticMethod
+            -- @owner   class
+            -- @format  parser[, stack]
+            -- @param   parser                      the parser
+            -- @param   stack                       the stack level
+            -- @return  boolean                     true if the key-value pair is accepted as definition
+            ["RegisterParser"]  = function(parser, stack)
+                stack           = (type(stack) == "number" and stack or 1) + 1
+                if not prototype.Validate(parser)           then error("Usage: class.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
+                if not getprototypemethod(parser, "Parse")  then error("Usage: class.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
+                _Parser         = saveStorage(_Parser, parser, true)
+            end;
 
             --- Set the class as abstract
             -- @static
@@ -6916,19 +7147,6 @@ do
                 end
             end;
 
-            --- Set the class's init-fields
-            -- @static
-            -- @method  SetFields
-            -- @owner   class
-            -- @format  (target, fields[, stack])
-            -- @param   target                      the target class
-            -- @param   fields:table                the init-fields
-            -- @param   stack                       the stack level
-            ["SetFields"]       = function(target, fields, stack)
-                local msg, stack= setFields(target, fields, stack)
-                if msg then error("Usage: class.SetFields(target, fields[, stack]) - " .. msg, stack + 1) end
-            end;
-
             --- Set the class as final
             -- @static
             -- @method  SetFinal
@@ -6940,6 +7158,19 @@ do
                 setModifiedFlag(class, target, MOD_FINAL_IC, "SetFinal", stack)
             end;
 
+            --- Set the class's object exist checker
+            -- @static
+            -- @method  SetObjectExistChecker
+            -- @owner   class
+            -- @format  (target, func[, stack])
+            -- @param   target                      the target class
+            -- @param   func:function               the object exist checker
+            -- @param   stack                       the stack level
+            ["SetObjectExistChecker"] = function(target, func, stack)
+                local msg, stack= addMetaData(target, IC_META_EXIST, func, stack)
+                if msg then error("Usage: class.SetObjectExistChecker(target, func[, stack]) - " .. msg, stack + 1) end
+            end;
+
             --- Make the class objects enable the attribute for functions will be defined in it
             -- @static
             -- @method  SetObjectFunctionAttributeEnabled
@@ -6949,6 +7180,19 @@ do
             -- @param   stack                       the stack level
             ["SetObjectFunctionAttributeEnabled"] = function(target, stack)
                 setModifiedFlag(class, target, MOD_ATTRFUNC_OBJ, "SetObjectFunctionAttributeEnabled", stack)
+            end;
+
+            --- Set the class's object generator
+            -- @static
+            -- @method  SetObjectGenerator
+            -- @owner   class
+            -- @format  (target, func[, stack])
+            -- @param   target                      the target class
+            -- @param   func:function               the object generator
+            -- @param   stack                       the stack level
+            ["SetObjectGenerator"] = function(target, func, stack)
+                local msg, stack= addMetaData(target, IC_META_NEW, func, stack)
+                if msg then error("Usage: class.SetObjectGenerator(target, func[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Make the class object don't receive any value assignment excpet existed fields
@@ -7002,7 +7246,7 @@ do
             -- @format  (target[, stack])
             -- @param   target                      the target class
             -- @param   stack                       the stack level
-            ["SetSingleVersion"]= function(target, stack)
+            ["SetSingleVersion"]= PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and fakefunc or function(target, stack)
                 setModifiedFlag(class, target, MOD_SINGLEVER_CLS, "SetSingleVersion", stack)
             end;
 
@@ -7085,22 +7329,18 @@ do
         end,
     }
 
-    tinterface                  = prototype "tinterface" (tnamespace, {
+    tinterface                  = prototype (tnamespace, {
         __index                 = function(self, key)
             if type(key) == "string" then
                 -- Access methods
                 local info  = _ICInfo[self]
                 if info then
-                    -- Meta-methods
-                    local oper  = META_KEYS[key]
-                    if oper then return info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][oper] or nil end
-
                     -- Static or object methods
-                    oper  = info[key]
+                    oper    = info[key] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][key]
                     if oper then return oper end
 
                     -- Static features
-                    oper  = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
+                    oper    = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
                     if oper then return oper:Get(self) end
                 end
 
@@ -7119,7 +7359,7 @@ do
 
                     -- Try add methods
                     if type(value) == "function" then
-                        interface.AddMethod(self, key, value, 3)
+                        getmetatable(self).AddMethod(self, key, value, 2)
                         return
                     end
                 end
@@ -7129,27 +7369,15 @@ do
         end,
         __call                  = function(self, init)
             local info  = _ICInfo[self]
-            if type(init) == "string" then
-                local ret, msg = struct.ValidateValue(Lambda, init)
-                if msg then error(strformat("Usage: %s(init) - ", tostring(self)) .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "init") or "the init is not valid."), 2) end
-                init    = ret
-            end
+            local aycls = info[FLD_IC_ANYMSCL]
+            if not aycls then error(strformat("Usage: the %s doesn't have anonymous class", tostring(self)), 2) end
 
             if type(init) == "function" then
-                if not info[FLD_IC_ONEABS] then error(strformat("Usage: %s(init) - the interface isn't an one method required interface", tostring(self)), 2) end
-                init    = { [info[FLD_IC_ONEABS]] = init }
-            end
-
-            if init and type(init) ~= "table" then error(strformat("Usage: %s(init) - the init can only be lambda expression, function or table", tostring(self)), 2) end
-
-            local aycls = info[FLD_IC_ANYMSCL]
-
-            if not aycls then
-                local r = getUniqueReqMethod(info)
-                for k in pairs, r do r[k] = fakefunc end
-                r[1]    = self
-                aycls   = class(r, true)
-                info[FLD_IC_ANYMSCL] = aycls
+                local abs = info[FLD_IC_ONEABS]
+                if not abs then error(strformat("Usage: %s([init]) - the interface doesn't have only one abstract method", tostring(self)), 2) end
+                init    = { [abs] = init }
+            elseif init and type(init) ~= "table" then
+                error(strformat("Usage: %s([init]) - the init can only be a table", tostring(self)), 2)
             end
 
             return aycls(init)
@@ -7157,156 +7385,286 @@ do
         __metatable             = interface,
     })
 
-    tclass                      = prototype "tclass" (tinterface, {
-        __newindex              = function(self, key, value)
-            if type(key) == "string" then
-                local info  = _ICInfo[self]
-
-                if info then
-                    -- Static features
-                    local oper  = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
-                    if oper then oper:Set(self, value) return end
-
-                    -- Try add methods
-                    if type(value) == "function" then
-                        class.AddMethod(self, key, value, 3)
-                        return
-                    end
-                end
-            end
-
-            error(strformat("The %s is readonly", tostring(self)), 2)
-        end,
+    tclass                      = prototype (tinterface, {
         __call                  = function(self, ...)
             local info  = _ICInfo[self]
-            local obj   = info[FLD_IC_CTOR](...)
+            local obj   = info[FLD_IC_OBCTOR](...)
             return obj
         end,
         __metatable             = class,
     })
 
-    tSuperInterface             = prototype "tSuperInterface" {
+    tsuperinterface             = prototype {
+        __tostring              = function(self) return tostring(_SuperMap[self]) end,
         __index                 = function(self, key)
             local t = type(key)
 
             if t == "string" then
-                local obj = _SuperObj[self]
-                if obj then
-                    _SuperObj[self] = nil
-                    local info  = getICTargetInfo(getmetatable(obj))
-                    if not info then error("Usage: Super[obj].Method(obj, [...]) - Can't figure out the obj's class", 2) end
-                    return getSuperMethod(info, key, _SuperMap[self])
-                else
-                    local info  = _ICInfo[_SuperMap[self]]
-                    if not info then error("Usage: Super.Method(obj, [...]) - Can't figure out the type that the super represent", 2) end
-                    local f     = info[FLD_IC_SUPFTR][key]
-                    if not f then
-                        if META_KEYS[key] then
-                            f   = getSuperMetaMethod(info, key)
-                        else
-                            f   = getSuperMethod(info, key) or getSuperFeature(info, key)
-                        end
-                        info[FLD_IC_SUPFTR][key] = f
-                    end
-                    if type(f) ~= "function" then error(strformat("No method named %q can be find in Super", key), 2) end
-                    return f
-                end
+                local info  = _ICInfo[_SuperMap[self]]
+                local f     = info[FLD_IC_SUPMTD]
+                return f and f[key]
             elseif t == "table" then
-                _SuperObj[self] = key
-                return self
+                rawset(self, __PLOOP_SUPER_ACCESS, _SuperMap[self])
+                return key
             end
         end,
-        __newindex              = function(self, key, value)
-            if type(key) == "string" then
-                local obj = _SuperObj[self]
-                if not obj then error("Usage: Super[obj].PropA = value", 2) end
-                _SuperObj[self] = nil
-            end
-        end,
+        __newindex              = readOnly,
         __metatable             = interface,
     }
 
-    tSuperClass                 = prototype "tSuperClass" (tSuperInterface, {
+    tsuperclass                 = prototype (tsuperinterface, {
         __call                  = function(self, obj, ...)
-
+            local cls           = _SuperMap[self]
+            if obj and class.IsSubType(getmetatable(obj), cls) then
+                local spcls     = _ICInfo[cls][FLD_IC_SUPCLS]
+                if spcls then
+                    local ctor  = _ICInfo[spcls][FLD_IC_CLINIT]
+                    if ctor then return ctor(obj, ...) end
+                else
+                    error(strformat("Usage: super(object, ..) - the %s has no super class", tostring(cls)), 2)
+                end
+            else
+                error("Usage: super(object, ..) - the object is not valid", 2)
+            end
         end,
         __metatable             = class,
     })
 
-    tThisClass                  = prototype "tThisClass" {
+    tthisclass                  = prototype {
+        __tostring              = function(self) return tostring(_ThisMap[self]) end,
         __call                  = function(self, obj, ...)
-
+            local cls           = _ThisMap[self]
+            if obj and getmetatable(obj) == cls then
+                local ctor      = _ICInfo[cls][FLD_IC_CTOR]
+                if ctor then return ctor(obj, ...) end
+            else
+                error("Usage: this(object, ..) - the object is not valid", 2)
+            end
         end,
         __metatable             = class,
     }
 
-    interfacebuilder            = prototype "interfacebuilder" {
+    interfacebuilder            = prototype {
+        __tostring              = function(self)
+            local owner         = environment.GetNameSpace(self)
+            return "[interfacebuilder]" .. (owner and tostring(owner) or "anonymous")
+        end,
         __index                 = function(self, key)
-            local val, cache = getBuilderValue(self, key)
-
-            -- Access methods
-            local info  = getICTargetInfo(environment.GetNameSpace(self))
-            local m     = info and (info[name] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name])
-            if m then return m, true end
-            return environment.GetValue(self, name)
-            if val ~= nil and cache and not _ICBuilderInfo[environment.GetNameSpace(self)] then
-                rawset(self, key, val)
-            end
-            return val
+            local value         = environment.GetValue(self, key, _ICBuilderInDefine[self], 2)
+            return value
         end,
         __newindex              = function(self, key, value)
-            local owner = environment.GetNameSpace(self)
-            if _ICBuilderInfo[owner] then
-                if setBuilderOwnerValue(owner, key, value, 3) then
-                    return
-                end
+            if not setIFBuilderValue(self, key, value, 2) then
+                return rawset(self, key, value)
             end
-            return rawset(self, key, value)
         end,
         __call                  = function(self, definition, stack)
-            if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
+            stack = (type(stack) == "number" and stack or 1) + 1
+            if not definition then error("Usage: interface([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNameSpace(self)
-            if not owner then error("The struct's definition is finished", stack) end
+            if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The interface's definition is finished", stack) end
 
-            stack = stack + 1
+            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_INTERFACE, definition), self, stack)
 
             if type(definition) == "function" then
+                setfenv(definition, self)
                 definition(self)
             else
-                -- Index key first
+                -- Index key
                 for i, v in ipairs, definition, 0 do
-                    setBuilderOwnerValue(owner, i, v, stack)
+                    setIFBuilderValue(self, i, v, stack, true)
                 end
 
                 for k, v in pairs, definition do
                     if type(k) == "string" then
-                        setBuilderOwnerValue(owner, k, v, stack, true)
+                        setIFBuilderValue(self, k, v, stack, true)
                     end
                 end
             end
 
-            setfenv(stack - 1, environment.GetParent(self) or _G)
-            struct.EndDefinition(owner, stack)
+            _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
+            interface.EndDefinition(owner, stack)
+
+            if getfenv(stack) == self then
+                safesetfenv(stack, environment.GetParent(self) or _G)
+            end
 
             return owner
         end,
     }
 
-    classbuilder                = prototype "classbuilder" ( interfacebuilder, {
+    classbuilder                = prototype {
+        __tostring              = function(self)
+            local owner         = environment.GetNameSpace(self)
+            return "[classbuilder]" .. (owner and tostring(owner) or "anonymous")
+        end,
+        __index                 = function(self, key)
+            local value         = environment.GetValue(self, key, _ICBuilderInDefine[self], 2)
+            return value
+        end,
+        __newindex              = function(self, key, value)
+            if not setClassBuilderValue(self, key, value, 2) then
+                return rawset(self, key, value)
+            end
+        end,
+        __call                  = function(self, definition, stack)
+            stack = (type(stack) == "number" and stack or 1) + 1
+            if not definition then error("Usage: class([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-    })
+            local owner = environment.GetNameSpace(self)
+            if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The class's definition is finished", stack) end
 
-    feature                     = prototype "feature" {
-        __index                 = {
-            ["IsStatic"]        = function(self)                end;
-            ["IsShareable"]     = function(self) return true    end;
-            ["GetAccessor"]     = function(self) return self    end;
-            ["Get"]             = function(self, object)        end;
-            ["Set"]             = function(self, object, value) end;
-        },
-        __newindex              = readOnly
+            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_CLASS, definition), self, stack)
+
+            if type(definition) == "function" then
+                setfenv(definition, self)
+                definition(self)
+            else
+                -- Index key
+                for i, v in ipairs, definition, 0 do
+                    setClassBuilderValue(self, i, v, stack, true)
+                end
+
+                for k, v in pairs, definition do
+                    if type(k) == "string" then
+                        setClassBuilderValue(self, k, v, stack, true)
+                    end
+                end
+            end
+
+            _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
+            class.EndDefinition(owner, stack)
+
+            if getfenv(stack) == self then
+                safesetfenv(stack, environment.GetParent(self) or _G)
+            end
+
+            return owner
+        end,
     }
+
+    -----------------------------------------------------------------------
+    --                             keywords                              --
+    -----------------------------------------------------------------------
+
+    -----------------------------------------------------------------------
+    -- extend an interface to the current class or interface
+    --
+    -- @keyword     extend
+    -- @usage       extend "System.IAttribute"
+    -----------------------------------------------------------------------
+    extend                      = function (...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(extend, ...)
+
+        name = namespace.Validate(name)
+        if not name then error("Usage: extend(interface) - The interface is not provided", stack + 1) end
+
+        local owner = visitor and environment.GetNameSpace(visitor)
+        if not owner  then error("Usage: extend(interface) - The system can't figure out the class or interface", stack + 1) end
+
+        interface.AddExtend(owner, name, stack + 1)
+    end
+
+    -----------------------------------------------------------------------
+    -- Add init fields to the class or interface
+    --
+    -- @keyword     field
+    -- @usage       field { Test = 123, Any = true }
+    -----------------------------------------------------------------------
+    field                       = function (...)
+        local visitor, env, name, definition, flag, stack = getFeatureParams(field, ...)
+
+        if type(definition) ~= "table" then error("Usage: field { key-value pairs } - The field only accept table as definition", stack + 1) end
+
+        local owner = visitor and environment.GetNameSpace(visitor)
+
+        if owner then
+            if class.Validate(owner) then
+                class.AddFields(owner, definition, stack + 1)
+                return
+            elseif interface.Validate(owner) then
+                interface.AddFields(owner, definition, stack + 1)
+                return
+            end
+        end
+
+        error("Usage: field { key-value pairs } - The field can't be used here", stack + 1)
+    end
+
+    -----------------------------------------------------------------------
+    -- inherit a super class to the current class
+    --
+    -- @keyword     inherit
+    -- @usage       inherit "System.Object"
+    -----------------------------------------------------------------------
+    inherit                      = function (...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(inherit, ...)
+
+        name = namespace.Validate(name)
+        if not name then error("Usage: inherit(class) - The class is not provided", stack + 1) end
+
+        local owner = visitor and environment.GetNameSpace(visitor)
+        if not owner  then error("Usage: inherit(class) - The system can't figure out the class", stack + 1) end
+
+        class.SetSuperClass(owner, name, stack + 1)
+    end
+
+    -----------------------------------------------------------------------
+    -- End the definition of the interface
+    --
+    -- @keyword     endinterface
+    -- @usage       interface "IA"
+    --                  function IA(self)
+    --                  end
+    --              endinterface "IA"
+    -----------------------------------------------------------------------
+    endinterface                = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(endinterface, ...)
+        local owner = visitor and environment.GetNameSpace(visitor)
+
+        stack = stack + 1
+
+        if not owner or not visitor then error([[Usage: endinterface "name" - can't be used here.]], stack) end
+        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+
+        _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
+        interface.EndDefinition(owner, stack)
+
+        local baseEnv       = environment.GetParent(visitor) or _G
+
+        setfenv(stack, baseEnv)
+
+        return baseEnv
+    end or nil
+
+    -----------------------------------------------------------------------
+    -- End the definition of the class
+    --
+    -- @keyword     endclass
+    -- @usage       class "IA"
+    --                  function IA(self)
+    --                  end
+    --              endclass "IA"
+    -----------------------------------------------------------------------
+    endclass                    = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(endclass, ...)
+        local owner = visitor and environment.GetNameSpace(visitor)
+
+        stack = stack + 1
+
+        if not owner or not visitor then error([[Usage: endclass "name" - can't be used here.]], stack) end
+        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+
+        _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
+        class.EndDefinition(owner, stack)
+
+        local baseEnv       = environment.GetParent(visitor) or _G
+
+        setfenv(stack, baseEnv)
+
+        return baseEnv
+    end or nil
 end
 
 -------------------------------------------------------------------------------
@@ -7471,22 +7829,24 @@ do
 
     environment.RegisterContextKeyword(structbuilder, {
         member          = member,
-        endstruct       = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endstruct,
+        endstruct       = rawget(_PLoopEnv, "endstruct"),
     })
 
     environment.RegisterContextKeyword(interfacebuilder, {
         extend          = extend,
+        field           = field,
         event           = event,
         property        = property,
-        endinterface    = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endinterface,
+        endinterface    = rawget(_PLoopEnv, "endinterface"),
     })
 
     environment.RegisterContextKeyword(classbuilder, {
         inherit         = inherit,
         extend          = extend,
+        field           = field,
         event           = event,
         property        = property,
-        endclass        = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and endclass,
+        endclass        = rawget(_PLoopEnv, "endclass"),
     })
 
     _G.PLoop = prototype "PLoop" {
