@@ -51,9 +51,9 @@ do
             LUA_VERSION         = tonumber(_VERSION and _VERSION:match("[%d%.]+")) or 5.1,
 
             -- Weak Mode
-            WEAK_KEY            = { __mode = "k"  },
-            WEAK_VALUE          = { __mode = "v"  },
-            WEAK_ALL            = { __mode = "kv" },
+            WEAK_KEY            = { __mode = "k", __metatable = false },
+            WEAK_VALUE          = { __mode = "v", __metatable = false },
+            WEAK_ALL            = { __mode = "kv",__metatable = false },
 
             -- Iterator
             ipairs              = ipairs(_G),
@@ -313,7 +313,8 @@ do
     safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
     loadInitTable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
-    getobjectvalue              = function (target, method, useobjectmethod) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target) end end
+    getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
+    uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -2176,8 +2177,11 @@ do
             end
 
             if not flag then
-                if visitor then environment.SetNameSpace(visitor, target) end
-                if env and env ~= visitor then  environment.SetNameSpace(env, target) end
+                if visitor then
+                    environment.SetNameSpace(visitor, target)
+                elseif env and env ~= visitor then
+                    namespace.ExportNameSpace(env, target)
+                end
             end
 
             return target
@@ -2291,9 +2295,15 @@ do
 
     local genEnumValidator      = function (info)
         local token = 0
+        local upval = _Cache()
+
+        tinsert(upval, info[FLD_ENUM_CACHE])
+        tinsert(upval, info[FLD_ENUM_ITEMS])
+        tinsert(upval, info[FLD_ENUM_ERRMSG])
 
         if validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
             token   = turnOnFlags(FLG_FLAGS_ENUM, token)
+            tinsert(upval, info[FLD_ENUM_MAXVAL])
         end
 
         if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
@@ -2301,33 +2311,45 @@ do
         end
 
         if not _EnumValidMap[token] then
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
+
+            tinsert(head, "cache")
+            tinsert(head, "items")
+            tinsert(head, "errmsg")
+
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
 
             tinsert(body, [[
-                return function(info, value)
-                    local cache = info[]] .. FLD_ENUM_CACHE .. [[]
+                return function(value)
                     if cache[value] then return value end
             ]])
 
             if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
+                uinsert(apis, "type")
                 tinsert(body, [[
                     local vtype = type(value)
                     if vtype == "string" then
                 ]])
 
                 if validateFlags(FLG_CASE_IGNORED, token) then
+                    uinsert(apis, "strupper")
                     tinsert(body, [[value = strupper(value)]])
                 end
             end
 
-            tinsert(body, [[value = info[]] .. FLD_ENUM_ITEMS .. [[][value] ]])
+            tinsert(body, [[value = items[value] ]])
 
             if validateFlags(FLG_FLAGS_ENUM, token) then
+                tinsert(head, "maxv")
+                uinsert(apis, "floor")
                 tinsert(body, [[
                     elseif vtype == "number" then
                         if value == 0 then
                             if cache[0] then return 0 end
-                        elseif floor(value) == value and value > 0 and value <= info[]] .. FLD_ENUM_MAXVAL .. [[] then
+                        elseif floor(value) == value and value > 0 and value <= maxv then
                             return value
                         end
                 ]])
@@ -2342,16 +2364,29 @@ do
             end
 
             tinsert(body, [[
-                    return value, value == nil and info[]] .. FLD_ENUM_ERRMSG .. [[] or nil
+                    return value, value == nil and errmsg or nil
                 end
             ]])
 
+            tinsert(body, [[end]])
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
+            end
+
+            body[2]             = strformat(body[2], tblconcat(head, ", "))
+
             _EnumValidMap[token]= loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
 
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
-        info[FLD_ENUM_VALID]    = _EnumValidMap[token]
+        info[FLD_ENUM_VALID]    = _EnumValidMap[token](unpack(upval))
+
+        _Cache(upval)
     end
 
     local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
@@ -2466,7 +2501,7 @@ do
 
                 -- Check Default
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
-                    ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo, ninfo[FLD_ENUM_DEFAULT])
+                    ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo[FLD_ENUM_DEFAULT])
                     if ninfo[FLD_ENUM_DEFAULT] == nil then
                         error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack + 1)
                     end
@@ -2730,7 +2765,7 @@ do
             ["ValidateValue"]   = function(target, value)
                 local info      = _EnumInfo[target]
                 if info then
-                    return info[FLD_ENUM_VALID](info, value)
+                    return info[FLD_ENUM_VALID](value)
                 else
                     error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
                 end
@@ -2958,7 +2993,7 @@ end
 --              The `__Static__` is an attribtue, it's used here to declare the
 --          next defined method is a static one.
 --
---              In the example, we decalre the default value of the member in
+--              In the example, we declare the default value of the member in
 --          the member's definition, but we also can provide the default value
 --          in the custom struct like :
 --
@@ -2983,7 +3018,7 @@ end
 --          not recommended.
 --
 --iii. Array    The array structure represent tables that contains a list of
---          same type items. Here is an example to decalre an array:
+--          same type items. Here is an example to declare an array:
 --
 --                  struct "Locations" (function(_ENV)
 --                      __array = Location
@@ -3346,19 +3381,28 @@ do
 
         -- Build the validator generator
         if not _StructValidMap[token] then
-            local header    = _Cache()
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
 
-            tinsert(body, "")   -- remain for closure
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+                uinsert(apis, "strformat")
+                uinsert(apis, "type")
+                uinsert(apis, "strgsub")
+                uinsert(apis, "tostring")
+                uinsert(apis, "getmetatable")
+
                 tinsert(body, [[
                     if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table" end
                     if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table" end
                 ]])
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                    uinsert(apis, "_Cache")
                     tinsert(body, [[
                         -- Cache to block recursive validation
                         local vcache = cache[info]
@@ -3374,7 +3418,9 @@ do
             end
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
-                tinsert(header, "count")
+                uinsert(apis, "clone")
+
+                tinsert(head, "count")
                 tinsert(body, [[
                     if onlyValid then
                         for i = ]] .. FLD_STRUCT_MEMBERSTART .. [[, count do
@@ -3421,6 +3467,8 @@ do
                     end
                 ]])
             elseif validateFlags(FLG_ARRAY_STRUCT, token) then
+                uinsert(apis, "ipairs")
+
                 tinsert(body, [[
                     local array = info[]] .. FLD_STRUCT_ARRAY .. [[]
                     local avalid= info[]] .. FLD_STRUCT_ARRVALID .. [[]
@@ -3439,19 +3487,24 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
-                tinsert(body, [[
-                    local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
-                    if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
-                ]])
-            elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
-                tinsert(header, "mvalid")
-                tinsert(body, [[
-                    for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
-                        local msg = info[i](value)
+            if validateFlags(FLG_STRUCT_SINGLE_VLD, token) or validateFlags(FLG_STRUCT_MULTI_VLD, token) then
+                uinsert(apis, "type")
+                uinsert(apis, "strformat")
+
+                if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
+                    tinsert(body, [[
+                        local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
                         if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
-                    end
-                ]])
+                    ]])
+                elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
+                    tinsert(head, "mvalid")
+                    tinsert(body, [[
+                        for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
+                            local msg = info[i](value)
+                            if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
+                        end
+                    ]])
+                end
             end
 
             if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) or validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
@@ -3468,7 +3521,7 @@ do
                         tinsert(body, [[if ret ~= nil then value = ret end]])
                     end
                 else
-                    tinsert(header, "minit")
+                    tinsert(head, "minit")
                     tinsert(body, [[
                         for i = ]] .. FLD_STRUCT_INITSTART .. [[, minit do
                             local ret = info[i](value)
@@ -3482,8 +3535,10 @@ do
 
             if validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
                 if validateFlags(FLG_CUSTOM_STRUCT, token) then
+                    uinsert(apis, "type")
                     tinsert(body, [[if type(value) == "table" then]])
                 end
+                uinsert(apis, "pairs")
                 tinsert(body, [[
                     for k, v in pairs, info[]] .. FLD_STRUCT_TYPEMETHOD .. [[] do
                         if v and value[k] == nil then value[k] = v end
@@ -3500,18 +3555,24 @@ do
                 end
             ]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            tinsert(body, [[end]])
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
             end
 
-            _StructValidMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            if #header == 0 then
+            _StructValidMap[token]  = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)()
+
+            if #head == 0 then
                 _StructValidMap[token] = _StructValidMap[token]()
             end
 
-            _Cache(header)
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
         if #upval > 0 then
@@ -3564,12 +3625,21 @@ do
 
         -- Build the validator generator
         if not _StructCtorMap[token] then
-            local header    = _Cache()
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
 
-            tinsert(body, "")   -- remain for closure
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
+
+            uinsert(apis, "error")
+            uinsert(apis, "strgsub")
 
             if validateFlags(FLG_MEMBER_STRUCT, token) then
+                uinsert(apis, "select")
+                uinsert(apis, "type")
+                uinsert(apis, "getmetatable")
+
                 tinsert(body, [[
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
@@ -3577,13 +3647,13 @@ do
                         if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
                 ]])
 
-                tinsert(header, "count")
+                tinsert(head, "count")
                 if not validateFlags(FLG_STRUCT_MULTI_REQ, token) then
                     -- So, it may be the first member
                     if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
-                        tinsert(header, "ftype")
-                        tinsert(header, "fvalid")
-                        tinsert(header, "fimtbl")
+                        tinsert(head, "ftype")
+                        tinsert(head, "fvalid")
+                        tinsert(head, "fimtbl")
                         tinsert(body, [[
                             local _, fmatch = fvalid(ftype, first, true) fmatch = not fmatch
                         ]])
@@ -3650,6 +3720,8 @@ do
             end
 
             if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                uinsert(apis, "_Cache")
+                uinsert(apis, "pairs")
                 tinsert(body, [[
                     local cache = _Cache()
                     ret, msg = ivalid(info, ret, false, cache)
@@ -3664,6 +3736,7 @@ do
             tinsert(body, [[if not msg then return ret end]])
 
             if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+                uinsert(apis, "type")
                 tinsert(body, [[
                     error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
                 ]])
@@ -3675,18 +3748,24 @@ do
 
             tinsert(body, [[end]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            tinsert(body, [[end]])
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
             end
 
-            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            if #header == 0 then
+            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)()
+
+            if #head == 0 then
                 _StructCtorMap[token] = _StructCtorMap[token]()
             end
 
-            _Cache(header)
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
         if #upval > 0 then
@@ -4723,7 +4802,7 @@ do
     local MOD_SINGLEVER_CLS     = 2^5               -- SINGLE VERSION CLASS - NO MULTI VERSION
     local MOD_ATTRFUNC_OBJ      = 2^6               -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
     local MOD_NORAWSET_OBJ      = 2^7               -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ      = 2^8               -- NO NIL FIELD ACCESS
+    local MOD_NONILVAL_OBJ      = 2^8               -- NO NIL dFIELD ACCESS
     local MOD_NOSUPER_OBJ       = 2^9               -- OLD SUPER ACCESS STYLE
     local MOD_ANYMOUS_CLS       = 2^10              -- HAS ANONYMOUS CLASS
 
@@ -4974,7 +5053,7 @@ do
 
     local getSuperMethod        = function (info, name) return getSuperOnPriority(info, name, getTypeMethod) end
 
-    local getSuperFeature       = function (info, name, ftype) local feature, priority = getSuperOnPriority(info, name, getTypeFeature) return feature and (not ftype and feature or ftype.Validate(feature)) or nil, priority end
+    local getSuperFeature       = function (info, name) return getSuperOnPriority(info, name, getTypeFeature) end
 
     local getSuperMetaMethod    = function (info, name) return getSuperOnPriority(info, name, getTypeMetaMethod) end
 
@@ -5004,9 +5083,9 @@ do
         return lst, super
     end
 
-    local genCacheOnPriority    = function (source, target, objpri, inhrtp, super, ismeta, isfeature, objfeature, stack)
+    local genCacheOnPriority    = function (source, target, objpri, inhrtp, super, ismeta, featuretarget, objfeature, stack)
         for k, v in pairs, source do
-            if v and not (ismeta and META_KEYS[k] == nil) and not (isfeature and getobjectvalue(v, "IsStatic", true)) then
+            if v and not (ismeta and META_KEYS[k] == nil) and not (featuretarget and getobjectvalue(v, "IsStatic", true)) then
                 local priority  = inhrtp and inhrtp[k] or INRT_PRIORITY_NORMAL
                 if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
                     if super and target[k] and (objpri[k] or INRT_PRIORITY_NORMAL) > INRT_PRIORITY_ABSTRACT then
@@ -5020,11 +5099,11 @@ do
 
                     objpri[k]   = priority
 
-                    if isfeature then
+                    if featuretarget then
                         if getobjectvalue(v, "IsShareable", true) and objfeature and objfeature[k] then
                             target[k]   = objfeature[k]
                         else
-                            v           = getobjectvalue(v, "GetAccessor", true) or v
+                            v           = getobjectvalue(v, "GetAccessor", true, featuretarget) or v
                             if type(safeget(v, "Get")) ~= "function" or type(safeget(v, "Set")) ~= "function" then
                                 error(strformat("the feature named %q is not valid", k), stack + 1)
                             end
@@ -5098,14 +5177,20 @@ do
         if token == FLG_IC_IDXFUN or token == FLG_IC_IDXTBL then meta[IC_META_INDEX] = data                 return _Cache(upval) end
 
         if not _ICIndexMap[token] then
-            local header    = _Cache()
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
 
-            tinsert(body, "")   -- Remain for closure values
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(self, key)]])
 
             if validateFlags(FLG_IC_SUPACC, token) then
-                tinsert(header, "spinfo")
+                uinsert(apis, "rawget")
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                uinsert(apis, "tostring")
+                tinsert(head, "spinfo")
                 tinsert(body, [[
                     local sp = rawget(self, "]] .. OBJ_SUPER_ACCESS .. [[")
                     if sp then
@@ -5127,7 +5212,7 @@ do
             end
 
             if validateFlags(FLG_IC_OBJMTD, token) then
-                tinsert(header, "methods")
+                tinsert(head, "methods")
                 tinsert(body, [[
                     local mtd = methods[key]
                     if mtd then return mtd end
@@ -5135,7 +5220,7 @@ do
             end
 
             if validateFlags(FLG_IC_OBJFTR, token) then
-                tinsert(header, "features")
+                tinsert(head, "features")
                 tinsert(body, [[
                     local ftr = features[key]
                     if ftr then return ftr:Get(self) end
@@ -5143,7 +5228,7 @@ do
             end
 
             if validateFlags(FLG_IC_IDXFUN, token) then
-                tinsert(header, "_index")
+                tinsert(head, "_index")
                 if validateFlags(FLG_IC_NNILVL, token) then
                     tinsert(body, [[
                         local val = _index(self, key)
@@ -5153,7 +5238,7 @@ do
                     tinsert(body, [[return _index(self, key)]])
                 end
             elseif validateFlags(FLG_IC_IDXTBL, token) then
-                tinsert(header, "_index")
+                tinsert(head, "_index")
                 if validateFlags(FLG_IC_NNILVL, token) then
                     tinsert(body, [[
                         local val = _index[key]
@@ -5165,23 +5250,31 @@ do
             end
 
             if validateFlags(FLG_IC_NNILVL, token) then
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                uinsert(apis, "tostring")
                 tinsert(body, [[error(strformat("The object don't have any field that named %q", tostring(key)), 2)]])
             end
 
             tinsert(body, [[end]])
+            tinsert(body, [[end]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
             end
 
-            _ICIndexMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Index_" .. token)
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            if #header == 0 then
+            _ICIndexMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Index_" .. token)()
+
+            if #head == 0 then
                 _ICIndexMap[token] = _ICIndexMap[token]()
             end
 
-            _Cache(header)
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
         if #upval > 0 then
@@ -5227,14 +5320,20 @@ do
         if token == FLG_IC_NEWIDX   then meta[IC_META_NEWIDX] = data return _Cache(upval) end
 
         if not _ICNewIdxMap[token] then
-            local header    = _Cache()
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
 
-            tinsert(body, "")   -- Remain for closure values
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(self, key, value)]])
 
             if validateFlags(FLG_IC_SUPACC, token) then
-                tinsert(header, "spinfo")
+                uinsert(apis, "rawget")
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                uinsert(apis, "tostring")
+                tinsert(head, "spinfo")
                 tinsert(body, [[
                     local sp = rawget(self, "]] .. OBJ_SUPER_ACCESS .. [[")
                     if sp then
@@ -5252,7 +5351,7 @@ do
             end
 
             if validateFlags(FLG_IC_OBJFTR, token) then
-                tinsert(header, "feature")
+                tinsert(head, "feature")
                 tinsert(body, [[
                     local ftr = feature[key]
                     if ftr then ftr:Set(self, value, 2) return end
@@ -5261,6 +5360,9 @@ do
 
             if validateFlags(FLG_IC_NEWIDX, token) or not validateFlags(FLG_IC_NRAWST, token) then
                 if validateFlags(FLG_IC_OBJATR, token) then
+                    uinsert(apis, "type")
+                    uinsert(apis, "attribute")
+                    uinsert(apis, "ATTRTAR_FUNCTION")
                     tinsert(body, [[
                         local tvalue = type(value)
                         if tvalue == "function" then
@@ -5273,31 +5375,40 @@ do
                 end
 
                 if validateFlags(FLG_IC_NEWIDX, token) then
-                    tinsert(header, "_newindex")
+                    tinsert(head, "_newindex")
                     tinsert(body, [[_newindex(self, key, value)]])
                 else
+                    uinsert(apis, "rawset")
                     tinsert(body, [[rawset(self, key, value)]])
                 end
             end
 
             if validateFlags(FLG_IC_NRAWST, token) then
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                uinsert(apis, "tostring")
                 tinsert(body, [[error(strformat("The object can't accept field that named %q", tostring(key)), 2)]])
             end
 
             tinsert(body, [[end]])
+            tinsert(body, [[end]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
             end
 
-            _ICNewIdxMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token)
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            if #header == 0 then
+            _ICNewIdxMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token)()
+
+            if #head == 0 then
                 _ICNewIdxMap[token] = _ICNewIdxMap[token]()
             end
 
-            _Cache(header)
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
         if #upval > 0 then
@@ -5353,10 +5464,14 @@ do
         end
 
         if not _ClassCtorMap[token] then
-            local header    = _Cache()
+            local head      = _Cache()
             local body      = _Cache()
+            local apis      = _Cache()
 
-            tinsert(body, "")   -- Remain for closure values
+            uinsert(apis, "setmetatable")
+
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(info, ...)]])
 
             tinsert(body, [[local obj]])
@@ -5369,6 +5484,12 @@ do
             end
 
             if validateFlags(FLG_IC_NEWOBJ, token) then
+                uinsert(apis, "type")
+                uinsert(apis, "pcall")
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                uinsert(apis, "tostring")
+
                 tinsert(body, [[
                     obj = info[]] .. FLD_IC_NEWOBJ ..  [[](...)
                     if type(obj) == "table" then
@@ -5381,6 +5502,10 @@ do
             end
 
             if validateFlags(FLG_IC_SIMCLS, token) or validateFlags(FLG_IC_ASSIMP, token) or not validateFlags(FLG_IC_HSCLIN, token) then
+                uinsert(apis, "select")
+                uinsert(apis, "type")
+                uinsert(apis, "getmetatable")
+
                 tinsert(body, [[
                     local init = nil
                     if select("#", ...) == 1 then
@@ -5400,6 +5525,7 @@ do
                         tinsert(body, [[local noconflict = true]])
 
                         if validateFlags(FLG_IC_OBJFTR, token) then
+                            uinsert(apis, "pairs")
                             tinsert(body, [[
                                 for k in pairs, info[]] .. FLD_IC_OBJFTR ..  [[] do
                                     if init[k] ~= nil then
@@ -5422,8 +5548,9 @@ do
             tinsert(body, [[obj = obj or setmetatable({}, info[]] .. FLD_IC_OBJMTM ..  [[])]])
 
             if validateFlags(FLG_IC_FIELD, token) then
+                uinsert(apis, "pairs")
+                uinsert(apis, "rawset")
                 tinsert(body, [[
-                    local rawset = rawset
                     for fld, val in pairs, info[]] .. FLD_IC_FIELD ..  [[] do
                         rawset(obj, fld, val)
                     end
@@ -5443,6 +5570,10 @@ do
                     tinsert(body, [[info[]] .. FLD_IC_CLINIT ..  [[](obj, ...)]])
                 end
             else
+                uinsert(apis, "pcall")
+                uinsert(apis, "loadInitTable")
+                uinsert(apis, "error")
+                uinsert(apis, "strmatch")
                 tinsert(body, [[
                     if init then
                         local ok, msg = pcall(loadInitTable, obj, init)
@@ -5452,7 +5583,7 @@ do
             end
 
             if validateFlags(FLG_IC_HSIFIN, token) then
-                tinsert(header, "_max")
+                tinsert(head, "_max")
 
                 tinsert(body, [[
                     for i = ]] .. FLD_IC_STINIT .. [[, _max do
@@ -5466,18 +5597,24 @@ do
                 end
             ]])
 
-            if #header > 0 then
-                body[1] = "local " .. tblconcat(header, ",") .. "= ..."
+            tinsert(body, [[end]])
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
             end
 
-            _ClassCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            if #header == 0 then
+            _ClassCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)()
+
+            if #head == 0 then
                 _ClassCtorMap[token] = _ClassCtorMap[token]()
             end
 
-            _Cache(header)
+            _Cache(head)
             _Cache(body)
+            _Cache(apis)
         end
 
         if #upval > 0 then
@@ -5490,7 +5627,7 @@ do
     end
 
     local genTypeCaches         = function (target, info, stack)
-        local isclass   = clsss.Validate(target)
+        local isclass   = class.Validate(target)
         local realCls   = isclass and not class.IsAbstract(target)
         local objpri    = _Cache()
         local objmeta   = _Cache()
@@ -5541,7 +5678,7 @@ do
             end
 
             if sinfo[FLD_IC_TYPFTR] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, false, true, sinfo[FLD_IC_OBJFTR], stack)
+                genCacheOnPriority(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, false, target, sinfo[FLD_IC_OBJFTR], stack)
             end
 
             if realCls then
@@ -5582,18 +5719,18 @@ do
 
         if info[FLD_IC_TYPFTR] then
             super       = _Cache()
-            genCacheOnPriority(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, false, true, info[FLD_IC_OBJFTR], stack)
+            genCacheOnPriority(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, false, target, info[FLD_IC_OBJFTR], stack)
             if next(super) then info[FLD_IC_SUPFTR] = super else _Cache(super) end
 
             -- Check static features
             local staftr= info[FLD_IC_STAFTR]
 
-            for name, ftr in pairs, typftr do
+            for name, ftr in pairs, info[FLD_IC_TYPFTR] do
                 if getobjectvalue(ftr, "IsStatic", true) then
                     if not (staftr and staftr[name] and getobjectvalue(ftr, "IsShareable", true)) then
                         staftr      = staftr or {}
 
-                        ftr         = getobjectvalue(ftr, "GetAccessor", true) or ftr
+                        ftr         = getobjectvalue(ftr, "GetAccessor", true, target) or ftr
                         if type(safeget(ftr, "Get")) ~= "function" or type(safeget(ftr, "Set")) ~= "function" then
                             error(strformat("the feature named %q is not valid", k), stack + 1)
                         end
@@ -5640,7 +5777,7 @@ do
 
             -- Gen anonymous class
             if validateFlags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) and not info[FLD_IC_ANYMSCL] then
-                local aycls     = prototype.newPrototype(tclass)
+                local aycls     = prototype.NewProxy(tclass)
                 local ainfo     = getInitICInfo(aycls, true)
 
                 ainfo[FLD_IC_MOD]   = turnOnFlags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
@@ -6016,63 +6153,19 @@ do
 
         if msg then return msg, stack end
 
-        if not (info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil) then return strformat("the %s has no method named %q", tostring(target), name), stack end
-
         if info[name] == nil then
+            info[FLD_IC_TYPMTD] = info[FLD_IC_TYPMTD] or {}
             info[name] = info[FLD_IC_TYPMTD][name]
             info[FLD_IC_TYPMTD][name] = false
             if info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] then info[FLD_IC_INHRTP][name] = nil end
         end
     end
 
-    local setPriorityFeature    = function (target, name, priority, stack)
+    local setPriority           = function (target, name, priority, stack)
         local info, name, stack, msg = preDefineCheck(target, name, stack)
-
         if msg then return msg, stack end
 
-        local ftr = info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name]
-
-        if not ftr then
-            return strformat("the %s has no feature named %q", tostring(target), name), stack
-        else
-            if getobjectvalue(ftr, "IsStatic", true) then
-                return strformat("the %s's %q is static, can't change its priority", tostring(target), name), stack
-            end
-        end
-
-        info[FLD_IC_INHRTP] = info[FLD_IC_INHRTP] or _Cache()
-        info[FLD_IC_INHRTP][name] = priority
-    end
-
-    local setPriorityMethod     = function (target, name, priority, stack)
-        local info, name, stack, msg = preDefineCheck(target, name, stack)
-
-        if msg then return msg, stack end
-
-        local mtd = info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name]
-
-        if mtd == false then
-            return strformat("the %s's %q is static, can't change its priority", tostring(target), name), stack
-        elseif mtd == nil then
-            return strformat("the %s has no method named %q", tostring(target), name), stack
-        end
-
-        info[FLD_IC_INHRTP] = info[FLD_IC_INHRTP] or _Cache()
-        info[FLD_IC_INHRTP][name] = priority
-    end
-
-    local setPriorityMetaMethod = function (target, name, priority, stack)
-        local info, name, stack, msg = preDefineCheck(target, name, stack)
-
-        if msg then return msg, stack end
-
-        local meta = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][name]
-
-        if not meta then
-            return strformat("the %s has no meta-method named %q", tostring(target), name), stack
-        end
-
-        info[FLD_IC_INHRTP] = info[FLD_IC_INHRTP] or _Cache()
+        info[FLD_IC_INHRTP] = info[FLD_IC_INHRTP] or {}
         info[FLD_IC_INHRTP][name] = priority
     end
 
@@ -6100,7 +6193,7 @@ do
 
             if notenvset then
                 for parser in pairs, _Parser do
-                    if parser:Parse(owner, key, value, stack) then
+                    if parser.Parse(owner, key, value, stack) then
                         return true
                     end
                 end
@@ -6121,7 +6214,7 @@ do
 
             if notenvset then
                 for parser in pairs, _Parser do
-                    if parser:Parse(owner, key, value, stack) then
+                    if parser.Parse(owner, key, value, stack) then
                         return true
                     end
                 end
@@ -6139,7 +6232,7 @@ do
         stack       = stack + 1
 
         if tkey == "string" and not tonumber(key) then
-            if META_KEYS[tkey] then
+            if META_KEYS[key] then
                 class.AddMetaData(owner, key, value, stack)
                 return true
             elseif tkey == namespace.GetNameSpaceName(owner, true) then
@@ -6152,7 +6245,7 @@ do
 
             if notenvset then
                 for parser in pairs, _Parser do
-                    if parser:Parse(owner, key, value, stack) then
+                    if parser.Parse(owner, key, value, stack) then
                         return true
                     end
                 end
@@ -6173,7 +6266,7 @@ do
 
             if notenvset then
                 for parser in pairs, _Parser do
-                    if parser:Parse(owner, key, value, stack) then
+                    if parser.Parse(owner, key, value, stack) then
                         return true
                     end
                 end
@@ -6477,6 +6570,42 @@ do
                 return info and info[FLD_IC_REQCLS]
             end;
 
+            --- Get the super method of the target interface with the given name
+            -- @static
+            -- @method  GetSuperMethod
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   name                        the method name
+            -- @return  function                    the super method
+            ["GetSuperMethod"]  = function(target, name)
+                local info      = _ICInfo[target]
+                return info and getSuperMethod(info, name)
+            end;
+
+            --- Get the super meta-method of the target interface with the given name
+            -- @static
+            -- @method  GetSuperMetaMethod
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   name                        the meta-method name
+            -- @return  function                    the super meta-method
+            ["GetSuperMetaMethod"] = function(target, name)
+                local info      = _ICInfo[target]
+                return info and getSuperMetaMethod(info, name)
+            end;
+
+            --- Get the super feature of the target interface with the given name
+            -- @static
+            -- @method  GetSuperFeature
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   name                        the feature name
+            -- @return  function                    the super feature
+            ["GetSuperFeature"] = function(target, name)
+                local info      = _ICInfo[target]
+                return info and getSuperFeature(info, name)
+            end;
+
             --- Get the super refer of the target interface
             -- @static
             -- @method  GetSuperRefer
@@ -6572,6 +6701,19 @@ do
                 _Parser         = saveStorage(_Parser, parser, true)
             end;
 
+            --- Set the interface's method, meta-method or feature as abstract
+            -- @static
+            -- @method  SetAbstract
+            -- @owner   interface
+            -- @format  (target, name[, stack])
+            -- @param   target                      the target interface
+            -- @param   name                        the interface's method, meta-method or feature
+            -- @param   stack                       the stack level
+            ["SetAbstract"]     = function(target, name, stack)
+                local msg, stack= setPriority(target, name, INRT_PRIORITY_ABSTRACT, stack)
+                if msg then error("Usage: interface.SetAbstract(target, name[, stack]) - " .. msg, stack + 1) end
+            end;
+
             --- Set the interface to have anonymous class
             -- @static
             -- @method  SetAnonymousClass
@@ -6583,15 +6725,23 @@ do
                 setModifiedFlag(interface, target, MOD_ANYMOUS_CLS, "SetAnonymousClass", stack)
             end;
 
-            --- Set the interface as final
+            --- Set the interface as final, or its method, meta-method or feature as final
             -- @static
             -- @method  SetFinal
             -- @owner   interface
             -- @format  (target[, stack])
+            -- @format  (target, name[, stack])
             -- @param   target                      the target interface
+            -- @param   name                        the interface's method, meta-method or feature
             -- @param   stack                       the stack level
-            ["SetFinal"]        = function(target, stack)
-                setModifiedFlag(interface, target, MOD_FINAL_IC, "SetFinal", stack)
+            ["SetFinal"]        = function(target, name, stack)
+                if type(name) == "string" then
+                    local msg, stack= setPriority(target, name, INRT_PRIORITY_FINAL, stack)
+                    if msg then error("Usage: interface.SetFinal(target, name[, stack]) - " .. msg, stack + 1) end
+                else
+                    stack = name
+                    setModifiedFlag(interface, target, MOD_FINAL_IC, "SetFinal", stack)
+                end
             end;
 
             --- Set the interface's destructor
@@ -6675,7 +6825,7 @@ do
             -- @param   target                      the target interface
             -- @return  target                      return the target if it's an interface, otherwise nil
             ["Validate"]        = function(target)
-                return getmetatable(target) == interface and getICTargetInfo(target) and target or nil
+                return getmetatable(target) == interface and target or nil
             end;
         },
         __newindex              = readOnly,
@@ -6924,6 +7074,33 @@ do
                 return info and info[FLD_IC_SUPCLS]
             end;
 
+            --- Get the super method of the target class with the given name
+            -- @static
+            -- @method  GetSuperMethod
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the method name
+            -- @return  function                    the super method
+            ["GetSuperMethod"]  = interface.GetSuperMethod;
+
+            --- Get the super meta-method of the target class with the given name
+            -- @static
+            -- @method  GetSuperMetaMethod
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the meta-method name
+            -- @return  function                    the super meta-method
+            ["GetSuperMetaMethod"] = interface.GetSuperMetaMethod;
+
+            --- Get the super feature of the target class with the given name
+            -- @static
+            -- @method  GetSuperFeature
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the feature name
+            -- @return  function                    the super feature
+            ["GetSuperFeature"] = interface.GetSuperFeature;
+
             --- Get the super refer of the target class
             -- @static
             -- @method  GetSuperRefer
@@ -7095,15 +7272,23 @@ do
                 _Parser         = saveStorage(_Parser, parser, true)
             end;
 
-            --- Set the class as abstract
+            --- Set the class as abstract, or its method, meta-method or feature as abstract
             -- @static
             -- @method  SetAbstract
             -- @owner   class
             -- @format  (target[, stack])
+            -- @format  (target, name[, stack])
             -- @param   target                      the target class
+            -- @param   name                        the class's method, meta-method or feature
             -- @param   stack                       the stack level
-            ["SetAbstract"]     = function(target, stack)
-                setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack)
+            ["SetAbstract"]     = function(target, name, stack)
+                if type(name) == "string" then
+                    local msg, stack= setPriority(target, name, INRT_PRIORITY_ABSTRACT, stack)
+                    if msg then error("Usage: class.SetAbstract(target, name[, stack]) - " .. msg, stack + 1) end
+                else
+                    stack = name
+                    setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack)
+                end
             end;
 
             --- Set the class as a simple class, normally class without constructor and
@@ -7147,15 +7332,23 @@ do
                 end
             end;
 
-            --- Set the class as final
+            --- Set the class as final, or its method, meta-method or feature as final
             -- @static
             -- @method  SetFinal
             -- @owner   class
             -- @format  (target[, stack])
+            -- @format  (target, name[, stack])
             -- @param   target                      the target class
+            -- @param   name                        the class's method, meta-method or feature
             -- @param   stack                       the stack level
-            ["SetFinal"]        = function(target, stack)
-                setModifiedFlag(class, target, MOD_FINAL_IC, "SetFinal", stack)
+            ["SetFinal"]        = function(target, name, stack)
+                if type(name) == "string" then
+                    local msg, stack= setPriority(target, name, INRT_PRIORITY_FINAL, stack)
+                    if msg then error("Usage: class.SetFinal(target, name[, stack]) - " .. msg, stack + 1) end
+                else
+                    stack = name
+                    setModifiedFlag(class, target, MOD_FINAL_IC, "SetFinal", stack)
+                end
             end;
 
             --- Set the class's object exist checker
@@ -7298,7 +7491,7 @@ do
             -- @param   target                      the target class
             -- @return  target                      return the target if it's a class, otherwise nil
             ["Validate"]        = function(target)
-                return getmetatable(target) == class and getICTargetInfo(target) and target or nil
+                return getmetatable(target) == class and target or nil
             end;
         },
         __newindex              = readOnly,
@@ -7336,7 +7529,7 @@ do
                 local info  = _ICInfo[self]
                 if info then
                     -- Static or object methods
-                    oper    = info[key] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][key]
+                    local oper  = info[key] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][key]
                     if oper then return oper end
 
                     -- Static features
@@ -7388,7 +7581,7 @@ do
     tclass                      = prototype (tinterface, {
         __call                  = function(self, ...)
             local info  = _ICInfo[self]
-            local obj   = info[FLD_IC_OBCTOR](...)
+            local obj   = info[FLD_IC_OBCTOR](info, ...)
             return obj
         end,
         __metatable             = class,
@@ -7486,6 +7679,10 @@ do
             _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
             interface.EndDefinition(owner, stack)
 
+            -- Save super refer
+            local super = interface.GetSuperRefer(owner)
+            if super then rawset(self, IC_KEYWORD_SUPER, super) end
+
             if getfenv(stack) == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
             end
@@ -7535,6 +7732,14 @@ do
 
             _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
             class.EndDefinition(owner, stack)
+
+            -- Save super refer
+            local super = class.GetSuperRefer(owner)
+            if super then rawset(self, IC_KEYWORD_SUPER, super) end
+
+            -- Save this refer
+            local this  = class.GetThisRefer(owner)
+            if this then rawset(self, IC_KEYWORD_THIS, this) end
 
             if getfenv(stack) == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
@@ -7631,6 +7836,10 @@ do
         _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
         interface.EndDefinition(owner, stack)
 
+        -- Save super refer
+        local super = interface.GetSuperRefer(owner)
+        if super then rawset(visitor, IC_KEYWORD_SUPER, super) end
+
         local baseEnv       = environment.GetParent(visitor) or _G
 
         setfenv(stack, baseEnv)
@@ -7659,6 +7868,14 @@ do
         _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
         class.EndDefinition(owner, stack)
 
+        -- Save super refer
+        local super = class.GetSuperRefer(owner)
+        if super then rawset(visitor, IC_KEYWORD_SUPER, super) end
+
+        -- Save this refer
+        local this  = class.GetThisRefer(owner)
+        if this then rawset(visitor, IC_KEYWORD_THIS, this) end
+
         local baseEnv       = environment.GetParent(visitor) or _G
 
         setfenv(stack, baseEnv)
@@ -7677,85 +7894,224 @@ do
     ATTRTAR_EVENT               = attribute.RegisterTargetType("Event")
 
     -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    local FLD_EVENT_HANDLER     = 0
+    local FLD_EVENT_NAME        = 1
+    local FLD_EVENT_FIELD       = 2
+    local FLD_EVENT_OWNER       = 3
+    local FLD_EVENT_STATIC      = 4
+    local FLD_EVENT_DELEGATE    = 5
+
+    local FLD_EVENT_META        = "__PLOOP_EVENT_META"
+    local FLD_EVENT_PREFIX      = "__PLOOP_EVENT_"
+
+    -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _EvtInfo  = setmetatable({}, WEAK_KEY)
+    local _EventInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_EVENT_META) or nil end})
+                                    or  newStorage(WEAK_KEY)
 
-    local FD_NAME   = 0
-    local FD_OWNER  = 1
-    local FD_STATIC = 2
-    local FD_INDEF  = 3
+    local _EventInDefine        = newStorage(WEAK_KEY)
 
-    -- Key feature : event "Name"
-    event           = prototype "event" (typefeature, {
-        __index     = {
-            ["BeginDefinition"] = function(owner, name, definition, super, stack)
-                local evt       = prototype "name" (tevent)
-                _EvtInfo[evt]   = setmetatable({ [FD_NAME] = name, [FD_OWNER] = owner, [FD_INDEF] = true }, WEAK_KEY)
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
+    local saveEventInfo         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function(target, info) rawset(target, FLD_EVENT_META, info) end
+                                    or  function(target, info) _EventInfo = saveStorage(_EventInfo, target, info) end
 
-                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack + 1)
-                attribute.ApplyAttributes  (evt, ATTRTAR_EVENT, nil, owner, name, super)
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    event                       = prototype {
+        __tostring              = "event",
+        __index                 = {
+            ["Invoke"]          = function(self, obj, ...)
+                -- No check, as simple as it could be
+                local delegate  = rawget(obj, _EventInfo[self][FLD_EVENT_FIELD])
+                if delegate then return delegate:Invoke(obj, ...) end
+            end;
+
+            ["Parse"]           = function(owner, key, value, stack)
+                if type(key) == "string" and type(value) == "boolean" and owner and (interface.Validate(owner) or class.Validate(owner)) then
+                    local evt       = prototype.NewProxy(tevent)
+                    local info      = {
+                        [FLD_EVENT_NAME]    = key,
+                        [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNameSpaceName(owner, true) .. "_" .. key,
+                        [FLD_EVENT_OWNER]   = owner,
+                        [FLD_EVENT_STATIC]  = value or nil,
+                    }
+
+                    saveEventInfo(evt, info)
+
+                    local super     = interface.GetSuperFeature(owner, key)
+                    if super and event.Validate(super) then
+                        _EventInDefine  = saveStorage(_EventInDefine, evt, true)
+                        attribute.InheritAttributes(evt, ATTRTAR_EVENT, super)
+                        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, key)
+                        _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
+                        attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, key)
+                    end
+
+                    interface.AddFeature(owner, key, evt, stack + 1)
+
+                    return true
+                end
+            end;
+
+            ["Validate"]        = function(self) return _EventInfo[self] and self or nil end;
+        },
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(event, ...)
+
+            stack               = stack + 1
+
+            if not name or name == "" then error([[Usage: event "name" - the name must be a string]], stack) end
+
+            local owner = visitor and environment.GetNameSpace(visitor)
+
+            if owner and (interface.Validate(owner) or class.Validate(owner)) then
+                local evt       = prototype.NewProxy(tevent)
+                local info      = {
+                    [FLD_EVENT_NAME]    = name,
+                    [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNameSpaceName(owner, true) .. "_" .. name,
+                    [FLD_EVENT_OWNER]   = owner,
+                    [FLD_EVENT_STATIC]  = flag or nil,
+                }
+
+                saveEventInfo(evt, info)
+
+                _EventInDefine  = saveStorage(_EventInDefine, evt, true)
+
+                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack)
+
+                local super     = interface.GetSuperFeature(owner, name)
+                if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
+                attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name)
+
+                _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
+
+                attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, name)
+
+                interface.AddFeature(owner, name, evt, stack)
+
+                -- Save the event proxy to the visitor, so it can be called directly
+                rawset(visitor, name, evt)
 
                 return evt
-            end;
+            else
+                error([[Usage: event "name" - the event can't be used here.]], stack)
+            end
+        end,
+    }
 
-            ["EndDefinition"]   = function(feature, owner, name)
-                attribute.AttachAttributes (feature, ATTRTAR_EVENT, owner, name)
+    tevent                      = prototype {
+        __tostring              = function(self)
+            local info = _EventInfo[self]
+            return "[event]" .. namespace.GetNameSpaceName(info[FLD_EVENT_OWNER]) .. "." .. info[FLD_EVENT_NAME]
+        end;
+        __index                 = {
+            ["Get"]             = function(self, obj, nocreation)
+                local info      = _EventInfo[self]
+                if info then
+                    if info[FLD_EVENT_STATIC] then
+                        local delegate      = info[FLD_EVENT_DELEGATE]
+                        if not delegate and not nocreation then
+                            delegate        = Delegate()
+                            info[FLD_EVENT_STATIC] = delegate
 
-                local info      = _EvtInfo[feature]
-                if info then info[FD_INDEF] = nil end
-            end;
+                            if info[FLD_EVENT_HANDLER] then
+                                local owner     = info[FLD_EVENT_OWNER]
+                                local name      = info[FLD_EVENT_NAME]
+                                local handler   = info[FLD_EVENT_HANDLER]
+                                delegate.OnChange = delegate.OnChange + function(self)
+                                    return handler(self, owner, name)
+                                end
+                            end
+                        end
+                        return delegate
+                    elseif type(obj) == "table" then
+                        local delegate      = rawget(obj, info[FLD_EVENT_FIELD])
+                        if not delegate or getmetatable(delegate) ~= Delegate then
+                            if nocreation then return end
 
-            ["GetFeature"]      = function(feature) return feature end;
+                            delegate        = Delegate()
+                            rawset(obj, info[FLD_EVENT_FIELD], delegate)
 
-            ["Invoke"]          = function(feature, obj, ...)
-                local info      = _EvtInfo[feature]
-                local handler   = info and info[obj]
-                if handler then
-
+                            if info[FLD_EVENT_HANDLER] then
+                                local name      = info[FLD_EVENT_NAME]
+                                local handler   = info[FLD_EVENT_HANDLER]
+                                delegate.OnChange = delegate.OnChange + function(self)
+                                    return handler(self, obj, name)
+                                end
+                            end
+                        end
+                        return delegate
+                    end
                 end
             end;
 
-            ["IsStatic"]        = function(feature)
-                local info      = _EvtInfo[feature]
-                return info and info[FD_STATIC] or false
+            ["GetEventChangeHandler"] = function(self)
+                local info      = _EventInfo[self]
+                return info and info[FLD_EVENT_HANDLER] or false
             end;
 
-            ["SetStatic"]       = function(feature, stack)
-                stack           = type(stack) == "number" and stack or 2
-                local info      = _EvtInfo[feature]
-                if info then
-                    if info[FD_INDEF] then
-                        info[FD_STATIC] = true
-                    elseif not info[FD_STATIC] then
-                        error("Usage: event.SetStatic(event[, stack]) - The event's definition is finished", stack)
+            ["Invoke"]          = event.Invoke;
+
+            ["IsShareable"]     = function(self) return true end;
+
+            ["IsStatic"]        = function(self)
+                local info      = _EventInfo[self]
+                return info and info[FLD_EVENT_STATIC] or false
+            end;
+
+            ["Set"]             = function(self, obj, delegate, stack)
+                local info      = _EventInfo[self]
+                stack           = (type(stack) == "number" and stack or 1) + 1
+                if not info then error("Usage: event:Set(obj, delegate[, stack]) - the event is not valid", stack) end
+                if type(obj) ~= "table" then error("Usage: event:Set(obj, delegate[, stack]) - the object is not valid", stack) end
+
+                local odel      = self:Get(obj)
+                if delegate == nil then
+                    odel:SetFinalFunction(nil)
+                elseif type(delegate) == "function" then
+                    attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
+                    local ret = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, info[FLD_EVENT_NAME])
+                    attribute.ReleaseTargetAttributes(delegate)
+                    odel:SetFinalFunction(ret)
+                elseif getmetatable(delegate) == Delegate then
+                    if delegate ~= odel then
+                        delegate:CopyTo(odel)
                     end
                 else
-                    error("Usage: event.SetStatic(event[, stack]) - The event object is not valid", stack)
+                    error("Usage: event:Set(obj, delegate[, stack]) - the delegate can only be function or object of System.Delegate", stack)
                 end
             end;
 
-            ["Validate"]        = function(feature)
-                return _EvtInfo[feature] and feature or nil
+            ["SetEventChangeHandler"] = function(self, handler, stack)
+                stack           = (type(stack) == "number" and stack or 1) + 1
+                if _EventInDefine[self] then
+                    if type(handler) ~= "function" then error("Usage: event:SetEventChangeHandler(handler[, stack]) - the handler must be a function", stack) end
+                    _EventInfo[self][FLD_EVENT_HANDLER] = handler
+                else
+                    error("Usage: event:SetEventChangeHandler(handler[, stack]) - the event's definition is finished", stack)
+                end
+            end;
+
+            ["SetStatic"]       = function(self, stack)
+                if _EventInDefine[self] then
+                    _EventInfo[self][FLD_EVENT_STATIC] = true
+                else
+                    error("Usage: event:SetStatic([stack]) - the event's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
             end;
         },
-        __call      = function(self, ...)
-            if self == event then
-                local owner,env, name, definition, flag, stack = getFeatureParams(event, ...)
-                if not owner then error([[Usage: event "name" - can't be used here.]], stack) end
-                if type(name) ~= "string" then error([[Usage: event "name" - the name must be a string.]], stack) end
-                name = strtrim(name)
-                if name == "" then error([[Usage: event "name" - the name can't be an empty string.]], stack) end
-
-                getmetatable(owner).AddFeature(owner, event, name, definition, stack + 1)
-            else
-                error([[Usage: event "name" - can only be used by event command.]], stack)
-            end
-        end;
-    })
-
-    tevent          = prototype "tevent" {
-        __call      = event.Invoke,
+        __newindex              = readOnly,
+        __call                  = event.Invoke,
+        __metatable             = event,
     }
 end
 
@@ -7769,57 +8125,931 @@ do
     ATTRTAR_PROPERTY            = attribute.RegisterTargetType("Property")
 
     -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    -- MODIFIER
+    local MOD_PROP_STATIC       = 2^0
+
+    local MOD_PROP_SETCLONE     = 2^1
+    local MOD_PROP_SETDEEPCL    = 2^2
+    local MOD_PROP_SETRETAIN    = 2^3
+    local MOD_PROP_SETWEAK      = 2^4
+
+    local MOD_PROP_GETCLONE     = 2^5
+    local MOD_PROP_GETDEEPCL    = 2^6
+
+    -- PROPERTY FIELDS
+    local FLD_PROP_MOD          =  0
+    local FLD_PROP_RAWGET       =  1
+    local FLD_PROP_RAWSET       =  2
+    local FLD_PROP_NAME         =  3
+    local FLD_PROP_OWNER        =  4
+    local FLD_PROP_TYPE         =  5
+    local FLD_PROP_VALID        =  6
+    local FLD_PROP_FIELD        =  7
+    local FLD_PROP_GET          =  8
+    local FLD_PROP_SET          =  9
+    local FLD_PROP_GETMETHOD    = 10
+    local FLD_PROP_SETMETHOD    = 11
+    local FLD_PROP_DEFAULT      = 12
+    local FLD_PROP_DEFAULTFUNC  = 13
+    local FLD_PROP_HANDLER      = 14
+    local FLD_PROP_EVENT        = 15
+    local FLD_PROP_STATIC       = 16
+
+    -- FLAGS FOR PROPERTY BUILDING
+    local FLG_PROPGET_DISABLE   = 2^0
+    local FLG_PROPGET_DEFAULT   = 2^1
+    local FLG_PROPGET_DEFTFUNC  = 2^2
+    local FLG_PROPGET_GET       = 2^3
+    local FLG_PROPGET_GETMETHOD = 2^4
+    local FLG_PROPGET_FIELD     = 2^5
+    local FLG_PROPGET_SETWEAK   = 2^6
+    local FLG_PROPGET_SETFALSE  = 2^7
+    local FLG_PROPGET_CLONE     = 2^8
+    local FLG_PROPGET_DEEPCLONE = 2^9
+    local FLG_PROPGET_STATIC    = 2^10
+
+    local FLG_PROPSET_DISABLE   = 2^0
+    local FLG_PROPSET_TYPE      = 2^1
+    local FLG_PROPSET_CLONE     = 2^2
+    local FLG_PROPSET_DEEPCLONE = 2^3
+    local FLG_PROPSET_SET       = 2^4
+    local FLG_PROPSET_SETMETHOD = 2^5
+    local FLG_PROPSET_FIELD     = 2^6
+    local FLG_PROPSET_DEFAULT   = 2^7
+    local FLG_PROPSET_SETWEAK   = 2^8
+    local FLG_PROPSET_RETAIN    = 2^9
+    local FLG_PROPSET_SIMPDEFT  = 2^10
+    local FLG_PROPSET_HANDLER   = 2^11
+    local FLG_PROPSET_EVENT     = 2^12
+    local FLG_PROPSET_STATIC    = 2^13
+
+    local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
+    local FLD_PROP_OBJ_WEAK     = "__PLOOP_PROPERTY_WEAK"
+
+    -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
+    local _PropertyInfo         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_PROP_META) or nil end})
+                                    or  newStorage(WEAK_KEY)
+
+    local _PropertyInDefine     = newStorage(WEAK_KEY)
+
+    local _PropGetMap           = {}
+    local _PropSetMap           = {}
+
+    local _PropGetPrefix        = { "get", "Get", "is", "Is" }
+    local _PropSetPrefix        = { "set", "Set" }
 
     -----------------------------------------------------------------------
-    --                             property                              --
+    --                          private helpers                          --
     -----------------------------------------------------------------------
-    -- Key feature : property "Name" { Type = String, Default = "Anonymous" }
-    property        = prototype "property" {
-        __index     = {
-            ["New"]             = function(self, owner, name)
+    local savePropertyInfo      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function(target, info) rawset(target, FLD_PROP_META, info) end
+                                    or  function(target, info) _PropertyInfo = saveStorage(_PropertyInfo, target, info) end
 
-            end;
 
-            ["GetFeature"]      = function(feature) return nil end;
-        },
-        __call      = function(self, ...)
-            if self == property then
-                local owner, env, name, definition, flag, stack = getFeatureParams(property, ...)
-                if not owner or not tarenv then error([[Usage: property "name" {...} - can't be used here.]], stack) end
-                if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
-                name = strtrim(name)
-                if name == "" then error([[Usage: property "name" {...} - the name can't be an empty string.]], stack) end
+    local genPropertyGet        = function (info)
+        if info[FLD_PROP_GET] and info[FLD_PROP_DEFAULT] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and not validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
+            info[FLD_PROP_RAWGET] = info[FLD_PROP_GET]
+            return
+        end
 
-                if definition then
-                    if type(definition) ~= "table" then error([[Usage: property ("name", {...}) - the definition must be a table.]], stack) end
-                    getmetatable(owner).AddFeature(owner, property, name, definition, stack + 1)
+        local token         = 0
+        local usename       = false
+        local upval         = _Cache()
+
+        if info[FLD_PROP_GET] == false or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and info[FLD_PROP_DEFAULT] == nil) then
+            token           = turnOnFlags(FLG_PROPGET_DISABLE, token)
+            usename         = true
+        else
+            if info[FLD_PROP_DEFAULTFUNC] then
+                token       = turnOnFlags(FLG_PROPGET_DEFTFUNC, token)
+                tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
+                if info[FLD_PROP_SET] == false then
+                    token   = turnOnFlags(FLG_PROPGET_SETFALSE, token)
                 else
-                    return prototype.NewObject(property, { name = name, owner = owner })
+                    usename = true
                 end
+            elseif info[FLD_PROP_DEFAULT] ~= nil then
+                token       = turnOnFlags(FLG_PROPGET_DEFAULT, token)
+                tinsert(upval, info[FLD_PROP_DEFAULT])
+            end
+
+            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                token       = turnOnFlags(FLG_PROPGET_SETWEAK, token)
+            end
+
+            if validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token       = turnOnFlags(FLG_PROPGET_STATIC, token)
+                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                    tinsert(upval, info[FLD_PROP_STATIC])
+                else
+                    tinsert(upval, info)
+                end
+            end
+
+            if info[FLD_PROP_GET] then
+                token       = turnOnFlags(FLG_PROPGET_GET, token)
+                tinsert(upval, info[FLD_PROP_GET])
+            elseif info[FLD_PROP_GETMETHOD] then
+                token       = turnOnFlags(FLG_PROPGET_GETMETHOD, token)
+                tinsert(upval, info[FLD_PROP_GETMETHOD])
+            elseif info[FLD_PROP_FIELD] ~= nil then
+                token       = turnOnFlags(FLG_PROPGET_FIELD, token)
+                tinsert(upval, info[FLD_PROP_FIELD])
+            end
+
+            if validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
+                token       = turnOnFlags(FLG_PROPGET_CLONE, token)
+                if validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) then
+                    token   = turnOnFlags(FLG_PROPGET_DEEPCLONE, token)
+                end
+            end
+        end
+
+        if usename then tinsert(upval, info[FLD_PROP_NAME]) end
+
+        -- Building
+        if not _PropGetMap[token] then
+            local head      = _Cache()
+            local body      = _Cache()
+            local apis      = _Cache()
+
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
+            tinsert(body, [[return function(_, self)]])
+
+            if validateFlags(FLG_PROPGET_DISABLE, token) then
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                tinsert(body, [[error(strformat("the %s can't be read", name),2)]])
             else
-                local owner, name       = self.owner, self.name
-                local definition, stack = ...
+                if validateFlags(FLG_PROPGET_DEFTFUNC, token) then
+                    tinsert(head, "defaultFunc")
+                elseif validateFlags(FLG_PROPGET_DEFAULT, token) then
+                    tinsert(head, "default")
+                end
 
-                if type(name) ~= "string" then error([[Usage: property "name" {...} - the name must be a string.]], stack) end
-                name = strtrim(name)
-                if name == "" then error([[Usage: property "name" {...} - the name can't be an empty string.]], stack) end
-                if type(definition) ~= "table" then error([[Usage: property ("name", {...}) - the definition must be a table.]], stack) end
+                if validateFlags(FLG_PROPGET_STATIC, token) then
+                    uinsert(apis, "fakefunc")
+                    tinsert(head, "storage")
+                end
 
-                getmetatable(owner).AddFeature(owner, property, name, definition, stack + 1)
+                tinsert(body, [[local value]])
+
+                if validateFlags(FLG_PROPGET_GET, token) then
+                    tinsert(head, "get")
+                    tinsert(body, [[value = get(self)]])
+                elseif validateFlags(FLG_PROPGET_GETMETHOD, token) then
+                    -- won't be static
+                    tinsert(head, "getMethod")
+                    tinsert(body, [[value = self[getMethod](self)]])
+                elseif validateFlags(FLG_PROPGET_FIELD, token) then
+                    tinsert(head, "field")
+                    if validateFlags(FLG_PROPGET_STATIC, token) then
+                        if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                            tinsert(body, [[value = storage[0] ]])
+                        else
+                            tinsert(body, [[value = storage[]] .. FLD_PROP_STATIC .. [[] ]])
+                        end
+                        tinsert(body, [[if value == fakefunc then value = nil end]])
+                    else
+                        uinsert(apis, "rawget")
+                        if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                            tinsert(body, [[
+                                value = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                if value then value = value[field] else value = nil end
+                            ]])
+                        else
+                            tinsert(body, [[value = rawget(self, field)]])
+                        end
+                    end
+                end
+
+                -- Nil Handler
+                if validateFlags(FLG_PROPGET_DEFTFUNC, token) or validateFlags(FLG_PROPGET_DEFAULT, token) then
+                    tinsert(body, [[if value == nil then]])
+
+                    if validateFlags(FLG_PROPGET_DEFTFUNC, token) then
+                        tinsert(body, [[value = defaultFunc(self)]])
+                        tinsert(body, [[if value ~= nil then]])
+
+                        if validateFlags(FLG_PROPGET_STATIC, token) then
+                            if validateFlags(FLG_PROPGET_SETFALSE, token) then
+                                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                                    tinsert(body, [[storage[0] = value]])
+                                else
+                                    tinsert(body, [[storage[]] .. FLD_PROP_STATIC .. [[] = value]])
+                                end
+                            else
+                                tinsert(body, [[self[name]=value]])
+                            end
+                        else
+                            if validateFlags(FLG_PROPGET_SETFALSE, token) then
+                                uinsert(apis, "rawset")
+                                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                                    uinsert(apis, "rawget")
+                                    uinsert(apis, "type")
+                                    uinsert(apis, "setmetatable")
+                                    uinsert(apis, "WEAK_VALUE")
+                                    tinsert(body, [[
+                                        local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                        if type(container) ~= "table" then
+                                            container   = setmetatable({}, WEAK_VALUE)
+                                            rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                        end
+                                        container[field] = value
+                                    ]])
+                                else
+                                    tinsert(body, [[rawset(self, field, value)]])
+                                end
+                            else
+                                tinsert(body, [[self[name]=value]])
+                            end
+                        end
+
+                        tinsert(body, [[end]])
+                    elseif validateFlags(FLG_PROPGET_DEFAULT, token) then
+                        tinsert(body, [[value = default]])
+                    end
+
+                    tinsert(body, [[end]])
+                end
+
+                -- Clone
+                if validateFlags(FLG_PROPGET_CLONE, token) then
+                    uinsert(apis, "clone")
+                    if validateFlags(FLG_PROPGET_DEEPCLONE) then
+                        tinsert(body, [[value = clone(value, true, true)]])
+                    else
+                        tinsert(body, [[value = clone(value)]])
+                    end
+                end
+
+                tinsert(body, [[return value]])
+            end
+            tinsert(body, [[end]])
+            tinsert(body, [[end]])
+
+            if usename then tinsert(head, "name") end
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
+            end
+
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
+
+            _PropGetMap[token]  = loadSnippet(tblconcat(body, "\n"), "Property_Get_" .. token)()
+
+            if #head == 0 then
+                _PropGetMap[token]  = _PropGetMap[token]()
+            end
+
+            _Cache(head)
+            _Cache(body)
+            _Cache(apis)
+        end
+
+        if #upval > 0 then
+            info[FLD_PROP_RAWGET]   = _PropGetMap[token](unpack(upval))
+        else
+            info[FLD_PROP_RAWGET]   = _PropGetMap[token]
+        end
+
+        _Cache(upval)
+    end
+
+    local genPropertySet        = function (info)
+        if info[FLD_PROP_SET] and not info[FLD_PROP_TYPE] and not validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
+            info[FLD_PROP_RAWSET]   = info[FLD_PROP_SET]
+            return
+        end
+
+        local token             = 0
+        local usename           = false
+        local upval             = _Cache()
+
+        -- Calc the token
+        if info[FLD_PROP_SET] == false or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
+            token               = turnOnFlags(FLG_PROPSET_DISABLE, token)
+            usename             = true
+        else
+            if info[FLD_PROP_TYPE] then
+                token           = turnOnFlags(FLG_PROPSET_TYPE, token)
+                tinsert(upval, info[FLD_PROP_VALID])
+                tinsert(upval, info[FLD_PROP_TYPE])
+                usename         = true
+            end
+
+            if validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
+                token           = turnOnFlags(FLG_PROPSET_CLONE, token)
+                if validateFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) then
+                    token       = turnOnFlags(FLG_PROPSET_DEEPCLONE, token)
+                end
+            end
+
+            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                token = turnOnFlags(FLG_PROPSET_SETWEAK, token)
+            end
+
+            if validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token = turnOnFlags(FLG_PROPSET_STATIC, token)
+                if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                    tinsert(upval, info[FLD_PROP_STATIC])
+                else
+                    tinsert(upval, info)
+                end
+            end
+
+            if info[FLD_PROP_SET] then
+                token = turnOnFlags(FLG_PROPSET_SET, token)
+                tinsert(upval, info[FLD_PROP_SET])
+            elseif info[FLD_PROP_SETMETHOD] and not validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token = turnOnFlags(FLG_PROPSET_SETMETHOD, token)
+                tinsert(upval, info[FLD_PROP_SETMETHOD])
+            elseif info[FLD_PROP_FIELD] then
+                token = turnOnFlags(FLG_PROPSET_FIELD, token)
+                tinsert(upval, info[FLD_PROP_FIELD])
+
+                if info[FLD_PROP_DEFAULT] ~= nil then
+                    token = turnOnFlags(FLG_PROPSET_DEFAULT, token)
+                    tinsert(upval, info[FLD_PROP_DEFAULT])
+
+                    if type(info[FLD_PROP_DEFAULT]) ~= "table" then
+                        token = turnOnFlags(FLG_PROPSET_SIMPDEFT, token)
+                    end
+                end
+
+                if validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) then
+                    token = turnOnFlags(FLG_PROPSET_RETAIN, token)
+                end
+
+                if info[FLD_PROP_HANDLER] then
+                    token = turnOnFlags(FLG_PROPSET_HANDLER, token)
+                    tinsert(upval, info[FLD_PROP_HANDLER])
+                    usename = true
+                end
+
+                if info[FLD_PROP_EVENT] then
+                    token = turnOnFlags(FLG_PROPSET_EVENT, token)
+                    tinsert(upval, info[FLD_PROP_EVENT])
+                    usename = true
+                end
+            end
+        end
+
+        if usename then tinsert(upval, info[FLD_PROP_NAME]) end
+
+        -- Building
+        if not _PropSetMap[token] then
+            local head      = _Cache()
+            local body      = _Cache()
+            local apis      = _Cache()
+
+            tinsert(body, "")                       -- remain for shareable variables
+            tinsert(body, "return function(%s)")    -- remain for special variables
+
+            tinsert(body, [[return function(_, self, value)]])
+
+            if validateFlags(FLG_PROPSET_DISABLE, token) then
+                uinsert(apis, "error")
+                uinsert(apis, "strformat")
+                tinsert(body, [[error(strformat("the %s can't be set", name), 3)]])
+            else
+                if validateFlags(FLG_PROPSET_TYPE, token) then
+                    uinsert(apis, "error")
+                    uinsert(apis, "type")
+                    uinsert(apis, "strgsub")
+                    tinsert(head, "valid")
+                    tinsert(head, "vtype")
+                    tinsert(body, [[
+                        local ret, msg = valid(vtype, value)
+                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
+                    ]])
+                end
+
+                if validateFlags(FLG_PROPSET_CLONE, token) then
+                    uinsert(apis, "clone")
+                    if validateFlags(FLG_PROPSET_DEEPCLONE, token) then
+                        tinsert(body, [[value = clone(value, true, true)]])
+                    else
+                        tinsert(body, [[value = clone(value)]])
+                    end
+                end
+
+                if validateFlags(FLG_PROPSET_STATIC, token) then
+                    uinsert(apis, "fakefunc")
+                    tinsert(head, "storage")
+                end
+
+                if validateFlags(FLG_PROPSET_SET, token) then
+                    tinsert(head, "set")
+                    tinsert(body, [[return set(self, value)]])
+                elseif validateFlags(FLG_PROPSET_SETMETHOD, token) then
+                    tinsert(head, "setmethod")
+                    tinsert(body, [[return self[setmethod](self, value)]])
+                elseif validateFlags(FLG_PROPSET_FIELD, token) then
+                    tinsert(head, "field")
+
+                    if validateFlags(FLG_PROPSET_STATIC, token) then
+                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                            tinsert(body, [[local old = storage[0] ]])
+                        else
+                            tinsert(body, [[local old = storage[]] .. FLD_PROP_STATIC .. [[] ]])
+                        end
+
+                        tinsert(body, [[if old == fakefunc then old = nil end]])
+                    else
+                        uinsert(apis, "rawset")
+                        uinsert(apis, "rawget")
+                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                            uinsert(apis, "type")
+                            uinsert(apis, "setmetatable")
+                            uinsert(apis, "WEAK_VALUE")
+                            tinsert(body, [[
+                                local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                if type(container) ~= "table" then
+                                    container   = setmetatable({}, WEAK_VALUE)
+                                    rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                end
+                                local old = container[field]
+                            ]])
+                        else
+                            tinsert(body, [[local old = rawget(self, field)]])
+                        end
+                    end
+
+                    if validateFlags(FLG_PROPSET_DEFAULT, token) then
+                        tinsert(head, "default")
+                        tinsert(body, [[if old == nil then old = default end]])
+                        tinsert(body, [[if value == nil then value = default end]])
+                    end
+
+                    tinsert(body, [[if old == value then return end]])
+
+                    if validateFlags(FLG_PROPSET_STATIC, token) then
+                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                            tinsert(body, [[storage[0] = value == nil and fakefunc or value ]])
+                        else
+                            tinsert(body, [[storage[]] .. FLD_PROP_STATIC .. [[] = value == nil and fakefunc or value ]])
+                        end
+                    else
+                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                            tinsert(body, [[container[field] = value)]])
+                        else
+                            tinsert(body, [[rawset(self, field, value)]])
+                        end
+                    end
+
+                    if validateFlags(FLG_PROPSET_RETAIN, token) then
+                        tinsert(body, [[if old and old ~= default then obj:Dispose() old = nil end]])
+                    end
+
+                    if validateFlags(FLG_PROPSET_DEFAULT, token) and not validateFlags(FLG_PROPSET_SIMPDEFT, token) then
+                        tinsert(body, [[if old == default then old = nil end]])
+                    end
+
+                    if validateFlags(FLG_PROPSET_HANDLER, token) then
+                        tinsert(head, "handler")
+                        tinsert(body, [[handler(self, value, old, name)]])
+                    end
+
+                    if validateFlags(FLG_PROPSET_EVENT, token) then
+                        tinsert(head, "evt")
+                        tinsert(body, [[return evt(self, value, old, name)]])
+                    end
+                end
+            end
+
+            tinsert(body, [[end]])
+            tinsert(body, [[end]])
+
+            if usename then tinsert(head, "name") end
+
+            if #apis > 0 then
+                local declare   = tblconcat(apis, ", ")
+                body[1]         = strformat("local %s = %s", declare, declare)
+            end
+
+            body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
+
+            _PropSetMap[token]  = loadSnippet(tblconcat(body, "\n"), "Property_Set_" .. token)()
+
+            if #head == 0 then
+                _PropSetMap[token]  = _PropSetMap[token]()
+            end
+
+            _Cache(head)
+            _Cache(body)
+            _Cache(apis)
+        end
+
+        if #upval > 0 then
+            info[FLD_PROP_RAWSET]   = _PropSetMap[token](unpack(upval))
+        else
+            info[FLD_PROP_RAWSET]   = _PropSetMap[token]
+        end
+
+        _Cache(upval)
+    end
+
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    property                    = prototype {
+        __index                 = {
+            ["Validate"]        = function(self) return _PropertyInfo[self] and self or nil end;
+        },
+        __call                  = function(self, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(property, ...)
+
+            stack               = stack + 1
+
+            if not name or name == "" then error([[Usage: property "name" { ... } - the name must be a string]], stack) end
+
+            local owner = visitor and environment.GetNameSpace(visitor)
+
+            if owner and (interface.Validate(owner) or class.Validate(owner)) then
+                local prop      = prototype.NewProxy(tproperty)
+                local info      = {
+                    [FLD_PROP_NAME]    = name,
+                    [FLD_PROP_OWNER]   = owner,
+                }
+
+                savePropertyInfo(prop, info)
+
+                _PropertyInDefine  = saveStorage(_PropertyInDefine, prop, true)
+
+                attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack)
+
+                local super     = interface.GetSuperFeature(owner, name)
+                if super and property.Validate(super) then attribute.InheritAttributes(prop, ATTRTAR_PROPERTY, super) end
+
+                return prop
+            else
+                error([[Usage: property "name" - the property can't be used here.]], stack)
             end
         end,
     }
 
-    tproperty       = prototype "tproperty" { __metatable = property }
+    tproperty                   = prototype {
+        __tostring              = function(self)
+            local info = _PropertyInfo[self]
+            return "[property]" .. namespace.GetNameSpaceName(info[FLD_PROP_OWNER]) .. "." .. info[FLD_PROP_NAME]
+        end;
+        __index                 = {
+            ["GetAccessor"]     = function(self)
+                local info      = _PropertyInfo[self]
+                if not info then return end
+
+                if not info[FLD_PROP_RAWGET] then
+                    local name      = info[FLD_PROP_NAME]
+                    local uname     = name:gsub("^%a", strupper)
+                    local owner     = info[FLD_PROP_OWNER]
+                    local isstatic  = validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+
+                    -- Check get method
+                    if info[FLD_PROP_GETMETHOD] then
+                        local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_GETMETHOD])
+                        if mtd and isstatic == st then
+                            if isstatic then
+                                info[FLD_PROP_GETMETHOD]    = nil
+                                info[FLD_PROP_GET]          = mtd
+                            end
+                        else
+                            Warn("The %s don't have a %smethod named %q for property %q's get method", tostring(owner), isstatic and "static " or "", info[FLD_PROP_GETMETHOD], name)
+                            info[FLD_PROP_GETMETHOD]        = nil
+                        end
+                    end
+
+                    -- Check set method
+                    if info[FLD_PROP_SETMETHOD] then
+                        local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_SETMETHOD])
+                        if mtd and isstatic == st then
+                            if isstatic then
+                                info[FLD_PROP_SETMETHOD]    = nil
+                                info[FLD_PROP_SET]          = mtd
+                            end
+                        else
+                            Warn("The %s don't have a %smethod named %q for property %q's set method", tostring(owner), isstatic and "static " or "", info[FLD_PROP_SETMETHOD], name)
+                            info[FLD_PROP_SETMETHOD]        = nil
+                        end
+                    end
+
+                    -- Auto-gen get (only check GetXXX, getXXX, IsXXX, isXXX for simple)
+                    if info[FLD_PROP_GET] == true or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
+                        info[FLD_PROP_GET]  = nil
+
+                        for _, prefix in ipairs, _PropGetPrefix, 0 do
+                            local mtd, st   = interface.GetMethod(owner, prefix .. name)
+                            if mtd and isstatic == st then
+                                info[FLD_PROP_GET] = mtd
+                                Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. name)
+                                break
+                            end
+
+                            if uname ~= name then
+                                mtd, st     = interface.GetMethod(owner, prefix .. uname)
+                                if mtd and isstatic == st then
+                                    info[FLD_PROP_GET] = mtd
+                                    Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. uname)
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Auto-gen set (only check SetXXX, setXXX)
+                    if info[FLD_PROP_SET] == true or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
+                        info[FLD_PROP_SET]  = nil
+
+                        for _, prefix in ipairs, _PropSetPrefix, 0 do
+                            local mtd, st   = interface.GetMethod(owner, prefix .. name)
+                            if mtd and isstatic == st then
+                                info[FLD_PROP_SET]  = mtd
+                                Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. name)
+                                break
+                            end
+
+                            if uname ~= name then
+                                local mtd, st   = interface.GetMethod(owner, prefix .. uname)
+                                if mtd and isstatic == st then
+                                    info[FLD_PROP_SET]  = mtd
+                                    Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. uname)
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Check the handler
+                    if type(info[FLD_PROP_HANDLER]) == "string" then
+                        local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_HANDLER])
+                        if mtd and isstatic == st then
+                            info[FLD_PROP_HANDLER]  = mtd
+                        else
+                            Warn("The %s don't have a %smethod named %q for property %q's handler", tostring(owner), isstatic and "static " or "", info[FLD_PROP_HANDLER], name)
+                            info[FLD_PROP_HANDLER]  = nil
+                        end
+                    end
+
+                    -- Auto-gen field
+                    if (info[FLD_PROP_SET] == nil or (info[FLD_PROP_SET] == false and info[FLD_PROP_DEFAULTFUNC]))
+                        and info[FLD_PROP_SETMETHOD] == nil
+                        and info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil then
+
+                        if info[FLD_PROP_FIELD] == true then info[FLD_PROP_FIELD] = nil end
+
+                        info[FLD_PROP_FIELD] = info[FLD_PROP_FIELD] or "_" .. namespace.GetNameSpaceName(owner, true) .. "_" .. uname
+
+                    end
+
+                    -- Gen static value container
+                    if isstatic then
+                        -- Use fakefunc as nil object
+                        if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                            info[FLD_PROP_STATIC] = setmetatable({ [0] = fakefunc }, WEAK_VALUE)
+                        else
+                            info[FLD_PROP_STATIC] = fakefunc
+                        end
+                    end
+
+                    -- Generate the get & set
+                    genPropertyGet(info)
+                    genPropertySet(info)
+                end
+
+                return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET] }
+            end;
+
+            ["IsGetClone"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsGetDeepClone"]  = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsSetClone"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsSetDeepClone"]  = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsRetainObject"]  = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsShareable"]     = function(self) return true end;
+
+            ["IsStatic"]        = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["IsWeak"]          = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) or false
+            end;
+
+            ["GetClone"]     = function(self, deep, stack)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD])
+                    if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) end
+                else
+                    error("Usage: property:GetClone(deep, [stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
+            end;
+
+            ["SetClone"]     = function(self, deep, stack)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD])
+                    if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) end
+                else
+                    error("Usage: property:SetClone(deep, [stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
+            end;
+
+            ["SetRetainObject"] = function(self, stack)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
+            end;
+
+            ["SetStatic"]       = function(self, stack)
+                if _PropertyInDefine[self] then
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetStatic([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
+            end;
+
+            ["SetWeak"]         = function(self, stack)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetWeak([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                end
+            end;
+        },
+        __call                  = function(self, definition)
+            if type(definition) ~= "table" then error([[Usage: property "name" { definition } - the definition part must be a table]], 2) end
+            if not _PropertyInDefine[self] then error([[Usage: property "name" { definition } - the property's definition is finished]], 2) end
+
+            local info          = _PropertyInfo[self]
+            local owner         = info[FLD_PROP_OWNER]
+            local name          = info[FLD_PROP_NAME]
+
+            attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name)
+
+            -- Parse the definition
+            for k, v in pairs, definition do
+                if type(k) == "string" then
+                    k   = strlower(k)
+                    local tval  = type(v)
+
+                    if k == "get" then
+                        if tval == "function" or tval == "boolean" then
+                            info[FLD_PROP_GET] = v
+                        elseif tval == "string" then
+                            info[FLD_PROP_GETMETHOD] = v
+                        else
+                            error([[Usage: property "name" { get = ... } - the "get" must be function, string or boolean]], 2)
+                        end
+                    elseif k == "set" then
+                        if tval == "function" or tval == "boolean" then
+                            info[FLD_PROP_SET] = v
+                        elseif tval == "string" then
+                            info[FLD_PROP_SETMETHOD] = v
+                        else
+                            error([[Usage: property "name" { set = ... } - the "set" must be function, string or boolean]], 2)
+                        end
+                    elseif k == "getmethod" then
+                        if tval == "string" then
+                            info[FLD_PROP_GETMETHOD] = v
+                        else
+                            error([[Usage: property "name" { getmethod = ... } - the "get" must be string]], 2)
+                        end
+                    elseif k == "setmethod" then
+                        if tval == "string" then
+                            info[FLD_PROP_SETMETHOD] = v
+                        else
+                            error([[Usage: property "name" { setmethod = ... } - the "get" must be string]], 2)
+                        end
+                    elseif k == "field" then
+                        if v ~= name then
+                            info[FLD_PROP_FIELD] = v ~= name and v or nil
+                        else
+                            error([[Usage: property "name" { field = ... } - the field can't be the same with the property name]], 2)
+                        end
+                    elseif k == "type" then
+                        local tpValid   = getprototypemethod(v, "ValidateValue")
+                        if tpValid then
+                            info[FLD_PROP_TYPE]  = v
+                            info[FLD_PROP_VALID] = tpValid
+                        else
+                            error([[Usage: property "name" { type = ... } - the type is not valid]], 2)
+                        end
+                    elseif k == "default" then
+                        if type(v) == "function" then
+                            info[FLD_PROP_DEFAULTFUNC] = v
+                        else
+                            info[FLD_PROP_DEFAULT] = v
+                        end
+                    elseif k == "event" then
+                        if tval == "string" or event.Validate(v) then
+                            info[FLD_PROP_EVENT] = v
+                        else
+                            error([[Usage: property "name" { event = ... } - the event is not valid]], 2)
+                        end
+                    elseif k == "handler" then
+                        if tval == "string" or tval == "function" then
+                            info[FLD_PROP_HANDLER] = v
+                        else
+                            error([[Usage: property "name" { handler = ... } - the handler must be function or string]], 2)
+                        end
+                    elseif k == "isstatic" or k == "static" then
+                        if v then
+                            info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                        end
+                    end
+                end
+            end
+
+            -- Check Default
+            if info[FLD_PROP_DEFAULT] ~= nil and info[FLD_PROP_TYPE] then
+                local ret, msg = info[FLD_PROP_VALID](info[FLD_PROP_TYPE], info[FLD_PROP_DEFAULT])
+                if not msg then
+                    info[FLD_PROP_DEFAULT] = ret
+                else
+                    error([[Usage: property "name" { type = ...,  default = ... } - the default don't match the type setting]], 2)
+                end
+            elseif info[FLD_PROP_DEFAULT] == nil and info[FLD_PROP_TYPE] then
+                info[FLD_PROP_DEFAULT] = getobjectvalue(info[FLD_PROP_TYPE], "GetDefault")
+            end
+
+            -- Clear conflict settings
+            if info[FLD_PROP_GET] then info[FLD_PROP_GETMETHOD] = nil end
+            if info[FLD_PROP_SET] then info[FLD_PROP_SETMETHOD] = nil end
+
+            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name)
+
+            _PropertyInDefine  = saveStorage(_PropertyInDefine, self, nil)
+
+            attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name)
+
+            -- Check the event
+            if type(info[FLD_PROP_EVENT]) == "string" then
+                local ename     = info[FLD_PROP_EVENT]
+                local evt       = interface.GetFeature(owner, ename)
+
+                if event.Validate(evt) then
+                    if evt:IsStatic() == self:IsStatic() then
+                        info[FLD_PROP_EVENT] = evt
+                    elseif evt:IsStatic() then
+                        error([[Usage: property "name" { event = ... } - the event is static]], 2)
+                    else
+                        error([[Usage: property "name" { event = ... } - the event is not static]], 2)
+                    end
+                elseif evt == nil then
+                    -- Auto create the event
+                    event.Parse(owner, ename, self:IsStatic() or false, 2)
+                    info[FLD_PROP_EVENT] = interface.GetFeature(owner, ename)
+                else
+                    error([[Usage: property "name" { event = ... } - the event is not valid]], 2)
+                end
+            end
+
+            interface.AddFeature(owner, name, self, 2)
+        end,
+        __newindex              = readOnly,
+        __metatable             = property,
+    }
 end
 
 -------------------------------------------------------------------------------
---                           Feature Installation                            --
+--                           Keyword Installation                            --
 -------------------------------------------------------------------------------
 do
     environment.RegisterGlobalKeyword {
+        namespace       = namespace,
         import          = import,
         enum            = enum,
         struct          = struct,
@@ -7849,7 +9079,7 @@ do
         endclass        = rawget(_PLoopEnv, "endclass"),
     })
 
-    _G.PLoop = prototype "PLoop" {
+    _G.PLoop = prototype {
         __index = {
             namespace   = namespace,
             enum        = enum,
@@ -7867,8 +9097,93 @@ end
 -------------------------------------------------------------------------------
 --                                  System                                   --
 -------------------------------------------------------------------------------
-do
+namespace "System" (function(_ENV)
+    class "Delegate" (function(_ENV)
+        event "OnChange"
 
-end
+        local tinsert   = table.insert
+        local tremove   = table.remove
+
+        function CopyTo(self, target)
+            if getmetatable(target) == Delegate then
+                local len = #self
+                for i = -1, len do target[i] = self[i] end
+                for i = len + 1, #target do target[i] = nil end
+            end
+        end
+
+        function Invoke(self, ...)
+            local ret = self[0] and self[0](...) or false
+            -- Any func return true means to stop all
+            if ret then return end
+
+            -- Call the stacked handlers
+            for _, func in ipairs(self) do
+                ret = func(...)
+
+                if ret then return end
+            end
+
+            -- Call the final func
+            return self[-1] and self[-1](...)
+        end
+
+        function IsEmpty(self)
+            return not (self[-1] or self[1] or self[0])
+        end
+
+        function SetInitFunction(self, func, stack)
+            if func == nil or type(func) == "function" then
+                func = func or false
+                if self[0] ~= func then
+                    self[0] = func
+                    return OnChange(self)
+                end
+            end
+        end
+
+        function SetFinalFunction(self, func, stack)
+            if func == nil or type(func) == "function" then
+                func = func or false
+                if self[-1] ~= func then
+                    self[-1] = func
+                    return OnChange(self)
+                end
+            end
+        end
+
+        function __new()
+            return { [-1] = false, [0] = false }
+        end
+
+        function __add(self, func)
+            if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
+            attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
+            local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func)
+            attribute.ReleaseTargetAttributes(func)
+
+            for _, f in ipairs(self) do
+                if f == ret then return self end
+            end
+
+            tinsert(self, ret)
+            OnChange(self)
+            return self
+        end
+
+        function __sub(self, func)
+            for i, f in ipairs(self) do
+                if f == func then
+                    tremove(self, i)
+                    OnChange(self)
+                    break
+                end
+            end
+            return self
+        end
+    end)
+end)
+
+namespace.ExportNameSpace(_PLoopEnv, "System", true)
 
 return ROOT_NAMESPACE
