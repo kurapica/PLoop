@@ -25,7 +25,7 @@
 
 --===========================================================================--
 --                                                                           --
---                   Prototype Lua Object-Oriented System                    --
+--               Prototype Lua Object-Oriented Program System                --
 --                                                                           --
 --===========================================================================--
 
@@ -1951,10 +1951,10 @@ do
     --                          private storage                          --
     -----------------------------------------------------------------------
     local _NSTree               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and setmetatable({}, {__index = function(_, ns) return type(ns) == "table" and rawget(ns, FLD_NS_SUBNS) or nil end})
+                                    and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_SUBNS) end end})
                                     or  newStorage(WEAK_KEY)
     local _NSName               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and setmetatable({}, {__index = function(_, ns) return type(ns) == "table" and rawget(ns, FLD_NS_NAME) or nil end})
+                                    and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_NAME) end end})
                                     or  newStorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
@@ -1990,11 +1990,11 @@ do
     end
 
     local saveSubNameSpace      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function(root, name, subns) rawset(root, FLD_NS_SUBNS, saveStorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) rawset(subns, FLD_NS_SUBNS, false) end
+                                    and function(root, name, subns) rawset(root, FLD_NS_SUBNS, saveStorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) end
                                     or  function(root, name, subns) _NSTree = saveStorage(_NSTree, root, saveStorage(_NSTree[root] or {}, name, subns)) end
 
     local saveNameSpaceName     = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function(ns, name) rawset(ns, FLD_NS_NAME, name) end
+                                    and function(ns, name) rawset(ns, FLD_NS_NAME, name) rawset(ns, FLD_NS_SUBNS, false) end
                                     or  function(ns, name) _NSName = saveStorage(_NSName, ns, name) end
 
     -----------------------------------------------------------------------
@@ -2072,19 +2072,18 @@ do
                     root        = getValidatedNS(root)
                 end
 
-                if stack ~= nil and type(stack) ~= "number" then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the stack must be number", 2)
-                end
+                stack           = (type(stack) == "number" and stack or 1) + 1
+
                 if root == nil then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the root must be namespace", (stack or 1) + 1)
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the root must be namespace", stack)
                 end
                 if type(path) ~= "string" or strtrim(path) == "" then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the path must be string", (stack or 1) + 1)
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the path must be string", stack)
                 else
-                    path    = strtrim(path)
+                    path        = strtrim(path)
                 end
                 if type(feature) ~= "table" and type(feature) ~= "userdata" then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the feature should be userdata or table", (stack or 1) + 1)
+                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the feature should be userdata or table", stack)
                 end
 
                 if _NSName[feature] ~= nil then
@@ -2094,7 +2093,7 @@ do
                     if tblconcat(epath, ".") == _NSName[feature] then
                         return
                     else
-                        error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - already registered as " .. (_NSName[feature] or "Anonymous"), (stack or 1) + 1)
+                        error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - already registered as " .. (_NSName[feature] or "Anonymous"), stack)
                     end
                 end
 
@@ -2109,7 +2108,7 @@ do
                     if not nxt then
                         if subns then
                             if subns == feature then return end
-                            error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the namespace path has already be used by others", (stack or 1) + 1)
+                            error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the namespace path has already be used by others", stack)
                         else
                             saveNameSpaceName(feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
                             saveSubNameSpace(root, subname, feature)
@@ -2133,14 +2132,12 @@ do
             -- @param   feature                     the feature, must be table or userdata
             -- @param   stack                       the stack level
             ["SaveAnonymousNameSpace"] = function(feature, stack)
-                if stack ~= nil and type(stack) ~= "number" then
-                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the stack must be number", 2)
-                end
+                stack           = (type(stack) == "number" and stack or 1) + 1
                 if type(feature) ~= "table" and type(feature) ~= "userdata" then
-                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature should be userdata or table", (stack or 1) + 1)
+                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature should be userdata or table", stack)
                 end
                 if _NSName[feature] then
-                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], (stack or 1) + 1)
+                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], stack)
                 end
                 saveNameSpaceName(feature, false)
             end;
@@ -3399,8 +3396,8 @@ do
                 uinsert(apis, "getmetatable")
 
                 tinsert(body, [[
-                    if type(value)         ~= "table" then return nil, onlyValid or "%s must be a table" end
-                    if getmetatable(value) ~= nil     then return nil, onlyValid or "%s must be a table without meta-table" end
+                    if type(value)         ~= "table" then return nil, onlyValid or "the %s must be a table" end
+                    if getmetatable(value) ~= nil     then return nil, onlyValid or "the %s must be a table without meta-table" end
                 ]])
 
                 if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
@@ -3451,7 +3448,7 @@ do
 
                             if val == nil then
                                 if mem[]] .. FLD_MEMBER_REQUIRE .. [[] then
-                                    return nil, strformat("%s.%s can't be nil", "%s", name)
+                                    return nil, strformat("the %s.%s can't be nil", "%s", name)
                                 end
 
                                 if mem[]] .. FLD_MEMBER_DEFTFACTORY .. [[] then
@@ -3461,7 +3458,7 @@ do
                                 end
                             elseif vtype then
                                 val, msg = mem[]] .. FLD_MEMBER_VALID .. [[](vtype, val, false, cache)
-                                if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s" .. "." .. name) or strformat("%s.%s must be [%s]", "%s", name, tostring(vtype)) end
+                                if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s" .. "." .. name) or strformat("the %s.%s must be [%s]", "%s", name, tostring(vtype)) end
                             end
 
                             value[name] = val
@@ -3482,7 +3479,7 @@ do
                     else
                         for i, v in ipairs, value, 0 do
                             local ret, msg  = avalid(array, v, false, cache)
-                            if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s[" .. i .. "]") or strformat("%s[%s] must be [%s]", "%s", i, tostring(array)) end
+                            if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s[" .. i .. "]") or strformat("the %s[%s] must be [%s]", "%s", i, tostring(array)) end
                             value[i] = ret
                         end
                     end
@@ -3496,15 +3493,15 @@ do
                 if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
                     tinsert(head, "svalid")
                     tinsert(body, [[
-                        local _, msg = svalid(value)
-                        if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
+                        local msg = svalid(value)
+                        if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("the %s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                     ]])
                 elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
                     tinsert(head, "mvalid")
                     tinsert(body, [[
                         for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
-                            local _, msg = info[i](value)
-                            if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
+                            local msg = info[i](value)
+                            if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("the %s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                         end
                     ]])
                 end
@@ -3746,7 +3743,7 @@ do
                 ]])
             else
                 tinsert(body, [[
-                    error(strgsub(msg, "%%s", "the value"), 3)
+                    error(strgsub(msg, "%%s", "value"), 3)
                 ]])
             end
 
@@ -6034,7 +6031,7 @@ do
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
 
         if def then
-            if info[name] then
+            if info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] == false then
                 info[name] = func
             else
                 info[FLD_IC_TYPMTD] = info[FLD_IC_TYPMTD] or _Cache()
