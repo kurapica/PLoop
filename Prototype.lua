@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/02/23                                               --
--- Version      :   1.0.0-alpha.023                                          --
+-- Update Date  :   2018/02/26                                               --
+-- Version      :   1.0.0                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -3356,6 +3356,7 @@ do
                 tinsert(upval, i - 1)
             else
                 token = turnOnFlags(FLG_STRUCT_SINGLE_VLD, token)
+                tinsert(upval, info[FLD_STRUCT_VALIDSTART])
             end
         end
 
@@ -3367,6 +3368,7 @@ do
                 tinsert(upval, i - 1)
             else
                 token = turnOnFlags(FLG_STRUCT_SINGLE_INIT, token)
+                tinsert(upval, info[FLD_STRUCT_INITSTART])
             end
         end
 
@@ -3492,15 +3494,16 @@ do
                 uinsert(apis, "strformat")
 
                 if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
+                    tinsert(head, "svalid")
                     tinsert(body, [[
-                        local msg = info[]] .. FLD_STRUCT_VALIDSTART .. [[](value)
+                        local _, msg = svalid(value)
                         if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                     ]])
                 elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
                     tinsert(head, "mvalid")
                     tinsert(body, [[
                         for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
-                            local msg = info[i](value)
+                            local _, msg = info[i](value)
                             if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("%s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                         end
                     ]])
@@ -3513,8 +3516,9 @@ do
 
             if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) then
                 if validateFlags(FLG_STRUCT_SINGLE_INIT, token) then
+                    tinsert(head, "sinit")
                     tinsert(body, [[
-                        local ret = info[]] .. FLD_STRUCT_INITSTART .. [[](value)
+                        local ret = sinit(value)
                     ]])
 
                     if validateFlags(FLG_CUSTOM_STRUCT, token) then
@@ -8321,7 +8325,7 @@ do
                         if validateFlags(FLG_PROPGET_SETWEAK, token) then
                             tinsert(body, [[
                                 value = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
-                                if value then value = value[field] else value = nil end
+                                if type(value) == "table" then value = value[field] else value = nil end
                             ]])
                         else
                             tinsert(body, [[value = rawget(self, field)]])
@@ -8438,7 +8442,7 @@ do
             token               = turnOnFlags(FLG_PROPSET_DISABLE, token)
             usename             = true
         else
-            if info[FLD_PROP_TYPE] then
+            if info[FLD_PROP_TYPE] and not (PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED and getobjectvalue(info[FLD_PROP_TYPE], "IsImmutable")) then
                 token           = turnOnFlags(FLG_PROPSET_TYPE, token)
                 tinsert(upval, info[FLD_PROP_VALID])
                 tinsert(upval, info[FLD_PROP_TYPE])
@@ -8555,41 +8559,45 @@ do
                 elseif validateFlags(FLG_PROPSET_FIELD, token) then
                     tinsert(head, "field")
 
-                    if validateFlags(FLG_PROPSET_STATIC, token) then
-                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
-                            tinsert(body, [[local old = storage[0] ]])
+                    local useold = validateFlags(FLG_PROPSET_DEFAULT, token) or validateFlags(FLG_PROPSET_RETAIN, token) or validateFlags(FLG_PROPSET_HANDLER, token) or validateFlags(FLG_PROPSET_EVENT, token)
+
+                    if useold then
+                        if validateFlags(FLG_PROPSET_STATIC, token) then
+                            if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                                tinsert(body, [[local old = storage[0] ]])
+                            else
+                                tinsert(body, [[local old = storage[]] .. FLD_PROP_STATIC .. [[] ]])
+                            end
+
+                            tinsert(body, [[if old == fakefunc then old = nil end]])
                         else
-                            tinsert(body, [[local old = storage[]] .. FLD_PROP_STATIC .. [[] ]])
+                            uinsert(apis, "rawset")
+                            uinsert(apis, "rawget")
+                            if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                                uinsert(apis, "type")
+                                uinsert(apis, "setmetatable")
+                                uinsert(apis, "WEAK_VALUE")
+                                tinsert(body, [[
+                                    local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                    if type(container) ~= "table" then
+                                        container   = setmetatable({}, WEAK_VALUE)
+                                        rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                    end
+                                    local old = container[field]
+                                ]])
+                            else
+                                tinsert(body, [[local old = rawget(self, field)]])
+                            end
                         end
 
-                        tinsert(body, [[if old == fakefunc then old = nil end]])
-                    else
-                        uinsert(apis, "rawset")
-                        uinsert(apis, "rawget")
-                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
-                            uinsert(apis, "type")
-                            uinsert(apis, "setmetatable")
-                            uinsert(apis, "WEAK_VALUE")
-                            tinsert(body, [[
-                                local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
-                                if type(container) ~= "table" then
-                                    container   = setmetatable({}, WEAK_VALUE)
-                                    rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
-                                end
-                                local old = container[field]
-                            ]])
-                        else
-                            tinsert(body, [[local old = rawget(self, field)]])
+                        if validateFlags(FLG_PROPSET_DEFAULT, token) then
+                            tinsert(head, "default")
+                            tinsert(body, [[if old == nil then old = default end]])
+                            tinsert(body, [[if value == nil then value = default end]])
                         end
-                    end
 
-                    if validateFlags(FLG_PROPSET_DEFAULT, token) then
-                        tinsert(head, "default")
-                        tinsert(body, [[if old == nil then old = default end]])
-                        tinsert(body, [[if value == nil then value = default end]])
+                        tinsert(body, [[if old == value then return end]])
                     end
-
-                    tinsert(body, [[if old == value then return end]])
 
                     if validateFlags(FLG_PROPSET_STATIC, token) then
                         if validateFlags(FLG_PROPSET_SETWEAK, token) then
@@ -8599,7 +8607,18 @@ do
                         end
                     else
                         if validateFlags(FLG_PROPSET_SETWEAK, token) then
-                            tinsert(body, [[container[field] = value)]])
+                            if useold then
+                                tinsert(body, [[container[field] = value)]])
+                            else
+                                tinsert(body, [[
+                                    local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                    if type(container) ~= "table" then
+                                        container   = setmetatable({}, WEAK_VALUE)
+                                        rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                    end
+                                    container[field] = value
+                                ]])
+                            end
                         else
                             tinsert(body, [[rawset(self, field, value)]])
                         end
@@ -9092,6 +9111,8 @@ do
     _G.enum             = enum
     _G.import           = import
     _G.struct           = struct
+    _G.class            = class
+    _G.interface        = interface
 end
 
 -------------------------------------------------------------------------------
