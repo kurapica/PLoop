@@ -1677,7 +1677,10 @@ do
                     if value == nil then
                         local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[")
                         if type(parent) == "table" and parent ~= _G then
-                            value = getenvvalue(parent, name, true)
+                            value = rawget(parent, name)
+                            if value == nil then
+                                value = getenvvalue(parent, name, true)
+                            end
                         else
                             value = rawget(_G, name)
                         end
