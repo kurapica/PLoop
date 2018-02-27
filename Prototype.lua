@@ -191,9 +191,9 @@ do
 
         --- Whether all old objects keep using new features when their
         -- classes or extend interfaces are re-defined.
-        -- Default false
+        -- Default true
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        CLASS_NO_MULTI_VERSION_CLASS        = false,
+        CLASS_NO_MULTI_VERSION_CLASS        = true,
 
         --- Whether all interfaces & classes only use the classic format
         -- `Super.Method(obj, ...)` to call super's features, don't use new
@@ -1542,6 +1542,7 @@ do
     -- Registered Keywords
     local _ContextKeywords      = {}                -- Keywords for environment type
     local _GlobalKeywords       = {}                -- Global keywords
+    local _GlobalNS             = {}                -- Global namespaces
 
     -- Keyword visitor
     local _KeyVisitor                               -- The environment that access the next keyword
@@ -1590,11 +1591,106 @@ do
                 local head              = _Cache()
                 local body              = _Cache()
                 local upval             = _Cache()
+                local apis              = _Cache()
+
+                -- Check the keywords
+                tinsert(head, "_GlobalKeywords")
+                tinsert(upval, _GlobalKeywords)
+
+                tinsert(head, "_ContextKeywords")
+                tinsert(upval, _ContextKeywords)
+
+                tinsert(head, "_GlobalNS")
+                tinsert(upval, _GlobalNS)
+
+                tinsert(head, "regKeyVisitor")
+                tinsert(upval, function(env, keyword) _KeyVisitor, _AccessKey = env, keyword return keyword end)
+
+                uinsert(apis, "type")
 
                 tinsert(body, "")
+                tinsert(body, "")
                 tinsert(body, [[
-                    return function(env, name, noautocache, stack)
+                    local getenvvalue
+                    getenvvalue = function(env, name, isparent)
                         local value
+                ]])
+
+                if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
+                    -- Don't cache global variables in the environment to avoid conflict
+                    -- The cache should be full-hit during runtime after several operations
+                    tinsert(body, [[
+                        if isparent then
+                            value = env["]] .. ENV_GLOBAL_CACHE .. [["][name]
+                            if value ~= nil then return value end
+                        end
+                    ]])
+                end
+
+                -- Check current namespace
+                uinsert(apis, "rawget")
+                tinsert(body, [[
+                    local nvalid = namespace.Validate
+                    local nsname = namespace.GetNameSpaceName
+                    local ns = nvalid(rawget(env, "]] .. ENV_NS_OWNER .. [["))
+                    if ns then
+                        value = name == nsname(ns, true) and ns or ns[name]
+                    end
+                ]])
+
+                -- Check imported namespaces
+                uinsert(apis, "ipairs")
+                tinsert(body, [[
+                    if value == nil then
+                        local imp = rawget(env, "]] .. ENV_NS_IMPORTS .. [[")
+                        if type(imp) == "table" then
+                            for _, sns in ipairs, imp, 0 do
+                                sns = nvalid(sns)
+                                if sns then
+                                    value = name == nsname(sns, true) and sns or sns[name]
+                                    if value ~= nil then break end
+                                end
+                            end
+                        end
+                    end
+                ]])
+
+                -- Check global namespaces & root namespaces
+                tinsert(body, [[
+                    if not isparent then
+                        if value == nil then
+                            for _, sns in ipairs, _GlobalNS, 0 do
+                                value = name == nsname(sns, true) and sns or sns[name]
+                                if value ~= nil then break end
+                            end
+                        end
+
+                        if value == nil then
+                            value = namespace.GetNameSpace(name)
+                        end
+                    end
+                ]])
+
+                -- Check base environment
+                uinsert(apis, "_G")
+                tinsert(body, [[
+                    if value == nil then
+                        local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[")
+                        if type(parent) == "table" and parent ~= _G then
+                            value = getenvvalue(parent, name, true)
+                        else
+                            value = rawget(_G, name)
+                        end
+                    end
+                ]])
+
+                tinsert(body, [[
+                        return value
+                    end
+
+                    return function(env, name, noautocache, stack)
+                        if type(name) == "string" then
+                            local value
                 ]])
 
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
@@ -1606,17 +1702,8 @@ do
                     ]])
                 end
 
-                tinsert(body, [[if type(name) == "string" then]])
-
-                -- Check the keywords
-                tinsert(head, "_GlobalKeywords")
-                tinsert(upval, _GlobalKeywords)
-
-                tinsert(head, "_ContextKeywords")
-                tinsert(upval, _ContextKeywords)
-
-                tinsert(head, "regKeyVisitor")
-                tinsert(upval, function(env, keyword) _KeyVisitor, _AccessKey = env, keyword return keyword end)
+                -- Check keywords
+                uinsert(apis, "getmetatable")
                 tinsert(body, [[
                     value = _GlobalKeywords[name]
                     if not value then
@@ -1628,60 +1715,17 @@ do
                     end
                 ]])
 
-                -- Check current namespace
                 tinsert(body, [[
-                    local ns = namespace.Validate(rawget(env, "]] .. ENV_NS_OWNER .. [["))
-                    if ns then
-                        value = name == namespace.GetNameSpaceName(ns, true) and ns or ns[name]
-                    end
+                    value = getenvvalue(env, name)
                 ]])
 
-                -- Check imported namespaces
-                tinsert(body, [[
-                    if value == nil then
-                        local imp = rawget(env, "]] .. ENV_NS_IMPORTS .. [[")
-                        if type(imp) == "table" then
-                            for _, sns in ipairs, imp, 0 do
-                                sns = namespace.Validate(sns)
-                                if sns then
-                                    value = name == namespace.GetNameSpaceName(sns, true) and sns or sns[name]
-                                    if value ~= nil then break end
-                                end
-                            end
-                        end
-                    end
-                ]])
-
-                -- Check root namespaces
-                tinsert(body, [[
-                    if value == nil then
-                        value = namespace.GetNameSpace(name)
-                    end
-                ]])
-
-                -- Check base environment
-                tinsert(body, [[
-                    if value == nil then
-                        local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[") or _G
-                        if type(parent) == "table" then
-                ]])
                 if not PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL then
-                    tinsert(head, "saferawget")
-                    tinsert(body, function(self, key) return self[key] end)
+                    uinsert(apis, "error")
+                    uinsert(apis, "strformat")
                     tinsert(body, [[
-                            local ok, ret = pcall(saferawget, parent, name)
-                            if not ok or ret == nil then error(("The global variable %q can't be nil."):format(name), (stack or 1) + 1) end
-                            value = ret
-                    ]])
-                else
-                    tinsert(body, [[
-                            value = parent[name]
+                        if value == nil then error(strformat("The global variable %q can't be nil.", name), (stack or 1) + 1) end
                     ]])
                 end
-                tinsert(body, [[
-                        end
-                    end
-                ]])
 
                 -- Auto-Cache
                 tinsert(body, [[
@@ -1689,26 +1733,31 @@ do
                 ]])
 
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
+                    uinsert(apis, "saveStorage")
                     tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = saveStorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
                     if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
+                        uinsert(apis, "Warn")
+                        uinsert(apis, "tostring")
                         tinsert(body, [[Warn("The %q is auto saved to %s", (stack or 1) + 1, name, tostring(env))]])
                     end
                 else
+                    uinsert(apis, "rawset")
                     tinsert(body, [[rawset(env, name, value)]])
                 end
 
                 tinsert(body, [[
-                    end
-                ]])
-
-                tinsert(body, [[
+                            end
+                            return value
                         end
-                        return value
                     end
                 ]])
 
                 if #head > 0 then
                     body[1] = "local " .. tblconcat(head, ",") .. "= ..."
+                end
+                if #apis > 0 then
+                    local declare = tblconcat(apis, ", ")
+                    body[2] = strformat("local %s = %s", declare, declare)
                 end
 
                 local func = loadSnippet(tblconcat(body, "\n"), "environment.GetValue")(unpack(upval))
@@ -1716,6 +1765,7 @@ do
                 _Cache(head)
                 _Cache(body)
                 _Cache(upval)
+                _Cache(apis)
 
                 return func
             end)();
@@ -1765,6 +1815,16 @@ do
                 if type(env) == "table" then rawset(env, ENV_GLOBAL_CACHE, {}) end
             end or fakefunc;
 
+            --- Register a namespace as global namespace, so it can be accessed
+            -- by all environments
+            -- @static
+            -- @method  RegisterGlobalNameSpace
+            -- @param   namespace                   the target namespace
+            ["RegisterGlobalNameSpace"] = function(ns)
+                local ns    = namespace.Validate(ns)
+                if ns then uinsert(_GlobalNS, ns) end
+            end;
+
             --- Register a context keyword, like property must be used in the
             -- definition of a class or interface.
             -- @static
@@ -1776,7 +1836,7 @@ do
             -- @param   keyword                     the keyword entity
             -- @format  (ctxType, keywords)
             -- @param   keywords:table              a collection of the keywords like : { import = import , class, struct }
-            ["RegisterContextKeyword"]= function(ctxType, key, keyword)
+            ["RegisterContextKeyword"] = function(ctxType, key, keyword)
                 if not ctxType or (type(ctxType) ~= "table" and type(ctxType) ~= "userdata") then
                     error("Usage: environment.RegisterContextKeyword(ctxType, key[, keyword]) - the ctxType isn't valid", 2)
                 end
@@ -2851,7 +2911,7 @@ end
 --
 --                  struct "Number" (function(_ENV)
 --                      function Number(value)
---                          return type(value) ~= "number" and "%s must be number"
+--                          return type(value) ~= "number" and "the %s must be number"
 --                      end
 --                  end)
 --
@@ -2866,7 +2926,7 @@ end
 --              The function with the struct's name is the validator, also you
 --          can use `__valid` instead of the struct's name(There are anonymous
 --          structs). The validator would be called with the target value, if
---          the return value is non-false, that means the target value don't
+--          the return value is non-false, that means the target value can't
 --          pass the validation, normally the return value should be an error
 --          message, the `%s` in the message'll be replaced by words based on
 --          where it's used, if the return value is true, the system would
@@ -2890,7 +2950,7 @@ end
 --
 --              The struct can have one base struct so it will inherit the base
 --          struct's validator and initializer, the base struct's validator and
---          initializer should be called before the struct's:
+--          initializer should be called before the struct's own:
 --
 --                  struct "Integer" (function(_ENV)
 --                      __base = Number
@@ -2898,7 +2958,7 @@ end
 --                      local floor = math.floor
 --
 --                      function Integer(value)
---                          return floor(value) ~= value and "%s must be integer"
+--                          return floor(value) ~= value and "the %s must be integer"
 --                      end
 --                  end)
 --
@@ -4781,7 +4841,14 @@ do
 end
 
 -------------------------------------------------------------------------------
---                             interface & class                             --
+-- the class is an abstract type from a group of similar objects.
+--
+-- @prototype   class
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+--
+-- @prototype   interface
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -6016,7 +6083,12 @@ do
 
         if META_KEYS[name] ~= nil then return strformat("the %s can't be used as method name", name), stack end
         if type(func) ~= "function" then return "the func must be a function", stack end
-        if not def and (info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then return strformat("The %s has already be used", name), stack end
+
+        local typmtd = info[FLD_IC_TYPMTD]
+        if not def and (typmtd and typmtd[name] ~= nil and (typmtd[name] == false or validateFlags(MOD_SEALED_IC, info[FLD_IC_MOD]))
+            or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
+            return strformat("The %s can't be overridden", name), stack
+        end
 
         attribute.SaveAttributes(func, ATTRTAR_METHOD, stack + 2)
 
@@ -6031,14 +6103,14 @@ do
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
 
         if def then
-            if info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] == false then
+            if typmtd and typmtd[name] == false then
                 info[name] = func
             else
-                info[FLD_IC_TYPMTD] = info[FLD_IC_TYPMTD] or _Cache()
+                info[FLD_IC_TYPMTD] = typmtd or _Cache()
                 info[FLD_IC_TYPMTD][name] = func
             end
         else
-            info[FLD_IC_TYPMTD]     = saveStorage(info[FLD_IC_TYPMTD] or _Cache(), name, func)
+            info[FLD_IC_TYPMTD]     = saveStorage(typmtd or _Cache(), name, func)
             return saveObjectMethod(target, name, func)
         end
     end
@@ -6120,7 +6192,6 @@ do
 
         if not interface.Validate(target) then return "the target is not valid", stack end
         if not class.Validate(cls) then return "the requireclass must be a class", stack end
-        if not def then return strformat("The %s' definition is finished", tostring(target)), stack end
         if info[FLD_IC_REQCLS] and not class.IsSubType(cls, info[FLD_IC_REQCLS]) then return strformat("The requireclass must be %s's sub-class", tostring(info[FLD_IC_REQCLS])), stack end
 
         info[FLD_IC_REQCLS] = cls
@@ -6133,7 +6204,7 @@ do
 
         if not class.Validate(target) then return "the target is not valid", stack end
         if not class.Validate(super) then return "the superclass must be a class", stack end
-        if not def then return strformat("The %s' definition is finished", tostring(target)), stack end
+
         if info[FLD_IC_SUPCLS] and info[FLD_IC_SUPCLS] ~= super then return strformat("The %s already has a super class", tostring(target)), stack end
 
         if info[FLD_IC_SUPCLS] then return end
@@ -7598,7 +7669,7 @@ do
                 local f     = info[FLD_IC_SUPMTD]
                 return f and f[key]
             elseif t == "table" then
-                rawset(self, __PLOOP_SUPER_ACCESS, _SuperMap[self])
+                rawset(key, OBJ_SUPER_ACCESS, _SuperMap[self])
                 return key
             end
         end,
@@ -9061,7 +9132,7 @@ do
 end
 
 -------------------------------------------------------------------------------
---                           Keyword Installation                            --
+--                           keyword installation                            --
 -------------------------------------------------------------------------------
 do
     environment.RegisterGlobalKeyword {
@@ -9113,7 +9184,7 @@ do
 end
 
 -------------------------------------------------------------------------------
---                                  System                                   --
+--                            [namespace] System                             --
 -------------------------------------------------------------------------------
 namespace "System" (function(_ENV)
     class "Delegate" (function(_ENV)
@@ -9202,6 +9273,11 @@ namespace "System" (function(_ENV)
     end)
 end)
 
-namespace.ExportNameSpace(_PLoopEnv, "System", true)
+-------------------------------------------------------------------------------
+--                                final stage                                --
+-------------------------------------------------------------------------------
+environment.RegisterGlobalNameSpace(System)
+
+Delegate = ROOT_NAMESPACE.System.Delegate
 
 return ROOT_NAMESPACE
