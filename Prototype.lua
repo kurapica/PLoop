@@ -1589,6 +1589,7 @@ do
                 tinsert(upval, function(env, keyword) _KeyVisitor, _AccessKey = env, keyword return keyword end)
 
                 uinsert(apis, "type")
+                uinsert(apis, "rawget")
 
                 tinsert(body, "")
                 tinsert(body, "")
@@ -1603,14 +1604,18 @@ do
                     -- The cache should be full-hit during runtime after several operations
                     tinsert(body, [[
                         if isparent then
-                            value = env["]] .. ENV_GLOBAL_CACHE .. [["][name]
-                            if value ~= nil then return value end
+                            value = rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[")
+                            if type(value) == "table" then
+                                value = rawget(value, name)
+                                if value ~= nil then return value end
+                            else
+                                value = nil
+                            end
                         end
                     ]])
                 end
 
                 -- Check current namespace
-                uinsert(apis, "rawget")
                 tinsert(body, [[
                     local nvalid = namespace.Validate
                     local nsname = namespace.GetNamespaceName
