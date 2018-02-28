@@ -315,6 +315,7 @@ do
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
+    parsestack                  = function (stack) return type(stack) == "number" and stack or 1 end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -612,23 +613,23 @@ do
         if target then
             if type(target) == "string" then
                 local path  = target
-                target      = namespace.GetNameSpace(environment.GetNameSpace(visitor or env), path)
+                target      = namespace.GetNamespace(environment.GetNamespace(visitor or env), path)
                 if not target then
                     target  = prototype.NewProxy(ptype)
-                    namespace.SaveNameSpace(environment.GetNameSpace(visitor or env), path, target, stack + 2)
+                    namespace.SaveNamespace(environment.GetNamespace(visitor or env), path, target, stack + 2)
                 end
 
                 if not nType.Validate(target) then
                     target  = nil
                 else
-                    if visitor then rawset(visitor, namespace.GetNameSpaceName(target, true), target) end
-                    if env and env ~= visitor then rawset(env, namespace.GetNameSpaceName(target, true), target) end
+                    if visitor then rawset(visitor, namespace.GetNamespaceName(target, true), target) end
+                    if env and env ~= visitor then rawset(env, namespace.GetNamespaceName(target, true), target) end
                 end
             end
         else
             -- Anonymous
             target = prototype.NewProxy(ptype)
-            namespace.SaveAnonymousNameSpace(target)
+            namespace.SaveAnonymousNamespace(target)
         end
 
         return visitor, env, target, definition, flag, stack
@@ -734,7 +735,6 @@ do
         local name
         local prototype         = newproxy(true)
         local pmeta             = getmetatable(prototype)
-        pmeta.__super           = super
 
         savePrototype(prototype, pmeta)
 
@@ -794,17 +794,6 @@ do
                 end
             end;
 
-            --- Get the super prototype of the prototype
-            -- @static
-            -- @method  GetMethods
-            -- @owner   prototype
-            -- @param   prototype                   the target prototype
-            -- @return  super                       the super prototype
-            ["GetSuperPrototype"] = function(self)
-                local meta      = _Prototype[self]
-                return meta and meta.__super
-            end;
-
             --- Create a proxy with the prototype's meta-table
             -- @static
             -- @method  NewProxy
@@ -823,21 +812,6 @@ do
             -- @param   object:table                the raw-table used to be set the prototype's metatable
             -- @return  object:table                the table with the prototype's meta-table
             ["NewObject"]       = function(self, tbl) return setmetatable(type(tbl) == "table" and tbl or {}, _Prototype[self]) end;
-
-            --- Whether a prototype is the sub type of the super prototype
-            -- @static
-            -- @method  IsSubType
-            -- @owner   prototype
-            -- @param   prototype                   the target prototype
-            -- @param   super                       the super prototype
-            -- @return  boolean                     true if the prototype is the sub type of the super prototype
-            ["IsSubType"]       = function(self, super)
-                while self do
-                    if self == super then return true end
-                    self = _Prototype[self] and _Prototype[self].__super
-                end
-                return false
-            end;
 
             --- Whether the value is an object(proxy) of the prototype(has the same meta-table),
             -- only works for the prototype that use itself as the __metatable.
@@ -902,7 +876,7 @@ end
 --          * Parameters :
 --              * attribute     the attribute
 --              * target        the target like class, method and etc
---              * targetType    the target type, that's a flag value registered
+--              * targettype    the target type, that's a flag value registered
 --                      by types. @see attribute.RegisterTargetType
 --              * definition    the definition of the target.
 --              * owner         the target's owner, it the target is a method,
@@ -918,7 +892,7 @@ end
 --          * Parameters :
 --              * attribute     the attribute
 --              * target        the target like class, method and etc
---              * targetType    the target type, that's a flag value registered
+--              * targettype    the target type, that's a flag value registered
 --                      by the target type. @see attribute.RegisterTargetType
 --              * owner         the target's owner, it the target is a method,
 --                      the owner may be a class or interface that contains it.
@@ -931,7 +905,7 @@ end
 --          * Parameters :
 --              * attribute     the attribute
 --              * target        the target like class, method and etc
---              * targetType    the target type, that's a flag value registered
+--              * targettype    the target type, that's a flag value registered
 --                      by the target type. @see attribute.RegisterTargetType
 --              * owner         the target's owner, it the target is a method,
 --                      the owner may be a class or interface that contains it.
@@ -1092,17 +1066,20 @@ do
             -- @static
             -- @method  ApplyAttributes
             -- @owner   attribute
-            -- @format  (target, targetType, definition, [owner], [name][, ...])
+            -- @format  (target, targettype, definition, [owner], [name][, stack])
             -- @param   target                      the target, maybe class, method, object and etc
-            -- @param   targetType                  the flag value of the target's type
+            -- @param   targettype                  the flag value of the target's type
             -- @param   owner                       the target's owner, like the class for a method
             -- @param   name                        the target's name if it has owner
-            ["ApplyAttributes"] = function(target, targetType, owner, name)
+            -- @param   stack                       the stack level
+            ["ApplyAttributes"] = function(target, targettype, owner, name, stack)
                 local tarAttrs  = _TargetAttrs[target]
                 if not tarAttrs then return end
 
+                stack           = parsestack(stack) + 1
+
                 -- Apply the attribute to the target
-                Debug("[attribute][ApplyAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Debug("[attribute][ApplyAttributes] ==> [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
 
                 for i, attr in ipairs, tarAttrs, 0 do
                     local ausage= getAttributeUsage(attr)
@@ -1111,31 +1088,33 @@ do
                     -- Apply attribute before the definition
                     if apply then
                         Trace("Call %s.ApplyAttribute", tostring(attr))
-                        apply(attr, target, targetType, owner, name)
+                        apply(attr, target, targettype, owner, name, stack)
                     end
                 end
 
-                Trace("[attribute][ApplyAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Trace("[attribute][ApplyAttributes] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
             end;
 
             --- Attach the registered attributes data to the target after the definition
             -- @static
             -- @method  AttachAttributes
             -- @owner   attribute
-            -- @format  (target, targetType, [owner], [name])
+            -- @format  (target, targettype, [owner], [name][, stack])
             -- @param   target                      the target, maybe class, method, object and etc
-            -- @param   targetType                  the flag value of the target's type
+            -- @param   targettype                  the flag value of the target's type
             -- @param   owner                       the target's owner, like the class for a method
             -- @param   name                        the target's name if it has owner
-            ["AttachAttributes"]= function(target, targetType, owner, name)
+            -- @param   stack                       the stack level
+            ["AttachAttributes"]= function(target, targettype, owner, name, stack)
                 local tarAttrs  = _TargetAttrs[target]
                 if not tarAttrs then return else _TargetAttrs[target] = nil end
 
                 local extInhrt  = _AttrTargetInrt[target] and tblclone(_AttrTargetInrt[target], _Cache())
                 local newInhrt  = false
+                stack           = parsestack(stack) + 1
 
                 -- Apply the attribute to the target
-                Debug("[attribute][AttachAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Debug("[attribute][AttachAttributes] ==> [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
 
                 for i, attr in ipairs, tarAttrs, 0 do
                     local aType = getmetatable(attr)
@@ -1148,7 +1127,7 @@ do
                     if attach and (ovrd or getAttributeData(aType, target, owner) == nil) then
                         Trace("Call %s.AttachAttribute", tostring(attr))
 
-                        local ret = attach(attr, target, targetType, owner, name)
+                        local ret = attach(attr, target, targettype, owner, name, stack)
 
                         if ret ~= nil then
                             saveAttributeData(aType, target, ret, owner)
@@ -1164,7 +1143,7 @@ do
                     end
                 end
 
-                Trace("[attribute][AttachAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Trace("[attribute][AttachAttributes] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
 
                 _Cache(tarAttrs)
 
@@ -1249,7 +1228,7 @@ do
             -- @param   stack                       the stack level
             ["IndependentCall"] = function(definition, static)
                 if type(definition) ~= "function" then
-                    error("Usage : attribute.Register(definition) - the definition must be a function", (stack or 1) + 1)
+                    error("Usage : attribute.Register(definition) - the definition must be a function", parsestack(stack) + 1)
                 end
 
                 tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
@@ -1267,16 +1246,16 @@ do
             -- @static
             -- @method  Inherit
             -- @owner   attribute
-            -- @format  (target, targetType, ...)
+            -- @format  (target, targettype, ...)
             -- @param   target                      the target, maybe class, method, object and etc
-            -- @param   targetType                  the flag value of the target's type
+            -- @param   targettype                  the flag value of the target's type
             -- @param   ...                         the target's super that used for attribute inheritance
-            ["InheritAttributes"] = function(target, targetType, ...)
+            ["InheritAttributes"] = function(target, targettype, ...)
                 local cnt       = select("#", ...)
                 if cnt == 0 then return end
 
                 -- Apply the attribute to the target
-                Debug("[attribute][InheritAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                Debug("[attribute][InheritAttributes] ==> [%s]%s", _AttrTargetTypes[targettype] or "Unknown", tostring(target))
 
                 local tarAttrs  = _TargetAttrs[target]
 
@@ -1287,7 +1266,7 @@ do
                         for _, sattr in pairs, _AttrTargetInrt[super] do
                             local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                            if aTar == ATTRTAR_ALL or validateFlags(targetType, aTar) then
+                            if aTar == ATTRTAR_ALL or validateFlags(targettype, aTar) then
                                 Trace("Inherit attribtue %s", tostring(sattr))
                                 tarAttrs = tarAttrs or _Cache()
                                 addAttribute(tarAttrs, sattr, true)
@@ -1296,7 +1275,7 @@ do
                     end
                 end
 
-                Trace("[attribute][InheritAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                Trace("[attribute][InheritAttributes] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", tostring(target))
 
                 _TargetAttrs[target] = tarAttrs
             end;
@@ -1305,19 +1284,22 @@ do
             -- @static
             -- @method  InitDefinition
             -- @owner   attribute
-            -- @format  (target, targetType, definition, [owner], [name][, ...])
+            -- @format  (target, targettype, definition, [owner], [name][, stack])
             -- @param   target                      the target, maybe class, method, object and etc
-            -- @param   targetType                  the flag value of the target's type
+            -- @param   targettype                  the flag value of the target's type
             -- @param   definition                  the definition of the target
             -- @param   owner                       the target's owner, like the class for a method
             -- @param   name                        the target's name if it has owner
+            -- @param   stack                       the stack level
             -- @return  definition                  the target's new definition, nil means no change, false means cancel the target's definition, it may be done by the attribute, these may not be supported by the target type
-            ["InitDefinition"]  = function(target, targetType, definition, owner, name)
+            ["InitDefinition"]  = function(target, targettype, definition, owner, name, stack)
                 local tarAttrs  = _TargetAttrs[target]
                 if not tarAttrs then return definition end
 
+                stack           = parsestack(stack) + 1
+
                 -- Apply the attribute to the target
-                Debug("[attribute][InitDefinition] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Debug("[attribute][InitDefinition] ==> [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
 
                 for i, attr in ipairs, tarAttrs, 0 do
                     local ausage= getAttributeUsage(attr)
@@ -1327,12 +1309,12 @@ do
                     if apply then
                         Trace("Call %s.InitDefinition", tostring(attr))
 
-                        local ret = apply(attr, target, targetType, definition, owner, name)
+                        local ret = apply(attr, target, targettype, definition, owner, name, stack)
                         if ret ~= nil then definition = ret end
                     end
                 end
 
-                Trace("[attribute][InitDefinition] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
+                Trace("[attribute][InitDefinition] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
 
                 return definition
             end;
@@ -1346,7 +1328,7 @@ do
             -- @param   unique                      whether don't register the attribute if there is another attribute with the same type
             -- @param   stack                       the stack level
             ["Register"]        = function(attr, unique, stack)
-                if type(attr) ~= "table" and type(attr) ~= "userdata" then error("Usage : attribute.Register(attr[, unique][, stack]) - the attr is not valid", (stack or 1) + 1) end
+                if type(attr) ~= "table" and type(attr) ~= "userdata" then error("Usage : attribute.Register(attr[, unique][, stack]) - the attr is not valid", parsestack(stack) + 1) end
                 Debug("[attribute][Register] %s", tostring(attr))
                 return addAttribute(_RegisteredAttrs, attr, unique)
             end;
@@ -1361,7 +1343,7 @@ do
             -- @param   stack                       the stack level
             ["RegisterAttributeType"] = function(attrType, usage, stack)
                 if not attrType then
-                    error("Usage: attribute.RegisterAttributeType(attrType, usage[, stack]) - The attrType can't be nil", (stack or 1) + 1)
+                    error("Usage: attribute.RegisterAttributeType(attrType, usage[, stack]) - The attrType can't be nil", parsestack(stack) + 1)
                 end
                 local extUsage  = getAttributeData(attribute, attrType)
                 if extUsage and extUsage.Final then return end
@@ -1414,34 +1396,34 @@ do
             -- @static
             -- @method  SaveAttributes
             -- @owner   attribtue
-            -- @format  (target, targetType[, stack])
+            -- @format  (target, targettype[, stack])
             -- @param   target                      the target
-            -- @param   targetType                  the target type
+            -- @param   targettype                  the target type
             -- @param   stack                       the stack level
-            ["SaveAttributes"]  = function(target, targetType, stack)
+            ["SaveAttributes"]  = function(target, targettype, stack)
                 if #_RegisteredAttrs  == 0 then return end
 
                 local regAttrs  = _RegisteredAttrs
                 _RegisteredAttrs= _Cache()
 
-                Debug("[attribute][SaveAttributes] ==> [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                Debug("[attribute][SaveAttributes] ==> [%s]%s", _AttrTargetTypes[targettype] or "Unknown", tostring(target))
 
                 for i = #regAttrs, 1, -1 do
                     local attr  = regAttrs[i]
                     local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                    if aTar ~= ATTRTAR_ALL and not validateFlags(targetType, aTar) then
+                    if aTar ~= ATTRTAR_ALL and not validateFlags(targettype, aTar) then
                         if _UseWarnInstreadErr then
-                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                            Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targettype] or "Unknown", tostring(target))
                             tremove(regAttrs, i)
                         else
                             _Cache(regAttrs)
-                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targetType] or "Unknown", tostring(target)), stack)
+                            error(strformat("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targettype] or "Unknown", tostring(target)), parsestack(stack) + 1)
                         end
                     end
                 end
 
-                Debug("[attribute][SaveAttributes] <== [%s]%s", _AttrTargetTypes[targetType] or "Unknown", tostring(target))
+                Debug("[attribute][SaveAttributes] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", tostring(target))
 
                 _TargetAttrs[target] = regAttrs
             end;
@@ -1556,11 +1538,11 @@ do
         __index                 = {
             --- Get the namespace from the environment
             -- @static
-            -- @method  GetNameSpace
+            -- @method  GetNamespace
             -- @owner   environment
             -- @param   env:table                   the environment
             -- @return  ns                          the namespace of the environment
-            ["GetNameSpace"]    = function(env)
+            ["GetNamespace"]    = function(env)
                 env = env or getfenv(2)
                 return namespace.Validate(type(env) == "table" and rawget(env, ENV_NS_OWNER))
             end;
@@ -1631,7 +1613,7 @@ do
                 uinsert(apis, "rawget")
                 tinsert(body, [[
                     local nvalid = namespace.Validate
-                    local nsname = namespace.GetNameSpaceName
+                    local nsname = namespace.GetNamespaceName
                     local ns = nvalid(rawget(env, "]] .. ENV_NS_OWNER .. [["))
                     if ns then
                         value = name == nsname(ns, true) and ns or ns[name]
@@ -1666,7 +1648,7 @@ do
                         end
 
                         if value == nil then
-                            value = namespace.GetNameSpace(name)
+                            value = namespace.GetNamespace(name)
                         end
                     end
                 ]])
@@ -1792,16 +1774,16 @@ do
 
             --- Import namespace to environment
             -- @static
-            -- @method  ImportNameSpace
+            -- @method  ImportNamespace
             -- @owner   environment
             -- @format  (env, ns[, stack])
             -- @param   env                         the environment
             -- @param   ns                          the namespace, it can be the namespace itself or its name path
             -- @param   stack                       the stack level
-            ["ImportNameSpace"] = function(env, ns, stack)
+            ["ImportNamespace"] = function(env, ns, stack)
                 ns = namespace.Validate(ns)
-                if type(env) ~= "table" then error("Usage: environment.ImportNameSpace(env, namespace) - the env must be a table", (stack or 1) + 1) end
-                if not ns then error("Usage: environment.ImportNameSpace(env, namespace) - The namespace is not provided", (stack or 1) + 1) end
+                if type(env) ~= "table" then error("Usage: environment.ImportNamespace(env, namespace) - the env must be a table", parsestack(stack) + 1) end
+                if not ns then error("Usage: environment.ImportNamespace(env, namespace) - The namespace is not provided", parsestack(stack) + 1) end
 
                 local imports   = rawget(env, ENV_NS_IMPORTS)
                 if not imports then imports = newStorage(WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
@@ -1821,9 +1803,9 @@ do
             --- Register a namespace as global namespace, so it can be accessed
             -- by all environments
             -- @static
-            -- @method  RegisterGlobalNameSpace
+            -- @method  RegisterGlobalNamespace
             -- @param   namespace                   the target namespace
-            ["RegisterGlobalNameSpace"] = function(ns)
+            ["RegisterGlobalNamespace"] = function(ns)
                 local ns    = namespace.Validate(ns)
                 if ns then uinsert(_GlobalNS, ns) end
             end;
@@ -1891,30 +1873,31 @@ do
             -- @param   stack                       the stack level
             ["SaveValue"]       = function(env, key, value, stack)
                 if type(key)   == "string" and type(value) == "function" then
-                    attribute.SaveAttributes(value, ATTRTAR_FUNCTION, (stack or 1) + 1)
+                    stack       = parsestack(stack) + 1
+                    attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
 
-                    local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key)
+                    local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key, stack)
 
                     if type(final) == "function" and final ~= value then
                         attribute.ToggleTarget(value, final)
                         value   = final
                     end
-                    attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key)
-                    attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key)
+                    attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key, stack)
+                    attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
                 end
                 return rawset(env, key, value)
             end;
 
             --- Set the namespace to the environment
             -- @static
-            -- @method  SetNameSpace
+            -- @method  SetNamespace
             -- @owner   environment
             -- @format  (env, ns[, stack])
             -- @param   env                         the environment
             -- @param   ns                          the namespace, it can be the namespace itself or its name path
             -- @param   stack                       the stack level
-            ["SetNameSpace"]    = function(env, ns, stack)
-                if type(env) ~= "table" then error("Usage: environment.SetNameSpace(env, namespace) - the env must be a table", (stack or 1) + 1) end
+            ["SetNamespace"]    = function(env, ns, stack)
+                if type(env) ~= "table" then error("Usage: environment.SetNamespace(env, namespace) - the env must be a table", parsestack(stack) + 1) end
                 rawset(env, ENV_NS_OWNER, namespace.Validate(ns))
             end;
 
@@ -1927,8 +1910,8 @@ do
             -- @param   base                        the base environment
             -- @param   stack                       the stack level
             ["SetParent"]       = function(env, base, stack)
-                if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", (stack or 1) + 1) end
-                if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", (stack or 1) + 1) end
+                if type(env) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the env must be a table", parsestack(stack) + 1) end
+                if base and type(base) ~= "table" then error("Usage: environment.SetParent(env, [parentenv]) - the parentenv must be a table", parsestack(stack) + 1) end
                 rawset(env, ENV_BASE_ENV, base or nil)
             end;
         },
@@ -1971,9 +1954,9 @@ do
         if not name then error("Usage: import(namespace) - The namespace is not provided", stack + 1) end
 
         if visitor then
-            return environment.ImportNameSpace(visitor, name)
+            return environment.ImportNamespace(visitor, name)
         else
-            return namespace.ExportNameSpace(env, name, flag)
+            return namespace.ExportNamespace(env, name, flag)
         end
     end
 end
@@ -2023,7 +2006,7 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
-    local getNameSpace          = function(root, path)
+    local getNamespace          = function(root, path)
         if type(root)  == "string" then
             root, path  = ROOT_NAMESPACE, root
         elseif root    == nil then
@@ -2031,7 +2014,8 @@ do
         end
 
         if _NSName[root] ~= nil and type(path) == "string" then
-            local iter      = strgmatch(path, "[^%s%p]+")
+            path            = strgsub(path, "%s+", "")
+            local iter      = strgmatch(path, "[%P_]+")
             local subname   = iter()
 
             while subname do
@@ -2048,15 +2032,15 @@ do
     end
 
     local getValidatedNS        = function(target)
-        if type(target) == "string" then return getNameSpace(target) end
+        if type(target) == "string" then return getNamespace(target) end
         return _NSName[target] ~= nil and target or nil
     end
 
-    local saveSubNameSpace      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+    local saveSubNamespace      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(root, name, subns) rawset(root, FLD_NS_SUBNS, saveStorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) end
                                     or  function(root, name, subns) _NSTree = saveStorage(_NSTree, root, saveStorage(_NSTree[root] or {}, name, subns)) end
 
-    local saveNameSpaceName     = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+    local saveNamespaceName     = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(ns, name) rawset(ns, FLD_NS_NAME, name) rawset(ns, FLD_NS_SUBNS, false) end
                                     or  function(ns, name) _NSName = saveStorage(_NSName, ns, name) end
 
@@ -2068,21 +2052,21 @@ do
         __index                 = {
             --- Export a namespace and its children to an environment
             -- @static
-            -- @method  ExportNameSpace
+            -- @method  ExportNamespace
             -- @owner   namespace
             -- @format  (env, ns[, override][, stack])
             -- @param   env                         the environment
             -- @param   ns                          the namespace
             -- @param   override                    whether override the existed value in the environment, Default false
             -- @param   stack                       the stack level
-            ["ExportNameSpace"] = function(env, ns, override, stack)
-                if type(env)   ~= "table" then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - the env must be a table", (stack or 1) + 1) end
+            ["ExportNamespace"] = function(env, ns, override, stack)
+                if type(env)   ~= "table" then error("Usage: namespace.ExportNamespace(env, namespace[, override]) - the env must be a table", parsestack(stack) + 1) end
                 ns  = getValidatedNS(ns)
-                if not ns then error("Usage: namespace.ExportNameSpace(env, namespace[, override]) - The namespace is not provided", (stack or 1) + 1) end
+                if not ns then error("Usage: namespace.ExportNamespace(env, namespace[, override]) - The namespace is not provided", parsestack(stack) + 1) end
 
                 local nsname    = _NSName[ns]
                 if nsname then
-                    nsname      = strmatch(nsname, "[^%s%p]+$")
+                    nsname      = strmatch(nsname, "[%P_]+$")
                     if override or rawget(env, nsname) == nil then rawset(env, nsname, ns) end
                 end
 
@@ -2096,37 +2080,38 @@ do
 
             --- Get the namespace by path
             -- @static
-            -- @method  GetNameSpace
+            -- @method  GetNamespace
             -- @owner   namespace
             -- @format  ([root, ]path)
             -- @param   root                        the root namespace
             -- @param   path:string                 the namespace path
             -- @return  ns                          the namespace
-            ["GetNameSpace"]    = getNameSpace;
+            ["GetNamespace"]    = getNamespace;
 
             --- Get the namespace's path
             -- @static
-            -- @method  GetNameSpaceName
+            -- @method  GetNamespaceName
             -- @owner   namespace
             -- @format  (ns[, lastOnly])
             -- @param   ns                          the namespace
             -- @parma   lastOnly                    whether only the last name of the namespace's path
             -- @return  string                      the path of the namespace or the name of it if lastOnly is true
-            ["GetNameSpaceName"]= function(ns, onlyLast)
+            ["GetNamespaceName"]= function(ns, onlyLast)
                 local name = _NSName[ns]
-                return name and (onlyLast and strmatch(name, "[^%s%p]+$") or name) or "Anonymous"
+                return name and (onlyLast and strmatch(name, "[%P_]+$") or name) or "Anonymous"
             end;
 
             --- Save feature to the namespace
             -- @static
-            -- @method  SaveNameSpace
+            -- @method  SaveNamespace
             -- @owner   namespace
             -- @format  ([root, ]path, feature[, stack])
             -- @param   root                        the root namespace
             -- @param   path:string                 the path of the feature
             -- @param   feature                     the feature, must be table or userdata
             -- @param   stack                       the stack level
-            ["SaveNameSpace"]   = function(root, path, feature, stack)
+            -- @return  feature                     the feature itself
+            ["SaveNamespace"]   = function(root, path, feature, stack)
                 if type(root)  == "string" then
                     root, path, feature, stack = ROOT_NAMESPACE, root, path, feature
                 elseif root    == nil then
@@ -2135,32 +2120,32 @@ do
                     root        = getValidatedNS(root)
                 end
 
-                stack           = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if root == nil then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the root must be namespace", stack)
+                    error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - the root must be namespace", stack)
                 end
                 if type(path) ~= "string" or strtrim(path) == "" then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the path must be string", stack)
+                    error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - the path must be string", stack)
                 else
-                    path        = strtrim(path)
+                    path        = strgsub(path, "%s+", "")
                 end
                 if type(feature) ~= "table" and type(feature) ~= "userdata" then
-                    error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the feature should be userdata or table", stack)
+                    error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - the feature should be userdata or table", stack)
                 end
 
                 if _NSName[feature] ~= nil then
                     local epath = _Cache()
                     if _NSName[root] then tinsert(epath, _NSName[root]) end
-                    path:gsub("[^%s%p]+", function(name) tinsert(epath, name) end)
+                    path:gsub("[%P_]+", function(name) tinsert(epath, name) end)
                     if tblconcat(epath, ".") == _NSName[feature] then
-                        return
+                        return feature
                     else
-                        error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - already registered as " .. (_NSName[feature] or "Anonymous"), stack)
+                        error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - already registered as " .. (_NSName[feature] or "Anonymous"), stack)
                     end
                 end
 
-                local iter      = strgmatch(path, "[^%s%p]+")
+                local iter      = strgmatch(path, "[%P_]+")
                 local subname   = iter()
 
                 while subname do
@@ -2170,39 +2155,41 @@ do
 
                     if not nxt then
                         if subns then
-                            if subns == feature then return end
-                            error("Usage: namespace.SaveNameSpace([root, ]path, feature[, stack]) - the namespace path has already be used by others", stack)
+                            if subns == feature then return feature end
+                            error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - the namespace path has already be used by others", stack)
                         else
-                            saveNameSpaceName(feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
-                            saveSubNameSpace(root, subname, feature)
+                            saveNamespaceName(feature, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                            saveSubNamespace(root, subname, feature)
                         end
                     elseif not subns then
                         subns = prototype.NewProxy(tnamespace)
 
-                        saveNameSpaceName(subns, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
-                        saveSubNameSpace(root, subname, subns)
+                        saveNamespaceName(subns, _NSName[root] and (_NSName[root] .. "." .. subname) or subname)
+                        saveSubNamespace(root, subname, subns)
                     end
 
                     root, subname = subns, nxt
                 end
+
+                return feature
             end;
 
             --- Save anonymous namespace, anonymous namespace also can be used
             -- as new root of another namespace tree.
             -- @static
-            -- @method  SaveAnonymousNameSpace
+            -- @method  SaveAnonymousNamespace
             -- @owner   namespace
             -- @param   feature                     the feature, must be table or userdata
             -- @param   stack                       the stack level
-            ["SaveAnonymousNameSpace"] = function(feature, stack)
-                stack           = (type(stack) == "number" and stack or 1) + 1
+            ["SaveAnonymousNamespace"] = function(feature, stack)
+                stack           = parsestack(stack) + 1
                 if type(feature) ~= "table" and type(feature) ~= "userdata" then
-                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature should be userdata or table", stack)
+                    error("Usage: namespace.SaveAnonymousNamespace(feature[, stack]) - the feature should be userdata or table", stack)
                 end
                 if _NSName[feature] then
-                    error("Usage: namespace.SaveAnonymousNameSpace(feature[, stack]) - the feature already registered as " .. _NSName[feature], stack)
+                    error("Usage: namespace.SaveAnonymousNamespace(feature[, stack]) - the feature already registered as " .. _NSName[feature], stack)
                 end
-                saveNameSpaceName(feature, false)
+                saveNamespaceName(feature, false)
             end;
 
             --- Whether the target is a namespace
@@ -2216,31 +2203,32 @@ do
         __newindex              = readOnly,
         __call                  = function(self, ...)
             local visitor, env, target, _, flag, stack = getFeatureParams(namespace, ...)
+            stack               = stack + 1
 
-            if not env then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the environment", stack + 1) end
+            if not env then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the environment", stack) end
 
             if target ~= nil then
                 if type(target) == "string" then
-                    local ns    = getNameSpace(target)
+                    local ns    = getNamespace(target)
                     if not ns then
                         ns = prototype.NewProxy(tnamespace)
-                        attribute.SaveAttributes(ns, ATTRTAR_NAMESPACE, stack + 1)
-                        namespace.SaveNameSpace(target, ns, stack + 1)
-                        attribute.AttachAttributes(ns, ATTRTAR_NAMESPACE)
-                        target    = ns
+                        attribute.SaveAttributes(ns, ATTRTAR_NAMESPACE, stack)
+                        namespace.SaveNamespace(target, ns, stack)
+                        attribute.AttachAttributes(ns, ATTRTAR_NAMESPACE, nil, nil, stack)
                     end
+                    target = ns
                 else
                     target = Validate(target)
                 end
 
-                if not target then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the namespace", stack + 1) end
+                if not target then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the namespace", stack) end
             end
 
             if not flag then
                 if visitor then
-                    environment.SetNameSpace(visitor, target)
+                    environment.SetNamespace(visitor, target)
                 elseif env and env ~= visitor then
-                    namespace.ExportNameSpace(env, target)
+                    namespace.ExportNamespace(env, target)
                 end
             end
 
@@ -2250,15 +2238,15 @@ do
 
     -- default type for namespace
     tnamespace                  = prototype {
-        __index                 = namespace.GetNameSpace,
+        __index                 = namespace.GetNamespace,
         __newindex              = readOnly,
-        __tostring              = namespace.GetNameSpaceName,
+        __tostring              = namespace.GetNamespaceName,
         __metatable             = namespace,
         __concat                = typeconcat,
         __call                  = function(self, definition)
             local env           = prototype.NewObject(tenvironment)
             environment.Initialize(env)
-            environment.SetNameSpace(env, self)
+            environment.SetNamespace(env, self)
             if definition then
                 return env(definition)
             else
@@ -2271,7 +2259,7 @@ do
     --                            Initialize                             --
     -----------------------------------------------------------------------
     ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
-    namespace.SaveAnonymousNameSpace(ROOT_NAMESPACE)
+    namespace.SaveAnonymousNamespace(ROOT_NAMESPACE)
 end
 
 -------------------------------------------------------------------------------
@@ -2468,26 +2456,26 @@ do
             -- @param   key                         the element name
             -- @param   value                       the element value
             -- @param   stack                       the stack level
-            ["AddElement"]    = function(target, key, value, stack)
+            ["AddElement"]      = function(target, key, value, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
+                stack           = parsestack(stack) + 1
 
                 if info then
-                    if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
-                    if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack + 1) end
+                    if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
                     for k, v in pairs, info[FLD_ENUM_ITEMS] do
                         if strupper(k) == strupper(key) then
                             if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack + 1)
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack)
                         elseif v == value then
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack + 1)
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack)
                         end
                     end
 
                     info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
                 else
-                    error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack + 1)
+                    error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -2499,14 +2487,14 @@ do
             -- @param   enumeration                 the enumeration
             -- @param   stack                       the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack   = type(stack) == "number" and stack or 1
-                target  = enum.Validate(target)
-                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack + 1) end
+                stack           = parsestack(stack) + 1
+                target          = enum.Validate(target)
+                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
 
                 local info      = _EnumInfo[target]
 
-                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack + 1) end
-                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack + 1) end
+                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
                     [FLD_ENUM_MOD    ]  = MOD_ENUM_INIT,
@@ -2518,7 +2506,7 @@ do
                     [FLD_ENUM_DEFAULT]  = nil,
                 })
 
-                attribute.SaveAttributes(target, ATTRTAR_ENUM, stack + 1)
+                attribute.SaveAttributes(target, ATTRTAR_ENUM, stack)
             end;
 
             --- End the enumeration's definition
@@ -2532,9 +2520,9 @@ do
                 local ninfo     = _EnumBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = type(stack) == "number" and stack or 1
+                stack           = parsestack(stack) + 1
 
-                attribute.ApplyAttributes(target, ATTRTAR_ENUM)
+                attribute.ApplyAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
                 _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, nil)
 
@@ -2563,14 +2551,14 @@ do
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
                     ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo[FLD_ENUM_DEFAULT])
                     if ninfo[FLD_ENUM_DEFAULT] == nil then
-                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack + 1)
+                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack)
                     end
                 end
 
                 -- Save as new enumeration's info
                 saveEnumMeta(target, ninfo)
 
-                attribute.AttachAttributes(target, ATTRTAR_ENUM)
+                attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
                 return target
             end;
@@ -2725,13 +2713,13 @@ do
             -- @param   stack                       the stack level
             ["SetDefault"]      = function(target, default, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
+                stack           = parsestack(stack) + 1
 
                 if info then
-                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
+                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_ENUM_DEFAULT] = default
                 else
-                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack + 1)
+                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -2744,11 +2732,11 @@ do
             -- @param   stack                       the stack level
             ["SetCaseIgnored"]  = function(target, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
+                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD])
 
                         local enums     = info[FLD_ENUM_ITEMS]
@@ -2758,7 +2746,7 @@ do
                         _Cache(enums)
                     end
                 else
-                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack + 1)
+                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -2771,16 +2759,16 @@ do
             -- @param   stack                       the stack level
             ["SetFlagsEnum"]    = function(target, stack)
                 local info, def = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack + 1) end
-                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack + 1) end
+                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
-                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack + 1)
+                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -2793,14 +2781,13 @@ do
             -- @param   stack                       the stack level
             ["SetSealed"]       = function(target, stack)
                 local info      = getEnumTargetInfo(target)
-                stack = type(stack) == "number" and stack or 1
 
                 if info then
                     if not validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
                         info[FLD_ENUM_MOD] = turnOnFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
-                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", stack + 1)
+                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", parsestack(stack) + 1)
                 end
             end;
 
@@ -2857,7 +2844,7 @@ do
             Debug("[enum] %s created", stack, tostring(target))
 
             local builder = prototype.NewObject(enumbuilder)
-            environment.SetNameSpace(builder, target)
+            environment.SetNamespace(builder, target)
 
             if definition then
                 builder(definition, stack)
@@ -2878,17 +2865,17 @@ do
         __index                 = writeOnly,
         __newindex              = readOnly,
         __call                  = function(self, definition, stack)
-            stack   = (type(stack) == "number" and stack or 1) + 1
+            stack               = parsestack(stack) + 1
             if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
 
-            local owner = environment.GetNameSpace(self)
+            local owner = environment.GetNamespace(self)
             if not owner then error("The enumeration can't be found", stack) end
             if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
 
-            local final = attribute.InitDefinition(owner, ATTRTAR_ENUM, definition)
+            local final = attribute.InitDefinition(owner, ATTRTAR_ENUM, definition, nil, nil, stack)
 
             if type(final) == "table" then
-                definition = final
+                definition      = final
             end
 
             for k, v in pairs, definition do
@@ -3231,7 +3218,7 @@ do
     end
 
     local setStructBuilderValue = function (self, key, value, stack, notenvset)
-        local owner = environment.GetNameSpace(self)
+        local owner = environment.GetNamespace(self)
         if not (owner and _StructBuilderInDefine[self]) then return end
 
         local tkey  = type(key)
@@ -3247,7 +3234,7 @@ do
                 if key == STRUCT_KEYWORD_INIT then
                     struct.SetInitializer(owner, value, stack)
                     return true
-                elseif key == STRUCT_KEYWORD_VALD or key == namespace.GetNameSpaceName(owner, true) then
+                elseif key == STRUCT_KEYWORD_VALD or key == namespace.GetNamespaceName(owner, true) then
                     struct.SetValidator(owner, value, stack)
                     return true
                 else
@@ -3908,7 +3895,7 @@ do
                         end
                     end
                 end
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -3923,7 +3910,7 @@ do
                         if info[idx][FLD_MEMBER_NAME] == name then
                             error(strformat("Usage: struct.AddMember(structure[, name], definition[, stack]) - There is an existed member with the name : %q", name), stack)
                         end
-                        idx = idx + 1
+                        idx     = idx + 1
                     end
 
                     local mobj  = prototype.NewProxy(member)
@@ -3933,7 +3920,7 @@ do
                     minfo[FLD_MEMBER_NAME]  = name
 
                     -- Save attributes
-                    attribute.SaveAttributes(mobj, ATTRTAR_MEMBER, stack + 1)
+                    attribute.SaveAttributes(mobj, ATTRTAR_MEMBER, stack)
 
                     -- Inherit attributes
                     if info[FLD_STRUCT_BASE] then
@@ -3942,7 +3929,7 @@ do
                     end
 
                     -- Init the definition with attributes
-                    definition = attribute.InitDefinition(mobj, ATTRTAR_MEMBER, definition, target, name)
+                    definition = attribute.InitDefinition(mobj, ATTRTAR_MEMBER, definition, target, name, stack)
 
                     -- Parse the definition
                     for k, v in pairs, definition do
@@ -3985,8 +3972,8 @@ do
                     end
 
                     info[idx] = minfo
-                    attribute.ApplyAttributes (mobj, ATTRTAR_MEMBER, target, name)
-                    attribute.AttachAttributes(mobj, ATTRTAR_MEMBER, target, name)
+                    attribute.ApplyAttributes (mobj, ATTRTAR_MEMBER, target, name, stack)
+                    attribute.AttachAttributes(mobj, ATTRTAR_MEMBER, target, name, stack)
                 else
                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid", stack)
                 end
@@ -4003,7 +3990,7 @@ do
             -- @param   stack                       the stack level
             ["AddMethod"]       = function(target, name, func, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.AddMethod(structure, name, func[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -4019,7 +4006,7 @@ do
                         if sfunc then attribute.InheritAttributes(func, ATTRTAR_METHOD, sfunc) end
                     end
 
-                    local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name)
+                    local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
                     if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
                     if not info[name] then
@@ -4029,8 +4016,8 @@ do
                         info[name]  = func
                     end
 
-                    attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name)
-                    attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
+                    attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
+                    attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
                 else
                     error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
                 end
@@ -4044,7 +4031,7 @@ do
             -- @param   structure                   the structure
             -- @param   stack                       the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack = parsestack(stack) + 1
 
                 target          = struct.Validate(target)
                 if not target then error("Usage: struct.BeginDefinition(structure[, stack]) - The structure not existed", stack) end
@@ -4073,9 +4060,9 @@ do
                 local ninfo     = _StructBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack = parsestack(stack) + 1
 
-                attribute.ApplyAttributes(target, ATTRTAR_STRUCT)
+                attribute.ApplyAttributes(target, ATTRTAR_STRUCT, nil, nil, stack)
 
                 _StructBuilderInfo  = saveStorage(_StructBuilderInfo, target, nil)
 
@@ -4216,7 +4203,7 @@ do
                     end
                 end
 
-                attribute.AttachAttributes(target, ATTRTAR_STRUCT)
+                attribute.AttachAttributes(target, ATTRTAR_STRUCT, nil, nil, stack)
 
                 -- Refresh structs depended on this
                 if _DependenceMap[target] then
@@ -4444,7 +4431,7 @@ do
             -- @param   stack                       the stack level
             ["SetArrayElement"] = function(target, eleType, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -4470,7 +4457,7 @@ do
             -- @param   stack                       the stack level
             ["SetBaseStruct"]   = function(target, base, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetBaseStruct(structure, base) - The %s's definition is finished", tostring(target)), stack) end
@@ -4492,7 +4479,7 @@ do
             -- @param   stack                       the stack level
             ["SetDefault"]      = function(target, default, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetDefault(structure, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -4512,7 +4499,7 @@ do
             -- @param   stack                       the stack level
             ["SetValidator"]    = function(target, func, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -4533,7 +4520,7 @@ do
             -- @param   stack                       the stack level
             ["SetInitializer"]  = function(target, func, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetInitializer(structure, initializer[, stack]) - The %s's definition is finished", tostring(target)), stack) end
@@ -4553,7 +4540,7 @@ do
             -- @param   stack                       the stack level
             ["SetSealed"]       = function(target, stack)
                 local info      = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
@@ -4574,7 +4561,7 @@ do
             -- @param   stack                       the stack level
             ["SetStaticMethod"] = function(target, name, stack)
                 local info, def = getStructTargetInfo(target)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 if info then
                     if type(name) ~= "string" then error("Usage: struct.SetStaticMethod(structure, name) - the name must be a string", stack) end
@@ -4643,7 +4630,7 @@ do
 
             local builder   = prototype.NewObject(structbuilder)
             environment.Initialize  (builder)
-            environment.SetNameSpace(builder, target)
+            environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
 
             _StructBuilderInDefine  = saveStorage(_StructBuilderInDefine, builder, true)
@@ -4662,7 +4649,7 @@ do
         __index                 = function(self, name)
             if type(name) == "string" then
                 local info  = _StructInfo[self]
-                return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNameSpace(self, name)
+                return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNamespace(self, name)
             end
         end,
         __call                  = function(self, ...)
@@ -4675,7 +4662,7 @@ do
 
     structbuilder               = prototype {
         __tostring              = function(self)
-            local owner         = environment.GetNameSpace(self)
+            local owner         = environment.GetNamespace(self)
             return"[structbuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
         __index                 = function(self, key)
@@ -4688,13 +4675,13 @@ do
             end
         end,
         __call                  = function(self, definition, stack)
-            stack = (type(stack) == "number" and stack or 1) + 1
+            stack               = parsestack(stack) + 1
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = environment.GetNameSpace(self)
+            local owner = environment.GetNamespace(self)
             if not (owner and _StructBuilderInDefine[self] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition), self, stack)
+            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition, nil, nil, stack), self, stack)
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -4778,7 +4765,7 @@ do
         __call                  = function(self, ...)
             if self == member then
                 local visitor, env, name, definition, flag, stack  = getFeatureParams(member, ...)
-                local owner = visitor and environment.GetNameSpace(visitor)
+                local owner = visitor and environment.GetNamespace(visitor)
 
                 if owner and name then
                     if type(definition) == "table" then
@@ -4825,12 +4812,12 @@ do
     -----------------------------------------------------------------------
     endstruct                   = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
         local visitor, env, name, definition, flag, stack  = getFeatureParams(endstruct, ...)
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
 
         if not owner or not visitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
-        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+        if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
         _StructBuilderInDefine = saveStorage(_StructBuilderInDefine, visitor, nil)
         struct.EndDefinition(owner, stack)
@@ -5438,7 +5425,7 @@ do
                         local tvalue = type(value)
                         if tvalue == "function" then
                             attribute.SaveAttributes(value, ATTRTAR_FUNCTION, 2)
-                            local ret = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, name)
+                            local ret = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, key, 2)
                             attribute.ReleaseTargetAttributes(value)
                             value = ret
                         end
@@ -6002,18 +5989,18 @@ do
 
     -- Shared APIS
     local preDefineCheck        = function (target, name, stack, allowDefined)
-        local info, def = getICTargetInfo(target)
-        stack = type(stack) == "number" and stack or 1
+        local info, def         = getICTargetInfo(target)
+        stack                   = parsestack(stack)
         if not info then return nil, nil, stack, "the target is not valid" end
         if not allowDefined and not def then return nil, nil, stack, strformat("the %s's definition is finished", tostring(target)) end
         if not name or type(name) ~= "string" then return info, nil, stack, "the name must be a string." end
-        name = strtrim(name)
+        name                    = strtrim(name)
         if name == "" then return info, nil, stack, "the name can't be empty." end
         return info, name, stack, nil, def
     end
 
     local addSuperType          = function (info, target, supType)
-        local isIF      = interface.Validate(supType)
+        local isIF              = interface.Validate(supType)
 
         -- Clear _ICDependsMap for old extend interfaces
         for i = #info, FLD_IC_STEXT, -1 do
@@ -6093,17 +6080,19 @@ do
             return strformat("The %s can't be overridden", name), stack
         end
 
-        attribute.SaveAttributes(func, ATTRTAR_METHOD, stack + 2)
+        stack       = stack + 2
+
+        attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
         if not info[name] then
             attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuperMethod(info, name))
         end
 
-        local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name)
+        local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
         if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
-        attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name)
-        attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name)
+        attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
+        attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
 
         if def then
             if typmtd and typmtd[name] == false then
@@ -6135,18 +6124,20 @@ do
             return "the data must be a function", stack
         end
 
+        stack       = stack + 2
+
         if tdata == "function" then
-            attribute.SaveAttributes(data, ATTRTAR_METHOD, stack + 2)
+            attribute.SaveAttributes(data, ATTRTAR_METHOD, stack)
 
             if not info[name] then
                 attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperMetaMethod(info, name))
             end
 
-            local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name)
+            local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name, stack)
             if ret ~= data then attribute.ToggleTarget(data, ret) data = ret end
 
-            attribute.ApplyAttributes (data, ATTRTAR_METHOD, target, name)
-            attribute.AttachAttributes(data, ATTRTAR_METHOD, target, name)
+            attribute.ApplyAttributes (data, ATTRTAR_METHOD, target, name, stack)
+            attribute.AttachAttributes(data, ATTRTAR_METHOD, target, name, stack)
         end
 
         -- Save
@@ -6246,7 +6237,7 @@ do
 
     -- Buidler helpers
     local setIFBuilderValue     = function (self, key, value, stack, notenvset)
-        local owner = environment.GetNameSpace(self)
+        local owner = environment.GetNamespace(self)
         if not (owner and _ICBuilderInDefine[self]) then return end
 
         local tkey  = type(key)
@@ -6258,7 +6249,7 @@ do
             if META_KEYS[tkey] then
                 interface.AddMetaData(owner, key, value, stack)
                 return true
-            elseif tkey == namespace.GetNameSpaceName(owner, true) then
+            elseif tkey == namespace.GetNamespaceName(owner, true) then
                 interface.SetInitializer(owner, value, stack)
                 return true
             elseif tval == "function" then
@@ -6298,7 +6289,7 @@ do
     end
 
     local setClassBuilderValue  = function (self, key, value, stack, notenvset)
-        local owner = environment.GetNameSpace(self)
+        local owner = environment.GetNamespace(self)
         if not (owner and _ICBuilderInDefine[self]) then return end
 
         local tkey  = type(key)
@@ -6310,7 +6301,7 @@ do
             if META_KEYS[key] then
                 class.AddMetaData(owner, key, value, stack)
                 return true
-            elseif tkey == namespace.GetNameSpaceName(owner, true) then
+            elseif tkey == namespace.GetNamespaceName(owner, true) then
                 class.SetConstructor(owner, value, stack)
                 return true
             elseif tval == "function" then
@@ -6431,7 +6422,7 @@ do
             -- @param   target                      the target interface
             -- @param   stack                       the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack = parsestack(stack) + 1
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.BeginDefinition(target[, stack]) - the target is not valid", stack) end
@@ -6455,10 +6446,10 @@ do
                 local ninfo     = _ICBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 attribute.InheritAttributes(target, ATTRTAR_INTERFACE, unpack(ninfo, FLD_IC_STEXT))
-                attribute.ApplyAttributes  (target, ATTRTAR_INTERFACE)
+                attribute.ApplyAttributes  (target, ATTRTAR_INTERFACE, nil, nil, stack)
 
                 -- End interface's definition
                 _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
@@ -6468,7 +6459,7 @@ do
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
 
-                attribute.AttachAttributes(target, ATTRTAR_INTERFACE)
+                attribute.AttachAttributes(target, ATTRTAR_INTERFACE, nil, nil, stack)
 
                 reDefineChildren(target, stack)
 
@@ -6483,7 +6474,7 @@ do
             -- @param   target                      the target interface
             -- @param   stack                       the stack level
             ["RefreshDefinition"] = function(target, stack)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.RefreshDefinition(interface[, stack]) - interface not existed", stack) end
@@ -6770,7 +6761,7 @@ do
             -- @param   stack                       the stack level
             -- @return  boolean                     true if the key-value pair is accepted as definition
             ["RegisterParser"]  = function(parser, stack)
-                stack           = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
                 if not prototype.Validate(parser)           then error("Usage: interface.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
                 if not getprototypemethod(parser, "Parse")  then error("Usage: interface.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
                 _Parser         = saveStorage(_Parser, parser, true)
@@ -6916,7 +6907,7 @@ do
 
             local builder = prototype.NewObject(interfacebuilder)
             environment.Initialize  (builder)
-            environment.SetNameSpace(builder, target)
+            environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
 
             _ICBuilderInDefine  = saveStorage(_ICBuilderInDefine, builder, true)
@@ -7010,7 +7001,7 @@ do
             -- @param   target                      the target class
             -- @param   stack                       the stack level
             ["BeginDefinition"] = function(target, stack)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 target          = class.Validate(target)
                 if not target then error("Usage: class.BeginDefinition(target[, stack]) - the target is not valid", stack) end
@@ -7034,10 +7025,10 @@ do
                 local ninfo     = _ICBuilderInfo[target]
                 if not ninfo then return end
 
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 attribute.InheritAttributes(target, ATTRTAR_CLASS, unpack(ninfo, ninfo[FLD_IC_SUPCLS] and FLD_IC_SUPCLS or FLD_IC_STEXT))
-                attribute.ApplyAttributes  (target, ATTRTAR_CLASS)
+                attribute.ApplyAttributes  (target, ATTRTAR_CLASS, nil, nil, stack)
 
                 -- End class's definition
                 _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
@@ -7048,7 +7039,7 @@ do
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
 
-                attribute.AttachAttributes(target, ATTRTAR_CLASS)
+                attribute.AttachAttributes(target, ATTRTAR_CLASS, nil, nil, stack)
 
                 reDefineChildren(target, stack)
 
@@ -7063,7 +7054,7 @@ do
             -- @param   target                      the target class
             -- @param   stack                       the stack level
             ["RefreshDefinition"] = function(target, stack)
-                stack = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
 
                 target          = class.Validate(target)
                 if not target then error("Usage: class.RefreshDefinition(target[, stack]) - the target is not valid", stack) end
@@ -7341,7 +7332,7 @@ do
             -- @param   stack                       the stack level
             -- @return  boolean                     true if the key-value pair is accepted as definition
             ["RegisterParser"]  = function(parser, stack)
-                stack           = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
                 if not prototype.Validate(parser)           then error("Usage: class.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
                 if not getprototypemethod(parser, "Parse")  then error("Usage: class.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
                 _Parser         = saveStorage(_Parser, parser, true)
@@ -7582,7 +7573,7 @@ do
 
             local builder = prototype.NewObject(classbuilder)
             environment.Initialize  (builder)
-            environment.SetNameSpace(builder, target)
+            environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
 
             _ICBuilderInDefine  = saveStorage(_ICBuilderInDefine, builder, true)
@@ -7613,7 +7604,7 @@ do
                 end
 
                 -- Access child-namespaces
-                return namespace.GetNameSpace(self, key)
+                return namespace.GetNamespace(self, key)
             end
         end,
         __newindex              = function(self, key, value)
@@ -7714,7 +7705,7 @@ do
 
     interfacebuilder            = prototype {
         __tostring              = function(self)
-            local owner         = environment.GetNameSpace(self)
+            local owner         = environment.GetNamespace(self)
             return "[interfacebuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
         __index                 = function(self, key)
@@ -7727,13 +7718,13 @@ do
             end
         end,
         __call                  = function(self, definition, stack)
-            stack = (type(stack) == "number" and stack or 1) + 1
+            stack               = parsestack(stack) + 1
             if not definition then error("Usage: interface([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = environment.GetNameSpace(self)
+            local owner         = environment.GetNamespace(self)
             if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The interface's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_INTERFACE, definition), self, stack)
+            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_INTERFACE, definition, nil, nil, stack), self, stack)
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -7768,7 +7759,7 @@ do
 
     classbuilder                = prototype {
         __tostring              = function(self)
-            local owner         = environment.GetNameSpace(self)
+            local owner         = environment.GetNamespace(self)
             return "[classbuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
         __index                 = function(self, key)
@@ -7781,13 +7772,13 @@ do
             end
         end,
         __call                  = function(self, definition, stack)
-            stack = (type(stack) == "number" and stack or 1) + 1
+            stack               = parsestack(stack) + 1
             if not definition then error("Usage: class([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = environment.GetNameSpace(self)
+            local owner         = environment.GetNamespace(self)
             if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The class's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_CLASS, definition), self, stack)
+            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_CLASS, definition, nil, nil, stack), self, stack)
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -7840,7 +7831,7 @@ do
         name = namespace.Validate(name)
         if not name then error("Usage: extend(interface) - The interface is not provided", stack + 1) end
 
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
         if not owner  then error("Usage: extend(interface) - The system can't figure out the class or interface", stack + 1) end
 
         interface.AddExtend(owner, name, stack + 1)
@@ -7857,7 +7848,7 @@ do
 
         if type(definition) ~= "table" then error("Usage: field { key-value pairs } - The field only accept table as definition", stack + 1) end
 
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
 
         if owner then
             if class.Validate(owner) then
@@ -7884,10 +7875,28 @@ do
         name = namespace.Validate(name)
         if not name then error("Usage: inherit(class) - The class is not provided", stack + 1) end
 
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
         if not owner  then error("Usage: inherit(class) - The system can't figure out the class", stack + 1) end
 
         class.SetSuperClass(owner, name, stack + 1)
+    end
+
+    -----------------------------------------------------------------------
+    -- set the require class to the interface
+    --
+    -- @keyword     require
+    -- @usage       require "System.Object"
+    -----------------------------------------------------------------------
+    require                      = function (...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(require, ...)
+
+        name = namespace.Validate(name)
+        if not name then error("Usage: require(class) - The class is not provided", stack + 1) end
+
+        local owner = visitor and environment.GetNamespace(visitor)
+        if not owner  then error("Usage: require(class) - The system can't figure out the interface", stack + 1) end
+
+        interface.SetRequireClass(owner, name, stack + 1)
     end
 
     -----------------------------------------------------------------------
@@ -7901,12 +7910,12 @@ do
     -----------------------------------------------------------------------
     endinterface                = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
         local visitor, env, name, definition, flag, stack  = getFeatureParams(endinterface, ...)
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
 
         if not owner or not visitor then error([[Usage: endinterface "name" - can't be used here.]], stack) end
-        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+        if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
         _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
         interface.EndDefinition(owner, stack)
@@ -7933,12 +7942,12 @@ do
     -----------------------------------------------------------------------
     endclass                    = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
         local visitor, env, name, definition, flag, stack  = getFeatureParams(endclass, ...)
-        local owner = visitor and environment.GetNameSpace(visitor)
+        local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
 
         if not owner or not visitor then error([[Usage: endclass "name" - can't be used here.]], stack) end
-        if namespace.GetNameSpaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+        if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
         _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
         class.EndDefinition(owner, stack)
@@ -8014,7 +8023,7 @@ do
                     local evt       = prototype.NewProxy(tevent)
                     local info      = {
                         [FLD_EVENT_NAME]    = key,
-                        [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNameSpaceName(owner, true) .. "_" .. key,
+                        [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNamespaceName(owner, true) .. "_" .. key,
                         [FLD_EVENT_OWNER]   = owner,
                         [FLD_EVENT_STATIC]  = value or nil,
                     }
@@ -8025,9 +8034,9 @@ do
                     if super and event.Validate(super) then
                         _EventInDefine  = saveStorage(_EventInDefine, evt, true)
                         attribute.InheritAttributes(evt, ATTRTAR_EVENT, super)
-                        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, key)
+                        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, key, stack)
                         _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
-                        attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, key)
+                        attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, key, stack)
                     end
 
                     interface.AddFeature(owner, key, evt, stack + 1)
@@ -8037,58 +8046,8 @@ do
             end;
 
             ["Validate"]        = function(self) return _EventInfo[self] and self or nil end;
-        },
-        __newindex              = readOnly,
-        __call                  = function(self, ...)
-            local visitor, env, name, definition, flag, stack = getFeatureParams(event, ...)
 
-            stack               = stack + 1
-
-            if not name or name == "" then error([[Usage: event "name" - the name must be a string]], stack) end
-
-            local owner = visitor and environment.GetNameSpace(visitor)
-
-            if owner and (interface.Validate(owner) or class.Validate(owner)) then
-                local evt       = prototype.NewProxy(tevent)
-                local info      = {
-                    [FLD_EVENT_NAME]    = name,
-                    [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNameSpaceName(owner, true) .. "_" .. name,
-                    [FLD_EVENT_OWNER]   = owner,
-                    [FLD_EVENT_STATIC]  = flag or nil,
-                }
-
-                saveEventInfo(evt, info)
-
-                _EventInDefine  = saveStorage(_EventInDefine, evt, true)
-
-                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack)
-
-                local super     = interface.GetSuperFeature(owner, name)
-                if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
-                attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name)
-
-                _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
-
-                attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, name)
-
-                interface.AddFeature(owner, name, evt, stack)
-
-                -- Save the event proxy to the visitor, so it can be called directly
-                rawset(visitor, name, evt)
-
-                return evt
-            else
-                error([[Usage: event "name" - the event can't be used here.]], stack)
-            end
-        end,
-    }
-
-    tevent                      = prototype {
-        __tostring              = function(self)
-            local info = _EventInfo[self]
-            return "[event]" .. namespace.GetNameSpaceName(info[FLD_EVENT_OWNER]) .. "." .. info[FLD_EVENT_NAME]
-        end;
-        __index                 = {
+            -- events
             ["Get"]             = function(self, obj, nocreation)
                 local info      = _EventInfo[self]
                 if info then
@@ -8134,8 +8093,6 @@ do
                 return info and info[FLD_EVENT_HANDLER] or false
             end;
 
-            ["Invoke"]          = event.Invoke;
-
             ["IsShareable"]     = function(self) return true end;
 
             ["IsStatic"]        = function(self)
@@ -8145,7 +8102,7 @@ do
 
             ["Set"]             = function(self, obj, delegate, stack)
                 local info      = _EventInfo[self]
-                stack           = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
                 if not info then error("Usage: event:Set(obj, delegate[, stack]) - the event is not valid", stack) end
                 if type(obj) ~= "table" then error("Usage: event:Set(obj, delegate[, stack]) - the object is not valid", stack) end
 
@@ -8154,7 +8111,7 @@ do
                     odel:SetFinalFunction(nil)
                 elseif type(delegate) == "function" then
                     attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
-                    local ret = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, info[FLD_EVENT_NAME])
+                    local ret = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, info[FLD_EVENT_NAME], stack)
                     attribute.ReleaseTargetAttributes(delegate)
                     odel:SetFinalFunction(ret)
                 elseif getmetatable(delegate) == Delegate then
@@ -8167,7 +8124,7 @@ do
             end;
 
             ["SetEventChangeHandler"] = function(self, handler, stack)
-                stack           = (type(stack) == "number" and stack or 1) + 1
+                stack           = parsestack(stack) + 1
                 if _EventInDefine[self] then
                     if type(handler) ~= "function" then error("Usage: event:SetEventChangeHandler(handler[, stack]) - the handler must be a function", stack) end
                     _EventInfo[self][FLD_EVENT_HANDLER] = handler
@@ -8180,9 +8137,69 @@ do
                 if _EventInDefine[self] then
                     _EventInfo[self][FLD_EVENT_STATIC] = true
                 else
-                    error("Usage: event:SetStatic([stack]) - the event's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: event:SetStatic([stack]) - the event's definition is finished", parsestack(stack) + 1)
                 end
             end;
+        },
+        __newindex              = readOnly,
+        __call                  = function(self, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(event, ...)
+
+            stack               = stack + 1
+
+            if not name or name == "" then error([[Usage: event "name" - the name must be a string]], stack) end
+
+            local owner = visitor and environment.GetNamespace(visitor)
+
+            if owner and (interface.Validate(owner) or class.Validate(owner)) then
+                local evt       = prototype.NewProxy(tevent)
+                local info      = {
+                    [FLD_EVENT_NAME]    = name,
+                    [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNamespaceName(owner, true) .. "_" .. name,
+                    [FLD_EVENT_OWNER]   = owner,
+                    [FLD_EVENT_STATIC]  = flag or nil,
+                }
+
+                saveEventInfo(evt, info)
+
+                _EventInDefine  = saveStorage(_EventInDefine, evt, true)
+
+                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack)
+
+                local super     = interface.GetSuperFeature(owner, name)
+                if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
+                attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+
+                _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
+
+                attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+
+                interface.AddFeature(owner, name, evt, stack)
+
+                -- Save the event proxy to the visitor, so it can be called directly
+                rawset(visitor, name, evt)
+
+                return evt
+            else
+                error([[Usage: event "name" - the event can't be used here.]], stack)
+            end
+        end,
+    }
+
+    tevent                      = prototype {
+        __tostring              = function(self)
+            local info = _EventInfo[self]
+            return "[event]" .. namespace.GetNamespaceName(info[FLD_EVENT_OWNER]) .. "." .. info[FLD_EVENT_NAME]
+        end;
+        __index                 = {
+            ["Get"]             = event.Get;
+            ["GetEventChangeHandler"] = event.GetEventChangeHandler;
+            ["Invoke"]          = event.Invoke;
+            ["IsShareable"]     = event.IsShareable;
+            ["IsStatic"]        = event.IsStatic;
+            ["Set"]             = event.Set;
+            ["SetEventChangeHandler"] = event.SetEventChangeHandler;
+            ["SetStatic"]       = event.SetStatic;
         },
         __newindex              = readOnly,
         __call                  = event.Invoke,
@@ -8752,46 +8769,6 @@ do
     -----------------------------------------------------------------------
     property                    = prototype {
         __index                 = {
-            ["Validate"]        = function(self) return _PropertyInfo[self] and self or nil end;
-        },
-        __call                  = function(self, ...)
-            local visitor, env, name, definition, flag, stack = getFeatureParams(property, ...)
-
-            stack               = stack + 1
-
-            if not name or name == "" then error([[Usage: property "name" { ... } - the name must be a string]], stack) end
-
-            local owner = visitor and environment.GetNameSpace(visitor)
-
-            if owner and (interface.Validate(owner) or class.Validate(owner)) then
-                local prop      = prototype.NewProxy(tproperty)
-                local info      = {
-                    [FLD_PROP_NAME]    = name,
-                    [FLD_PROP_OWNER]   = owner,
-                }
-
-                savePropertyInfo(prop, info)
-
-                _PropertyInDefine  = saveStorage(_PropertyInDefine, prop, true)
-
-                attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack)
-
-                local super     = interface.GetSuperFeature(owner, name)
-                if super and property.Validate(super) then attribute.InheritAttributes(prop, ATTRTAR_PROPERTY, super) end
-
-                return prop
-            else
-                error([[Usage: property "name" - the property can't be used here.]], stack)
-            end
-        end,
-    }
-
-    tproperty                   = prototype {
-        __tostring              = function(self)
-            local info = _PropertyInfo[self]
-            return "[property]" .. namespace.GetNameSpaceName(info[FLD_PROP_OWNER]) .. "." .. info[FLD_PROP_NAME]
-        end;
-        __index                 = {
             ["GetAccessor"]     = function(self)
                 local info      = _PropertyInfo[self]
                 if not info then return end
@@ -8894,7 +8871,7 @@ do
 
                         if info[FLD_PROP_FIELD] == true then info[FLD_PROP_FIELD] = nil end
 
-                        info[FLD_PROP_FIELD] = info[FLD_PROP_FIELD] or "_" .. namespace.GetNameSpaceName(owner, true) .. "_" .. uname
+                        info[FLD_PROP_FIELD] = info[FLD_PROP_FIELD] or "_" .. namespace.GetNamespaceName(owner, true) .. "_" .. uname
 
                     end
 
@@ -8959,7 +8936,7 @@ do
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD])
                     if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) end
                 else
-                    error("Usage: property:GetClone(deep, [stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: property:GetClone(deep, [stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -8969,7 +8946,7 @@ do
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD])
                     if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) end
                 else
-                    error("Usage: property:SetClone(deep, [stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: property:SetClone(deep, [stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -8978,7 +8955,7 @@ do
                     local info  = _PropertyInfo[self]
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD])
                 else
-                    error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -8986,7 +8963,7 @@ do
                 if _PropertyInDefine[self] then
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
                 else
-                    error("Usage: property:SetStatic([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: property:SetStatic([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -8995,9 +8972,64 @@ do
                     local info  = _PropertyInfo[self]
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD])
                 else
-                    error("Usage: property:SetWeak([stack]) - the property's definition is finished", (type(stack) == "number" and stack or 1) + 1)
+                    error("Usage: property:SetWeak([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
+
+            ["Validate"]        = function(self) return _PropertyInfo[self] and self or nil end;
+        },
+        __call                  = function(self, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(property, ...)
+
+            stack               = stack + 1
+
+            if not name or name == "" then error([[Usage: property "name" { ... } - the name must be a string]], stack) end
+
+            local owner = visitor and environment.GetNamespace(visitor)
+
+            if owner and (interface.Validate(owner) or class.Validate(owner)) then
+                local prop      = prototype.NewProxy(tproperty)
+                local info      = {
+                    [FLD_PROP_NAME]    = name,
+                    [FLD_PROP_OWNER]   = owner,
+                }
+
+                savePropertyInfo(prop, info)
+
+                _PropertyInDefine  = saveStorage(_PropertyInDefine, prop, true)
+
+                attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack)
+
+                local super     = interface.GetSuperFeature(owner, name)
+                if super and property.Validate(super) then attribute.InheritAttributes(prop, ATTRTAR_PROPERTY, super) end
+
+                return prop
+            else
+                error([[Usage: property "name" - the property can't be used here.]], stack)
+            end
+        end,
+    }
+
+    tproperty                   = prototype {
+        __tostring              = function(self)
+            local info = _PropertyInfo[self]
+            return "[property]" .. namespace.GetNamespaceName(info[FLD_PROP_OWNER]) .. "." .. info[FLD_PROP_NAME]
+        end;
+        __index                 = {
+            ["GetAccessor"]     = property.GetAccessor;
+            ["IsGetClone"]      = property.IsGetClone;
+            ["IsGetDeepClone"]  = property.IsGetDeepClone;
+            ["IsSetClone"]      = property.IsSetClone;
+            ["IsSetDeepClone"]  = property.IsSetDeepClone;
+            ["IsRetainObject"]  = property.IsRetainObject;
+            ["IsShareable"]     = property.IsShareable;
+            ["IsStatic"]        = property.IsStatic;
+            ["IsWeak"]          = property.IsWeak;
+            ["GetClone"]        = property.GetClone;
+            ["SetClone"]        = property.SetClone;
+            ["SetRetainObject"] = property.SetRetainObject;
+            ["SetStatic"]       = property.SetStatic;
+            ["SetWeak"]         = property.SetWeak;
         },
         __call                  = function(self, definition)
             if type(definition) ~= "table" then error([[Usage: property "name" { definition } - the definition part must be a table]], 2) end
@@ -9007,7 +9039,7 @@ do
             local owner         = info[FLD_PROP_OWNER]
             local name          = info[FLD_PROP_NAME]
 
-            attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name)
+            attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name, 2)
 
             -- Parse the definition
             for k, v in pairs, definition do
@@ -9099,11 +9131,11 @@ do
             if info[FLD_PROP_GET] then info[FLD_PROP_GETMETHOD] = nil end
             if info[FLD_PROP_SET] then info[FLD_PROP_SETMETHOD] = nil end
 
-            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name)
+            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name, 2)
 
             _PropertyInDefine  = saveStorage(_PropertyInDefine, self, nil)
 
-            attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name)
+            attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name, 2)
 
             -- Check the event
             if type(info[FLD_PROP_EVENT]) == "string" then
@@ -9138,59 +9170,374 @@ end
 --                           keyword installation                            --
 -------------------------------------------------------------------------------
 do
+    -----------------------------------------------------------------------
+    --                          global keyword                           --
+    -----------------------------------------------------------------------
     environment.RegisterGlobalKeyword {
-        namespace       = namespace,
-        import          = import,
-        enum            = enum,
-        struct          = struct,
-        class           = class,
-        interface       = interface,
+        namespace               = namespace,
+        import                  = import,
+        enum                    = enum,
+        struct                  = struct,
+        class                   = class,
+        interface               = interface,
     }
 
+    -----------------------------------------------------------------------
+    --                          struct keyword                           --
+    -----------------------------------------------------------------------
     environment.RegisterContextKeyword(structbuilder, {
-        member          = member,
-        endstruct       = rawget(_PLoopEnv, "endstruct"),
+        member                  = member,
+        endstruct               = rawget(_PLoopEnv, "endstruct"),
     })
 
+    -----------------------------------------------------------------------
+    --                         interface keyword                         --
+    -----------------------------------------------------------------------
     environment.RegisterContextKeyword(interfacebuilder, {
-        extend          = extend,
-        field           = field,
-        event           = event,
-        property        = property,
-        endinterface    = rawget(_PLoopEnv, "endinterface"),
+        require                 = require,
+        extend                  = extend,
+        field                   = field,
+        event                   = event,
+        property                = property,
+        endinterface            = rawget(_PLoopEnv, "endinterface"),
     })
 
+    -----------------------------------------------------------------------
+    --                           class keyword                           --
+    -----------------------------------------------------------------------
     environment.RegisterContextKeyword(classbuilder, {
-        inherit         = inherit,
-        extend          = extend,
-        field           = field,
-        event           = event,
-        property        = property,
-        endclass        = rawget(_PLoopEnv, "endclass"),
+        inherit                 = inherit,
+        extend                  = extend,
+        field                   = field,
+        event                   = event,
+        property                = property,
+        endclass                = rawget(_PLoopEnv, "endclass"),
     })
 
-    _G.PLoop = prototype {
-        __index = {
-            namespace   = namespace,
-            enum        = enum,
-            import      = import,
-            environment = environment,
-        }
-    }
-
-    _G.namespace        = namespace
-    _G.enum             = enum
-    _G.import           = import
-    _G.struct           = struct
-    _G.class            = class
-    _G.interface        = interface
+    -----------------------------------------------------------------------
+    --                            _G keyword                             --
+    -----------------------------------------------------------------------
+    _G.namespace                = namespace
+    _G.import                   = import
+    _G.enum                     = enum
+    _G.struct                   = struct
+    _G.class                    = class
+    _G.interface                = interface
 end
 
 -------------------------------------------------------------------------------
 --                            [namespace] System                             --
 -------------------------------------------------------------------------------
-namespace "System" (function(_ENV)
-    class "Delegate" (function(_ENV)
+do
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.Prototype",   prototype (prototype,   { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Attribute",   prototype (attribute,   { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Environment", prototype (environment, { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Namespace",   prototype (namespace,   { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Enum",        prototype (enum,        { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Struct",      prototype (struct,      { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Member",      prototype (member,      { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Interface",   prototype (interface,   { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Class",       prototype (class,       { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Event",       prototype (event,       { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Property",    prototype (property,    { __newindex = readOnly, __tostring = namespace.GetNamespaceName }))
+
+    -----------------------------------------------------------------------
+    --                             attribute                             --
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Abstract__",      prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
+                    getmetatable(target).SetAbstract(target, parsestack(stack) + 1)
+                elseif class.Validate(owner) or interface.Validate(owner) then
+                    getmetatable(owner).SetAbstract(owner, name, parsestack(stack) + 1)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__AnonymousClass__",prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                interface.SetAnonymousClass(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_INTERFACE,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Base__",          prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                struct.SetBaseStruct(target, self[1], parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_STRUCT,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__CaseIgnored__",   prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                enum.SetCaseIgnored(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Default__",       prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                local value     = self[1]
+                if value       ~= nil then
+                    stack       = parsestack(stack) + 1
+
+                    if targettype == ATTRTAR_ENUM then
+                        enum.SetDefault(target, value, stack)
+                    elseif targettype == ATTRTAR_STRUCT then
+                        struct.SetDefault(target, value, stack)
+                    end
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Final__",         prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
+                    getmetatable(target).SetFinal(target, parsestack(stack) + 1)
+                elseif class.Validate(owner) or interface.Validate(owner) then
+                    getmetatable(owner).SetFinal(owner, name, parsestack(stack) + 1)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Flags__",         prototype {
+        __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                local enums     = definition
+                local cache     = _Cache()
+                local count     = 0
+                local max       = 0
+
+                stack           = parsestack(stack) + 1
+
+                if type(definition) ~= "table" then error("the enum's definition must be a table", stack) end
+
+                -- Scan
+                for k, v in pairs, enums do
+                    v           = tonumber(v)
+
+                    if v then
+                        if v == 0 then
+                            if cache[0] then
+                                error(strformat("The %s and %s can't be the same value", k, cache[0]), stack)
+                            else
+                                cache[0] = k
+                            end
+                        elseif v > 0 then
+                            count   = count + 1
+
+                            local n = mlog(v) / mlog(2)
+                            if floor(n) == n then
+                                if cache[2^n] then
+                                    error(strformat("The %s and %s can't be the same value", k, cache[2^n]), stack)
+                                else
+                                    cache[2^n]  = k
+                                    max         = n > max and n or max
+                                end
+                            else
+                                error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
+                            end
+                        else
+                            error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
+                        end
+                    else
+                        count   = count + 1
+                        enums[k]= -1
+                    end
+                end
+
+                -- So the definition would be more precisely
+                if max >= count then error("The flags enumeration's value can't be greater than 2^(count - 1)", stack) end
+
+                -- Auto-gen values
+                local n     = 0
+                for k, v in pairs, enums do
+                    if v == -1 then
+                        while cache[2^n] do n = n + 1 end
+                        cache[2^n]  = k
+                        enums[k]    = 2^n
+                    end
+                end
+
+                _Cache(cache)
+            end,
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                enum.SetFlagsEnum(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__NoNilValue__",    prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetNilValueBlocked(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__NoRawSet__",      prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetRawSetBlocked(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__NoSuperObject__", prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetNoSuperObject(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__ObjFuncAttr__",   prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetObjectFunctionAttributeEnabled(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Require__",       prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                interface.GetRequireClass(target, self[1], parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_INTERFACE,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Sealed__",        prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                getmetatable(target).SetSealed(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_INTERFACE + ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Simple__",        prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetAsSimpleClass(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__SingleVer__",     prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetSingleVersion(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Static__",        prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                stack           = parsestack(stack) + 1
+                if targettype  == ATTRTAR_METHOD then
+                    getmetatable(owner).SetStaticMethod(owner, name, stack)
+                elseif targettype == ATTRTAR_EVENT then
+                    event.SetStatic(target, stack)
+                elseif targettype == ATTRTAR_PROPERTY then
+                    property.SetStatic(target, stack)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
+        },
+        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    namespace.SaveNamespace("System.__Super__",         prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetSuperClass(target, self[1], parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    -----------------------------------------------------------------------
+    --                           registration                            --
+    -----------------------------------------------------------------------
+    environment.RegisterGlobalNamespace("System")
+    namespace.ExportNamespace(_PLoopEnv, "System", true)
+
+    -----------------------------------------------------------------------
+    --                               types                               --
+    -----------------------------------------------------------------------
+    __Sealed__() __Flags__() __Default__(ATTRTAR_ALL)
+    enum "System.AttributeTargets" {
+        All         = ATTRTAR_ALL,
+        Function    = ATTRTAR_FUNCTION,
+        Namespace   = ATTRTAR_NAMESPACE,
+        Enum        = ATTRTAR_ENUM,
+        Struct      = ATTRTAR_STRUCT,
+        Member      = ATTRTAR_MEMBER,
+        Method      = ATTRTAR_METHOD,
+        Interface   = ATTRTAR_INTERFACE,
+        Class       = ATTRTAR_CLASS,
+        Event       = ATTRTAR_EVENT,
+        Property    = ATTRTAR_PROPERTY,
+    }
+
+    __Sealed__() __Final__()
+    class "System.Delegate" (function(_ENV)
         event "OnChange"
 
         local tinsert   = table.insert
@@ -9251,7 +9598,7 @@ namespace "System" (function(_ENV)
         function __add(self, func)
             if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
             attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
-            local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func)
+            local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, nil, nil, 2)
             attribute.ReleaseTargetAttributes(func)
 
             for _, f in ipairs(self) do
@@ -9274,13 +9621,6 @@ namespace "System" (function(_ENV)
             return self
         end
     end)
-end)
-
--------------------------------------------------------------------------------
---                                final stage                                --
--------------------------------------------------------------------------------
-environment.RegisterGlobalNameSpace(System)
-
-Delegate = ROOT_NAMESPACE.System.Delegate
+end
 
 return ROOT_NAMESPACE
