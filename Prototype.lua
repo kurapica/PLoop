@@ -9562,7 +9562,7 @@ do
             if ret then return end
 
             -- Call the stacked handlers
-            for _, func in ipairs(self) do
+            for _, func in ipairs, self, 0 do
                 ret = func(...)
 
                 if ret then return end
@@ -9606,7 +9606,7 @@ do
             local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, nil, nil, 2)
             attribute.ReleaseTargetAttributes(func)
 
-            for _, f in ipairs(self) do
+            for _, f in ipairs, self, 0 do
                 if f == ret then return self end
             end
 
@@ -9616,7 +9616,7 @@ do
         end
 
         function __sub(self, func)
-            for i, f in ipairs(self) do
+            for i, f in ipairs, self, 0 do
                 if f == func then
                     tremove(self, i)
                     OnChange(self)
