@@ -191,9 +191,9 @@ do
 
         --- Whether all old objects keep using new features when their
         -- classes or extend interfaces are re-defined.
-        -- Default true
+        -- Default false
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        CLASS_NO_MULTI_VERSION_CLASS        = true,
+        CLASS_NO_MULTI_VERSION_CLASS        = false,
 
         --- Whether all interfaces & classes only use the classic format
         -- `Super.Method(obj, ...)` to call super's features, don't use new
@@ -613,10 +613,11 @@ do
         if target then
             if type(target) == "string" then
                 local path  = target
-                target      = namespace.GetNamespace(environment.GetNamespace(visitor or env), path)
+                local full  = path:find("%p+")
+                target      = namespace.GetNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path)
                 if not target then
                     target  = prototype.NewProxy(ptype)
-                    namespace.SaveNamespace(environment.GetNamespace(visitor or env), path, target, stack + 2)
+                    namespace.SaveNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path, target, stack + 2)
                 end
 
                 if not nType.Validate(target) then
@@ -2233,6 +2234,7 @@ do
                 if visitor then
                     environment.SetNamespace(visitor, target)
                 elseif env and env ~= visitor then
+                    environment.SetNamespace(env, target)
                     namespace.ExportNamespace(env, target)
                 end
             end
@@ -4655,7 +4657,7 @@ do
     tstruct                     = prototype (tnamespace, {
         __index                 = function(self, name)
             if type(name) == "string" then
-                local info  = _StructInfo[self]
+                local info  = _StructBuilderInfo[self] or _StructInfo[self]
                 return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNamespace(self, name)
             end
         end,
@@ -4843,8 +4845,8 @@ end
 --
 -- A class can be defined within several parts:
 --
--- i. Method        The methods are functions that be used by the classes and
---          their objects. Take an example :
+-- i. **Method**        The methods are functions that be used by the classes
+--          and their objects. Take an example :
 --
 --              class "Person" (function(_ENV)
 --                  function SetName(self, name)
@@ -4890,7 +4892,7 @@ end
 -- The static method don't use _self_ as the first parameter since it's used by
 -- the class itself not its objects.
 --
--- ii. Meta-data    The meta-data is a superset of the Lua's meta-method:
+-- ii. **Meta-data**    The meta-data is a superset of the Lua's meta-method:
 --          *  __add        the addition operation:             a + b  -- a is the object, also for the below operations
 --          *  __sub        the subtraction operation:          a - b
 --          *  __mul        the multiplication operation:       a * b
@@ -4917,20 +4919,286 @@ end
 --          *  __tostring   the convert to string operation:    tostring(a)
 --          *  __ipairs     the ipairs iterator:                ipairs(a)
 --          *  __pairs      the pairs iterator:                 pairs(a)
---          *  __exist      the object existed check function
+--          *  __exist      the object existence checker
 --          *  __field      the init object fields, must be a table
 --          *  __new        the function used to generate the table that'd be converted to an object
 --          *  __ctor       the object constructor
 --          *  __dtor       the object destructor
 --
---  There are several PLoop special meta-data, here is an example :
+--  There are several PLoop special meta-data, here are examples :
+--
+--              class "Person" (function(_ENV)
+--                  __ExistPerson = {}
+--
+--                  -- The Constructor
+--                  function __ctor(self, name)
+--                      print("Call the Person's constructor with " .. name)
+--                      __ExistPerson[name] = self
+--                      self.name = name
+--                  end
+--
+--                  -- The existence checker
+--                  function __exist(name)
+--                      if __ExistPerson[name] then
+--                          print("An object existed with " .. name)
+--                          return __ExistPerson[name]
+--                      end
+--                  end
+--
+--                  -- The destructor
+--                  function __dtor(self)
+--                      print("Dispose the object " .. self.name)
+--                      __ExistPerson[self.name] = nil
+--                  end
+--              end)
+--
+--              o = Person("Ann")           -- Call the Person's constructor with Ann
+--
+--              -- true
+--              print(o == Person("Ann"))   -- An object existed with Ann
+--
+--              o:Dispose()                 -- Dispose the object Ann
+--
+--              -- false
+--              print(o == Person("Ann")) -- Call the Person's constructor with Ann
+--
+-- Here is the constructor, the destructor and an existence checker. We also
+-- can find a non-declared method **Dispose**, all objects generated by classes
+-- have the **Dispose** method, used to call it's class, super class and the
+-- class's extended interface's destructor with order to destruct the object,
+-- normally the destructor is used to release the reference of the object, so
+-- the Lua can collect them.
+--
+-- The constructor receive the object and all the parameters, the existence
+-- checker receive all the parameters, and if it return a non-false value, the
+-- value will be used as the object and return it directly. The destructor only
+-- receive the object.
+--
+-- The `__new` meta is used to generate table that will be used as the object.
+-- You can use it to return tables generated by other systems or you can return
+-- a well inited table so the object's construction speed will be greatly
+-- increased like :
+--
+--              class "List" (function(_ENV)
+--                  function __new(...)
+--                      return { ... }
+--                  end
+--              end)
+--
+--              v = List(1, 2, 3, 4, 5, 6)
+--
+-- The `__new` would recieve all parameters and return a table. So for the List
+-- class, the `__new` meta will eliminate the rehash cost of the object's
+-- initialization.
+--
+-- The `__field` meta is a table, contains several key-value paris to be saved
+-- in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the
+-- **OBJECT_NO_NIL_ACCESS** options, so authors can only use existing fields to
+-- to the jobs, and spell errors can be easily spotted.
+--
+--              PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
+--
+--              require "PLoop"
+--
+--              class "Person" (function(_ENV)
+--                  __field     = {
+--                      name    = "noname",
+--                  }
+--
+--                  -- Also you can use *field* keyword since `__field` could be error spelled
+--                  field {
+--                      age     = 0,
+--                  }
+--              end)
+--
+--              o = Person()
+--              o.name = "Ann"
+--              o.age  = 12
+--
+--              o.nme = "King"  -- Error : The object can't accept field that named "nme"
+--              print(o.gae)    -- Error : The object don't have any field that named "gae"
+--
+-- For the constructor and destructor, there are other formal names: the class
+-- name will be used as constructor, and the **Dispose** will be used as the
+-- destructor:
+--
+--              class "Person" (function(_ENV)
+--                  -- The Constructor
+--                  function Person(self, name)
+--                      self.name = name
+--                  end
+--
+--                  -- The destructor
+--                  function Dispose(self)
+--                  end
+--              end)
 --
 --
+-- iii. **Super class** the class can and only can have one super class, the
+-- class will inherit the super class's object method, meta-datas and other
+-- features(event, property and etc). If the class has override the super's
+-- object method, meta-data or other features, the class can use **super**
+-- keyword to access the super class's method, meta-data or feature.
+--
+--              class "A" (function(_ENV)
+--                  -- Object method
+--                  function Test(self)
+--                      print("Call A's method")
+--                  end
+--
+--                  -- Constructor
+--                  function A(self)
+--                      print("Call A's ctor")
+--                  end
+--
+--                  -- Destructor
+--                  function Dispose(self)
+--                      print("Dispose A")
+--                  end
+--
+--                  -- Meta-method
+--                  function __call(self)
+--                      print("Call A Object")
+--                  end
+--              end)
+--
+--              class "B" (function(_ENV)
+--                  inherit "A"  -- also can use inherit(A)
+--
+--                  function Test(self)
+--                      print("Call super's method ==>")
+--                      super[self]:Test()
+--                      super.Test(self)
+--                      print("Call super's method ==<")
+--                  end
+--
+--                  function B(self)
+--                      super(self)
+--                      print("Call B's ctor")
+--                  end
+--
+--                  function Dispose(self)
+--                      print("Dispose B")
+--                  end
+--
+--                  function __call(self)
+--                      print("Call B Object")
+--                      super[self]:__call()
+--                      super.__call(self)
+--                  end
+--              end)
+--
+--              -- Call A's ctor
+--              -- Call B's ctor
+--              o = B()
+--
+--              -- Call super's method ==>
+--              -- Call A's method
+--              -- Call A's method
+--              -- Call super's method ==<
+--              o:Test()
+--
+--              -- Call B Object
+--              -- Call A Object
+--              -- Call A Object
+--              o()
+--
+--              -- Dispose B
+--              -- Dispose A
+--              o:Dispose()
+--
+-- From the example, here are some details:
+--      * The destructor don't need call super's destructor, they are well
+--  controlled by the system, so the class only need to consider itself.
+--      * The constructor need call super's constructor manually, we'll learned
+--  more about it within the overload system.
+--      * For the object method and meta-method, we have two style to call its
+--  super, `super.Test(self)` is a simple version, but if the class has multi
+--  versions, we must keep using the `super[self]:Test()` code style, because
+--  the super can know the object's class version before it fetch the *Test*
+--  method. We'll see more about the super call style in the event and property
+--  system.
 --
 -- @prototype   class
 -------------------------------------------------------------------------------
 
 -------------------------------------------------------------------------------
+-- The interfaces are abstract types of functionality, it also provided the
+-- multi-inheritance mechanism to the class. Like the class, it also support
+-- object method, static method and meta-datas.
+--
+-- The class and interface can extend many other interfaces, the **super**
+-- keyword also can access the extended interface's object-method and the
+-- meta-methods.
+--
+-- The interface use `__init` instead of the `__ctor` as the interface's
+-- initializer. The initializer only receive the object as it's parameter, and
+-- don't like the constructor, the initializer can't be accessed by **super**
+-- keyword. The method defined with the interface's name will also be used as
+-- the initializer.
+--
+-- If you only want defined methods and features that should be implemented by
+-- child interface or class, you can use `__Abstract__` on the method or the
+-- feature, those abstract methods and featuers can't be accessed by **super**
+-- keyword.
+--
+-- Let's take an example :
+--
+--              interface "IName" (function(self)
+--                  __Abstract__()
+--                  function SetName(self) end
+--
+--                  __Abstract__()
+--                  function GetName(self) end
+--
+--                  -- initializer
+--                  function IName(self) print("IName Init") end
+--
+--                  -- destructor
+--                  function Dispose(self) print("IName Dispose") end
+--              end)
+--
+--              interface "IAge" (function(self)
+--                  __Abstract__()
+--                  function SetAge(self) end
+--
+--                  __Abstract__()
+--                  function GetAge(self) end
+--
+--                  -- initializer
+--                  function IAge(self) print("IAge Init") end
+--
+--                  -- destructor
+--                  function Dispose(self) print("IAge Dispose") end
+--              end)
+--
+--              class "Person" (function(_ENV)
+--                  extend "IName" "IAge"   -- also can use `extend(IName)(IAge)`
+--
+--                  -- Error: attempt to index global 'super' (a nil value)
+--                  -- Since there is no super method(the IName.SetName is abstract),
+--                  -- there is no super keyword can be use
+--                  function SetName(self, name) super[self]:SetName(name) end
+--
+--                  function Person(self) print("Person Init") end
+--
+--                  function Dispose(self) print("Person Dispose") end
+--              end)
+--
+--              -- Person Init
+--              -- IName Init
+--              -- IAge Init
+--              o = Person()
+--
+--              -- IAge Dispose
+--              -- IName Dispose
+--              -- Person Dispose
+--              o:Dispose()
+--
+-- From the example, we can see the initializers are called when object is
+-- created and already passed the class's constructor. The dispose order is
+-- the reverse order of the object creation. So, the class and interface should
+-- only care themselves.
 --
 -- @prototype   interface
 -------------------------------------------------------------------------------
@@ -5326,7 +5594,7 @@ do
         -- No __index generated
         if token == 0                                       then meta[IC_META_INDEX] = nil                  return _Cache(upval) end
         -- Use the object method cache directly
-        if token == FLG_IC_OBJMTD                           then meta[IC_META_INDEX] = info[FLD_IC_OBJFTR]  return _Cache(upval) end
+        if token == FLG_IC_OBJMTD                           then meta[IC_META_INDEX] = info[FLD_IC_OBJMTD]  return _Cache(upval) end
         -- Use the custom __index directly
         if token == FLG_IC_IDXFUN or token == FLG_IC_IDXTBL then meta[IC_META_INDEX] = data                 return _Cache(upval) end
 
@@ -6029,7 +6297,7 @@ do
 
                 -- Copy the metatable if the class is single version
                 if class.IsSingleVersion(target) then
-                    local oinfo     = _ICInfo[oinfo]
+                    local oinfo     = _ICInfo[target]
 
                     if oinfo and oinfo[FLD_IC_OBJMTM] then
                         info[FLD_IC_OBJMTM] = tblclone(objmeta, oinfo[FLD_IC_OBJMTM], false, true)
@@ -6294,7 +6562,7 @@ do
         if not info then return msg, stack end
         if type(fields) ~= "table" then return "the fields must be a table", stack end
 
-        info[FLD_IC_FIELD]      = tblclone(rs, info[FLD_IC_FIELD] or _Cache(), true, true)
+        info[FLD_IC_FIELD]      = tblclone(fields, info[FLD_IC_FIELD] or _Cache(), true, true)
     end
 
     local setRequireClass       = function (target, cls, stack)
@@ -6364,10 +6632,10 @@ do
         stack       = stack + 1
 
         if tkey == "string" and not tonumber(key) then
-            if META_KEYS[tkey] then
+            if META_KEYS[key] then
                 interface.AddMetaData(owner, key, value, stack)
                 return true
-            elseif tkey == namespace.GetNamespaceName(owner, true) then
+            elseif key == namespace.GetNamespaceName(owner, true) then
                 interface.SetInitializer(owner, value, stack)
                 return true
             elseif tval == "function" then
@@ -6419,7 +6687,7 @@ do
             if META_KEYS[key] then
                 class.AddMetaData(owner, key, value, stack)
                 return true
-            elseif tkey == namespace.GetNamespaceName(owner, true) then
+            elseif key == namespace.GetNamespaceName(owner, true) then
                 class.SetConstructor(owner, value, stack)
                 return true
             elseif tval == "function" then
@@ -6569,10 +6837,10 @@ do
                 attribute.InheritAttributes(target, ATTRTAR_INTERFACE, unpack(ninfo, FLD_IC_STEXT))
                 attribute.ApplyAttributes  (target, ATTRTAR_INTERFACE, nil, nil, stack)
 
+                genTypeCaches(target, ninfo, stack)
+
                 -- End interface's definition
                 _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
-
-                genTypeCaches(target, ninfo, stack)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -7148,11 +7416,11 @@ do
                 attribute.InheritAttributes(target, ATTRTAR_CLASS, unpack(ninfo, ninfo[FLD_IC_SUPCLS] and FLD_IC_SUPCLS or FLD_IC_STEXT))
                 attribute.ApplyAttributes  (target, ATTRTAR_CLASS, nil, nil, stack)
 
-                -- End class's definition
-                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
-
                 -- Generate caches and constructor
                 genTypeCaches(target, ninfo, stack)
+
+                -- End class's definition
+                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -7497,7 +7765,7 @@ do
             -- @param   func:function               the constructor
             -- @param   stack                       the stack level
             ["SetConstructor"]  = function(target, func, stack)
-                local msg, stack= addMetaData(target, IC_META_INIT, func, stack)
+                local msg, stack= addMetaData(target, IC_META_CTOR, func, stack)
                 if msg then error("Usage: class.SetConstructor(target, func[, stack]) - " .. msg, stack + 1) end
             end;
 
@@ -7710,14 +7978,14 @@ do
         __index                 = function(self, key)
             if type(key) == "string" then
                 -- Access methods
-                local info  = _ICInfo[self]
+                local info      = _ICBuilderInfo[self] or _ICInfo[self]
                 if info then
                     -- Static or object methods
                     local oper  = info[key] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][key]
                     if oper then return oper end
 
                     -- Static features
-                    oper    = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
+                    oper        = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
                     if oper then return oper:Get(self) end
                 end
 
@@ -7727,7 +7995,7 @@ do
         end,
         __newindex              = function(self, key, value)
             if type(key) == "string" then
-                local info  = _ICInfo[self]
+                local info      = _ICInfo[self]
 
                 if info then
                     -- Static features
@@ -7953,6 +8221,8 @@ do
         if not owner  then error("Usage: extend(interface) - The system can't figure out the class or interface", stack + 1) end
 
         interface.AddExtend(owner, name, stack + 1)
+
+        return visitor.extend
     end
 
     -----------------------------------------------------------------------
@@ -8087,7 +8357,168 @@ do
 end
 
 -------------------------------------------------------------------------------
---                                   event                                   --
+-- The events are used to notify the outside that the state of class object has
+-- changed. Let's take an example to start :
+--
+--              class "Person" (function(_ENV)
+--                  event "OnNameChanged"
+--
+--                  field { name = "anonymous" }
+--
+--                  function SetName(self, name)
+--                      if name ~= self.name then
+--                          -- Notify the outside
+--                          OnNameChanged(self, name, self.name)
+--                          self.name = name
+--                      end
+--                  end
+--              end)
+--
+--              o = Person()
+--
+--              -- Bind a function as handler to the event
+--              function o:OnNameChanged(new, old)
+--                  print(("Renamed from %q to %q"):format(old, new))
+--              end
+--
+--              -- Renamed from "anonymous" to "Ann"
+--              o:SetName("Ann")
+--
+-- The event is a feature type of the class and interface, there are two types
+-- of the event handler :
+--      * the final handler - the previous example has shown how to bind the
+--          final handler.
+--      * the stackable handler - The stackable handler are normally used in
+--          the class's constructor or interface's initializer:
+--
+--              class "Student" (function(_ENV)
+--                  inherit "Person"
+--
+--                  local function onNameChanged(self, name, old)
+--                      print(("Student %s renamed to %s"):format(old, name))
+--                  end
+--
+--                  function Student(self, name)
+--                      self:SetName(name)
+--                      self.OnNameChanged = self.OnNameChanged + onNameChanged
+--                  end
+--              end)
+--
+--              o = Student("Ann")
+--
+--              function o:OnNameChanged(name)
+--                  print("My new name is " .. name)
+--              end
+--
+--              -- Student Ann renamed to Ammy
+--              -- My new name is Ammy
+--              o:SetName("Ammy")
+--
+-- The `self.OnNameChanged` is an object generated by **System.Delegate** who
+-- has `__add` and `__sub` meta-methods so it can works with the style like
+--
+--              self.OnNameChanged = self.OnNameChanged + onNameChanged
+-- or
+--
+--              self.OnNameChanged = self.OnNameChanged - onNameChanged
+--
+-- The stackable handlers are added with orders, so the super class's handler'd
+-- be called at first then the class's, then the interface's. The final handler
+-- will be called at the last, if any handler `return true`, the call process
+-- will be ended.
+--
+-- In some scenarios, we need to block the object's event, the **Delegate** can
+-- set an init function that'd be called before all other handlers, we can use
+--
+--              self.OnNameChanged:SetInitFunction(function() return true end)
+--
+-- To block the object's *OnNameChanged* event.
+--
+-- When using PLoop to wrap objects generated from other system, we may need to
+-- bind the PLoop event to other system's event, there is two parts in it :
+--      * When the PLoop object's event handlers are changed, we need know when
+--  and whether there is any handler for that event, so we can register or
+--  un-register in the other system.
+--      * When the event of the other system is triggered, we need invoke the
+--  PLoop's event.
+--
+-- Take the *Frame* widget from the *World of Warcraft* as an example, ignore
+-- the other details, let's focus on the event two-way binding :
+--
+--              class "Frame" (function(_ENV)
+--                  __EventChangeHandler__(function(delegate, owner, eventname)
+--                      -- owner is the frame object
+--                      -- eventname is the OnEnter for this case
+--                      if delegate:IsEmpty() then
+--                          -- No event handler, so un-register the frame's script event
+--                          owner:SetScript(eventname, nil)
+--                      else
+--                          -- Has event handler, so we must regiser the frame's script event
+--                          if owner:GetScript(eventname) == nil then
+--                              owner:SetScript(eventname, function(self, ...)
+--                                  -- Call the delegate directly
+--                                  delegate(self, ...)
+--                              end)
+--                          end
+--                      end
+--                  end)
+--                  event "OnEnter"
+--              end)
+--
+-- With the `__EventChangeHandler__` attribute, we can bind a function to the
+-- target event, so all changes of the event handlers can be checked in the
+-- function. Since the event change handler has nothing special with the target
+-- event, we can use it on all script events in one system like :
+--
+--              -- A help class so it can be saved in namespaces
+--              class "__WidgetEvent__" (function(_ENV)
+--                  local function handler (delegate, owner, eventname)
+--                      if delegate:IsEmpty() then
+--                          owner:SetScript(eventname, nil)
+--                      else
+--                          if owner:GetScript(eventname) == nil then
+--                              owner:SetScript(eventname, function(self, ...)
+--                                  -- Call the delegate directly
+--                                  delegate(self, ...)
+--                              end)
+--                          end
+--                      end
+--                  end
+--
+--                  function __WidgetEvent__(self)
+--                      __EventChangeHandler__(handler)
+--                  end
+--              end)
+--
+--              class "Frame" (function(_ENV)
+--                  __WidgetEvent__()
+--                  event "OnEnter"
+--
+--                  __WidgetEvent__()
+--                  event "OnLeave"
+--              end)
+--
+--
+-- The event can also be marked as static, so it can be used and only be used by
+-- the class or interface :
+--
+--              class "Person" (function(_ENV)
+--                  __Static__()
+--                  event "OnPersonCreated"
+--
+--                  function Person(self, name)
+--                      OnPersonCreated(name)
+--                  end
+--              end)
+--
+--              function Person.OnPersonCreated(name)
+--                  print("Person created " .. name)
+--              end
+--
+--              -- Person created Ann
+--              o = Person("Ann")
+--
+-- @prototype   event
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -8124,48 +8555,68 @@ do
                                     and function(target, info) rawset(target, FLD_EVENT_META, info) end
                                     or  function(target, info) _EventInfo = saveStorage(_EventInfo, target, info) end
 
+    local genEvent              = function(owner, name, value, stack)
+        local evt               = prototype.NewProxy(tevent)
+        local info              = {
+            [FLD_EVENT_NAME]    = name,
+            [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNamespaceName(owner, true) .. "_" .. name,
+            [FLD_EVENT_OWNER]   = owner,
+            [FLD_EVENT_STATIC]  = value or nil,
+        }
+
+        stack                   = stack + 1
+
+        saveEventInfo(evt, info)
+
+        _EventInDefine          = saveStorage(_EventInDefine, evt, true)
+
+        attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack + 1)
+
+        local super             = interface.GetSuperFeature(owner, name)
+        if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
+        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+
+        _EventInDefine          = saveStorage(_EventInDefine, evt, nil)
+
+        -- Convert to static event
+        if not value and event.IsStatic(evt) then
+            saveEventInfo(evt, nil)
+            local new           = prototype.NewProxy(tsevent)
+            attribute.ToggleTarget(evt, new)
+            evt                 = new
+            saveEventInfo(evt, info)
+        end
+
+        attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+
+        return evt
+    end
+
+    local invokeEvent           = function(self, obj, ...)
+        -- No check, as simple as it could be
+        local delegate          = rawget(obj, _EventInfo[self][FLD_EVENT_FIELD])
+        if delegate then return delegate:Invoke(obj, ...) end
+    end
+
+    local invokeStaticEvent     = function(self,...)
+        local delegate          = _EventInfo[self][FLD_EVENT_DELEGATE]
+        if delegate then return delegate:Invoke(...) end
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
     event                       = prototype {
         __tostring              = "event",
         __index                 = {
-            ["Invoke"]          = function(self, obj, ...)
-                -- No check, as simple as it could be
-                local delegate  = rawget(obj, _EventInfo[self][FLD_EVENT_FIELD])
-                if delegate then return delegate:Invoke(obj, ...) end
-            end;
-
-            ["Parse"]           = function(owner, key, value, stack)
-                if type(key) == "string" and type(value) == "boolean" and owner and (interface.Validate(owner) or class.Validate(owner)) then
-                    local evt       = prototype.NewProxy(tevent)
-                    local info      = {
-                        [FLD_EVENT_NAME]    = key,
-                        [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNamespaceName(owner, true) .. "_" .. key,
-                        [FLD_EVENT_OWNER]   = owner,
-                        [FLD_EVENT_STATIC]  = value or nil,
-                    }
-
-                    saveEventInfo(evt, info)
-
-                    local super     = interface.GetSuperFeature(owner, key)
-                    if super and event.Validate(super) then
-                        _EventInDefine  = saveStorage(_EventInDefine, evt, true)
-                        attribute.InheritAttributes(evt, ATTRTAR_EVENT, super)
-                        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, key, stack)
-                        _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
-                        attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, key, stack)
-                    end
-
-                    interface.AddFeature(owner, key, evt, stack + 1)
-
-                    return true
-                end
-            end;
-
-            ["Validate"]        = function(self) return _EventInfo[self] and self or nil end;
-
-            -- events
+            --- Get the event delegate
+            -- @static
+            -- @method  Get
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @param   object                      the object if the event is not static
+            -- @param   nocreation                  true if no need to generate the delegate if not existed
+            -- @return  delegate                    the event's delegate
             ["Get"]             = function(self, obj, nocreation)
                 local info      = _EventInfo[self]
                 if info then
@@ -8173,7 +8624,7 @@ do
                         local delegate      = info[FLD_EVENT_DELEGATE]
                         if not delegate and not nocreation then
                             delegate        = Delegate()
-                            info[FLD_EVENT_STATIC] = delegate
+                            info[FLD_EVENT_DELEGATE] = delegate
 
                             if info[FLD_EVENT_HANDLER] then
                                 local owner     = info[FLD_EVENT_OWNER]
@@ -8206,18 +8657,74 @@ do
                 end
             end;
 
+            --- Get the event change handler
+            -- @static
+            -- @method  GetEventChangeHandler
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  handler                     the event's change handler
             ["GetEventChangeHandler"] = function(self)
                 local info      = _EventInfo[self]
                 return info and info[FLD_EVENT_HANDLER] or false
             end;
 
-            ["IsShareable"]     = function(self) return true end;
+            --- Whether the event's data is shared, always true
+            -- @static
+            -- @method  IsShareable
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  true
+            ["IsShareable"]     = function() return true end;
 
+            --- Whether the event is static
+            -- @static
+            -- @method  IsStatic
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  boolean                     true if the event is static
             ["IsStatic"]        = function(self)
                 local info      = _EventInfo[self]
                 return info and info[FLD_EVENT_STATIC] or false
             end;
 
+            --- Invoke an event with parameters
+            -- @static
+            -- @method  Invoke
+            -- @owner   event
+            -- @format  (target[, object], ...)
+            -- @param   target                      the target event
+            -- @param   object                      the object if the event is not static
+            -- @param   ...                         the parameters
+            ["Invoke"]          = function(self, ...) return self:Invoke(...) end;
+
+            --- Parse a string-boolean pair as the event's definition, the string is the event's name and true marks it as static
+            -- @static
+            -- @method  Parse
+            -- @owner   event
+            -- @format  (target, key, value[, stack])
+            -- @param   target                      the target class or interface
+            -- @param   key                         the key
+            -- @param   value                       the value
+            -- @param   stack                       the stack level
+            -- @return  boolean                     true if key-value pair can be used as the event's definition
+            ["Parse"]           = function(owner, key, value, stack)
+                if type(key) == "string" and type(value) == "boolean" and owner and (interface.Validate(owner) or class.Validate(owner)) then
+                    stack       = parsestack(stack) + 1
+                    local evt   = genEvent(owner, key, value, stack)
+                    interface.AddFeature(owner, key, evt, stack)
+                    return true
+                end
+            end;
+
+            --- Set delegate or a final handler to the event's delegate
+            -- @static
+            -- @method  Set
+            -- @owner   event
+            -- @format  (target, object, delegate[, stack])
+            -- @param   target                      the target event
+            -- @param   object                      the object if the event is not static
+            -- @param   delegate                    the delegate used to copy or the final handler
+            -- @param   stack                       the stack level
             ["Set"]             = function(self, obj, delegate, stack)
                 local info      = _EventInfo[self]
                 stack           = parsestack(stack) + 1
@@ -8241,6 +8748,14 @@ do
                 end
             end;
 
+            --- Set the event change handler
+            -- @static
+            -- @method  SetEventChangeHandler
+            -- @owner   event
+            -- @format  (target, handler[, stack])
+            -- @param   target                      the target event
+            -- @param   handler                     the event's change handler
+            -- @param   stack                       the stack level
             ["SetEventChangeHandler"] = function(self, handler, stack)
                 stack           = parsestack(stack) + 1
                 if _EventInDefine[self] then
@@ -8251,6 +8766,13 @@ do
                 end
             end;
 
+            --- Set the event as static
+            -- @static
+            -- @method  SetStatic
+            -- @owner   event
+            -- @format  (target[, stack])
+            -- @param   target                      the target event
+            -- @param   stack                       the stack level
             ["SetStatic"]       = function(self, stack)
                 if _EventInDefine[self] then
                     _EventInfo[self][FLD_EVENT_STATIC] = true
@@ -8258,6 +8780,14 @@ do
                     error("Usage: event:SetStatic([stack]) - the event's definition is finished", parsestack(stack) + 1)
                 end
             end;
+
+            --- Whether the target is an event
+            -- @static
+            -- @method  Validate
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  target                      return the target if it's an event
+            ["Validate"]        = function(self) return _EventInfo[self] and self or nil end;
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
@@ -8270,27 +8800,7 @@ do
             local owner = visitor and environment.GetNamespace(visitor)
 
             if owner and (interface.Validate(owner) or class.Validate(owner)) then
-                local evt       = prototype.NewProxy(tevent)
-                local info      = {
-                    [FLD_EVENT_NAME]    = name,
-                    [FLD_EVENT_FIELD]   = FLD_EVENT_PREFIX .. namespace.GetNamespaceName(owner, true) .. "_" .. name,
-                    [FLD_EVENT_OWNER]   = owner,
-                    [FLD_EVENT_STATIC]  = flag or nil,
-                }
-
-                saveEventInfo(evt, info)
-
-                _EventInDefine  = saveStorage(_EventInDefine, evt, true)
-
-                attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack)
-
-                local super     = interface.GetSuperFeature(owner, name)
-                if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
-                attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
-
-                _EventInDefine  = saveStorage(_EventInDefine, evt, nil)
-
-                attribute.AttachAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+                local evt       = genEvent(owner, name, flag or false, stack)
 
                 interface.AddFeature(owner, name, evt, stack)
 
@@ -8312,7 +8822,7 @@ do
         __index                 = {
             ["Get"]             = event.Get;
             ["GetEventChangeHandler"] = event.GetEventChangeHandler;
-            ["Invoke"]          = event.Invoke;
+            ["Invoke"]          = invokeEvent;
             ["IsShareable"]     = event.IsShareable;
             ["IsStatic"]        = event.IsStatic;
             ["Set"]             = event.Set;
@@ -8320,13 +8830,143 @@ do
             ["SetStatic"]       = event.SetStatic;
         },
         __newindex              = readOnly,
-        __call                  = event.Invoke,
+        __call                  = invokeEvent,
         __metatable             = event,
     }
+
+    tsevent                     = prototype (tevent, {
+        __index                 = {
+            ["Invoke"]          = invokeStaticEvent;
+        },
+        __call                  = invokeStaticEvent;
+        __metatable             = event,
+    })
+
+    -----------------------------------------------------------------------
+    --                            registration                           --
+    -----------------------------------------------------------------------
+    interface.RegisterParser(event)
 end
 
 -------------------------------------------------------------------------------
---                                 property                                  --
+-- The properties are object states, we can use the table fields to act as the
+-- object states, but they lack the value validation, and we also can't track
+-- the modification of those fields.
+--
+-- Like the event, the property is also a feature type of the interface and
+-- class. The property system provide many mechanisms like get/set, value type
+-- validation, value changed handler, value changed event, default value and
+-- default value factory. Let's start with a simple example :
+--
+--              class "Person" (function(_ENV)
+--                  property "Name" { type = String }
+--                  property "Age"  { type = Number }
+--              end)
+--
+--              -- If the class has no constructor, we can use the class to create the object based on a table
+--              -- the table is called the init-table
+--              o = Person{ Name = "Ann", Age = 10 }
+--
+--              print(o.Name)-- Ann
+--              o.Name = 123 -- Error : the Name must be [String]
+--
+-- The **Person** class has two properties: *Name* and *Age*, the table after
+-- `property "Name"` is the definition of the *Name* property, it contains a
+-- *type* field that contains the property value's type, so when we assign a
+-- number value to the *Name*, the operation is failed.
+--
+-- Like the **member** of the **struct**, we use table to give the property's
+-- definition, the key is case ignored, here is a full list:
+--
+--      * get           the function used to get the property value from the
+--              object like `get(obj)`, also you can set **false** to it, so
+--              the property can't be read
+--
+--      * set           the function used to set the property value of the
+--              object like `set(obj, value)`, also you can set **false** to
+--              it, so the property can't be written
+--
+--      * getmethod     the string name used to specified the object method to
+--              get the value like `obj[getmethod](obj)`
+--
+--      * setmethod     the string name used to specified the object method to
+--              set the value like `obj[setmethod](obj, value)`
+--
+--      * field         the table field to save the property value, no use if
+--              get/set specified, like the *Name* of the **Person**, since
+--              there is no get/set or field specified, the system will auto
+--              generate a field for it, it's recommended.
+--
+--      * type          the value's type, if the value is immutable, the type
+--              validation can be turn off for release version, just turn on
+--              **TYPE_VALIDATION_DISABLED** in the **PLOOP_PLATFORM_SETTINGS**
+--
+--      * default       the default value
+--
+--      * event         the event used to handle the property value changes,
+--              if it's value is string, an event will be created:
+--
+--                  class "Person" (function(_ENV)
+--                      property "Name" { type = String, event = "OnNameChanged" }
+--                  end)
+--
+--                  o = Person { Name = "Ann" }
+--
+--                  function o:OnNameChanged(new, old, prop)
+--                      print(("[%s] %s -> %s"):format(prop, old, new))
+--                  end
+--
+--                  -- [Name] Ann -> Ammy
+--                  o.Name = "Ammy"
+--
+--      * handler       the function used to handle the property value changes,
+--               unlike the event, the handler is used to notify the class or
+--              interface itself, normally this is used combine with **field**
+--              (or auto-gen field), so the class or interface only need to act
+--              based on the value changes :
+--
+--                  class "Person" (function(_ENV)
+--                      property "Name" {
+--                          type = String, default = "anonymous",
+--                          handler = function(self, new, old, prop) print(("[%s] %s -> %s"):format(prop, old, new)) end
+--                      }
+--                  end)
+--
+--                  --[Name] anonymous -> Ann
+--                  o = Person { Name = "Ann" }
+--
+--                  --[Name] Ann -> Ammy
+--                  o.Name = "Ammy"
+--
+--      * static        true if the property is a static property
+--
+-- There is also a auto-binding mechanism for the property, if the definition
+-- don't provide get/set, getmethod/setmethod and field, the system will check
+-- the property owner's method(object method if non-static, static method if it
+-- is static), if the property name is **name**:
+--
+--      * The *setname*, *Setname*, *SetName*, *setName* will be scanned, if it
+--  existed, the method will be used as the **set** setting
+--
+--                  class "Person" (function(_ENV)
+--                      function SetName(self, name)
+--                          print("SetName", name)
+--                      end
+--
+--                      property "Name" { type = String }
+--                  end)
+--
+--                  -- SetName  Ann
+--                  o = Person { Name = "Ann"}
+--
+--                  -- SetName  Ammy
+--                  o.Name = "Ammy"
+--
+--      * The *getname*, *Getname*, *Isname*, *isname*, *getName*, *GetName*,
+--  *IsName*, *isname* will be scanned, if it exsited, the method will be used
+--  as the **get** setting
+--
+-- @prototype   property
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -8421,12 +9061,26 @@ do
                                     or  function(target, info) _PropertyInfo = saveStorage(_PropertyInfo, target, info) end
 
 
-    local genPropertyGet        = function (info)
-        if info[FLD_PROP_GET] and info[FLD_PROP_DEFAULT] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and not validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
-            info[FLD_PROP_RAWGET] = info[FLD_PROP_GET]
-            return
-        end
+    local genProperty           = function(owner, name, stack)
+        local prop              = prototype.NewProxy(tproperty)
+        local info              = {
+            [FLD_PROP_NAME]     = name,
+            [FLD_PROP_OWNER]    = owner,
+        }
 
+        savePropertyInfo(prop, info)
+
+        _PropertyInDefine       = saveStorage(_PropertyInDefine, prop, true)
+
+        attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack + 1)
+
+        local super             = interface.GetSuperFeature(owner, name)
+        if super and property.Validate(super) then attribute.InheritAttributes(prop, ATTRTAR_PROPERTY, super) end
+
+        return prop
+    end
+
+    local genPropertyGet        = function (info)
         local token         = 0
         local usename       = false
         local upval         = _Cache()
@@ -8634,11 +9288,6 @@ do
     end
 
     local genPropertySet        = function (info)
-        if info[FLD_PROP_SET] and not info[FLD_PROP_TYPE] and not validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
-            info[FLD_PROP_RAWSET]   = info[FLD_PROP_SET]
-            return
-        end
-
         local token             = 0
         local usename           = false
         local upval             = _Cache()
@@ -8887,6 +9536,12 @@ do
     -----------------------------------------------------------------------
     property                    = prototype {
         __index                 = {
+            --- Get the property accessor, the accessor will be used by object to get/set value instead of the property itself
+            -- @static
+            -- @method  GetAccessor
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  accessor                    A table like { Get = func, Set = func }
             ["GetAccessor"]     = function(self)
                 local info      = _PropertyInfo[self]
                 if not info then return end
@@ -9011,43 +9666,99 @@ do
                 return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET] }
             end;
 
+            --- Whether the property should return a clone copy of the value
+            -- @static
+            -- @method  IsGetClone
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if should return a clone copy of the value
             ["IsGetClone"]      = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property should return a deep clone copy of the value
+            -- @static
+            -- @method  IsGetDeepClone
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if should return a deep clone copy of the value
             ["IsGetDeepClone"]  = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property should save a clone copy to the value
+            -- @static
+            -- @method  IsSetClone
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if should save a clone copy to the value
             ["IsSetClone"]      = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property should save a deep clone copy to the value
+            -- @static
+            -- @method  IsSetDeepClone
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if should save a deep clone copy to the value
             ["IsSetDeepClone"]  = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property should dispose the old value
+            -- @static
+            -- @method  IsRetainObject
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if should dispose the old value
             ["IsRetainObject"]  = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property data is shareable, always true
+            -- @static
+            -- @method  IsShareable
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  true
             ["IsShareable"]     = function(self) return true end;
 
+            --- Whether the property is static
+            -- @static
+            -- @method  IsStatic
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is static
             ["IsStatic"]        = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property value should kept in a weak table
+            -- @static
+            -- @method  IsWeak
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property value should kept in a weak table
             ["IsWeak"]          = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Set the property whether it should return a clone copy of the value
+            -- @static
+            -- @method  GetClone
+            -- @owner   property
+            -- @format  (target[, deep[, stack]])
+            -- @param   target                      the target property
+            -- @param   deep                        true if need deep clone
+            -- @param   stack                       the stack level
             ["GetClone"]     = function(self, deep, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
@@ -9058,6 +9769,34 @@ do
                 end
             end;
 
+            --- Parse a string-[table|type] pair as the property's definition, the string is the property's name and the value should be a table or a valid type
+            -- @static
+            -- @method  Parse
+            -- @owner   property
+            -- @format  (target, key, value[, stack])
+            -- @param   target                      the target class or interface
+            -- @param   key                         the key
+            -- @param   value                       the value
+            -- @param   stack                       the stack level
+            -- @return  boolean                     true if key-value pair can be used as the property's definition
+            ["Parse"]           = function(owner, key, value, stack)
+                if type(key) == "string" and (getprototypemethod(value, "ValidateValue") or (type(value) == "table" and getmetatable(value) == nil)) and owner and (interface.Validate(owner) or class.Validate(owner)) then
+                    stack       = parsestack(stack) + 1
+                    if getprototypemethod(value, "ValidateValue") then value = { type = value } end
+                    local prop  = genProperty(owner, key, stack)
+                    prop(value, stack)
+                    return true
+                end
+            end;
+
+            --- Set the property whether it should save a clone copy of the value
+            -- @static
+            -- @method  SetClone
+            -- @owner   property
+            -- @format  (target[, deep[, stack]])
+            -- @param   target                      the target property
+            -- @param   deep                        true if need deep clone
+            -- @param   stack                       the stack level
             ["SetClone"]     = function(self, deep, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
@@ -9068,6 +9807,13 @@ do
                 end
             end;
 
+            --- Set the property whether it should dispose the old value
+            -- @static
+            -- @method  SetRetainObject
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
             ["SetRetainObject"] = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
@@ -9077,6 +9823,13 @@ do
                 end
             end;
 
+            --- Mark the property as static
+            -- @static
+            -- @method  SetStatic
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
             ["SetStatic"]       = function(self, stack)
                 if _PropertyInDefine[self] then
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
@@ -9085,6 +9838,13 @@ do
                 end
             end;
 
+            --- Mark the property so its value should be kept in a weak table
+            -- @static
+            -- @method  SetWeak
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
             ["SetWeak"]         = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
@@ -9094,6 +9854,12 @@ do
                 end
             end;
 
+            --- Wether the value is a property
+            -- @static
+            -- @method  Validate
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @param   target                      return the taret is it's a property
             ["Validate"]        = function(self) return _PropertyInfo[self] and self or nil end;
         },
         __call                  = function(self, ...)
@@ -9106,21 +9872,7 @@ do
             local owner = visitor and environment.GetNamespace(visitor)
 
             if owner and (interface.Validate(owner) or class.Validate(owner)) then
-                local prop      = prototype.NewProxy(tproperty)
-                local info      = {
-                    [FLD_PROP_NAME]    = name,
-                    [FLD_PROP_OWNER]   = owner,
-                }
-
-                savePropertyInfo(prop, info)
-
-                _PropertyInDefine  = saveStorage(_PropertyInDefine, prop, true)
-
-                attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack)
-
-                local super     = interface.GetSuperFeature(owner, name)
-                if super and property.Validate(super) then attribute.InheritAttributes(prop, ATTRTAR_PROPERTY, super) end
-
+                local prop      = genProperty(owner, name, stack)
                 return prop
             else
                 error([[Usage: property "name" - the property can't be used here.]], stack)
@@ -9149,15 +9901,17 @@ do
             ["SetStatic"]       = property.SetStatic;
             ["SetWeak"]         = property.SetWeak;
         },
-        __call                  = function(self, definition)
-            if type(definition) ~= "table" then error([[Usage: property "name" { definition } - the definition part must be a table]], 2) end
-            if not _PropertyInDefine[self] then error([[Usage: property "name" { definition } - the property's definition is finished]], 2) end
+        __call                  = function(self, definition, stack)
+            stack               = parsestack(stack) + 1
+
+            if type(definition) ~= "table" then error([[Usage: property "name" { definition } - the definition part must be a table]], stack) end
+            if not _PropertyInDefine[self] then error([[Usage: property "name" { definition } - the property's definition is finished]], stack) end
 
             local info          = _PropertyInfo[self]
             local owner         = info[FLD_PROP_OWNER]
             local name          = info[FLD_PROP_NAME]
 
-            attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name, 2)
+            attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name, stack)
 
             -- Parse the definition
             for k, v in pairs, definition do
@@ -9171,7 +9925,7 @@ do
                         elseif tval == "string" then
                             info[FLD_PROP_GETMETHOD] = v
                         else
-                            error([[Usage: property "name" { get = ... } - the "get" must be function, string or boolean]], 2)
+                            error([[Usage: property "name" { get = ... } - the "get" must be function, string or boolean]], stack)
                         end
                     elseif k == "set" then
                         if tval == "function" or tval == "boolean" then
@@ -9179,25 +9933,25 @@ do
                         elseif tval == "string" then
                             info[FLD_PROP_SETMETHOD] = v
                         else
-                            error([[Usage: property "name" { set = ... } - the "set" must be function, string or boolean]], 2)
+                            error([[Usage: property "name" { set = ... } - the "set" must be function, string or boolean]], stack)
                         end
                     elseif k == "getmethod" then
                         if tval == "string" then
                             info[FLD_PROP_GETMETHOD] = v
                         else
-                            error([[Usage: property "name" { getmethod = ... } - the "get" must be string]], 2)
+                            error([[Usage: property "name" { getmethod = ... } - the "get" must be string]], stack)
                         end
                     elseif k == "setmethod" then
                         if tval == "string" then
                             info[FLD_PROP_SETMETHOD] = v
                         else
-                            error([[Usage: property "name" { setmethod = ... } - the "get" must be string]], 2)
+                            error([[Usage: property "name" { setmethod = ... } - the "get" must be string]], stack)
                         end
                     elseif k == "field" then
                         if v ~= name then
                             info[FLD_PROP_FIELD] = v ~= name and v or nil
                         else
-                            error([[Usage: property "name" { field = ... } - the field can't be the same with the property name]], 2)
+                            error([[Usage: property "name" { field = ... } - the field can't be the same with the property name]], stack)
                         end
                     elseif k == "type" then
                         local tpValid   = getprototypemethod(v, "ValidateValue")
@@ -9205,7 +9959,7 @@ do
                             info[FLD_PROP_TYPE]  = v
                             info[FLD_PROP_VALID] = tpValid
                         else
-                            error([[Usage: property "name" { type = ... } - the type is not valid]], 2)
+                            error([[Usage: property "name" { type = ... } - the type is not valid]], stack)
                         end
                     elseif k == "default" then
                         if type(v) == "function" then
@@ -9217,13 +9971,13 @@ do
                         if tval == "string" or event.Validate(v) then
                             info[FLD_PROP_EVENT] = v
                         else
-                            error([[Usage: property "name" { event = ... } - the event is not valid]], 2)
+                            error([[Usage: property "name" { event = ... } - the event is not valid]], stack)
                         end
                     elseif k == "handler" then
                         if tval == "string" or tval == "function" then
                             info[FLD_PROP_HANDLER] = v
                         else
-                            error([[Usage: property "name" { handler = ... } - the handler must be function or string]], 2)
+                            error([[Usage: property "name" { handler = ... } - the handler must be function or string]], stack)
                         end
                     elseif k == "isstatic" or k == "static" then
                         if v then
@@ -9239,7 +9993,7 @@ do
                 if not msg then
                     info[FLD_PROP_DEFAULT] = ret
                 else
-                    error([[Usage: property "name" { type = ...,  default = ... } - the default don't match the type setting]], 2)
+                    error([[Usage: property "name" { type = ...,  default = ... } - the default don't match the type setting]], stack)
                 end
             elseif info[FLD_PROP_DEFAULT] == nil and info[FLD_PROP_TYPE] then
                 info[FLD_PROP_DEFAULT] = getobjectvalue(info[FLD_PROP_TYPE], "GetDefault")
@@ -9249,11 +10003,11 @@ do
             if info[FLD_PROP_GET] then info[FLD_PROP_GETMETHOD] = nil end
             if info[FLD_PROP_SET] then info[FLD_PROP_SETMETHOD] = nil end
 
-            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name, 2)
+            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
 
             _PropertyInDefine  = saveStorage(_PropertyInDefine, self, nil)
 
-            attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name, 2)
+            attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
 
             -- Check the event
             if type(info[FLD_PROP_EVENT]) == "string" then
@@ -9264,24 +10018,29 @@ do
                     if evt:IsStatic() == self:IsStatic() then
                         info[FLD_PROP_EVENT] = evt
                     elseif evt:IsStatic() then
-                        error([[Usage: property "name" { event = ... } - the event is static]], 2)
+                        error([[Usage: property "name" { event = ... } - the event is static]], stack)
                     else
-                        error([[Usage: property "name" { event = ... } - the event is not static]], 2)
+                        error([[Usage: property "name" { event = ... } - the event is not static]], stack)
                     end
                 elseif evt == nil then
                     -- Auto create the event
-                    event.Parse(owner, ename, self:IsStatic() or false, 2)
+                    event.Parse(owner, ename, self:IsStatic() or false, stack)
                     info[FLD_PROP_EVENT] = interface.GetFeature(owner, ename)
                 else
-                    error([[Usage: property "name" { event = ... } - the event is not valid]], 2)
+                    error([[Usage: property "name" { event = ... } - the event is not valid]], stack)
                 end
             end
 
-            interface.AddFeature(owner, name, self, 2)
+            interface.AddFeature(owner, name, self, stack)
         end,
         __newindex              = readOnly,
         __metatable             = property,
     }
+
+    -----------------------------------------------------------------------
+    --                            registration                           --
+    -----------------------------------------------------------------------
+    interface.RegisterParser(property)
 end
 
 -------------------------------------------------------------------------------
@@ -9375,7 +10134,7 @@ do
     -----------------------------------------------------------------------
     --                             attribute                             --
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Abstract__",      prototype {
+    namespace.SaveNamespace("System.__Abstract__",          prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -9389,7 +10148,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__AnonymousClass__",prototype {
+    namespace.SaveNamespace("System.__AnonymousClass__",    prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 interface.SetAnonymousClass(target, parsestack(stack) + 1)
@@ -9399,7 +10158,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Base__",          prototype {
+    namespace.SaveNamespace("System.__Base__",              prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 struct.SetBaseStruct(target, self[1], parsestack(stack) + 1)
@@ -9412,7 +10171,7 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
-    namespace.SaveNamespace("System.__CaseIgnored__",   prototype {
+    namespace.SaveNamespace("System.__CaseIgnored__",       prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 enum.SetCaseIgnored(target, parsestack(stack) + 1)
@@ -9422,7 +10181,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Default__",       prototype {
+    namespace.SaveNamespace("System.__Default__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 local value     = self[1]
@@ -9444,7 +10203,23 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
-    namespace.SaveNamespace("System.__Final__",         prototype {
+    namespace.SaveNamespace("System.__EventChangeHandler__",prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                local value     = self[1]
+                if type(value) == "function" then
+                    event.SetEventChangeHandler(target, value, parsestack(stack) + 1)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_EVENT,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
+    })
+
+    namespace.SaveNamespace("System.__Final__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -9458,7 +10233,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Flags__",         prototype {
+    namespace.SaveNamespace("System.__Flags__",             prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local cache     = _Cache()
@@ -9552,7 +10327,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__NoNilValue__",    prototype {
+    namespace.SaveNamespace("System.__NoNilValue__",        prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetNilValueBlocked(target, parsestack(stack) + 1)
@@ -9562,7 +10337,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__NoRawSet__",      prototype {
+    namespace.SaveNamespace("System.__NoRawSet__",          prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetRawSetBlocked(target, parsestack(stack) + 1)
@@ -9572,7 +10347,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__NoSuperObject__", prototype {
+    namespace.SaveNamespace("System.__NoSuperObject__",     prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetNoSuperObject(target, parsestack(stack) + 1)
@@ -9582,7 +10357,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__ObjFuncAttr__",   prototype {
+    namespace.SaveNamespace("System.__ObjFuncAttr__",       prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetObjectFunctionAttributeEnabled(target, parsestack(stack) + 1)
@@ -9592,7 +10367,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Require__",       prototype {
+    namespace.SaveNamespace("System.__Require__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 interface.GetRequireClass(target, self[1], parsestack(stack) + 1)
@@ -9605,7 +10380,7 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
-    namespace.SaveNamespace("System.__Sealed__",        prototype {
+    namespace.SaveNamespace("System.__Sealed__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 getmetatable(target).SetSealed(target, parsestack(stack) + 1)
@@ -9615,7 +10390,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Simple__",        prototype {
+    namespace.SaveNamespace("System.__Simple__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetAsSimpleClass(target, parsestack(stack) + 1)
@@ -9625,7 +10400,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__SingleVer__",     prototype {
+    namespace.SaveNamespace("System.__SingleVer__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetSingleVersion(target, parsestack(stack) + 1)
@@ -9635,7 +10410,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Static__",        prototype {
+    namespace.SaveNamespace("System.__Static__",            prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 if targettype  == ATTRTAR_METHOD then
@@ -9656,7 +10431,7 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
-    namespace.SaveNamespace("System.__Super__",         prototype {
+    namespace.SaveNamespace("System.__Super__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetSuperClass(target, self[1], parsestack(stack) + 1)
