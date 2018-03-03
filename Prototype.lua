@@ -5557,6 +5557,37 @@ do
         return super
     end
 
+    local getInitICInfo         = function (target, isclass)
+        local info              = _ICInfo[target]
+
+        local ninfo             = {
+            -- STATIC FIELDS
+            [FLD_IC_SUPCLS]     = info and info[FLD_IC_SUPCLS],
+            [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_CLS or MOD_INITVAL_IF,
+            [FLD_IC_CTOR]       = info and info[FLD_IC_CTOR],
+            [FLD_IC_DTOR]       = info and info[FLD_IC_DTOR],
+            [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD] and tblclone(info[FLD_IC_FIELD], {}),
+            [FLD_IC_EXIST]      = info and info[FLD_IC_EXIST],
+            [FLD_IC_NEWOBJ]     = info and info[FLD_IC_NEWOBJ],
+            [FLD_IC_TYPMTD]     = info and info[FLD_IC_TYPMTD] and tblclone(info[FLD_IC_TYPMTD], {}) or false,
+            [FLD_IC_TYPMTM]     = info and info[FLD_IC_TYPMTM] and tblclone(info[FLD_IC_TYPMTM], {}),
+            [FLD_IC_TYPFTR]     = info and info[FLD_IC_TYPFTR] and tblclone(info[FLD_IC_TYPFTR], {}),
+            [FLD_IC_INHRTP]     = info and info[FLD_IC_INHRTP] and tblclone(info[FLD_IC_INHRTP], {}),
+            [FLD_IC_REQCLS]     = info and info[FLD_IC_REQCLS],
+            [FLD_IC_SUPER]      = info and info[FLD_IC_SUPER],
+            [FLD_IC_THIS]       = info and info[FLD_IC_THIS],
+            [FLD_IC_ANYMSCL]    = info and info[FLD_IC_ANYMSCL] or isclass and nil,
+
+            -- CACHE FIELDS
+            [FLD_IC_STAFTR]     = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
+            [FLD_IC_OBJFTR]     = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
+        }
+
+        if info then for i, extif in ipairs, info, FLD_IC_STEXT - 1 do ninfo[i] = extif end end
+
+        return ninfo
+    end
+
     local genMetaIndex          = function (info)
         local token = 0
         local upval = _Cache()
@@ -6228,7 +6259,7 @@ do
                 ainfo[FLD_IC_STEXT] = target
 
                 -- Register the _ICDependsMap
-                _ICDependsMap[target]   = _ICDependsMap[target] or {}
+                _ICDependsMap[target] = _ICDependsMap[target] or {}
                 tinsert(_ICDependsMap[target], aycls)
 
                 -- Save the anonymous class
@@ -6340,37 +6371,6 @@ do
                 saveObjectMethod(child, name, func, true)
             end
         end
-    end
-
-    local getInitICInfo         = function (target, isclass)
-        local info              = _ICInfo[target]
-
-        local ninfo             = {
-            -- STATIC FIELDS
-            [FLD_IC_SUPCLS]     = info and info[FLD_IC_SUPCLS],
-            [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_CLS or MOD_INITVAL_IF,
-            [FLD_IC_CTOR]       = info and info[FLD_IC_CTOR],
-            [FLD_IC_DTOR]       = info and info[FLD_IC_DTOR],
-            [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD] and tblclone(info[FLD_IC_FIELD], {}),
-            [FLD_IC_EXIST]      = info and info[FLD_IC_EXIST],
-            [FLD_IC_NEWOBJ]     = info and info[FLD_IC_NEWOBJ],
-            [FLD_IC_TYPMTD]     = info and info[FLD_IC_TYPMTD] and tblclone(info[FLD_IC_TYPMTD], {}) or false,
-            [FLD_IC_TYPMTM]     = info and info[FLD_IC_TYPMTM] and tblclone(info[FLD_IC_TYPMTM], {}),
-            [FLD_IC_TYPFTR]     = info and info[FLD_IC_TYPFTR] and tblclone(info[FLD_IC_TYPFTR], {}),
-            [FLD_IC_INHRTP]     = info and info[FLD_IC_INHRTP] and tblclone(info[FLD_IC_INHRTP], {}),
-            [FLD_IC_REQCLS]     = info and info[FLD_IC_REQCLS],
-            [FLD_IC_SUPER]      = info and info[FLD_IC_SUPER],
-            [FLD_IC_THIS]       = info and info[FLD_IC_THIS],
-            [FLD_IC_ANYMSCL]    = info and info[FLD_IC_ANYMSCL] or isclass and nil,
-
-            -- CACHE FIELDS
-            [FLD_IC_STAFTR]     = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
-            [FLD_IC_OBJFTR]     = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
-        }
-
-        if info then for i, extif in ipairs, info, FLD_IC_STEXT - 1 do ninfo[i] = info[extif] end end
-
-        return ninfo
     end
 
     -- Shared APIS
@@ -8518,6 +8518,39 @@ end
 --              -- Person created Ann
 --              o = Person("Ann")
 --
+-- When the class or interface has overridden the event, and they need register
+-- handler to super event, we can use the super object access style :
+--
+--              class "Person" (function(_ENV)
+--                  property "Name" { event = "OnNameChanged" }
+--              end)
+--
+--              class "Student" (function(_ENV)
+--                  inherit "Person"
+--
+--                  event "OnNameChanged"
+--
+--                  local function raiseEvent(self, ...)
+--                      OnNameChanged(self, ...)
+--                  end
+--
+--                  function Student(self)
+--                      super(self)
+--
+--                      -- Use the super object access style
+--                      super[self].OnNameChanged = raiseEvent
+--                  end
+--              end)
+--
+--              o = Student()
+--
+--              function o:OnNameChanged(name)
+--                  print("New name is " .. name)
+--              end
+--
+--              -- New name is Test
+--              o.Name = "Test"
+--
 -- @prototype   event
 -------------------------------------------------------------------------------
 do
@@ -8965,6 +8998,32 @@ end
 --      * The *getname*, *Getname*, *Isname*, *isname*, *getName*, *GetName*,
 --  *IsName*, *isname* will be scanned, if it exsited, the method will be used
 --  as the **get** setting
+--
+-- When the class or interface has overridden the property, they still can use
+-- the super object access style to use the super's property :
+--
+--                  class "Person" (function(_ENV)
+--                      property "Name" { event = "OnNameChanged" }
+--                  end)
+--
+--                  class "Student" (function(_ENV)
+--                      inherit "Person"
+--
+--                      property "Name" {
+--                          Set = function(self, name)
+--                              -- Use super property to save
+--                              super[self].Name = name
+--                          end,
+--                          Get = function(self)
+--                              -- Use super property to fetch
+--                              return super[self].Name
+--                          end,
+--                      }
+--                  end)
+--
+--                  o = Student()
+--                  o.Name = "Test"
+--                  print(o.Name)   -- Test
 --
 -- @prototype   property
 -------------------------------------------------------------------------------
@@ -10108,7 +10167,10 @@ do
 end
 
 -------------------------------------------------------------------------------
---                            [namespace] System                             --
+-- The **System** namespace contains fundamental prototypes, attributes, enums,
+-- structs, interfaces and classes
+--
+-- @namespace   System
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -10134,6 +10196,14 @@ do
     -----------------------------------------------------------------------
     --                             attribute                             --
     -----------------------------------------------------------------------
+    -----------------------------------------------------------------------
+    -- Mark a class as abstract, so it can't be used to generate objects,
+    -- or mark the object methods, object features(like event, property) as
+    -- abstract, so they need(not must) be implemented by child interfaces
+    -- or classes
+    --
+    -- @attribute   System.__Abstract__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Abstract__",          prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10148,6 +10218,36 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Mark an interface so it'll auto create an anonymous class that extend
+    -- the interface. So the interface can be used like a class to generate
+    -- objects. Since the anonymous class don't have any constructor, no
+    -- arguments can be accepted by the interface, but you still can pass
+    -- a table as the init-table(like the class without constructor).
+    --
+    -- If the interface has only one abstract object method(include extend),
+    -- it also can receive a function as argument to generate an object, the
+    -- accepted function will override the abstract method :
+    --
+    --          import "System"
+    --
+    --          __AnonymousClass__()
+    --          interface "ITask" (function(_ENV)
+    --              __Abstract__()
+    --              function DoTask(self)
+    --              end
+    --
+    --              function Process(self)
+    --                  self:DoTask()
+    --              end
+    --          end)
+    --
+    --          o = ITask(function() print("Hello") end)
+    --
+    --          o:Process()     -- Hello
+    --
+    -- @attribute   System.__AnonymousClass__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__AnonymousClass__",    prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10158,6 +10258,19 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the target struct's base struct, works like
+    --
+    --          struct "Number" { function (val) return type(val) ~= "number" and "the %s must be number" end }
+    --
+    --          __Base__(Number)
+    --          struct "Integer" { function(val) return math.floor(val) ~= val and "the %s must be integer" end}
+    --
+    --          print(Integer(true))    -- Error: the value must be number
+    --          print(Integer(1.3))     -- Error: the value must be integer
+    --
+    -- @attribute   System.__Base__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Base__",              prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10171,6 +10284,11 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the enum as case ignored
+    --
+    -- @attribute   System.__CaseIgnored__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__CaseIgnored__",       prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10181,6 +10299,11 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set a default value to the enum or custom struct
+    --
+    -- @attribute   System.__Default__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Default__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10203,6 +10326,11 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Set a event change handler to the event
+    --
+    -- @attribute   System.__EventChangeHandler__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__EventChangeHandler__",prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10219,6 +10347,13 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Mark a class or interface as final, so they can't be inherited or
+    -- extended, or mark the object methods, object features as final, so
+    -- they have the highest priority to be inherited
+    --
+    -- @attribute   System.__Final__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Final__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10233,6 +10368,11 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the enum as flags enumeration
+    --
+    -- @attribute   System.__Flags__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Flags__",             prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
@@ -10327,6 +10467,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class's objects so access non-existent fields on them will
+    -- be denied
+    --
+    -- @attribute   System.__NoNilValue__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__NoNilValue__",        prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10337,6 +10483,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class's objects so save value to non-existent fields on them
+    --  will be denied
+    --
+    -- @attribute   System.__NoRawSet__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__NoRawSet__",          prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10347,6 +10499,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class's objects so they don't use the super object access
+    -- style like `super[self]:Method()`, `super[self].Name = xxx`
+    --
+    -- @attribute   System.__NoSuperObject__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__NoSuperObject__",     prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10357,6 +10515,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class's objects so functions that be assigned on them will
+    -- be modified by the attribute system
+    --
+    -- @attribute   System.__ObjFuncAttr__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__ObjFuncAttr__",       prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10367,6 +10531,11 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set a require class to the target interface
+    --
+    -- @attribute   System.__Require__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Require__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10380,6 +10549,11 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Seal the enum, struct, interface or class, so they can't be re-defined
+    --
+    -- @attribute   System.__Sealed__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Sealed__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10390,6 +10564,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class as a simple class, so it'll try to use the init-table
+    -- as the object
+    --
+    -- @attribute   System.__Simple__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Simple__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10400,6 +10580,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the class as a single version class, so all old objects of it
+    -- will always use the newest definition
+    --
+    -- @attribute   System.__Simple__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__SingleVer__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10410,6 +10596,12 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the object methods or object features as static, so they can only
+    -- be used by the struct, interface or class itself
+    --
+    -- @attribute   System.__Simple__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Static__",            prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
@@ -10431,6 +10623,11 @@ do
         __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
+    -----------------------------------------------------------------------
+    -- Set a super class to the target class
+    --
+    -- @attribute   System.__Require__
+    -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Super__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
@@ -10453,6 +10650,11 @@ do
     -----------------------------------------------------------------------
     --                               types                               --
     -----------------------------------------------------------------------
+    -----------------------------------------------------------------------
+    -- The attribute targets
+    --
+    -- @enum        System.AttributeTargets
+    -----------------------------------------------------------------------
     __Sealed__() __Flags__() __Default__(ATTRTAR_ALL)
     enum "System.AttributeTargets" {
         All         = ATTRTAR_ALL,
@@ -10468,6 +10670,11 @@ do
         Property    = ATTRTAR_PROPERTY,
     }
 
+    -----------------------------------------------------------------------
+    -- The delegate used to container several function as event handlers
+    --
+    -- @class       System.Delegate
+    -----------------------------------------------------------------------
     __Sealed__() __Final__()
     class "System.Delegate" (function(_ENV)
         event "OnChange"
@@ -10481,11 +10688,11 @@ do
 
         local attribute     = Attribute
 
-        __field     = {
-            [-1]    = false,
-            [ 0]    = false,
-        }
-
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Copy the handlers to the target delegate
+        -- @param   target                      the target delegate
         function CopyTo(self, target)
             if getmetatable(target) == Delegate then
                 local len = #self
@@ -10494,6 +10701,8 @@ do
             end
         end
 
+        --- Invoke the handlers with arguments
+        -- @param   ...                         the arguments
         function Invoke(self, ...)
             local ret = self[0] and self[0](...) or false
             -- Any func return true means to stop all
@@ -10510,10 +10719,16 @@ do
             return self[-1] and self[-1](...)
         end
 
+        --- Whether the delegate has no handler
+        -- @return  boolean                     true if no handler in the delegate
         function IsEmpty(self)
             return not (self[-1] or self[1] or self[0])
         end
 
+        --- Set the init function to the delegate
+        -- @format  (init[, stack])
+        -- @param   init                        the init function
+        -- @param   stack                       the stack level
         function SetInitFunction(self, func, stack)
             if func == nil or type(func) == "function" then
                 func = func or false
@@ -10524,6 +10739,10 @@ do
             end
         end
 
+        --- Set the final function to the delegate
+        -- @format  (final[, stack])
+        -- @param   final                       the final function
+        -- @param   stack                       the stack level
         function SetFinalFunction(self, func, stack)
             if func == nil or type(func) == "function" then
                 func = func or false
@@ -10534,6 +10753,13 @@ do
             end
         end
 
+        -----------------------------------------------------------
+        --                       meta-data                       --
+        -----------------------------------------------------------
+        field { [-1] = false, [0] = false }
+
+        --- Use to add stackable handler to the delegate
+        -- @usage   obj.OnEvent = obj.OnEvent + func
         function __add(self, func)
             if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
             attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
@@ -10549,6 +10775,8 @@ do
             return self
         end
 
+        --- Use to remove stackable handler from the delegate
+        -- @usage   obj.OnEvent = obj.OnEvent - func
         function __sub(self, func)
             for i, f in ipairs(self) do
                 if f == func then
