@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/02/26                                               --
+-- Update Date  :   2018/03/03                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -2008,6 +2008,8 @@ do
     local _NSName               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_NAME) end end})
                                     or  newStorage(WEAK_KEY)
+    local _ValidTypeCombine     = newStorage(WEAK_KEY)
+    local _UnmSubTypeMap        = newStorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -2259,6 +2261,80 @@ do
             else
                 return env
             end
+        end,
+        __add                   = function(a, b)
+            local comb      = _ValidTypeCombine[a] and _ValidTypeCombine[a][b] or _ValidTypeCombine[b] and _ValidTypeCombine[b][a]
+            if comb then return comb end
+
+            local valida    = getprototypemethod(a, "ValidateValue")
+            local validb    = getprototypemethod(a, "ValidateValue")
+
+            if not valida or not validb then
+                error("the both value of the addition must be validation type", 2)
+            end
+
+            local isimmua   = getobjectvalue(a, "IsImmutable")
+            local isimmub   = getobjectvalue(b, "IsImmutable")
+            local isseala   = getobjectvalue(a, "IsSealed")
+            local issealb   = getobjectvalue(b, "IsSealed")
+            local aname     = _NSName[a]
+            local bname     = _NSName[b]
+            local cname     = false
+            local msg       = "the %s don't meet the requirement"
+
+            if aname and bname then
+                if aname:match("^%-") then aname = "(" .. aname .. ")" end
+                if bname:match("^%-") then bname = "(" .. bname .. ")" end
+                cname       = aname .. " | " .. bname
+                msg         = "the %s must be value of " .. cname
+            end
+
+            __Sealed__()
+            local strt      = struct {
+                function (val, onlyvalid)
+                    local _, err = valida(a, val, true)
+                    if not err then return end
+                    _, err = validb(b, val, true)
+                    if not err then return end
+                    return onlyvalid or msg
+                end,
+                __init      = not (isimmua and isimmub and isseala and issealb) and function(val)
+                    local ret, err = valida(a, val)
+                    if not err then return ret end
+                    ret, err = validb(b, val)
+                    if not err then return ret end
+                end or nil,
+            }
+
+            local comb      = _ValidTypeCombine[a] or newStorage(WEAK_ALL)
+            comb[b]         = strt
+            _ValidTypeCombine[a] = comb
+
+            saveNamespaceName(strt, cname)
+
+            return strt
+        end,
+        __unm                   = function(self)
+            local issubtype     = getprototypemethod(self, "IsSubType")
+            if not issubtype then
+                error("the type's prototype don't support 'IsSubType' check")
+            end
+
+            if _UnmSubTypeMap[self] then return _UnmSubTypeMap[self] end
+
+            local sname         = _NSName[self]
+            local msg           = sname and ("the %s must be a sub type of " .. sname) or "the %s don't meet the requirement"
+
+            __Sealed__() __Default__(self)
+            _UnmSubTypeMap[self]= struct {
+                function (val, onlyvalid)
+                    return not issubtype(val, self) and (onlyvalid or msg) or nil
+                end
+            }
+
+            saveNamespaceName(_UnmSubTypeMap[self], sname and ("-" .. sname) or false)
+
+            return _UnmSubTypeMap[self]
         end,
     }
 
@@ -2908,11 +2984,11 @@ end
 --
 --                  struct "Number" (function(_ENV)
 --                      function Number(value)
---                          return type(value) ~= "number" and "the %s must be number"
+--                          return type(value) ~= "number" and "the %s must be number, got " .. type(value)
 --                      end
 --                  end)
 --
---                  v = Number(true)  -- Error : the value must be number
+--                  v = Number(true)  -- Error : the value must be number, got boolean
 --
 --              Unlike the enumeration, the structure's definition is a little
 --          complex, the definition body is a function with _ENV as its first
@@ -2959,7 +3035,7 @@ end
 --                      end
 --                  end)
 --
---                  v = Integer(true)  -- Error : the value must be number
+--                  v = Integer(true)  -- Error : the value must be number, got boolean
 --                  v = Integer(1.23)  -- Error : the value must be integer
 --
 --
@@ -3119,6 +3195,41 @@ end
 --
 -- The prototype has provided four value type's prototype: enum, struct, class
 -- and interface.
+--
+--
+-- iv. Let's return the first struct **Number**, the error message is generated
+-- during runtime, and in PLoop there are many scenarios we only care whether
+-- the value match the struct type, so we only need validation, not the error
+-- message(the overload system use this technique to choose function).
+--
+-- The validator can receive 2nd parameter which indicated whether the system
+-- only care if the value is valid:
+--
+--                  struct "Number" (function(_ENV)
+--                      function Number(value, onlyvalid)
+--                          if type(value) ~= "number" then return onlyvalid or "the %s must be number, got " .. type(value) end
+--                      end
+--                  end)
+--
+--                  print(struct.ValidateValue(Number, "test", true))   -- nil, true
+--                  print(struct.ValidateValue(Number, "test", false))  -- nil, the %s must be number, got string
+--
+--
+-- v. If your value could be two or more types, you can combine those types like :
+--
+--                  -- nil, the %s must be value of System.Number | System.String
+--                  print(Struct.ValidateValue(Number + String, {}, false))
+--
+-- You can combine types like enums, structs, interfaces and classes.
+--
+--
+-- vi. If you need the value to be a struct who is a sub type of another struct,
+-- (the struct is a sub type of itself), you can create is like `- Number` :
+--
+--                  struct "Integer" { __base = Number, function(val) return math.floor(val) ~= val end }
+--                  print(Struct.ValidateValue( - Number, Integer, false))  -- Integer
+--
+-- You also can use the `-` operation on interface or class.
 --
 -- @prototype   struct
 -------------------------------------------------------------------------------
@@ -3552,14 +3663,14 @@ do
                 if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
                     tinsert(head, "svalid")
                     tinsert(body, [[
-                        local msg = svalid(value)
+                        local msg = svalid(value, onlyValid)
                         if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("the %s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                     ]])
                 elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
                     tinsert(head, "mvalid")
                     tinsert(body, [[
                         for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
-                            local msg = info[i](value)
+                            local msg = info[i](value, onlyValid)
                             if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("the %s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                         end
                     ]])
@@ -10176,6 +10287,17 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
+    local genBasicValidator     = function(tname)
+        local msg               = "the %s must be " .. tname .. ", got "
+        local type              = type
+        return function(val, onlyvalid) local tval = type(val) return tval ~= tname and (onlyvalid or msg .. tval) or nil end
+    end
+    local genTypeValidator      = function(ptype)
+        local pname             = tostring(ptype)
+        local msg               = "the %s must be a" .. (pname:match("^[aeiou]") and "n" or "") .. " " .. pname
+        local valid             = ptype.Validate
+        return function(val, onlyvalid) return not valid(val) and (onlyvalid or msg) or nil end
+    end
     local getAttributeName      = function(self) return namespace.GetNamespaceName(getmetatable(self)) end
 
     -----------------------------------------------------------------------
@@ -10642,19 +10764,14 @@ do
     })
 
     -----------------------------------------------------------------------
-    --                           registration                            --
+    --                        install attributes                         --
     -----------------------------------------------------------------------
-    environment.RegisterGlobalNamespace("System")
     namespace.ExportNamespace(_PLoopEnv, "System", true)
 
     -----------------------------------------------------------------------
-    --                               types                               --
+    --                               enums                               --
     -----------------------------------------------------------------------
-    -----------------------------------------------------------------------
-    -- The attribute targets
-    --
-    -- @enum        System.AttributeTargets
-    -----------------------------------------------------------------------
+    --- The attribute targets
     __Sealed__() __Flags__() __Default__(ATTRTAR_ALL)
     enum "System.AttributeTargets" {
         All         = ATTRTAR_ALL,
@@ -10671,10 +10788,31 @@ do
     }
 
     -----------------------------------------------------------------------
-    -- The delegate used to container several function as event handlers
-    --
-    -- @class       System.Delegate
+    --                              structs                              --
     -----------------------------------------------------------------------
+    __Sealed__() struct "System.Any"            { }
+    __Sealed__() struct "System.Boolean"        { false, __init = function(val) return val and true or false end }
+    __Sealed__() struct "System.RawBoolean"     { genBasicValidator("boolean")  }
+    __Sealed__() struct "System.String"         { genBasicValidator("string")   }
+    __Sealed__() struct "System.Number"         { genBasicValidator("number")   }
+    __Sealed__() struct "System.Function"       { genBasicValidator("function") }
+    __Sealed__() struct "System.Table"          { genBasicValidator("table")    }
+    __Sealed__() struct "System.RawTable"       { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
+    __Sealed__() struct "System.Userdata"       { genBasicValidator("userdata") }
+    __Sealed__() struct "System.Thread"         { genBasicValidator("thread")   }
+
+    __Sealed__() struct "System.NamespaceType"  { genTypeValidator(namespace)   }
+    __Sealed__() struct "System.EnumType"       { genTypeValidator(enum)        }
+    __Sealed__() struct "System.StructType"     { genTypeValidator(struct)      }
+    __Sealed__() struct "System.InterfaceType"  { genTypeValidator(interface)   }
+    __Sealed__() struct "System.ClassType"      { genTypeValidator(class)       }
+
+    __Sealed__() struct "System.AnyType"        { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+
+    -----------------------------------------------------------------------
+    --                              classes                              --
+    -----------------------------------------------------------------------
+    --- The delegate used to container several function as event handlers
     __Sealed__() __Final__()
     class "System.Delegate" (function(_ENV)
         event "OnChange"
@@ -10789,5 +10927,11 @@ do
         end
     end)
 end
+
+-------------------------------------------------------------------------------
+--                               registration                                --
+-------------------------------------------------------------------------------
+environment.RegisterGlobalNamespace("System")
+namespace.ExportNamespace(_PLoopEnv, "System", true)
 
 return ROOT_NAMESPACE
