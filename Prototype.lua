@@ -287,13 +287,19 @@ do
     --                               share                               --
     -----------------------------------------------------------------------
     strtrim                     = function (s)    return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end
-
-    typeconcat                  = function (a, b) return tostring(a) .. tostring(b) end
-    wipe                        = function (t)    for k in pairs, t do t[k] = nil end return t end
-
     readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
     writeOnly                   = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
+    wipe                        = function (t)    for k in pairs, t do t[k] = nil end return t end
+    getfield                    = function (self, key) return self[key] end
+    safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
+    loadInitTable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
+    getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
+    getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
+    uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
 
+    -----------------------------------------------------------------------
+    --                              storage                              --
+    -----------------------------------------------------------------------
     newStorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
     saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
                                         local new
@@ -306,16 +312,7 @@ do
                                         end
                                         for k, v in pairs, self do if k ~= key then new[k] = v end end
                                         return new
-                                    end
-                                    or  function(self, key, value) self[key] = value return self end
-    safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
-    getfield                    = function (self, key) return self[key] end
-    safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
-    loadInitTable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
-    getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
-    getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
-    uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
-    parsestack                  = function (stack) return type(stack) == "number" and stack or 1 end
+                                    end or function(self, key, value) self[key] = value return self end
 
     -----------------------------------------------------------------------
     --                               debug                               --
@@ -326,6 +323,7 @@ do
             return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
         end
     end
+    parsestack                  = function (stack) return type(stack) == "number" and stack or 1 end
 
     -----------------------------------------------------------------------
     --                               clone                               --
@@ -513,6 +511,7 @@ do
             setfenv             = fakefunc
         end
     end
+    safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
 
     -----------------------------------------------------------------------
     --                            main cache                             --
@@ -553,8 +552,8 @@ do
     -----------------------------------------------------------------------
     --                          keyword helper                           --
     -----------------------------------------------------------------------
-    local parseParams           = function (ptype, ...)
-        local visitor           = ptype and environment.GetKeywordVisitor(ptype)
+    local parseParams           = function (keyword, ptype, ...)
+        local visitor           = keyword and environment.GetKeywordVisitor(keyword)
         local env, target, definition, flag, stack
 
         for i = 1, select('#', ...) do
@@ -601,14 +600,14 @@ do
     end
 
     -- Used for features like property, event, member and namespace
-    getFeatureParams            = function (ftype, ...)
-        local  visitor, env, target, definition, flag, stack = parseParams(ftype, ...)
+    getFeatureParams            = function (keyword, ftype, ...)
+        local  visitor, env, target, definition, flag, stack = parseParams(keyword, ftype, ...)
         return visitor, env, target, definition, flag, stack
     end
 
     -- Used for types like enum, struct, class and interface : class([env,][name,][definition,][keepenv,][stack])
     getTypeParams               = function (nType, ptype, ...)
-        local  visitor, env, target, definition, flag, stack = parseParams(nType, ...)
+        local  visitor, env, target, definition, flag, stack = parseParams(nType, nType, ...)
 
         if target then
             if type(target) == "string" then
@@ -651,6 +650,14 @@ do
             end
         end
         return definition
+    end
+
+    parseNamespace              = function(name, visitor, env)
+        if type(name) == "string" and not strfind(name, "%p+") then
+            name    = strtrim(name)
+            name    = visitor and visitor[name] or env and env[name]
+        end
+        return name and namespace.Validate(name)
     end
 end
 
@@ -865,7 +872,7 @@ end
 -- The attributes are used to bind informations to features, or used to modify
 -- those features directly.
 --
--- The attributes should provide attribute usages by themselves or their types.
+-- The attributes should provide attribute usages.
 --
 -- The attribute usages are fixed name fields, methods or properties of the
 -- attribute:
@@ -930,22 +937,14 @@ end
 --      * SubLevel          Default 0. The priority's sublevel, for attributes
 --              with same priority, the bigger sublevel the first be applied.
 --
---      * Final             Default false. Special for attribute's type, so the
---              type's attribute usage can't be overridden, that's means the
---              attribute type can't be registered again.
 --
 -- To fetch the attribute usages from an attribute, take the *ApplyAttribute*
 -- as an example, the system will first use `attr["ApplyAttribute"]` to fetch
 -- the value, since the system don't care how it's provided, field, property,
 -- __index all works.
 --
--- If it's nil, the system will use `getmetatable(attr)` to get its type, the
--- type may be registered to the attribute system with the attribute usages,
--- if it existed, the system will try to fetch the value from it.
--- @see attribute.RegisterAttributeType
---
--- If the attribute don't provide attribute usage and so it's type, the default
--- value will be used.
+-- If the attribute don't provide attribute usage, the default value will be
+-- used.
 --
 -- Although the attribute system is designed without the type requirement, it's
 -- better to define them by creating classes extend @see System.IAttribute
@@ -1332,41 +1331,6 @@ do
                 if type(attr) ~= "table" and type(attr) ~= "userdata" then error("Usage : attribute.Register(attr[, unique][, stack]) - the attr is not valid", parsestack(stack) + 1) end
                 Debug("[attribute][Register] %s", tostring(attr))
                 return addAttribute(_RegisteredAttrs, attr, unique)
-            end;
-
-            --- Register an attribute type with usage information
-            -- @static
-            -- @method  RegisterAttributeType
-            -- @owner   attribute
-            -- @format  attribtueType, usage[, stack]
-            -- @param   attributeType               the attribute type
-            -- @param   usage                       the attribute usage
-            -- @param   stack                       the stack level
-            ["RegisterAttributeType"] = function(attrType, usage, stack)
-                if not attrType then
-                    error("Usage: attribute.RegisterAttributeType(attrType, usage[, stack]) - The attrType can't be nil", parsestack(stack) + 1)
-                end
-                local extUsage  = getAttributeData(attribute, attrType)
-                if extUsage and extUsage.Final then return end
-
-                local attrusage = _Cache()
-
-                Debug("[attribute][RegisterAttributeType] %s", tostring(attrType))
-
-                -- Default usage data for attributes
-                attrusage.InitDefinition    = getAttrUsageField(usage,  "InitDefinition",   nil,        "function")
-                attrusage.ApplyAttribute    = getAttrUsageField(usage,  "ApplyAttribute",   nil,        "function")
-                attrusage.AttachAttribute   = getAttrUsageField(usage,  "AttachAttribute",  nil,        "function")
-                attrusage.AttributeTarget   = getAttrUsageField(usage,  "AttributeTarget",  ATTRTAR_ALL,"number")
-                attrusage.Inheritable       = getAttrUsageField(usage,  "Inheritable",      false)
-                attrusage.Overridable       = getAttrUsageField(usage,  "Overridable",      true)
-                attrusage.Priority          = getAttrUsageField(usage,  "Priority",         0,          "number")
-                attrusage.SubLevel          = getAttrUsageField(usage,  "SubLevel",         0,          "number")
-
-                -- A special data for attribute usage, so the attribute usage won't be overridden
-                attrusage.Final             = getAttrUsageField(usage,  "Final",            false)
-
-                saveAttributeData(attribute, attrType, attrusage)
             end;
 
             --- Register attribute target type
@@ -1953,7 +1917,7 @@ do
     -- @usage       import "System.Threading"
     -----------------------------------------------------------------------
     import                      = function (...)
-        local visitor, env, name, _, flag, stack  = getFeatureParams(import, ...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(import, namespace, ...)
 
         name = namespace.Validate(name)
         if not env  then error("Usage: import(namespace) - The system can't figure out the environment", stack + 1) end
@@ -2210,7 +2174,7 @@ do
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
-            local visitor, env, target, _, flag, stack = getFeatureParams(namespace, ...)
+            local visitor, env, target, _, flag, stack = getFeatureParams(namespace, namespace, ...)
             stack               = stack + 1
 
             if not env then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the environment", stack) end
@@ -2251,7 +2215,7 @@ do
         __newindex              = readOnly,
         __tostring              = namespace.GetNamespaceName,
         __metatable             = namespace,
-        __concat                = typeconcat,
+        __concat                = function (a, b) return tostring(a) .. tostring(b) end,
         __call                  = function(self, definition)
             local env           = prototype.NewObject(tenvironment)
             environment.Initialize(env)
@@ -3426,7 +3390,7 @@ do
     end
 
     local checkStructDependence = function (target, chkType)
-        if target ~= chkType then
+        if chkType and target ~= chkType then
             if chkStructContents(chkType, isNotSealedStruct, true) then
                 _DependenceMap[chkType]         = _DependenceMap[chkType] or newStorage(WEAK_KEY)
                 _DependenceMap[chkType][target] = true
@@ -4884,7 +4848,7 @@ do
         __newindex              = readOnly,
         __call                  = function(self, ...)
             if self == member then
-                local visitor, env, name, definition, flag, stack  = getFeatureParams(member, ...)
+                local visitor, env, name, definition, flag, stack  = getFeatureParams(member, nil, ...)
                 local owner = visitor and environment.GetNamespace(visitor)
 
                 if owner and name then
@@ -4931,7 +4895,7 @@ do
     --              endstruct "Number"
     -----------------------------------------------------------------------
     endstruct                   = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
-        local visitor, env, name, definition, flag, stack  = getFeatureParams(endstruct, ...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(endstruct, nil,  ...)
         local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
@@ -5446,7 +5410,7 @@ do
         __lt                    = "__lt",           -- a < b
         __le                    = "__le",           -- a <= b
         __index                 = "___index",       -- return a[b]
-        __newindex              = "___newindex",     -- a[b] = v
+        __newindex              = "__newindex",     -- a[b] = v
         __call                  = "__call",         -- a()
         __gc                    = "__gc",           -- dispose a
         __tostring              = "__tostring",     -- tostring(a)
@@ -5623,11 +5587,7 @@ do
                 if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
                     if super and target[k] and (objpri[k] or INRT_PRIORITY_NORMAL) > INRT_PRIORITY_ABSTRACT then
                         -- abstract can't be used as Super
-                        if ismeta and k == IC_META_INDEX and target[META_KEYS[k]] then
-                            super[k]    = target[META_KEYS[k]]
-                        else
-                            super[k]    = target[k]
-                        end
+                        super[k]= target[k]
                     end
 
                     objpri[k]   = priority
@@ -5641,11 +5601,6 @@ do
                                 error(strformat("the feature named %q is not valid", k), stack + 1)
                             end
                             target[k]   = v
-                        end
-                    elseif ismeta then
-                        target[k]       = v
-                        if k == IC_META_INDEX and type(v) == "table" then
-                            target[META_KEYS[k]] = source[META_KEYS[k]]
                         end
                     else
                         target[k]       = v
@@ -5719,7 +5674,7 @@ do
             tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
-        local data = meta[META_KEYS[IC_META_INDEX]]
+        local data = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][META_KEYS[IC_META_INDEX]] or meta[IC_META_INDEX]
         if data then
             if type(data) == "function" then
                 token = turnOnFlags(FLG_IC_IDXFUN, token)
@@ -6645,7 +6600,8 @@ do
             info[FLD_IC_TYPMTM][name] = data
 
             if metaFld ~= name and tdata == "table" then
-                info[FLD_IC_TYPMTM][metaFld] = function(_, k) return data[k] end
+                info[FLD_IC_TYPMTM][metaFld]= data
+                info[FLD_IC_TYPMTM][name]   = function(_, k) return data[k] end
             end
         else
             info[metaFld]       = data
@@ -7026,13 +6982,15 @@ do
             -- @static
             -- @method  GetFeature
             -- @owner   interface
+            -- @param   (target, name[, fromobject])
             -- @param   target                      the target interface
             -- @param   name                        the feature's name
+            -- @param   fromobject:boolean          get the object feature
             -- @return  feature                     the feature
-            ["GetFeature"]      = function(target, name)
-                local info, def = getICTargetInfo(target)
+            ["GetFeature"]      = function(target, name, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info and type(name) == "string" then
-                    info        = info[FLD_IC_TYPFTR]
+                    info        = info[fromobj and FLD_IC_OBJFTR or FLD_IC_TYPFTR]
                     return info and info[name]
                 end
             end;
@@ -7041,15 +6999,16 @@ do
             -- @static
             -- @method  GetFeatures
             -- @owner   interface
-            -- @format  (target[, cache])
+            -- @format  (target[, cache][, fromobject])
             -- @param   target                      the target interface
             -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object features
             -- @rformat (cache)                     the cache that contains the feature list
             -- @rformat (iter, target)              without the cache parameter, used in generic for
-            ["GetFeatures"]     = function(target, cache)
-                local info      = getICTargetInfo(target)
+            ["GetFeatures"]     = function(target, cache, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
-                    local typftr= info[FLD_IC_TYPFTR]
+                    local typftr= info[fromobj and FLD_IC_OBJFTR or FLD_IC_TYPFTR]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
 
@@ -7073,17 +7032,22 @@ do
             -- @static
             -- @method  GetMethod
             -- @owner   interface
+            -- @format  (target, name[, fromobject])
             -- @param   target                      the target interface
             -- @param   name                        the method's name
+            -- @param   fromobject:boolean          get the object method
             -- @rformat method, isstatic
             -- @return  method                      the method
             -- @return  isstatic:boolean            whether the method is static
-            ["GetMethod"]       = function(target, name)
-                local info, def = getICTargetInfo(target)
+            ["GetMethod"]       = function(target, name, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info and type(name) == "string" then
-                    local mtd   = info[name]
-                    if mtd then return mtd, true end
-                    mtd         = info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name]
+                    if not fromobj then
+                        local mtd = info[name]
+                        if mtd then return mtd, true end
+                    end
+                    info        = info[fromobj and FLD_IC_OBJMTD or FLD_IC_TYPMTD]
+                    local mtd   = info and info[name]
                     if mtd then return mtd, false end
                 end
             end;
@@ -7092,18 +7056,19 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   interface
-            -- @format  (target[, cache])
+            -- @format  (target[, cache][, fromobject])
             -- @param   target                      the target interface
             -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object methods
             -- @rformat (cache)                     the cache that contains the method list
             -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            -- @usage   for name, func, isstatic in struct.GetMethods(System.IAttribtue) do
+            -- @usage   for name, func, isstatic in interface.GetMethods(System.IAttribtue) do
             --              print(name)
             --          end
-            ["GetMethods"]      = function(target, cache)
-                local info      = getICTargetInfo(target)
+            ["GetMethods"]      = function(target, cache, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
-                    local typm  = info[FLD_IC_TYPMTD]
+                    local typm  = info[fromobj and FLD_IC_OBJMTD or FLD_IC_TYPMTD]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
                         if typm then for k, v in pairs, typm do cache[k] = v or info[k] end end
@@ -7112,6 +7077,56 @@ do
                         return function(self, n)
                             local m, v = next(typm, n)
                             if m then return m, v or info[m], not v end
+                        end, target
+                    end
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
+                    return fakefunc, target
+                end
+            end;
+
+            --- Get a meta-method of the target interface
+            -- @static
+            -- @method  GetMetaMethod
+            -- @owner   interface
+            -- @format  (target, name[, fromobject])
+            -- @param   target                      the target interface
+            -- @param   name                        the meta-method's name
+            -- @param   fromobject:boolean          get the object meta-method
+            -- @return  function                    the meta-method
+            ["GetMetaMethod"]   = function(target, name, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
+                if info and META_KEYS[name] then
+                    info        = info[fromobj and FLD_IC_OBJMTM or FLD_IC_TYPMTM]
+                    return info and info[name]
+                end
+            end;
+
+            --- Get all the meta-methods of the interface
+            -- @static
+            -- @method  GetMetaMethods
+            -- @owner   interface
+            -- @format  (target[, cache][, fromobject])
+            -- @param   target                      the target interface
+            -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object meta-methods
+            -- @rformat (cache)                     the cache that contains the method list
+            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            ["GetMetaMethods"]      = function(target, cache, fromobj)
+                local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
+                if info then
+                    local typm  = info[fromobj and FLD_IC_OBJMTM or FLD_IC_TYPMTM]
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or {}
+                        if typm then for k, v in pairs, typm do if META_KEYS[k] then cache[k] = v end end end
+                        return cache
+                    elseif typm then
+                        return function(self, n)
+                            local m, v = next(typm, n)
+                            while m and not META_KEYS[m] do m, v = next(typm, m) end
+                            return m, v
                         end, target
                     end
                 end
@@ -7581,12 +7596,15 @@ do
             -- @rformat (iter, target)              without the cache parameter, used in generic for
             ["GetExtends"]      = interface.GetExtends;
 
+
             --- Get a type feature of the target class
             -- @static
             -- @method  GetFeature
             -- @owner   class
+            -- @param   (target, name[, fromobject])
             -- @param   target                      the target class
             -- @param   name                        the feature's name
+            -- @param   fromobject:boolean          get the object feature
             -- @return  feature                     the feature
             ["GetFeature"]      = interface.GetFeature;
 
@@ -7594,9 +7612,10 @@ do
             -- @static
             -- @method  GetFeatures
             -- @owner   class
-            -- @format  (target[, cache])
+            -- @format  (target[, cache][, fromobject])
             -- @param   target                      the target class
             -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object features
             -- @rformat (cache)                     the cache that contains the feature list
             -- @rformat (iter, target)              without the cache parameter, used in generic for
             ["GetFeatures"]     = interface.GetFeatures;
@@ -7605,8 +7624,10 @@ do
             -- @static
             -- @method  GetMethod
             -- @owner   class
+            -- @format  (target, name[, fromobject])
             -- @param   target                      the target class
             -- @param   name                        the method's name
+            -- @param   fromobject:boolean          get the object method
             -- @rformat method, isstatic
             -- @return  method                      the method
             -- @return  isstatic:boolean            whether the method is static
@@ -7616,15 +7637,36 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   class
-            -- @format  (target[, cache])
+            -- @format  (target[, cache][, fromobject])
             -- @param   target                      the target class
             -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object methods
             -- @rformat (cache)                     the cache that contains the method list
             -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            -- @usage   for name, func, isstatic in struct.GetMethods(System.IAttribtue) do
-            --              print(name)
-            --          end
             ["GetMethods"]      = interface.GetMethods;
+
+            --- Get a meta-method of the target class
+            -- @static
+            -- @method  GetMetaMethod
+            -- @owner   class
+            -- @format  (target, name[, fromobject])
+            -- @param   target                      the target class
+            -- @param   name                        the meta-method's name
+            -- @param   fromobject:boolean          get the object meta-method
+            -- @return  function                    the meta-method
+            ["GetMetaMethod"]   = interface.GetMetaMethod;
+
+            --- Get all the meta-methods of the class
+            -- @static
+            -- @method  GetMetaMethods
+            -- @owner   class
+            -- @format  (target[, cache][, fromobject])
+            -- @param   target                      the target class
+            -- @param   cache                       the table used to save the result
+            -- @param   fromobject:boolean          get the object meta-methods
+            -- @rformat (cache)                     the cache that contains the method list
+            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            ["GetMetaMethods"]      = interface.GetMetaMethods;
 
             --- Get the super class of the target class
             -- @static
@@ -8323,9 +8365,9 @@ do
     -- @usage       extend "System.IAttribute"
     -----------------------------------------------------------------------
     extend                      = function (...)
-        local visitor, env, name, _, flag, stack  = getFeatureParams(extend, ...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(extend, namespace, ...)
 
-        name = namespace.Validate(name)
+        name = parseNamespace(name, visitor, env)
         if not name then error("Usage: extend(interface) - The interface is not provided", stack + 1) end
 
         local owner = visitor and environment.GetNamespace(visitor)
@@ -8343,7 +8385,7 @@ do
     -- @usage       field { Test = 123, Any = true }
     -----------------------------------------------------------------------
     field                       = function (...)
-        local visitor, env, name, definition, flag, stack = getFeatureParams(field, ...)
+        local visitor, env, name, definition, flag, stack = getFeatureParams(field, nil, ...)
 
         if type(definition) ~= "table" then error("Usage: field { key-value pairs } - The field only accept table as definition", stack + 1) end
 
@@ -8369,9 +8411,9 @@ do
     -- @usage       inherit "System.Object"
     -----------------------------------------------------------------------
     inherit                      = function (...)
-        local visitor, env, name, _, flag, stack  = getFeatureParams(inherit, ...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(inherit, namespace, ...)
 
-        name = namespace.Validate(name)
+        name = parseNamespace(name, visitor, env)
         if not name then error("Usage: inherit(class) - The class is not provided", stack + 1) end
 
         local owner = visitor and environment.GetNamespace(visitor)
@@ -8387,9 +8429,9 @@ do
     -- @usage       require "System.Object"
     -----------------------------------------------------------------------
     require                      = function (...)
-        local visitor, env, name, _, flag, stack  = getFeatureParams(require, ...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(require, namespace, ...)
 
-        name = namespace.Validate(name)
+        name = parseNamespace(name, visitor, env)
         if not name then error("Usage: require(class) - The class is not provided", stack + 1) end
 
         local owner = visitor and environment.GetNamespace(visitor)
@@ -8408,7 +8450,7 @@ do
     --              endinterface "IA"
     -----------------------------------------------------------------------
     endinterface                = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
-        local visitor, env, name, definition, flag, stack  = getFeatureParams(endinterface, ...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(endinterface, nil,  ...)
         local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
@@ -8440,7 +8482,7 @@ do
     --              endclass "IA"
     -----------------------------------------------------------------------
     endclass                    = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and function (...)
-        local visitor, env, name, definition, flag, stack  = getFeatureParams(endclass, ...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(endclass, nil,  ...)
         local owner = visitor and environment.GetNamespace(visitor)
 
         stack = stack + 1
@@ -8935,7 +8977,7 @@ do
         },
         __newindex              = readOnly,
         __call                  = function(self, ...)
-            local visitor, env, name, definition, flag, stack = getFeatureParams(event, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(event, nil, ...)
 
             stack               = stack + 1
 
@@ -10002,6 +10044,7 @@ do
             -- @param   stack                       the stack level
             ["SetStatic"]       = function(self, stack)
                 if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
                     info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetStatic([stack]) - the property's definition is finished", parsestack(stack) + 1)
@@ -10033,7 +10076,7 @@ do
             ["Validate"]        = function(self) return _PropertyInfo[self] and self or nil end;
         },
         __call                  = function(self, ...)
-            local visitor, env, name, definition, flag, stack = getFeatureParams(property, ...)
+            local visitor, env, name, definition, flag, stack = getFeatureParams(property, nil, ...)
 
             stack               = stack + 1
 
@@ -10285,20 +10328,56 @@ end
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
+    --                          private storage                          --
+    -----------------------------------------------------------------------
+    local _LambdaCache          = newStorage(WEAK_VALUE)
+
+    -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
+    local getClassMeta          = class.GetMetaMethod
+
     local genBasicValidator     = function(tname)
         local msg               = "the %s must be " .. tname .. ", got "
         local type              = type
         return function(val, onlyvalid) local tval = type(val) return tval ~= tname and (onlyvalid or msg .. tval) or nil end
     end
+
     local genTypeValidator      = function(ptype)
         local pname             = tostring(ptype)
         local msg               = "the %s must be a" .. (pname:match("^[aeiou]") and "n" or "") .. " " .. pname
         local valid             = ptype.Validate
         return function(val, onlyvalid) return not valid(val) and (onlyvalid or msg) or nil end
     end
+
     local getAttributeName      = function(self) return namespace.GetNamespaceName(getmetatable(self)) end
+
+    local parseLambda           = function(value, onlyvalid)
+        if _LambdaCache[value] then return end
+        if not (type(value) == "string" and strfind(value, "=>")) then return onlyvalid or "the %s must be a string like 'x,y=>x+y'" end
+
+        local param, body       = strmatch(value, "^(.-)=>(.+)$")
+        param                   = param and strgsub(param, "[^_%w]+", ",")
+        body                    = body and strfind(body, "return") and body or ("return " .. (body or ""))
+
+        local func              = loadSnippet(strformat("return function(%s) %s end", param, body), value, _G)
+        if not func then return onlyvalid or "the %s must be a string like 'x,y => x+y'" end
+        func                    = func()
+
+        _LambdaCache            = saveStorage(_LambdaCache, value, func)
+    end
+
+    local parseCallable         = function(value, onlyvalid)
+        local stype             = type(value)
+        if stype == "function" then return end
+        if stype == "string" then
+            return parseLambda(value, true) and (onlyvalid or "the %s isn't callable") or nil
+        end
+        local meta = getmetatable(value)
+        if not (meta and getClassMeta(meta, "__call")) then
+            return onlyvalid or "the %s isn't callable"
+        end
+    end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -10315,6 +10394,8 @@ do
     namespace.SaveNamespace("System.Event",       prototype (event,       { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Property",    prototype (property,    { __tostring = namespace.GetNamespaceName }))
 
+    namespace.SaveNamespace("System.Platform",    prototype { __index = PLOOP_PLATFORM_SETTINGS, __tostring = namespace.GetNamespaceName })
+
     -----------------------------------------------------------------------
     --                             attribute                             --
     -----------------------------------------------------------------------
@@ -10326,7 +10407,7 @@ do
     --
     -- @attribute   System.__Abstract__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Abstract__",          prototype {
+    namespace.SaveNamespace("System.__Abstract__",              prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -10370,7 +10451,7 @@ do
     --
     -- @attribute   System.__AnonymousClass__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AnonymousClass__",    prototype {
+    namespace.SaveNamespace("System.__AnonymousClass__",        prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 interface.SetAnonymousClass(target, parsestack(stack) + 1)
@@ -10393,7 +10474,7 @@ do
     --
     -- @attribute   System.__Base__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Base__",              prototype {
+    namespace.SaveNamespace("System.__Base__",                  prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 struct.SetBaseStruct(target, self[1], parsestack(stack) + 1)
@@ -10411,7 +10492,7 @@ do
     --
     -- @attribute   System.__CaseIgnored__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__CaseIgnored__",       prototype {
+    namespace.SaveNamespace("System.__CaseIgnored__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 enum.SetCaseIgnored(target, parsestack(stack) + 1)
@@ -10426,7 +10507,7 @@ do
     --
     -- @attribute   System.__Default__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Default__",           prototype {
+    __Default__ = namespace.SaveNamespace("System.__Default__", prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 local value     = self[1]
@@ -10453,7 +10534,7 @@ do
     --
     -- @attribute   System.__EventChangeHandler__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__EventChangeHandler__",prototype {
+    namespace.SaveNamespace("System.__EventChangeHandler__",    prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 local value     = self[1]
@@ -10476,7 +10557,7 @@ do
     --
     -- @attribute   System.__Final__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Final__",             prototype {
+    __Final__ = namespace.SaveNamespace("System.__Final__",     prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -10495,7 +10576,7 @@ do
     --
     -- @attribute   System.__Flags__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Flags__",             prototype {
+    __Flags__ = namespace.SaveNamespace("System.__Flags__",     prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local cache     = _Cache()
@@ -10590,12 +10671,37 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Modify the property's get process
+    --
+    -- @attribute   System.__Get__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Get__",                   prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                local value     = self[1]
+                if type(value) == "number" then
+                    stack       = parsestack(stack) + 1
+
+                    if enum.ValidateFlags(PropertyGet.Clone, value) or enum.ValidateFlags(PropertyGet.DeepClone, value) then
+                        property.GetClone(target, enum.ValidateFlags(PropertyGet.DeepClone, value), stack)
+                    end
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_PROPERTY,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the class's objects so access non-existent fields on them will
     -- be denied
     --
     -- @attribute   System.__NoNilValue__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoNilValue__",        prototype {
+    namespace.SaveNamespace("System.__NoNilValue__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetNilValueBlocked(target, parsestack(stack) + 1)
@@ -10611,7 +10717,7 @@ do
     --
     -- @attribute   System.__NoRawSet__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoRawSet__",          prototype {
+    namespace.SaveNamespace("System.__NoRawSet__",              prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetRawSetBlocked(target, parsestack(stack) + 1)
@@ -10627,7 +10733,7 @@ do
     --
     -- @attribute   System.__NoSuperObject__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoSuperObject__",     prototype {
+    namespace.SaveNamespace("System.__NoSuperObject__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetNoSuperObject(target, parsestack(stack) + 1)
@@ -10643,7 +10749,7 @@ do
     --
     -- @attribute   System.__ObjFuncAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjFuncAttr__",       prototype {
+    namespace.SaveNamespace("System.__ObjFuncAttr__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetObjectFunctionAttributeEnabled(target, parsestack(stack) + 1)
@@ -10658,7 +10764,7 @@ do
     --
     -- @attribute   System.__Require__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Require__",           prototype {
+    namespace.SaveNamespace("System.__Require__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 interface.GetRequireClass(target, self[1], parsestack(stack) + 1)
@@ -10676,7 +10782,7 @@ do
     --
     -- @attribute   System.__Sealed__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Sealed__",            prototype {
+    __Sealed__ = namespace.SaveNamespace("System.__Sealed__",   prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 getmetatable(target).SetSealed(target, parsestack(stack) + 1)
@@ -10687,12 +10793,45 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Modify the property's assignment, works like :
+    --
+    -- @attribute   System.__Set__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Set__",                   prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                local value     = self[1]
+                if type(value) == "number" then
+                    stack       = parsestack(stack) + 1
+
+                    if enum.ValidateFlags(PropertySet.Clone, value) or enum.ValidateFlags(PropertySet.DeepClone, value) then
+                        property.SetClone(target, enum.ValidateFlags(PropertySet.DeepClone, value), stack)
+                    end
+
+                    if enum.ValidateFlags(PropertySet.Retain, value) then
+                        property.SetRetainObject(target, stack)
+                    end
+
+                    if enum.ValidateFlags(PropertySet.Weak, value) then
+                        property.SetWeak(target, stack)
+                    end
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_PROPERTY,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the class as a simple class, so it'll try to use the init-table
     -- as the object
     --
     -- @attribute   System.__Simple__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Simple__",            prototype {
+    namespace.SaveNamespace("System.__Simple__",                prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetAsSimpleClass(target, parsestack(stack) + 1)
@@ -10708,7 +10847,7 @@ do
     --
     -- @attribute   System.__Simple__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__SingleVer__",         prototype {
+    namespace.SaveNamespace("System.__SingleVer__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetSingleVersion(target, parsestack(stack) + 1)
@@ -10724,7 +10863,7 @@ do
     --
     -- @attribute   System.__Simple__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Static__",            prototype {
+    namespace.SaveNamespace("System.__Static__",                prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 if targettype  == ATTRTAR_METHOD then
@@ -10750,7 +10889,7 @@ do
     --
     -- @attribute   System.__Require__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Super__",             prototype {
+    namespace.SaveNamespace("System.__Super__",                 prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 class.SetSuperClass(target, self[1], parsestack(stack) + 1)
@@ -10763,10 +10902,10 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
-    -----------------------------------------------------------------------
-    --                        install attributes                         --
-    -----------------------------------------------------------------------
-    namespace.ExportNamespace(_PLoopEnv, "System", true)
+    -------------------------------------------------------------------------------
+    --                               registration                                --
+    -------------------------------------------------------------------------------
+    environment.RegisterGlobalNamespace("System")
 
     -----------------------------------------------------------------------
     --                               enums                               --
@@ -10787,34 +10926,196 @@ do
         Property    = ATTRTAR_PROPERTY,
     }
 
+    --- The attribute priorty
+    __Sealed__() __Default__(0)
+    enum "System.AttributePriorty" {
+        Highest     =  2,
+        Higher      =  1,
+        Normal      =  0,
+        Lower       = -1,
+        Lowest      = -2,
+    }
+
+    --- the property set settings
+    __Sealed__() __Flags__() __Default__(0)
+    PropertySet = enum "System.PropertySet" {
+        Assign      = 0,
+        Clone       = 1,
+        DeepClone   = 2,
+        Retain      = 4,
+        Weak        = 8,
+    }
+
+    --- the property get settings
+    __Sealed__() __Flags__() __Default__(0)
+    PropertyGet = enum "System.PropertyGet" {
+        Origin      = 0,
+        Clone       = 1,
+        DeepClone   = 2,
+    }
+
     -----------------------------------------------------------------------
     --                              structs                              --
     -----------------------------------------------------------------------
+    --- Represents any value
     __Sealed__() struct "System.Any"            { }
+
+    --- Converts any value to boolean
     __Sealed__() struct "System.Boolean"        { false, __init = function(val) return val and true or false end }
+
+    --- Represents any value
     __Sealed__() struct "System.RawBoolean"     { genBasicValidator("boolean")  }
+
+    --- Represents string value
     __Sealed__() struct "System.String"         { genBasicValidator("string")   }
+
+    --- Represents number value
     __Sealed__() struct "System.Number"         { genBasicValidator("number")   }
+
+    --- Represents function value
     __Sealed__() struct "System.Function"       { genBasicValidator("function") }
+
+    --- Represents table value
     __Sealed__() struct "System.Table"          { genBasicValidator("table")    }
+
+    --- Represents table value without meta-table
     __Sealed__() struct "System.RawTable"       { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
+
+    --- Represents userdata value
     __Sealed__() struct "System.Userdata"       { genBasicValidator("userdata") }
+
+    --- Represents thread value
     __Sealed__() struct "System.Thread"         { genBasicValidator("thread")   }
 
+    --- Represents namespace type
     __Sealed__() struct "System.NamespaceType"  { genTypeValidator(namespace)   }
+
+    --- Represents enum type
     __Sealed__() struct "System.EnumType"       { genTypeValidator(enum)        }
+
+    --- Represents struct type
     __Sealed__() struct "System.StructType"     { genTypeValidator(struct)      }
+
+    --- Represents interface type
     __Sealed__() struct "System.InterfaceType"  { genTypeValidator(interface)   }
+
+    --- Represents class type
     __Sealed__() struct "System.ClassType"      { genTypeValidator(class)       }
 
+    --- Represents any validation type
     __Sealed__() struct "System.AnyType"        { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+
+    --- Represents lambda value, used to string like 'x, y => x + y' to function
+    __Sealed__() struct "System.Lambda"         { __init = function(value) return _LambdaCache[value] end, parseLambda }
+
+    --- Represents callable value, like function, lambda, callable object generate by class
+    __Sealed__() struct "System.Callable"       { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
+
+    --- Represents a signature for argument or return value
+    __Sealed__() struct "System.Signature" (function(_ENV)
+        member "type"   { type = AnyType    }
+        member "nilable"{ type = RawBoolean }
+        member "default"{                   }
+        member "name"   { type = String     }
+        member "islist" { type = RawBoolean }
+    end)
+
+    -----------------------------------------------------------------------
+    --                             interface                             --
+    -----------------------------------------------------------------------
+    --- the interface of attribtue
+    __Sealed__()
+    interface "System.IAttribtue" (function(_ENV)
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets        }
+
+        --- whether the attribute is inheritable
+        property "Inheritable"      { type = Boolean                 }
+
+        --- whether the attribute is overridable
+        property "Overridable"      { type = Boolean, default = true }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriorty        }
+
+        --- the attribute's sub level of priority
+        property "SubLevel"         { type = Number,  default = 0    }
+
+        -----------------------------------------------------------
+        --                      initializer                      --
+        -----------------------------------------------------------
+        IAttribtue          = Attribute.Register
+    end)
+
+    --- the interface to modify the target's definition
+    __Sealed__()
+    interface "System.IInitAttribtue" (function(_ENV)
+        extend "IAttribtue"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        __Abstract__()
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+        end
+    end)
+
+    --- the interface to apply changes on the target
+    __Sealed__()
+    interface "System.IApplyAttribtue" (function(_ENV)
+        extend "IAttribtue"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        __Abstract__()
+        function ApplyAttribute(self, target, targettype, owner, name, stack)
+        end
+    end)
+
+    --- the interface to attach data on the target
+    __Sealed__()
+    interface "System.IAttachAttribtue" (function(_ENV)
+        extend "IAttribtue"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        __Abstract__()
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+        end
+    end)
 
     -----------------------------------------------------------------------
     --                              classes                              --
     -----------------------------------------------------------------------
     --- The delegate used to container several function as event handlers
     __Sealed__() __Final__()
-    class "System.Delegate" (function(_ENV)
+    Delegate = class "System.Delegate" (function(_ENV)
         event "OnChange"
 
         local tinsert       = table.insert
@@ -10926,12 +11227,9 @@ do
             return self
         end
     end)
+
+    ---
 end
 
--------------------------------------------------------------------------------
---                               registration                                --
--------------------------------------------------------------------------------
-environment.RegisterGlobalNamespace("System")
-namespace.ExportNamespace(_PLoopEnv, "System", true)
 
 return ROOT_NAMESPACE
