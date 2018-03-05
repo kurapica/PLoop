@@ -118,6 +118,7 @@ do
             debug               = debug or false,
             debuginfo           = debug and debug.getinfo or false,
             getupvalue          = debug and debug.getupvalue or false,
+            getlocal            = debug and debug.getlocal or false,
             traceback           = debug and debug.traceback or false,
             setfenv             = setfenv or debug and debug.setfenv or false,
             getfenv             = getfenv or debug and debug.getfenv or false,
@@ -271,11 +272,15 @@ do
         --
         -- When the @MULTI_OS_THREAD is true, to avoid the thread conflict, the
         -- system would use a clone-replace mechanism for inner storage, it'd
-        -- leave many tables to be collected during the definition time, turn
-        -- on the unsafe mode will greatly save the time.
+        -- leave many tables to be collected during the definition time.
         -- Default false
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        UNSAFE_MODE = false,
+        UNSAFE_MODE                         = false,
+
+        --- Whether try to save the stack data into the exception object, so
+        -- we can have more details about the exception.
+        -- Default true
+        EXCEPTION_SAVE_STACK_DATA           = true,
     }
 
     -- Special constraint
@@ -296,6 +301,7 @@ do
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
+    diposeObj                   = function (obj) obj:Dispose() end
 
     -----------------------------------------------------------------------
     --                              storage                              --
@@ -4093,11 +4099,11 @@ do
                     local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
                     if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
-                    if not info[name] then
-                        info[FLD_STRUCT_TYPEMETHOD]         = info[FLD_STRUCT_TYPEMETHOD] or _Cache()
-                        info[FLD_STRUCT_TYPEMETHOD][name]   = func
-                    else
+                    if info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] == false then
                         info[name]  = func
+                    else
+                        info[FLD_STRUCT_TYPEMETHOD]         = info[FLD_STRUCT_TYPEMETHOD] or {}
+                        info[FLD_STRUCT_TYPEMETHOD][name]   = func
                     end
 
                     attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
@@ -4502,7 +4508,7 @@ do
             -- @return  boolean                     true if the method is static
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getStructTargetInfo(target)
-                return info and type(name) == "string" and info[name] and true or false
+                return info and type(name) == "string" and info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] == false or false
             end;
 
             --- Set the structure's array element type
@@ -4652,9 +4658,9 @@ do
                     name = strtrim(name)
                     if name == "" then error("Usage: Usage: struct.SetStaticMethod(structure, name) - The name can't be empty", stack) end
                     if not def then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s's definition is finished", tostring(target)), stack) end
-                    if not (info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] ~= nil) then error(strformat("Usage: struct.SetStaticMethod(structure, name) - The %s has no method named %q", tostring(target), name), stack) end
 
                     if info[name] == nil then
+                        info[FLD_STRUCT_TYPEMETHOD] = info[FLD_STRUCT_TYPEMETHOD] or {}
                         info[name] = info[FLD_STRUCT_TYPEMETHOD][name]
                         info[FLD_STRUCT_TYPEMETHOD][name] = false
                     end
@@ -4883,6 +4889,24 @@ do
             end
         end,
     }
+
+    -----------------------------------------------------------------------
+    -- Set the array element to the structure
+    --
+    -- @keyword     array
+    -- @usage       array "Object"
+    -----------------------------------------------------------------------
+    array                       = function (...)
+        local visitor, env, name, _, flag, stack  = getFeatureParams(array, namespace, ...)
+
+        name = parseNamespace(name, visitor, env)
+        if not name then error("Usage: array(type) - The type is not provided", stack + 1) end
+
+        local owner = visitor and environment.GetNamespace(visitor)
+        if not owner  then error("Usage: array(type) - The system can't figure out the structure", stack + 1) end
+
+        struct.SetArrayElement(owner, name)
+    end
 
     -----------------------------------------------------------------------
     -- End the definition of the structure
@@ -6362,7 +6386,7 @@ do
                 local FLD_IC_STDISP     = dispIdx + 1
                 objmtd[IC_META_DISPOB]  = function(self)
                     for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
-                    rawset(wipe(self), "Dispose", true)
+                    rawset(wipe(self), IC_META_DISPOB, true)
                 end
 
                 -- Save self super info
@@ -7261,7 +7285,7 @@ do
             -- @return  boolean                     true if the method is static
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and type(name) == "string" and info[name] and true or false
+                return info and type(name) == "string" and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] == false or false
             end;
 
             --- Register a parser to analyse key-value pair as definition for the class or interface
@@ -9591,27 +9615,36 @@ do
                 uinsert(apis, "strformat")
                 tinsert(body, [[error(strformat("the %s can't be set", name), 3)]])
             else
-                if validateFlags(FLG_PROPSET_TYPE, token) then
-                    uinsert(apis, "error")
-                    uinsert(apis, "type")
-                    uinsert(apis, "strgsub")
-                    tinsert(head, "valid")
-                    tinsert(head, "vtype")
+                if validateFlags(FLG_PROPSET_TYPE, token) or validateFlags(FLG_PROPSET_CLONE, token) then
                     tinsert(body, [[
-                        local ret, msg = valid(vtype, value)
-                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
+                        if value ~= nil then
+                    ]])
+                    if validateFlags(FLG_PROPSET_TYPE, token) then
+                        uinsert(apis, "error")
+                        uinsert(apis, "type")
+                        uinsert(apis, "strgsub")
+                        tinsert(head, "valid")
+                        tinsert(head, "vtype")
+                        tinsert(body, [[
+                            local ret, msg = valid(vtype, value)
+                            if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
+                            value = ret
+                        ]])
+                    end
+
+                    if validateFlags(FLG_PROPSET_CLONE, token) then
+                        uinsert(apis, "clone")
+                        if validateFlags(FLG_PROPSET_DEEPCLONE, token) then
+                            tinsert(body, [[value = clone(value, true, true)]])
+                        else
+                            tinsert(body, [[value = clone(value)]])
+                        end
+                    end
+
+                    tinsert(body, [[
+                        end
                     ]])
                 end
-
-                if validateFlags(FLG_PROPSET_CLONE, token) then
-                    uinsert(apis, "clone")
-                    if validateFlags(FLG_PROPSET_DEEPCLONE, token) then
-                        tinsert(body, [[value = clone(value, true, true)]])
-                    else
-                        tinsert(body, [[value = clone(value)]])
-                    end
-                end
-
                 if validateFlags(FLG_PROPSET_STATIC, token) then
                     uinsert(apis, "fakefunc")
                     tinsert(head, "storage")
@@ -9659,8 +9692,7 @@ do
 
                         if validateFlags(FLG_PROPSET_DEFAULT, token) then
                             tinsert(head, "default")
-                            tinsert(body, [[if old == nil then old = default end]])
-                            tinsert(body, [[if value == nil then value = default end]])
+                            tinsert(body, [[if (old == default or old == nil) and (value == nil or value == default) then return end]])
                         end
 
                         tinsert(body, [[if old == value then return end]])
@@ -9691,12 +9723,9 @@ do
                         end
                     end
 
-                    if validateFlags(FLG_PROPSET_RETAIN, token) then
-                        tinsert(body, [[if old and old ~= default then obj:Dispose() old = nil end]])
-                    end
-
-                    if validateFlags(FLG_PROPSET_DEFAULT, token) and not validateFlags(FLG_PROPSET_SIMPDEFT, token) then
-                        tinsert(body, [[if old == default then old = nil end]])
+                    if validateFlags(FLG_PROPSET_DEFAULT, token) and validateFlags(FLG_PROPSET_SIMPDEFT, token) then
+                        tinsert(body, [[if old == nil then old = default end]])
+                        tinsert(body, [[if value == nil then value = default end]])
                     end
 
                     if validateFlags(FLG_PROPSET_HANDLER, token) then
@@ -9706,7 +9735,17 @@ do
 
                     if validateFlags(FLG_PROPSET_EVENT, token) then
                         tinsert(head, "evt")
-                        tinsert(body, [[return evt(self, value, old, name)]])
+                        tinsert(body, [[evt(self, value, old, name)]])
+                    end
+
+                    if validateFlags(FLG_PROPSET_RETAIN, token) then
+                        uinsert(apis, "pcall")
+                        uinsert(apis, "diposeObj")
+                        if validateFlags(FLG_PROPSET_DEFAULT, token) then
+                            tinsert(body, [[if old and old ~= default then pcall(diposeObj, old) end]])
+                        else
+                            tinsert(body, [[if old then pcall(diposeObj, old) end]])
+                        end
                     end
                 end
             end
@@ -10257,6 +10296,71 @@ do
 end
 
 -------------------------------------------------------------------------------
+-- The exception system are used to throw the error with debug datas on will.
+--
+-- The functions contains the throw-exception action must be called within the
+-- *pcall* function, Lua don't allow using table as error message for directly
+-- call. A normal scenario is use the throw-exception style in the constructor
+-- of the classes.
+--
+-- @keyword     throw
+-------------------------------------------------------------------------------
+do
+    throw                       = function (exception)
+        local visitor, env      = getFeatureParams(throw)
+        local stack             = exception.StackLevel + 1
+        if exception.StackDataSaved then error(exception, stack) end
+
+        exception.StackDataSaved= true
+
+        if traceback then
+            exception.StackTrace= traceback(exception.Message, stack)
+        end
+
+        local func
+
+        if debuginfo then
+            local info          = debuginfo(stack, "lSf")
+            if info then
+                exception.Source    = (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
+                func                = info.func
+                exception.TargetSite= visitor and tostring(visitor)
+            end
+        end
+
+        if exception.SaveVariables then
+            if getlocal then
+                local index         = 1
+                local k, v          = getlocal(stack, index)
+                local vars          = k and {}
+                while k do
+                    vars[k]     = v
+
+                    index           = index + 1
+                    k, v            = getlocal(stack, index)
+                end
+                if next(vars) then exception.LocalVariables = vars end
+            end
+
+            if getupvalue and func then
+                local index         = 1
+                local k, v          = getupvalue(func, index)
+                local vars          = k and {}
+                while k do
+                    vars[k]         = v
+
+                    index           = index + 1
+                    k, v            = getupvalue(func, index)
+                end
+                if next(vars) then exception.Upvalues = vars end
+            end
+        end
+
+        error(exception, stack)
+    end
+end
+
+-------------------------------------------------------------------------------
 --                           keyword installation                            --
 -------------------------------------------------------------------------------
 do
@@ -10270,6 +10374,7 @@ do
         struct                  = struct,
         class                   = class,
         interface               = interface,
+        throw                   = throw,
     }
 
     -----------------------------------------------------------------------
@@ -10277,6 +10382,7 @@ do
     -----------------------------------------------------------------------
     environment.RegisterContextKeyword(structbuilder, {
         member                  = member,
+        array                   = array,
         endstruct               = rawget(_PLoopEnv, "endstruct"),
     })
 
@@ -10958,67 +11064,120 @@ do
     --                              structs                              --
     -----------------------------------------------------------------------
     --- Represents any value
-    __Sealed__() struct "System.Any"            { }
+    __Sealed__() struct "System.Any"                { }
 
-    --- Converts any value to boolean
-    __Sealed__() struct "System.Boolean"        { false, __init = function(val) return val and true or false end }
-
-    --- Represents any value
-    __Sealed__() struct "System.RawBoolean"     { genBasicValidator("boolean")  }
+    --- Represents boolean value
+    __Sealed__() Boolean = struct "System.Boolean"  { genBasicValidator("boolean")  }
 
     --- Represents string value
-    __Sealed__() struct "System.String"         { genBasicValidator("string")   }
+    __Sealed__() String = struct "System.String"    { genBasicValidator("string")   }
 
     --- Represents number value
-    __Sealed__() struct "System.Number"         { genBasicValidator("number")   }
+    __Sealed__() Number = struct "System.Number"    { genBasicValidator("number")   }
 
     --- Represents function value
-    __Sealed__() struct "System.Function"       { genBasicValidator("function") }
+    __Sealed__() struct "System.Function"           { genBasicValidator("function") }
 
     --- Represents table value
-    __Sealed__() struct "System.Table"          { genBasicValidator("table")    }
-
-    --- Represents table value without meta-table
-    __Sealed__() struct "System.RawTable"       { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
+    __Sealed__() Table = struct "System.Table"      { genBasicValidator("table")    }
 
     --- Represents userdata value
-    __Sealed__() struct "System.Userdata"       { genBasicValidator("userdata") }
+    __Sealed__() struct "System.Userdata"           { genBasicValidator("userdata") }
 
     --- Represents thread value
-    __Sealed__() struct "System.Thread"         { genBasicValidator("thread")   }
+    __Sealed__() struct "System.Thread"             { genBasicValidator("thread")   }
+
+    --- Converts any value to boolean
+    __Sealed__() struct "System.AnyBool"            { false, __init = function(val) return val and true or false end }
+
+    --- Represents non-empty string
+    __Sealed__() struct "System.NEString"           { __base = String, function(val, onlyvalid) return strtrim(val) == "" and (onlyvalid or "the %s can't be an empty string") or nil end, __init = strtrim }
+
+    --- Represents table value without meta-table
+    __Sealed__() struct "System.RawTable"           { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
+
+    --- Represents integer value
+    __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
+
+    --- Represents natural number value
+    __Sealed__() struct "System.NaturalNumber"      { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
 
     --- Represents namespace type
-    __Sealed__() struct "System.NamespaceType"  { genTypeValidator(namespace)   }
+    __Sealed__() struct "System.NamespaceType"      { genTypeValidator(namespace)   }
 
     --- Represents enum type
-    __Sealed__() struct "System.EnumType"       { genTypeValidator(enum)        }
+    __Sealed__() struct "System.EnumType"           { genTypeValidator(enum)        }
 
     --- Represents struct type
-    __Sealed__() struct "System.StructType"     { genTypeValidator(struct)      }
+    __Sealed__() struct "System.StructType"         { genTypeValidator(struct)      }
 
     --- Represents interface type
-    __Sealed__() struct "System.InterfaceType"  { genTypeValidator(interface)   }
+    __Sealed__() struct "System.InterfaceType"      { genTypeValidator(interface)   }
 
     --- Represents class type
-    __Sealed__() struct "System.ClassType"      { genTypeValidator(class)       }
+    __Sealed__() struct "System.ClassType"          { genTypeValidator(class)       }
 
     --- Represents any validation type
-    __Sealed__() struct "System.AnyType"        { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+    __Sealed__() AnyType = struct "System.AnyType"  { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
 
     --- Represents lambda value, used to string like 'x, y => x + y' to function
-    __Sealed__() struct "System.Lambda"         { __init = function(value) return _LambdaCache[value] end, parseLambda }
+    __Sealed__() struct "System.Lambda"             { __init = function(value) return _LambdaCache[value] end, parseLambda }
 
     --- Represents callable value, like function, lambda, callable object generate by class
-    __Sealed__() struct "System.Callable"       { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
+    __Sealed__() struct "System.Callable"           { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
 
-    --- Represents a signature for argument or return value
-    __Sealed__() struct "System.Signature" (function(_ENV)
-        member "type"   { type = AnyType    }
-        member "nilable"{ type = RawBoolean }
-        member "default"{                   }
-        member "name"   { type = String     }
-        member "islist" { type = RawBoolean }
-    end)
+    --- Represents the variable types for arguments or return values
+    __Sealed__() Variable = struct "System.Variable"{
+        { name = "type",    type = AnyType },
+        { name = "nilable", type = Boolean },
+        { name = "default",                },
+        { name = "name",    type = String  },
+        { name = "islist",  type = Boolean },
+
+        function (var, onlyvalid)
+            if var.type and var.default ~= nil then
+                local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, onlyvalid)
+                if msg then return onlyvalid or "the %s.default don't match its type" end
+                var.default     = ret
+            end
+        end,
+
+        __init = function (var)
+            var.valid = var.type and getprototypemethod(var.type, "ValidateValue")
+        end,
+    }
+
+    --- Represents variables list
+    __Sealed__() struct "System.Variables"          { __array = Variable + AnyType,
+        function(vars, onlyvalid)
+            local opt   = false
+            local lst   = false
+
+            for i, var in ipairs, vars, 0 do
+                if lst then return onlyvalid or "the %s's list variable must be the last one" end
+                if getmetatable(var) == nil then
+                    if var.islist then
+                        if opt then return onlyvalid or "the %s's list variable and optional variable can't be use together" end
+                        lst = true
+                    elseif var.nilable then
+                        opt = true
+                    elseif opt then
+                        return onlyvalid or "the %s's non-optional variables must exist before the optional variables"
+                    end
+                elseif opt then
+                    return onlyvalid or "the %s's non-optional variables must exist before the optional variables"
+                end
+            end
+        end,
+
+        __init  = function(vars)
+            for i, var in ipairs, vars, 0 do
+                if getmetatable(var) ~= nil then
+                    vars[i] = Variable(var)
+                end
+            end
+        end,
+    }
 
     -----------------------------------------------------------------------
     --                             interface                             --
@@ -11026,6 +11185,29 @@ do
     --- the interface of attribtue
     __Sealed__()
     interface "System.IAttribtue" (function(_ENV)
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Get the attached attribute data of the target
+        -- @param   target                      the target
+        -- @param   owner                       the target's owner
+        -- @return  any                         the attached data
+        GetAttachedData             = Attribute.GetAttachedData
+
+        --- Get all targets have attached data of the attribtue
+        -- @format  ([cache])
+        -- @param   cache                       the cache to save the result
+        -- @rformat (cache)                     the cache that contains the targets
+        -- @rformat (iter, attr)                without the cache parameter, used in generic for
+        GetAttributeTargets         = Attribute.GetAttributeTargets
+
+        --- Get all target's owners that have attached data of the attribtue
+        -- @format  ([cache])
+        -- @param   cache                       the cache to save the result
+        -- @rformat (cache)                     the cache that contains the targets
+        -- @rformat (iter, attr)                without the cache parameter, used in generic for
+        GetAttributeTargetOwners    = Attribute.GetAttributeTargetOwners
+
         -----------------------------------------------------------
         --                       property                       --
         -----------------------------------------------------------
@@ -11113,9 +11295,9 @@ do
     -----------------------------------------------------------------------
     --                              classes                              --
     -----------------------------------------------------------------------
-    --- The delegate used to container several function as event handlers
+    --- Represents containers of several functions as event handlers
     __Sealed__() __Final__()
-    Delegate = class "System.Delegate" (function(_ENV)
+    Delegate = class "System.Delegate"  (function(_ENV)
         event "OnChange"
 
         local tinsert       = table.insert
@@ -11228,7 +11410,97 @@ do
         end
     end)
 
-    ---
+    --- Represents errors that occur during application execution
+    Exception = class "System.Exception"(function(_ENV)
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- a message that describes the current exception
+        property "Message"          { type = String }
+
+        --- a string representation of the immediate frames on the call stack
+        property "StackTrace"       { type = String }
+
+        --- the method that throws the current exception
+        property "TargetSite"       { type = String }
+
+        --- the source of the exception
+        property "Source"           { type = String }
+
+        --- the Exception instance that caused the current exception
+        property "InnerException"   { type = Exception }
+
+        --- key/value pairs that provide additional information about the exception
+        property "Data"             { type = Table }
+
+        --- key/value pairs of the local variable
+        property "LocalVariables"   { type = Table }
+
+        --- key/value pairs of the upvalues
+        property "Upvalues"         { type = Table }
+
+        --- whether the stack data is saved, the system will save the stack data
+        -- if the value is false when the exception is thrown out
+        property "StackDataSaved"   { type = Boolean, default = not Platform.EXCEPTION_SAVE_STACK_DATA }
+
+        --- the stack level to be scanned, default 1, where the throw is called
+        property "StackLevel"       { type = NaturalNumber, default = 1 }
+
+        --- whether save the local variables and the upvalues for the exception
+        property "SaveVariables"    { type = Boolean, default = false }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        function Exception(self, message, inner, savevariables)
+            self.Message        = message
+            self.InnerException = inner
+            self.SaveVariables  = savevariables
+        end
+    end)
+
+    --- the attribute to build the overload system
+    __Sealed__() __Final__()
+    class "System.__Arguments__"        (function(_ENV)
+        extend "IInitAttribtue"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+
+        end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,   default = AttributeTargets.Method }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriorty,  default = AttributePriorty.Lowest }
+
+        --- the attribute's sub level of priority
+        property "SubLevel"         { type = Number,            default = -99999 }
+
+        --- whether use super's overload method
+        property "DependOnSuper"    { type = Boolean,           default = true }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        function __Arguments__(self, vars)
+
+        end
+    end)
 end
 
 
