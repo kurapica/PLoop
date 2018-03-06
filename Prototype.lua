@@ -4092,7 +4092,7 @@ do
                     attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
                     if info[FLD_STRUCT_BASE] and not info[name] then
-                        local sfunc = struct.GetObjectMethod(info[FLD_STRUCT_BASE], name)
+                        local sfunc = struct.GetMethod(info[FLD_STRUCT_BASE], name)
                         if sfunc then attribute.InheritAttributes(func, ATTRTAR_METHOD, sfunc) end
                     end
 
@@ -7706,6 +7706,16 @@ do
             -- @rformat (iter, struct)              without the cache parameter, used in generic for
             ["GetMetaMethods"]      = interface.GetMetaMethods;
 
+            --- Get the object class of the object
+            -- @static
+            -- @method  GetObjectClass
+            -- @owner   class
+            -- @param   object                      the object
+            -- @return  class                       the object class
+            ["GetObjectClass"]      = function(object)
+                return class.Validate(getmetatable(object))
+            end;
+
             --- Get the super class of the target class
             -- @static
             -- @method  GetSuperClass
@@ -8229,8 +8239,7 @@ do
                 if type(obj)  == "string" then
                     error(obj, 0)
                 else
-                    -- It'd be the exception object
-                    error(obj.Message, 2)
+                    error(tostring(obj), 2)
                 end
             end
             return obj
@@ -10330,6 +10339,11 @@ end
 do
     throw                       = function (exception)
         local visitor, env      = getFeatureParams(throw)
+
+        if type(exception) == "string" or not class.IsSubType(getmetatable(exception), Exception) then
+            exception = Exception(tostring(exception))
+        end
+
         local stack             = exception.StackLevel + 1
         if exception.StackDataSaved then error(exception, stack) end
 
@@ -11478,6 +11492,13 @@ do
             self.Message        = message
             self.InnerException = inner
             self.SaveVariables  = savevariables
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __tostring(self)
+            return self.Message
         end
     end)
 
