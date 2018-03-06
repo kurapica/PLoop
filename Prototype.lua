@@ -5434,7 +5434,7 @@ do
         __lt                    = "__lt",           -- a < b
         __le                    = "__le",           -- a <= b
         __index                 = "___index",       -- return a[b]
-        __newindex              = "__newindex",     -- a[b] = v
+        __newindex              = "___newindex",    -- a[b] = v
         __call                  = "__call",         -- a()
         __gc                    = "__gc",           -- dispose a
         __tostring              = "__tostring",     -- tostring(a)
@@ -5570,7 +5570,7 @@ do
 
     local getTypeFeature        = function (info, name) info = info[FLD_IC_TYPFTR] return info and info[name] end
 
-    local getTypeMetaMethod     = function (info, name) info = info[FLD_IC_TYPMTM] return info and info[name] end
+    local getTypeMetaMethod     = function (info, name) info = info[FLD_IC_TYPMTM] return info and info[META_KEYS[name]] end
 
     local getSuperMethod        = function (info, name) return getSuperOnPriority(info, name, getTypeMethod) end
 
@@ -5611,7 +5611,11 @@ do
                 if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
                     if super and target[k] and (objpri[k] or INRT_PRIORITY_NORMAL) > INRT_PRIORITY_ABSTRACT then
                         -- abstract can't be used as Super
-                        super[k]= target[k]
+                        if ismeta and META_KEYS[k] ~= k then
+                            super[k] = target[META_KEYS[k]]
+                        else
+                            super[k] = target[k]
+                        end
                     end
 
                     objpri[k]   = priority
@@ -5628,6 +5632,12 @@ do
                         end
                     else
                         target[k]       = v
+                        if ismeta then
+                            local mk    = META_KEYS[k]
+                            if mk ~= k then
+                                target[mk]  = source[mk]
+                            end
+                        end
                     end
                 end
             end
@@ -5698,7 +5708,7 @@ do
             tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
-        local data = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][META_KEYS[IC_META_INDEX]] or meta[IC_META_INDEX]
+        local data  = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][IC_META_INDEX] or meta[META_KEYS[IC_META_INDEX]]
         if data then
             if type(data) == "function" then
                 token = turnOnFlags(FLG_IC_IDXFUN, token)
@@ -5713,7 +5723,7 @@ do
         end
 
         -- No __index generated
-        if token == 0                                       then meta[IC_META_INDEX] = nil                  return _Cache(upval) end
+        if token == 0                                       then meta[IC_META_INDEX] = fakefunc             return _Cache(upval) end
         -- Use the object method cache directly
         if token == FLG_IC_OBJMTD                           then meta[IC_META_INDEX] = info[FLD_IC_OBJMTD]  return _Cache(upval) end
         -- Use the custom __index directly
@@ -6384,9 +6394,11 @@ do
 
                 -- Auto-gen dispose for object methods
                 local FLD_IC_STDISP     = dispIdx + 1
-                objmtd[IC_META_DISPOB]  = function(self)
-                    for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
-                    rawset(wipe(self), IC_META_DISPOB, true)
+                if FLD_IC_STDISP <= FLD_IC_ENDISP then
+                    objmtd[IC_META_DISPOB]  = function(self)
+                        for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
+                        rawset(wipe(self), IC_META_DISPOB, true)
+                    end
                 end
 
                 -- Save self super info
@@ -6395,6 +6407,7 @@ do
                 end
 
                 _Cache(objpri)
+                if not next(objmtd) then _Cache(objmtd) objmtd = nil end
                 if not next(objfld) then _Cache(objfld) objfld = nil end
                 if not next(objftr) then _Cache(objftr) objftr = nil end
                 if not next(spcache)then _Cache(spcache)spcache= nil end
@@ -6403,7 +6416,7 @@ do
                 info[FLD_IC_CLINIT]     = info[FLD_IC_CTOR] or supctor
                 info[FLD_IC_OBJMTM]     = objmeta
                 info[FLD_IC_OBJFTR]     = objftr
-                info[FLD_IC_OBJMTD]     = objmtd
+                info[FLD_IC_OBJMTD]     = objmtd or false
                 info[FLD_IC_OBJFLD]     = objfld
 
                 -- Check simple class
@@ -6451,8 +6464,8 @@ do
 
         if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
 
-        if info[FLD_IC_OBJMTD] then
-            info[FLD_IC_OBJMTD] = saveStorage(info[FLD_IC_OBJMTD], name, func)
+        if info[FLD_IC_OBJMTD] ~= nil then
+            info[FLD_IC_OBJMTD] = saveStorage(info[FLD_IC_OBJMTD] or {}, name, func)
             genMetaIndex(info)
         end
 
@@ -6620,12 +6633,11 @@ do
         local metaFld = META_KEYS[name]
 
         if type(metaFld) == "string" then
-            info[FLD_IC_TYPMTM] = info[FLD_IC_TYPMTM] or _Cache()
-            info[FLD_IC_TYPMTM][name] = data
+            info[FLD_IC_TYPMTM]         = info[FLD_IC_TYPMTM] or {}
+            info[FLD_IC_TYPMTM][name]   = data
 
-            if metaFld ~= name and tdata == "table" then
-                info[FLD_IC_TYPMTM][metaFld]= data
-                info[FLD_IC_TYPMTM][name]   = function(_, k) return data[k] end
+            if metaFld ~= name then
+                info[FLD_IC_TYPMTM][metaFld] = tdata == "table" and function(_, k) return data[k] end or data
             end
         else
             info[metaFld]       = data
@@ -7122,9 +7134,10 @@ do
             -- @return  function                    the meta-method
             ["GetMetaMethod"]   = function(target, name, fromobj)
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
-                if info and META_KEYS[name] then
+                local key       = META_KEYS[name]
+                if info and key then
                     info        = info[fromobj and FLD_IC_OBJMTM or FLD_IC_TYPMTM]
-                    return info and info[name]
+                    return info and info[key]
                 end
             end;
 
@@ -7144,13 +7157,14 @@ do
                     local typm  = info[fromobj and FLD_IC_OBJMTM or FLD_IC_TYPMTM]
                     if cache then
                         cache   = type(cache) == "table" and wipe(cache) or {}
-                        if typm then for k, v in pairs, typm do if META_KEYS[k] then cache[k] = v end end end
+                        if typm then
+                            for k in pairs, typm do local key = META_KEYS[k] if key then cache[k] = typm[key] end end end
                         return cache
                     elseif typm then
                         return function(self, n)
-                            local m, v = next(typm, n)
-                            while m and not META_KEYS[m] do m, v = next(typm, m) end
-                            return m, v
+                            local m = next(typm, n)
+                            while m and not META_KEYS[m] do m = next(typm, m) end
+                            if m then return m, typm[META_KEYS[m]] end
                         end, target
                     end
                 end
@@ -8209,8 +8223,16 @@ do
 
     tclass                      = prototype (tinterface, {
         __call                  = function(self, ...)
-            local info  = _ICInfo[self]
-            local obj   = info[FLD_IC_OBCTOR](info, ...)
+            local info          = _ICInfo[self]
+            local ok, obj       = pcall(info[FLD_IC_OBCTOR], info, ...)
+            if not ok then
+                if type(obj)  == "string" then
+                    error(obj, 0)
+                else
+                    -- It'd be the exception object
+                    error(obj.Message, 2)
+                end
+            end
             return obj
         end,
         __metatable             = class,
