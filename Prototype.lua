@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/03                                               --
+-- Update Date  :   2018/03/07                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -302,6 +302,7 @@ do
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     diposeObj                   = function (obj) obj:Dispose() end
+    newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
 
     -----------------------------------------------------------------------
     --                              storage                              --
@@ -1222,6 +1223,18 @@ do
                 end
             end;
 
+            --- Whether there are registered attributes unused
+            -- @static
+            -- @method  HaveRegisteredAttributes
+            -- @owner   attribtue
+            -- @format  (target, targettype[, stack])
+            -- @param   target                      the target
+            -- @param   targettype                  the target type
+            -- @param   stack                       the stack level
+            ["HaveRegisteredAttributes"] = function()
+                return #_RegisteredAttrs > 0
+            end;
+
             --- Call a definition function within a standalone attribute system
             -- so it won't use the registered attributes that belong to others.
             -- Normally used in attribute's ApplyAttribute or AttachAttribute
@@ -1346,7 +1359,7 @@ do
             -- @param   name:string                 the target type's name
             -- @return  flag:number                 the target type's flag value
             ["RegisterTargetType"]  = function(name)
-                local i             = 2^0
+                local i             = 1
                 while _AttrTargetTypes[i] do i = i * 2 end
                 _AttrTargetTypes[i] = name
                 Debug("[attribute][RegisterTargetType] %q = %d", name, i)
@@ -1848,13 +1861,11 @@ do
             -- @param   value                       the value
             -- @param   stack                       the stack level
             ["SaveValue"]       = function(env, key, value, stack)
-                if type(key)   == "string" and type(value) == "function" then
+                if type(key)   == "string" and type(value) == "function" and attribute.HaveRegisteredAttributes() then
                     stack       = parsestack(stack) + 1
                     attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
-
                     local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key, stack)
-
-                    if type(final) == "function" and final ~= value then
+                    if final ~= value then
                         attribute.ToggleTarget(value, final)
                         value   = final
                     end
@@ -2352,10 +2363,10 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_ENUM       = 2^0               -- SEALED
-    local MOD_FLAGS_ENUM        = 2^1               -- FLAGS
-    local MOD_NOT_FLAGS         = 2^2               -- NOT FLAG
-    local MOD_CASE_IGNORED      = 2^3               -- CASE IGNORED
+    local MOD_SEALED_ENUM       = newflags(true)    -- SEALED
+    local MOD_FLAGS_ENUM        = newflags()        -- FLAGS
+    local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
+    local MOD_CASE_IGNORED      = newflags()        -- CASE IGNORED
 
     local MOD_ENUM_INIT         = PLOOP_PLATFORM_SETTINGS.ENUM_GLOBAL_IGNORE_CASE and MOD_CASE_IGNORED or 0
 
@@ -2369,8 +2380,8 @@ do
     local FLD_ENUM_DEFAULT      = 6                 -- FIELD DEFAULT
 
     -- Flags
-    local FLG_FLAGS_ENUM        = 2^0
-    local FLG_CASE_IGNORED      = 2^1
+    local FLG_FLAGS_ENUM        = newflags(true)
+    local FLG_CASE_IGNORED      = newflags()
 
     -- UNSAFE FIELD
     local FLD_ENUM_META         = "__PLOOP_ENUM_META"
@@ -3222,8 +3233,8 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_STRUCT     = 2^0               -- SEALED
-    local MOD_IMMUTABLE_STRUCT  = 2^1               -- IMMUTABLE
+    local MOD_SEALED_STRUCT     = newflags(true)    -- SEALED
+    local MOD_IMMUTABLE_STRUCT  = newflags()        -- IMMUTABLE
 
     -- FIELD INDEX
     local FLD_STRUCT_MOD        = -1                -- FIELD MODIFIER
@@ -3252,18 +3263,18 @@ do
     local FLD_MEMBER_REQUIRE    =  0                -- MEMBER FIELD REQUIRED
 
     -- TYPE FLAGS
-    local FLG_CUSTOM_STRUCT     = 2^0               -- CUSTOM STRUCT FLAG
-    local FLG_MEMBER_STRUCT     = 2^1               -- MEMBER STRUCT FLAG
-    local FLG_ARRAY_STRUCT      = 2^2               -- ARRAY  STRUCT FLAG
-    local FLG_STRUCT_SINGLE_VLD = 2^3               -- SINGLE VALID  FLAG
-    local FLG_STRUCT_MULTI_VLD  = 2^4               -- MULTI  VALID  FLAG
-    local FLG_STRUCT_SINGLE_INIT= 2^5               -- SINGLE INIT   FLAG
-    local FLG_STRUCT_MULTI_INIT = 2^6               -- MULTI  INIT   FLAG
-    local FLG_STRUCT_OBJ_METHOD = 2^7               -- OBJECT METHOD FLAG
-    local FLG_STRUCT_VALIDCACHE = 2^8               -- VALID  CACHE  FLAG
-    local FLG_STRUCT_MULTI_REQ  = 2^9               -- MULTI  FIELD  REQUIRE FLAG
-    local FLG_STRUCT_FIRST_TYPE = 2^10              -- FIRST  MEMBER TYPE    FLAG
-    local FLG_STRUCT_IMMUTABLE  = 2^11              -- IMMUTABLE     FLAG
+    local FLG_CUSTOM_STRUCT     = newflags(true)    -- CUSTOM STRUCT FLAG
+    local FLG_MEMBER_STRUCT     = newflags()        -- MEMBER STRUCT FLAG
+    local FLG_ARRAY_STRUCT      = newflags()        -- ARRAY  STRUCT FLAG
+    local FLG_STRUCT_SINGLE_VLD = newflags()        -- SINGLE VALID  FLAG
+    local FLG_STRUCT_MULTI_VLD  = newflags()        -- MULTI  VALID  FLAG
+    local FLG_STRUCT_SINGLE_INIT= newflags()        -- SINGLE INIT   FLAG
+    local FLG_STRUCT_MULTI_INIT = newflags()        -- MULTI  INIT   FLAG
+    local FLG_STRUCT_OBJ_METHOD = newflags()        -- OBJECT METHOD FLAG
+    local FLG_STRUCT_VALIDCACHE = newflags()        -- VALID  CACHE  FLAG
+    local FLG_STRUCT_MULTI_REQ  = newflags()        -- MULTI  FIELD  REQUIRE FLAG
+    local FLG_STRUCT_FIRST_TYPE = newflags()        -- FIRST  MEMBER TYPE    FLAG
+    local FLG_STRUCT_IMMUTABLE  = newflags()        -- IMMUTABLE     FLAG
 
     local STRUCT_KEYWORD_ARRAY  = "__array"
     local STRUCT_KEYWORD_BASE   = "__base"
@@ -4459,6 +4470,17 @@ do
                 end
             end;
 
+            --- Generate an error message with template and target
+            -- @static
+            -- @method  GetErrorMessage
+            -- @owner   struct
+            -- @param   template                    the error message template, normally generated by type validation
+            -- @param   target                      the target string, like "value"
+            -- @return  string                      the error message
+            ["GetErrorMessage"] = function(template, target)
+                return strgsub(template, "%%s%.?", target)
+            end;
+
             --- Whether the struct's value is immutable through the validation, means no object method, no initializer
             -- @static
             -- @method  IsImmutable
@@ -5313,17 +5335,17 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_IC         = 2^0               -- SEALED TYPE
-    local MOD_FINAL_IC          = 2^1               -- FINAL TYPE
-    local MOD_ABSTRACT_CLS      = 2^2               -- ABSTRACT CLASS
-    local MOD_ISSIMPLE_CLS      = 2^3               -- IS A SIMPLE CLASS
-    local MOD_ASSIMPLE_CLS      = 2^4               -- AS A SIMPLE CLASS
-    local MOD_SINGLEVER_CLS     = 2^5               -- SINGLE VERSION CLASS - NO MULTI VERSION
-    local MOD_ATTRFUNC_OBJ      = 2^6               -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
-    local MOD_NORAWSET_OBJ      = 2^7               -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ      = 2^8               -- NO NIL dFIELD ACCESS
-    local MOD_NOSUPER_OBJ       = 2^9               -- OLD SUPER ACCESS STYLE
-    local MOD_ANYMOUS_CLS       = 2^10              -- HAS ANONYMOUS CLASS
+    local MOD_SEALED_IC         = newflags(true)    -- SEALED TYPE
+    local MOD_FINAL_IC          = newflags()        -- FINAL TYPE
+    local MOD_ABSTRACT_CLS      = newflags()        -- ABSTRACT CLASS
+    local MOD_ISSIMPLE_CLS      = newflags()        -- IS A SIMPLE CLASS
+    local MOD_ASSIMPLE_CLS      = newflags()        -- AS A SIMPLE CLASS
+    local MOD_SINGLEVER_CLS     = newflags()        -- SINGLE VERSION CLASS - NO MULTI VERSION
+    local MOD_ATTRFUNC_OBJ      = newflags()        -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
+    local MOD_NORAWSET_OBJ      = newflags()        -- NO RAW SET FOR OBJECTS
+    local MOD_NONILVAL_OBJ      = newflags()        -- NO NIL dFIELD ACCESS
+    local MOD_NOSUPER_OBJ       = newflags()        -- OLD SUPER ACCESS STYLE
+    local MOD_ANYMOUS_CLS       = newflags()        -- HAS ANONYMOUS CLASS
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -5356,13 +5378,15 @@ do
     local FLD_IC_OBJMTM         =-17                -- FIELD OBJECT META-METHODS
     local FLD_IC_OBJFTR         =-18                -- FIELD OBJECT FEATURES
     local FLD_IC_OBJFLD         =-19                -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_ONEABS         =-20                -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO        =-21                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD         =-22                -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR         =-23                -- FIELD SUPER FEATURE
+    local FLD_IC_OBJEXT         =-20                -- FIELD OBJECT EXIST CHECK
+    local FLD_IC_OBJNEW         =-21                -- FIELD OBJECT NEW OBJECT
+    local FLD_IC_ONEABS         =-22                -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    local FLD_IC_SUPINFO        =-23                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPMTD         =-24                -- FIELD SUPER METHOD & META-METHODS
+    local FLD_IC_SUPFTR         =-25                -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
-    local FLD_IC_OBCTOR         = 10^4              -- FIELD THE OBJECT CONSTRUCTOR
+    local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
     local FLD_IC_CLINIT         = FLD_IC_OBCTOR + 1 -- FEILD THE CLASS INITIALIZER
     local FLD_IC_ENDISP         = FLD_IC_OBCTOR - 1 -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
     local FLD_IC_STINIT         = FLD_IC_CLINIT + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
@@ -5373,24 +5397,24 @@ do
     local INRT_PRIORITY_ABSTRACT= -1
 
     -- Flags for object accessing
-    local FLG_IC_OBJMTD         = 2^0               -- HAS OBJECT METHOD
-    local FLG_IC_OBJFTR         = 2^1               -- HAS OBJECT FEATURE
-    local FLG_IC_IDXFUN         = 2^2               -- HAS INDEX FUNCTION
-    local FLG_IC_IDXTBL         = 2^3               -- HAS INDEX TABLE
-    local FLG_IC_NEWIDX         = 2^4               -- HAS NEW INDEX
-    local FLG_IC_OBJATR         = 2^5               -- ENABLE OBJECT METHOD ATTRIBUTE
-    local FLG_IC_NRAWST         = 2^6               -- ENABLE NO RAW SET
-    local FLG_IC_NNILVL         = 2^7               -- NO NIL VALUE ACCESS
-    local FLG_IC_SUPACC         = 2^8               -- SUPER OBJECT ACCESS
+    local FLG_IC_OBJMTD         = newflags(true)    -- HAS OBJECT METHOD
+    local FLG_IC_OBJFTR         = newflags()        -- HAS OBJECT FEATURE
+    local FLG_IC_IDXFUN         = newflags()        -- HAS INDEX FUNCTION
+    local FLG_IC_IDXTBL         = newflags()        -- HAS INDEX TABLE
+    local FLG_IC_NEWIDX         = newflags()        -- HAS NEW INDEX
+    local FLG_IC_OBJATR         = newflags()        -- ENABLE OBJECT METHOD ATTRIBUTE
+    local FLG_IC_NRAWST         = newflags()        -- ENABLE NO RAW SET
+    local FLG_IC_NNILVL         = newflags()        -- NO NIL VALUE ACCESS
+    local FLG_IC_SUPACC         = newflags()        -- SUPER OBJECT ACCESS
 
     -- Flags for constructor
-    local FLG_IC_EXIST          = 2^2               -- HAS __exist
-    local FLG_IC_NEWOBJ         = 2^3               -- HAS __new
-    local FLG_IC_FIELD          = 2^4               -- HAS __field
-    local FLG_IC_SIMCLS         = 2^5               -- SIMPLE CLASS
-    local FLG_IC_ASSIMP         = 2^6               -- AS SIMPLE CLASS
-    local FLG_IC_HSCLIN         = 2^7               -- HAS CLASS INITIALIZER
-    local FLG_IC_HSIFIN         = 2^8               -- NEED CALL INTERFACE'S INITIALIZER
+    local FLG_IC_EXIST          = newflags(FLG_IC_IDXFUN)   -- HAS __exist
+    local FLG_IC_NEWOBJ         = newflags()        -- HAS __new
+    local FLG_IC_FIELD          = newflags()        -- HAS __field
+    local FLG_IC_SIMCLS         = newflags()        -- SIMPLE CLASS
+    local FLG_IC_ASSIMP         = newflags()        -- AS SIMPLE CLASS
+    local FLG_IC_HSCLIN         = newflags()        -- HAS CLASS INITIALIZER
+    local FLG_IC_HSIFIN         = newflags()        -- NEED CALL INTERFACE'S INITIALIZER
 
     -- Meta Datas
     local IC_META_DISPOB        = "Dispose"
@@ -5918,11 +5942,15 @@ do
                     uinsert(apis, "ATTRTAR_FUNCTION")
                     tinsert(body, [[
                         local tvalue = type(value)
-                        if tvalue == "function" then
+                        if tvalue == "function" and attribute.HaveRegisteredAttributes() then
                             attribute.SaveAttributes(value, ATTRTAR_FUNCTION, 2)
                             local ret = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, key, 2)
-                            attribute.ReleaseTargetAttributes(value)
-                            value = ret
+                            if value ~= ret then
+                                attribute.ToggleTarget(value, ret)
+                                value = ret
+                            end
+                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, self, key, 2)
+                            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, 2)
                         end
                     ]])
                 end
@@ -5985,14 +6013,14 @@ do
 
         tinsert(upval, info[FLD_IC_OBJMTM])
 
-        if info[FLD_IC_EXIST] then
+        if info[FLD_IC_OBJEXT] then
             token   = turnOnFlags(FLG_IC_EXIST, token)
-            tinsert(upval, info[FLD_IC_EXIST])
+            tinsert(upval, info[FLD_IC_OBJEXT])
         end
 
-        if info[FLD_IC_NEWOBJ] then
+        if info[FLD_IC_OBJNEW] then
             token   = turnOnFlags(FLG_IC_NEWOBJ, token)
-            tinsert(upval, info[FLD_IC_NEWOBJ])
+            tinsert(upval, info[FLD_IC_OBJNEW])
         end
 
         if info[FLD_IC_FIELD] then
@@ -6218,13 +6246,21 @@ do
         -- The init & dispose link for extended interfaces & super classes
         local initIdx   = FLD_IC_STINIT
         local dispIdx   = FLD_IC_ENDISP
-        local supctor
+        local supctor, supext, supnew
 
         -- Save super class's dtor & ctor
         for _, sinfo, isextIF in iterSuperInfo(info, true) do
             if not isextIF then
                 if sinfo[FLD_IC_CTOR] then
                     supctor         = sinfo[FLD_IC_CTOR]
+                end
+
+                if sinfo[FLD_IC_EXIST] then
+                    supext          = sinfo[FLD_IC_EXIST]
+                end
+
+                if sinfo[FLD_IC_NEWOBJ] then
+                    supnew          = sinfo[FLD_IC_NEWOBJ]
                 end
 
                 if sinfo[FLD_IC_DTOR] then
@@ -6388,10 +6424,6 @@ do
                 -- Set object's prototype
                 objmeta[IC_META_TABLE]  = target
 
-                -- Keep a backup
-                objmeta[META_KEYS[IC_META_INDEX]]   = objmeta[IC_META_INDEX]
-                objmeta[META_KEYS[IC_META_NEWIDX]]  = objmeta[IC_META_NEWIDX]
-
                 -- Auto-gen dispose for object methods
                 local FLD_IC_STDISP     = dispIdx + 1
                 if FLD_IC_STDISP <= FLD_IC_ENDISP then
@@ -6418,6 +6450,8 @@ do
                 info[FLD_IC_OBJFTR]     = objftr
                 info[FLD_IC_OBJMTD]     = objmtd or false
                 info[FLD_IC_OBJFLD]     = objfld
+                info[FLD_IC_OBJEXT]     = info[FLD_IC_EXIST] or supext
+                info[FLD_IC_OBJNEW]     = info[FLD_IC_NEWOBJ] or supnew
 
                 -- Check simple class
                 if not (info[FLD_IC_CLINIT] or info[FLD_IC_OBJFTR]) then
@@ -6573,7 +6607,7 @@ do
 
         attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
-        if not info[name] then
+        if not (typmtd and typmtd[name] == false) then
             attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuperMethod(info, name))
         end
 
@@ -6618,9 +6652,7 @@ do
         if tdata == "function" then
             attribute.SaveAttributes(data, ATTRTAR_METHOD, stack)
 
-            if not info[name] then
-                attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperMetaMethod(info, name))
-            end
+            attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperMetaMethod(info, name))
 
             local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name, stack)
             if ret ~= data then attribute.ToggleTarget(data, ret) data = ret end
@@ -8864,12 +8896,12 @@ do
                     if info[FLD_EVENT_STATIC] then
                         local delegate      = info[FLD_EVENT_DELEGATE]
                         if not delegate and not nocreation then
-                            delegate        = Delegate()
+                            local owner     = info[FLD_EVENT_OWNER]
+                            local name      = info[FLD_EVENT_NAME]
+                            delegate        = Delegate(owner, name)
                             info[FLD_EVENT_DELEGATE] = delegate
 
                             if info[FLD_EVENT_HANDLER] then
-                                local owner     = info[FLD_EVENT_OWNER]
-                                local name      = info[FLD_EVENT_NAME]
                                 local handler   = info[FLD_EVENT_HANDLER]
                                 delegate.OnChange = delegate.OnChange + function(self)
                                     return handler(self, owner, name)
@@ -8882,7 +8914,7 @@ do
                         if not delegate or getmetatable(delegate) ~= Delegate then
                             if nocreation then return end
 
-                            delegate        = Delegate()
+                            delegate        = Delegate(obj, info[FLD_EVENT_NAME])
                             rawset(obj, info[FLD_EVENT_FIELD], delegate)
 
                             if info[FLD_EVENT_HANDLER] then
@@ -8976,9 +9008,17 @@ do
                 if delegate == nil then
                     odel:SetFinalFunction(nil)
                 elseif type(delegate) == "function" then
-                    attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
-                    local ret = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, info[FLD_EVENT_NAME], stack)
-                    attribute.ReleaseTargetAttributes(delegate)
+                    if attribute.HaveRegisteredAttributes() then
+                        local name  = info[FLD_EVENT_NAME]
+                        attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
+                        local ret   = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, name, stack)
+                        if ret ~= delegate then
+                            attribute.ToggleTarget(delegate, ret)
+                            delegate   = ret
+                        end
+                        attribute.ApplyAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
+                        attribute.AttachAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
+                    end
                     odel:SetFinalFunction(ret)
                 elseif getmetatable(delegate) == Delegate then
                     if delegate ~= odel then
@@ -9245,15 +9285,15 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- MODIFIER
-    local MOD_PROP_STATIC       = 2^0
+    local MOD_PROP_STATIC       = newflags(true)
 
-    local MOD_PROP_SETCLONE     = 2^1
-    local MOD_PROP_SETDEEPCL    = 2^2
-    local MOD_PROP_SETRETAIN    = 2^3
-    local MOD_PROP_SETWEAK      = 2^4
+    local MOD_PROP_SETCLONE     = newflags()
+    local MOD_PROP_SETDEEPCL    = newflags()
+    local MOD_PROP_SETRETAIN    = newflags()
+    local MOD_PROP_SETWEAK      = newflags()
 
-    local MOD_PROP_GETCLONE     = 2^5
-    local MOD_PROP_GETDEEPCL    = 2^6
+    local MOD_PROP_GETCLONE     = newflags()
+    local MOD_PROP_GETDEEPCL    = newflags()
 
     -- PROPERTY FIELDS
     local FLD_PROP_MOD          =  0
@@ -9275,32 +9315,32 @@ do
     local FLD_PROP_STATIC       = 16
 
     -- FLAGS FOR PROPERTY BUILDING
-    local FLG_PROPGET_DISABLE   = 2^0
-    local FLG_PROPGET_DEFAULT   = 2^1
-    local FLG_PROPGET_DEFTFUNC  = 2^2
-    local FLG_PROPGET_GET       = 2^3
-    local FLG_PROPGET_GETMETHOD = 2^4
-    local FLG_PROPGET_FIELD     = 2^5
-    local FLG_PROPGET_SETWEAK   = 2^6
-    local FLG_PROPGET_SETFALSE  = 2^7
-    local FLG_PROPGET_CLONE     = 2^8
-    local FLG_PROPGET_DEEPCLONE = 2^9
-    local FLG_PROPGET_STATIC    = 2^10
+    local FLG_PROPGET_DISABLE   = newflags(true)
+    local FLG_PROPGET_DEFAULT   = newflags()
+    local FLG_PROPGET_DEFTFUNC  = newflags()
+    local FLG_PROPGET_GET       = newflags()
+    local FLG_PROPGET_GETMETHOD = newflags()
+    local FLG_PROPGET_FIELD     = newflags()
+    local FLG_PROPGET_SETWEAK   = newflags()
+    local FLG_PROPGET_SETFALSE  = newflags()
+    local FLG_PROPGET_CLONE     = newflags()
+    local FLG_PROPGET_DEEPCLONE = newflags()
+    local FLG_PROPGET_STATIC    = newflags()
 
-    local FLG_PROPSET_DISABLE   = 2^0
-    local FLG_PROPSET_TYPE      = 2^1
-    local FLG_PROPSET_CLONE     = 2^2
-    local FLG_PROPSET_DEEPCLONE = 2^3
-    local FLG_PROPSET_SET       = 2^4
-    local FLG_PROPSET_SETMETHOD = 2^5
-    local FLG_PROPSET_FIELD     = 2^6
-    local FLG_PROPSET_DEFAULT   = 2^7
-    local FLG_PROPSET_SETWEAK   = 2^8
-    local FLG_PROPSET_RETAIN    = 2^9
-    local FLG_PROPSET_SIMPDEFT  = 2^10
-    local FLG_PROPSET_HANDLER   = 2^11
-    local FLG_PROPSET_EVENT     = 2^12
-    local FLG_PROPSET_STATIC    = 2^13
+    local FLG_PROPSET_DISABLE   = newflags(true)
+    local FLG_PROPSET_TYPE      = newflags()
+    local FLG_PROPSET_CLONE     = newflags()
+    local FLG_PROPSET_DEEPCLONE = newflags()
+    local FLG_PROPSET_SET       = newflags()
+    local FLG_PROPSET_SETMETHOD = newflags()
+    local FLG_PROPSET_FIELD     = newflags()
+    local FLG_PROPSET_DEFAULT   = newflags()
+    local FLG_PROPSET_SETWEAK   = newflags()
+    local FLG_PROPSET_RETAIN    = newflags()
+    local FLG_PROPSET_SIMPDEFT  = newflags()
+    local FLG_PROPSET_HANDLER   = newflags()
+    local FLG_PROPSET_EVENT     = newflags()
+    local FLG_PROPSET_STATIC    = newflags()
 
     local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
     local FLD_PROP_OBJ_WEAK     = "__PLOOP_PROPERTY_WEAK"
@@ -10759,10 +10799,10 @@ do
 
                             local n = mlog(v) / mlog(2)
                             if floor(n) == n then
-                                if cache[2^n] then
-                                    error(strformat("The %s and %s can't be the same value", k, cache[2^n]), stack)
+                                if cache[v] then
+                                    error(strformat("The %s and %s can't be the same value", k, cache[v]), stack)
                                 else
-                                    cache[2^n]  = k
+                                    cache[v]    = k
                                     max         = n > max and n or max
                                 end
                             else
@@ -10793,12 +10833,12 @@ do
                 if max >= count then error("The flags enumeration's value can't be greater than 2^(count - 1)", stack) end
 
                 -- Auto-gen values
-                local n     = 0
+                local n     = 1
                 for k, v in pairs, definition do
                     if v == -1 then
-                        while cache[2^n] do n = n + 1 end
-                        cache[2^n]      = k
-                        definition[k]   = 2^n
+                        while cache[n] do n = 2 * n end
+                        cache[n]        = k
+                        definition[k]   = n
                     end
                 end
 
@@ -11044,6 +11084,47 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the enum as flags enumeration and add union enumeration value to
+    -- the enum
+    --
+    -- @attribute   System.__Union__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Union__",                 prototype {
+        __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                local value     = self[1]
+                stack           = parsestack(stack) + 1
+                if type(value) == "table" then
+                    __Flags__.InitDefinition(self, target, targettype, definition, owner, name, stack)
+
+                    for k, v in pairs, value do
+                        if type(v) == "table" then
+                            local total     = 0
+                            for _, en in ipairs, v, 0 do
+                                total       = total + definition[en] or error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union key must eixsted in the enumeration's definition", stack)
+                            end
+
+                            definition[k]   = total
+                        else
+                            error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union keys must be contained in a table", stack)
+                        end
+                    end
+                else
+                    error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union table is not valid", stack)
+                end
+            end,
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                enum.SetFlagsEnum(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
+    })
+
     -------------------------------------------------------------------------------
     --                               registration                                --
     -------------------------------------------------------------------------------
@@ -11094,6 +11175,14 @@ do
         Origin      = 0,
         Clone       = 1,
         DeepClone   = 2,
+    }
+
+    --- the struct category
+    __Sealed__()
+    enum "System.StructCategory" {
+        "MEMBER",
+        "ARRAY",
+        "CUSTOM"
     }
 
     -----------------------------------------------------------------------
@@ -11174,12 +11263,15 @@ do
             if var.type and var.default ~= nil then
                 local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, onlyvalid)
                 if msg then return onlyvalid or "the %s.default don't match its type" end
-                var.default     = ret
             end
         end,
 
         __init = function (var)
             var.valid = var.type and getprototypemethod(var.type, "ValidateValue")
+            if var.valid and var.default ~= nil then
+                var.default     = var.valid(var.type, var.default)
+                var.nilable     = true
+            end
         end,
     }
 
@@ -11331,6 +11423,213 @@ do
     -----------------------------------------------------------------------
     --                              classes                              --
     -----------------------------------------------------------------------
+    --- the attribute to build the overload system
+    __Sealed__() __Final__()
+    class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
+        extend "IInitAttribtue"
+        -----------------------------------------------------------
+        --                        storage                        --
+        -----------------------------------------------------------
+        local _OverloadMap      = newStorage(WEAK_KEY)
+
+        -----------------------------------------------------------
+        --                        constant                       --
+        -----------------------------------------------------------
+        local FLD_ARG_FUNCTN    =  0
+        local FLD_ARG_MINARG    = -1
+        local FLD_ARG_MAXARG    = -2
+        local FLD_ARG_ISLIST    = -3
+        local FLD_ARG_IMMTBL    = -4
+        local FLD_ARG_USGMSG    = -5
+
+        local TYPE_VALD_DISD    = Platform.TYPE_VALIDATION_DISABLED
+
+        -----------------------------------------------------------
+        --                        helpers                        --
+        -----------------------------------------------------------
+        local validate          = Struct.ValidateValue
+        local geterrmsg         = Struct.GetErrorMessage
+        local saveStorage       = saveStorage
+        local ipairs            = _G.ipairs
+        local getobjectvalue    = getobjectvalue
+        local tinsert           = tinsert
+        local tblconcat         = tblconcat
+        local strformat         = strformat
+        local type              = type
+
+        local Enum              = Enum
+        local Struct            = Struct
+        local Interface         = Interface
+        local Class             = Class
+        local Variables         = Variables
+        local AttributeTargets  = AttributeTargets
+        local StructCategory    = StructCategory
+
+        local function serializeData(data)
+            local dtype         = type(data)
+
+            if dtype == "string" then
+                return strformat("%q", data)
+            elseif dtype == "number" or dtype == "boolean" then
+                return tostring(data)
+            else
+                return "(inner)"
+            end
+        end
+
+        local function serialize(data, ns)
+            if ns then
+                if Enum.Validate(ns) then
+                    if Enum.IsFlagsEnum(ns) then
+                        local cache = {}
+                        for name in ns(data) do
+                            tinsert(cache, name)
+                        end
+                        return tblconcat(cache, " + ")
+                    else
+                        return ns(data)
+                    end
+                elseif Struct.Validate(ns) then
+                    if Struct.GetStructType(ns) == StructCategory.CUSTOM then
+                        return serializeData(data)
+                    else
+                        return "(inner)"
+                    end
+                else
+                    return "(inner)"
+                end
+            end
+            return serializeData(data)
+        end
+
+        local function buildUsage(vars, owner, name, ismethod)
+            local usage         = {}
+
+            if ismethod then
+                if getmetatable(owner).IsStaticMethod(owner, name) then
+                    tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
+                else
+                    tinsert(usage, strformat("Usage: %s:%s(", tostring(owner), name))
+                end
+            else
+                tinsert(usage, strformat("Usage: %s(", name))
+            end
+
+            for i, var in ipairs(vars) do
+                if i > 1 then tinsert(usage, ", ") end
+
+                if var.nilable then tinsert(usage, "[") end
+
+                if var.name or var.islist then
+                    tinsert(usage, var.islist and "..." or var.name)
+                    if var.type then
+                        tinsert(usage, " as ")
+                    end
+                end
+
+                if var.type then
+                    tinsert(usage, tostring(var.type))
+                end
+
+                if var.default ~= nil then
+                    tinsert(usage, " = ")
+                    tinsert(usage, serialize(var.default, var.type))
+                end
+
+                if var.nilable then tinsert(usage, "]") end
+            end
+
+            tinsert(usage, ")")
+
+            vars[FLD_ARG_USGMSG]= tblconcat(usage, "")
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            local len           = #self
+
+            local vars          = {
+                [FLD_ARG_FUNCTN]= definition,
+                [FLD_ARG_MINARG]= len,
+                [FLD_ARG_MAXARG]= len,
+                [FLD_ARG_ISLIST]= false,
+                [FLD_ARG_IMMTBL]= true,
+                [FLD_ARG_USGMSG]= "",
+            }
+
+            local minargs
+            local immutable     = true
+
+            for i = 1, len do
+                local var       = self[i]
+                vars[i]         = var
+                if var.islist then
+                    vars[FLD_ARG_ISLIST]    = true
+                    vars[FLD_ARG_MAXARG]    = 255
+                end
+
+                if var.nilable then
+                    minargs     = minargs or i - 1
+                end
+
+                if immutable and var.type then
+                    immutable   = getobjectvalue(var.type, "IsImmutable") and getobjectvalue(var.type, "IsSealed") or false
+                end
+            end
+
+            vars[FLD_ARG_MINARG]= minargs or vars[FLD_ARG_MINARG]
+            vars[FLD_ARG_IMMTBL]= immutable
+
+            if targettype == AttributeTargets.Method then
+
+            else
+                if TYPE_VALD_DISD and vars[FLD_ARG_IMMTBL] then return end
+
+                buildUsage(vars, owner, name, false)
+
+                return function (...)
+                    error(vars[FLD_ARG_USGMSG], 2)
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriorty,  default = AttributePriorty.Lowest }
+
+        --- the attribute's sub level of priority
+        property "SubLevel"         { type = Number,            default = -99999 }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        function __new(vars)
+            if vars ~= nil then
+                local ret, msg  = validate(Variables, vars)
+                if msg then throw("Usage: __Arguments__{ ... } - " .. geterrmsg(msg, "")) end
+
+                return vars
+            else
+                return {}
+            end
+        end
+    end)
+
     --- Represents containers of several functions as event handlers
     __Sealed__() __Final__()
     Delegate = class "System.Delegate"  (function(_ENV)
@@ -11411,6 +11710,24 @@ do
         end
 
         -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The delegate's owner
+        property "Owner"    { type = Table }
+
+        --- The delegate's name
+        property "Name"     { type = String }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ Variable(Table, true), Variable(String, true) }
+        function Delegate(self, owner, name)
+            self.Owner      = owner
+            self.Name       = name
+        end
+
+        -----------------------------------------------------------
         --                       meta-data                       --
         -----------------------------------------------------------
         field { [-1] = false, [0] = false }
@@ -11419,9 +11736,20 @@ do
         -- @usage   obj.OnEvent = obj.OnEvent + func
         function __add(self, func)
             if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
-            attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
-            local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, nil, nil, 2)
-            attribute.ReleaseTargetAttributes(func)
+
+            if attribute.HaveRegisteredAttributes() then
+                local owner     = self.Owner
+                local name      = self.Name
+
+                attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
+                local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, owner, name, 2)
+                if ret ~= func then
+                    attribute.ToggleTarget(func, ret)
+                    func = ret
+                end
+                attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, owner, name, 2)
+                attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
+            end
 
             for _, f in ipairs(self) do
                 if f == ret then return self end
@@ -11477,13 +11805,13 @@ do
 
         --- whether the stack data is saved, the system will save the stack data
         -- if the value is false when the exception is thrown out
-        property "StackDataSaved"   { type = Boolean, default = not Platform.EXCEPTION_SAVE_STACK_DATA }
+        property "StackDataSaved"   { type = Boolean,       default = not Platform.EXCEPTION_SAVE_STACK_DATA }
 
         --- the stack level to be scanned, default 1, where the throw is called
         property "StackLevel"       { type = NaturalNumber, default = 1 }
 
         --- whether save the local variables and the upvalues for the exception
-        property "SaveVariables"    { type = Boolean, default = false }
+        property "SaveVariables"    { type = Boolean,       default = false }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -11501,50 +11829,6 @@ do
             return self.Message
         end
     end)
-
-    --- the attribute to build the overload system
-    __Sealed__() __Final__()
-    class "System.__Arguments__"        (function(_ENV)
-        extend "IInitAttribtue"
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-
-        end
-
-        -----------------------------------------------------------
-        --                       property                       --
-        -----------------------------------------------------------
-        --- the attribute target
-        property "AttributeTarget"  { type = AttributeTargets,   default = AttributeTargets.Method }
-
-        --- the attribute's priority
-        property "Priority"         { type = AttributePriorty,  default = AttributePriorty.Lowest }
-
-        --- the attribute's sub level of priority
-        property "SubLevel"         { type = Number,            default = -99999 }
-
-        --- whether use super's overload method
-        property "DependOnSuper"    { type = Boolean,           default = true }
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        function __Arguments__(self, vars)
-
-        end
-    end)
 end
-
 
 return ROOT_NAMESPACE
