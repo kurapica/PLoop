@@ -171,11 +171,6 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         ENV_ALLOW_GLOBAL_VAR_BE_NIL         = true,
 
-        --- Whether all enumerations are case ignored.
-        -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
-        ENUM_GLOBAL_IGNORE_CASE             = false,
-
         --- Whether allow old style of type definitions like :
         --      class "A"
         --          -- xxx
@@ -833,10 +828,16 @@ do
             -- @static
             -- @method  ValidateValue
             -- @owner   prototype
+            -- @format  (prototype, value[, onlyvalid])
             -- @param   prototype                   the target prototype
             -- @param   value:(table|userdata)      the value to be validated
-            -- @return  result:boolean              true if the value is generated from the prototype
-            ["ValidateValue"]   = function(self, val) return getmetatable(val) == self end;
+            -- @param   onlyvalid:boolean           if true use true instead of the error message
+            -- @return  value                       the value if it's a value of the prototype, otherwise nil
+            -- @return  error                       the error message if the value is not valid
+            ["ValidateValue"]   = function(self, val, onlyvalid)
+                if getmetatable(val) == self then return val end
+                return nil, onlyvalid or ("the %s is not a valid value of [prototype]" .. tostring(self))
+            end;
 
             --- Whether the value is a prototype
             -- @static
@@ -1515,11 +1516,59 @@ do
     local _AccessKey                                -- The next keyword
 
     -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
+    local exportToEnv           = function(env, name, value, stack)
+        local tname             = type(name)
+        stack                   = stack + 1
+
+        if tname == "number" then
+            tname               = type(value)
+
+            if tname == "string" then
+                rawset(env, name, environment.GetValue(env, name, true, stack))
+            elseif namespace.Validate(value) then
+                rawset(env, namespace.GetNamespaceName(value, true), value)
+            end
+        elseif tname == "string" then
+            if value ~= nil then
+                rawset(env, name, value)
+            else
+                rawset(env, name, environment.GetValue(env, name, true, stack))
+            end
+        elseif namespace.Validate(name) then
+            rawset(env, namespace.GetNamespaceName(name, true), value)
+        end
+    end
+
+    -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
     environment                 = prototype {
         __tostring              = "environment",
         __index                 = {
+            --- Export variables by name or a list of names, those variables are
+            -- fetched from the namespaces or base environment
+            -- @static
+            -- @method  ExportVariables
+            -- @owner   environment
+            -- @format  (env, name[, stack])
+            -- @format  (env, namelist[, stack])
+            -- @param   env                         the environment
+            -- @param   name                        the variable name or namespace
+            -- @param   namelist                    the list or variable names
+            -- @param   stack                       the stack level
+            ["ExportVariables"]   = function(env, name, stack)
+                stack           = parsestack(stack) + 1
+                if type(name)  == "table" and getmetatable(name) == nil then
+                    for k, v in pairs, name do
+                        exportToEnv(env, k, v, stack)
+                    end
+                else
+                    exportToEnv(env, name, nil, stack)
+                end
+            end;
+
             --- Get the namespace from the environment
             -- @static
             -- @method  GetNamespace
@@ -1946,6 +1995,20 @@ do
             return namespace.ExportNamespace(env, name, flag)
         end
     end
+
+    -----------------------------------------------------------------------
+    -- export variables to current environment
+    --
+    -- @keyword     export
+    -- @usage       export { "print", log = "math.log", System.Delegate }
+    -----------------------------------------------------------------------
+    export                      = function (...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(export, nil, ...)
+
+        if not visitor  then error("Usage: export(name|namelist) - The system can't figure out the environment", stack + 1) end
+
+        environment.ExportVariables(visitor, name or definition)
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -2366,22 +2429,17 @@ do
     local MOD_SEALED_ENUM       = newflags(true)    -- SEALED
     local MOD_FLAGS_ENUM        = newflags()        -- FLAGS
     local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
-    local MOD_CASE_IGNORED      = newflags()        -- CASE IGNORED
-
-    local MOD_ENUM_INIT         = PLOOP_PLATFORM_SETTINGS.ENUM_GLOBAL_IGNORE_CASE and MOD_CASE_IGNORED or 0
 
     -- FIELD INDEX
     local FLD_ENUM_MOD          = 0                 -- FIELD MODIFIER
     local FLD_ENUM_ITEMS        = 1                 -- FIELD ENUMERATIONS
     local FLD_ENUM_CACHE        = 2                 -- FIELD CACHE : VALUE -> NAME
     local FLD_ENUM_ERRMSG       = 3                 -- FIELD ERROR MESSAGE
-    local FLD_ENUM_VALID        = 4                 -- FIELD VALIDATOR
-    local FLD_ENUM_MAXVAL       = 5                 -- FIELD MAX VALUE(FOR FLAGS)
-    local FLD_ENUM_DEFAULT      = 6                 -- FIELD DEFAULT
+    local FLD_ENUM_MAXVAL       = 4                 -- FIELD MAX VALUE(FOR FLAGS)
+    local FLD_ENUM_DEFAULT      = 5                 -- FIELD DEFAULT
 
     -- Flags
     local FLG_FLAGS_ENUM        = newflags(true)
-    local FLG_CASE_IGNORED      = newflags()
 
     -- UNSAFE FIELD
     local FLD_ENUM_META         = "__PLOOP_ENUM_META"
@@ -2403,102 +2461,6 @@ do
     local getEnumTargetInfo     = function (target)
         local info  = _EnumBuilderInfo[target]
         if info then return info, true else return _EnumInfo[target], false end
-    end
-
-    local genEnumValidator      = function (info)
-        local token = 0
-        local upval = _Cache()
-
-        tinsert(upval, info[FLD_ENUM_CACHE])
-        tinsert(upval, info[FLD_ENUM_ITEMS])
-        tinsert(upval, info[FLD_ENUM_ERRMSG])
-
-        if validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
-            token   = turnOnFlags(FLG_FLAGS_ENUM, token)
-            tinsert(upval, info[FLD_ENUM_MAXVAL])
-        end
-
-        if validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
-            token   = turnOnFlags(FLG_CASE_IGNORED, token)
-        end
-
-        if not _EnumValidMap[token] then
-            local head      = _Cache()
-            local body      = _Cache()
-            local apis      = _Cache()
-
-            tinsert(head, "cache")
-            tinsert(head, "items")
-            tinsert(head, "errmsg")
-
-            tinsert(body, "")                       -- remain for shareable variables
-            tinsert(body, "return function(%s)")    -- remain for special variables
-
-            tinsert(body, [[
-                return function(value)
-                    if cache[value] then return value end
-            ]])
-
-            if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
-                uinsert(apis, "type")
-                tinsert(body, [[
-                    local vtype = type(value)
-                    if vtype == "string" then
-                ]])
-
-                if validateFlags(FLG_CASE_IGNORED, token) then
-                    uinsert(apis, "strupper")
-                    tinsert(body, [[value = strupper(value)]])
-                end
-            end
-
-            tinsert(body, [[value = items[value] ]])
-
-            if validateFlags(FLG_FLAGS_ENUM, token) then
-                tinsert(head, "maxv")
-                uinsert(apis, "floor")
-                tinsert(body, [[
-                    elseif vtype == "number" then
-                        if value == 0 then
-                            if cache[0] then return 0 end
-                        elseif floor(value) == value and value > 0 and value <= maxv then
-                            return value
-                        end
-                ]])
-            end
-
-            if validateFlags(FLG_CASE_IGNORED, token) or validateFlags(FLG_FLAGS_ENUM, token) then
-                tinsert(body, [[
-                    else
-                        value = nil
-                    end
-                ]])
-            end
-
-            tinsert(body, [[
-                    return value, value == nil and errmsg or nil
-                end
-            ]])
-
-            tinsert(body, [[end]])
-
-            if #apis > 0 then
-                local declare   = tblconcat(apis, ", ")
-                body[1]         = strformat("local %s = %s", declare, declare)
-            end
-
-            body[2]             = strformat(body[2], tblconcat(head, ", "))
-
-            _EnumValidMap[token]= loadSnippet(tblconcat(body, "\n"), "Enum_Validate_" .. token)()
-
-            _Cache(head)
-            _Cache(body)
-            _Cache(apis)
-        end
-
-        info[FLD_ENUM_VALID]    = _EnumValidMap[token](unpack(upval))
-
-        _Cache(upval)
     end
 
     local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
@@ -2529,15 +2491,15 @@ do
                     if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
                     for k, v in pairs, info[FLD_ENUM_ITEMS] do
-                        if strupper(k) == strupper(key) then
-                            if (validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key) == k and v == value then return end
+                        if k == key then
+                            if v == value then return end
                             error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack)
                         elseif v == value then
                             error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack)
                         end
                     end
 
-                    info[FLD_ENUM_ITEMS][validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) and strupper(key) or key] = value
+                    info[FLD_ENUM_ITEMS][key] = value
                 else
                     error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
                 end
@@ -2561,11 +2523,10 @@ do
                 if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
-                    [FLD_ENUM_MOD    ]  = MOD_ENUM_INIT,
+                    [FLD_ENUM_MOD    ]  = 0,
                     [FLD_ENUM_ITEMS  ]  = {},
                     [FLD_ENUM_CACHE  ]  = {},
                     [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
-                    [FLD_ENUM_VALID  ]  = false,
                     [FLD_ENUM_MAXVAL ]  = false,
                     [FLD_ENUM_DEFAULT]  = nil,
                 })
@@ -2609,18 +2570,13 @@ do
                     ninfo[FLD_ENUM_MOD]     = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
                 end
 
-                genEnumValidator(ninfo)
+                -- Save as new enumeration's info
+                saveEnumMeta(target, ninfo)
 
                 -- Check Default
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
-                    ninfo[FLD_ENUM_DEFAULT]  = ninfo[FLD_ENUM_VALID](ninfo[FLD_ENUM_DEFAULT])
-                    if ninfo[FLD_ENUM_DEFAULT] == nil then
-                        error(ninfo[FLD_ENUM_ERRMSG]:format("The default"), stack)
-                    end
+                    ninfo[FLD_ENUM_DEFAULT] = enum.ValidateValue(target, ninfo[FLD_ENUM_DEFAULT])
                 end
-
-                -- Save as new enumeration's info
-                saveEnumMeta(target, ninfo)
 
                 attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
@@ -2659,17 +2615,6 @@ do
                 end
             end;
 
-            --- Whether the enumeration is case ignored
-            -- @static
-            -- @method  IsCaseIgnored
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  boolean                     true if the enumeration is case ignored
-            ["IsCaseIgnored"]   = function(target)
-                local info      = getEnumTargetInfo(target)
-                return info and validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) or false
-            end;
-
             --- Whether the enumeration element values only are flags
             -- @static
             -- @method  IsFlagsEnum
@@ -2681,15 +2626,13 @@ do
                 return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
-            --- Whether the enum's value is immutable through the validation, always false.
+            --- Whether the enum's value is immutable through the validation, always true.
             -- @static
             -- @method  IsImmutable
             -- @owner   enum
             -- @param   enumeration                 the enumeration
-            -- @return  false
-            ["IsImmutable"]     = function(target)
-                return false
-            end;
+            -- @return  true
+            ["IsImmutable"]     = function(target) return true end;
 
             --- Whether the enumeration is sealed, so can't be re-defined
             -- @static
@@ -2787,33 +2730,6 @@ do
                 end
             end;
 
-            --- Set the enumeration as case ignored
-            -- @static
-            -- @method  SetCaseIgnored
-            -- @owner   enum
-            -- @format  (enumeration[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   stack                       the stack level
-            ["SetCaseIgnored"]  = function(target, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack           = parsestack(stack) + 1
-
-                if info then
-                    if not validateFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_CASE_IGNORED, info[FLD_ENUM_MOD])
-
-                        local enums     = info[FLD_ENUM_ITEMS]
-                        local nenums    = _Cache()
-                        for k, v in pairs, enums do nenums[strupper(k)] = v end
-                        info[FLD_ENUM_ITEMS]  = nenums
-                        _Cache(enums)
-                    end
-                else
-                    error("Usage: enum.SetCaseIgnored(enumeration[, stack]) - The enumeration is not valid", stack)
-                end
-            end;
-
             --- Set the enumeration as flags enum
             -- @static
             -- @method  SetFlagsEnum
@@ -2869,14 +2785,23 @@ do
             -- @static
             -- @method  ValidateValue
             -- @owner   enum
+            -- @format  (enumeration, value[, onlyvalid])
             -- @param   enumeration                 the enumeration
             -- @param   value                       the value
+            -- @param   onlyvalid                   if true use true instead of the error message
             -- @return  value                       the element value, nil if not pass the validation
             -- @return  errormessage                the error message if not pass
-            ["ValidateValue"]   = function(target, value)
+            ["ValidateValue"]   = function(target, value, onlyvalid)
                 local info      = _EnumInfo[target]
                 if info then
-                    return info[FLD_ENUM_VALID](value)
+                    if info[FLD_ENUM_CACHE][value] then return value end
+
+                    local maxv  = info[FLD_ENUM_MAXVAL]
+                    if maxv and type(value) == "number" and floor(value) == value and value > 0 and value <= maxv then
+                        return value
+                    end
+
+                    return nil, onlyvalid or info[FLD_ENUM_ERRMSG]
                 else
                     error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
                 end
@@ -2903,6 +2828,10 @@ do
 
             stack = stack + 1
 
+            if visitor then
+                environment.ImportNamespace(visitor, target)
+            end
+
             enum.BeginDefinition(target, stack)
 
             Debug("[enum] %s created", stack, tostring(target))
@@ -2920,7 +2849,7 @@ do
     }
 
     tenum                       = prototype (tnamespace, {
-        __index                 = enum.ValidateValue,
+        __index                 = function(self, key) return _EnumInfo[self][FLD_ENUM_ITEMS][key] end,
         __call                  = enum.Parse,
         __metatable             = enum,
     })
@@ -4350,6 +4279,23 @@ do
                 return info and info[FLD_STRUCT_DEFAULT]
             end;
 
+            --- Get the definition context of the struct
+            -- @static
+            -- @method  GetDefault
+            -- @return  prototype                   the context type
+            ["GetDefinitionContext"] = function() return structbuilder end;
+
+            --- Generate an error message with template and target
+            -- @static
+            -- @method  GetErrorMessage
+            -- @owner   struct
+            -- @param   template                    the error message template, normally generated by type validation
+            -- @param   target                      the target string, like "value"
+            -- @return  string                      the error message
+            ["GetErrorMessage"] = function(template, target)
+                return strgsub(template, "%%s%.?", target)
+            end;
+
             --- Get the member of the structure with given name
             -- @static
             -- @method  GetMember
@@ -4468,17 +4414,6 @@ do
                     if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
                     return STRUCT_TYPE_CUSTOM
                 end
-            end;
-
-            --- Generate an error message with template and target
-            -- @static
-            -- @method  GetErrorMessage
-            -- @owner   struct
-            -- @param   template                    the error message template, normally generated by type validation
-            -- @param   target                      the target string, like "value"
-            -- @return  string                      the error message
-            ["GetErrorMessage"] = function(template, target)
-                return strgsub(template, "%%s%.?", target)
             end;
 
             --- Whether the struct's value is immutable through the validation, means no object method, no initializer
@@ -5108,9 +5043,10 @@ end
 --
 --              v = List(1, 2, 3, 4, 5, 6)
 --
--- The `__new` would recieve all parameters and return a table. So for the List
--- class, the `__new` meta will eliminate the rehash cost of the object's
--- initialization.
+-- The `__new` would recieve all parameters and return a table and a boolean
+-- value, if the value is true, all parameters will be discarded so won't pass
+-- to the constructor. So for the List class, the `__new` meta will eliminate
+-- the rehash cost of the object's initialization.
 --
 -- The `__field` meta is a table, contains several key-value paris to be saved
 -- in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the
@@ -5338,8 +5274,6 @@ do
     local MOD_SEALED_IC         = newflags(true)    -- SEALED TYPE
     local MOD_FINAL_IC          = newflags()        -- FINAL TYPE
     local MOD_ABSTRACT_CLS      = newflags()        -- ABSTRACT CLASS
-    local MOD_ISSIMPLE_CLS      = newflags()        -- IS A SIMPLE CLASS
-    local MOD_ASSIMPLE_CLS      = newflags()        -- AS A SIMPLE CLASS
     local MOD_SINGLEVER_CLS     = newflags()        -- SINGLE VERSION CLASS - NO MULTI VERSION
     local MOD_ATTRFUNC_OBJ      = newflags()        -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
     local MOD_NORAWSET_OBJ      = newflags()        -- NO RAW SET FOR OBJECTS
@@ -5411,8 +5345,6 @@ do
     local FLG_IC_EXIST          = newflags(FLG_IC_IDXFUN)   -- HAS __exist
     local FLG_IC_NEWOBJ         = newflags()        -- HAS __new
     local FLG_IC_FIELD          = newflags()        -- HAS __field
-    local FLG_IC_SIMCLS         = newflags()        -- SIMPLE CLASS
-    local FLG_IC_ASSIMP         = newflags()        -- AS SIMPLE CLASS
     local FLG_IC_HSCLIN         = newflags()        -- HAS CLASS INITIALIZER
     local FLG_IC_HSIFIN         = newflags()        -- NEED CALL INTERFACE'S INITIALIZER
 
@@ -6028,17 +5960,6 @@ do
             tinsert(upval, info[FLD_IC_FIELD])
         end
 
-        if validateFlags(MOD_ISSIMPLE_CLS,  info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_SIMCLS, token)
-        elseif validateFlags(MOD_ASSIMPLE_CLS, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_ASSIMP, token)
-
-            if info[FLD_IC_OBJFTR] then
-                token = turnOnFlags(FLG_IC_OBJFTR, token)
-                tinsert(upval, info[FLD_IC_OBJFTR])
-            end
-        end
-
         if info[FLD_IC_CLINIT] then
             token   = turnOnFlags(FLG_IC_HSCLIN, token)
             tinsert(upval, info[FLD_IC_CLINIT])
@@ -6055,6 +5976,7 @@ do
             local head      = _Cache()
             local body      = _Cache()
             local apis      = _Cache()
+            local hasctor   = validateFlags(FLG_IC_HSCLIN, token)
 
             uinsert(apis, "setmetatable")
 
@@ -6062,145 +5984,91 @@ do
 
             tinsert(body, "")                       -- remain for shareable variables
             tinsert(body, "return function(%s)")    -- remain for special variables
-            tinsert(body, [[return function(info, first, ...)]])
+            if hasctor then
+                tinsert(body, [[return function(info, ...)]])
+            else
+                tinsert(body, [[return function(info, first, ...)]])
+            end
 
             tinsert(body, [[local obj]])
 
             if validateFlags(FLG_IC_EXIST, token) then
                 tinsert(head, "extobj")
-                tinsert(body, [[
-                    obj = extobj(first, ...)
-                    if obj ~= nil then return obj end
-                ]])
+                if hasctor then
+                    tinsert(body, [[obj = extobj(...) if obj ~= nil then return obj end]])
+                else
+                    tinsert(body, [[obj = extobj(first, ...) if obj ~= nil then return obj end]])
+                end
             end
 
             if validateFlags(FLG_IC_NEWOBJ, token) then
                 uinsert(apis, "type")
                 tinsert(head, "newobj")
-                tinsert(body, [[
-                    obj = newobj(first, ...)
-                    if type(obj) ~= "table" then obj = nil end
-                ]])
+                tinsert(body, [[local cutargs]])
+                if hasctor then
+                    tinsert(body, [[obj, cutargs = newobj(...)]])
+                else
+                    tinsert(body, [[obj, cutargs = newobj(first, ...)]])
+                end
+                tinsert(body, [[if type(obj) ~= "table" then obj, cutargs = nil, false end]])
             end
 
-            if validateFlags(FLG_IC_SIMCLS, token) or validateFlags(FLG_IC_ASSIMP, token) or not validateFlags(FLG_IC_HSCLIN, token) then
+            if not hasctor then
                 uinsert(apis, "select")
                 uinsert(apis, "type")
                 uinsert(apis, "getmetatable")
 
-                tinsert(body, [[
-                    local init = select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil and first or nil
-                ]])
-
                 if validateFlags(FLG_IC_NEWOBJ, token) then
-                    tinsert(body, [[
-                        if obj == first then init = false end
-                    ]])
-                end
-
-                if validateFlags(FLG_IC_SIMCLS, token) or validateFlags(FLG_IC_ASSIMP, token) then
-                    tinsert(body, [[
-                        if init and not obj then
-                    ]])
-
-                    if validateFlags(FLG_IC_SIMCLS, token) or not validateFlags(FLG_IC_OBJFTR, token) then
-                        tinsert(body, [[obj, init = init, false]])
-                    else
-                        uinsert(apis, "pairs")
-                        tinsert(head, "objftr")
-                        tinsert(body, [[
-                            local noconflict = true
-                            for k in pairs, objftr do
-                                if init[k] ~= nil then
-                                    noconflict = false break
-                                end
-                            end
-                            if noconflict then obj, init = init, false end
-                        ]])
-                    end
-
-                    tinsert(body, [[
-                        end
-                    ]])
+                    tinsert(body, [[local init = not cutargs and select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil and first or nil]])
+                else
+                    tinsert(body, [[local init = select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil and first or nil]])
                 end
             end
 
-            if validateFlags(FLG_IC_NEWOBJ, token) or validateFlags(FLG_IC_SIMCLS, token) or validateFlags(FLG_IC_ASSIMP, token) then
-                tinsert(body, [[
-                    obj = obj or {}
-                ]])
+            if validateFlags(FLG_IC_NEWOBJ, token) then
+                tinsert(body, [[obj = obj or {}]])
             else
-                tinsert(body, [[
-                    obj = {}
-                ]])
+                tinsert(body, [[obj = {}]])
             end
 
             if validateFlags(FLG_IC_FIELD, token) then
                 uinsert(apis, "pairs")
                 tinsert(head, "fields")
-                tinsert(body, [[
-                    for fld, val in pairs, fields do
-                        if obj[fld] == nil then obj[fld] = val end
-                    end
-                ]])
+                tinsert(body, [[for fld, val in pairs, fields do if obj[fld] == nil then obj[fld] = val end end]])
             end
 
             if validateFlags(FLG_IC_NEWOBJ, token) then
                 uinsert(apis, "pcall")
-                uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
-                tinsert(body, [[
-                    if not pcall(setmetatable, obj, objmeta) then error(strformat("The %s's __new meta-method doesn't provide a valid table as object", tostring(objmeta["__metatable"])), 3) end
-                ]])
+                uinsert(apis, "throw")
+                tinsert(body, [[if not pcall(setmetatable, obj, objmeta) then throw(strformat("The %s's __new meta-method doesn't provide a valid table as object", tostring(objmeta["__metatable"]))) end]])
             else
-                tinsert(body, [[
-                    setmetatable(obj, objmeta)
-                ]])
+                tinsert(body, [[setmetatable(obj, objmeta)]])
             end
 
-            if validateFlags(FLG_IC_HSCLIN, token) then
+            if hasctor then
                 tinsert(head, "clinit")
-                if validateFlags(FLG_IC_SIMCLS, token) or validateFlags(FLG_IC_ASSIMP, token) then
-                    tinsert(body, [[
-                        if init == false then
-                            clinit(obj)
-                        else
-                            clinit(obj, first, ...)
-                        end
-                    ]])
+                if validateFlags(FLG_IC_NEWOBJ, token) then
+                    tinsert(body, [[if cutargs then clinit(obj) else clinit(obj, ...) end]])
                 else
-                    tinsert(body, [[clinit(obj, first, ...)]])
+                    tinsert(body, [[clinit(obj, ...)]])
                 end
             else
                 uinsert(apis, "pcall")
                 uinsert(apis, "loadInitTable")
-                uinsert(apis, "error")
                 uinsert(apis, "strmatch")
-                tinsert(body, [[
-                    if init then
-                        local ok, msg = pcall(loadInitTable, obj, init)
-                        if not ok then error(strmatch(msg, "%d+:%s*(.-)$") or msg, 3) end
-                    end
-                ]])
+                uinsert(apis, "throw")
+                tinsert(body, [[if init then local ok, msg = pcall(loadInitTable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
             if validateFlags(FLG_IC_HSIFIN, token) then
                 tinsert(head, "_max")
 
-                tinsert(body, [[
-                    for i = ]] .. FLD_IC_STINIT .. [[, _max do
-                        info[i](obj)
-                    end
-                ]])
+                tinsert(body, [[for i = ]] .. FLD_IC_STINIT .. [[, _max do info[i](obj) end]])
             end
 
-            tinsert(body, [[
-                    return obj
-                end
-            ]])
-
-            tinsert(body, [[end]])
+            tinsert(body, [[return obj end end]])
 
             if #apis > 0 then
                 local declare   = tblconcat(apis, ", ")
@@ -6452,13 +6320,6 @@ do
                 info[FLD_IC_OBJFLD]     = objfld
                 info[FLD_IC_OBJEXT]     = info[FLD_IC_EXIST] or supext
                 info[FLD_IC_OBJNEW]     = info[FLD_IC_NEWOBJ] or supnew
-
-                -- Check simple class
-                if not (info[FLD_IC_CLINIT] or info[FLD_IC_OBJFTR]) then
-                    info[FLD_IC_MOD]    = turnOnFlags(MOD_ISSIMPLE_CLS, info[FLD_IC_MOD])
-                else
-                    info[FLD_IC_MOD]    = turnOffFlags(MOD_ISSIMPLE_CLS, info[FLD_IC_MOD])
-                end
 
                 genMetaIndex(info)
                 genMetaNewIndex(info)
@@ -7013,6 +6874,12 @@ do
                 return target
             end;
 
+            --- Get the definition context of the interface
+            -- @static
+            -- @method  GetDefault
+            -- @return  prototype                   the context type
+            ["GetDefinitionContext"] = function() return interfacebuilder end;
+
             --- Get all the extended interfaces of the target interface
             -- @static
             -- @method  GetExtends
@@ -7459,11 +7326,15 @@ do
             -- @static
             -- @method  ValidateValue
             -- @owner   interface
+            -- @format  (target, value[, onlyvalid])
             -- @param   target                      the target interface
             -- @param   value                       the value used to validate
+            -- @param   onlyvalid                   if true use true instead of the error message
             -- @return  value                       the validated value, nil if not valid
-            ["ValidateValue"]   = function(extendIF, value)
-                return value and class.IsSubType(getmetatable(value), extendIF) and value or nil
+            -- @return  error                       the error message if the value is not valid
+            ["ValidateValue"]   = function(target, value, onlyvalid)
+                if class.IsSubType(getmetatable(value), target) then return value end
+                return nil, onlyvalid or ("the %s is not an object that extend the [interface]" .. tostring(target))
             end;
 
             -- Whether the target is an interface
@@ -7654,6 +7525,12 @@ do
 
                 return target
             end;
+
+            --- Get the definition context of the class
+            -- @static
+            -- @method  GetDefault
+            -- @return  prototype                   the context type
+            ["GetDefinitionContext"] = function() return classbuilder end;
 
             --- Get all the extended interfaces of the target class
             -- @static
@@ -7911,17 +7788,6 @@ do
             -- @return  boolean                     true if the class is sealed
             ["IsSealed"]        = interface.IsSealed;
 
-            --- Whether the class is a simple class, that would wrap the init-table as object
-            -- @static
-            -- @method  IsSimpleClass
-            -- @owner   class
-            -- @param   target                      the target class
-            -- @return  boolean                     true if the class is a simple class
-            ["IsSimpleClass"]   = function(target)
-                local info      = getAttributeInfo(target)
-                return info and (validateFlags(MOD_ISSIMPLE_CLS, info[FLD_IC_MOD]) or validateFlags(MOD_ASSIMPLE_CLS, info[FLD_IC_MOD])) or false
-            end;
-
             --- Whether the class is a single version class, so old object would receive re-defined class's features
             -- @static
             -- @method  IsSingleVersion
@@ -7974,19 +7840,6 @@ do
                     stack = name
                     setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack)
                 end
-            end;
-
-            --- Set the class as a simple class, normally class without constructor and
-            -- type features would be treated as simple class, also can use this API to
-            -- mark it manually
-            -- @static
-            -- @method  SetAsSimpleClass
-            -- @owner   class
-            -- @format  (target[, stack])
-            -- @param   target                      the target class
-            -- @param   stack                       the stack level
-            ["SetAsSimpleClass"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_ASSIMPLE_CLS, "SetAsSimpleClass", stack)
             end;
 
             --- Set the class's constructor
@@ -8158,15 +8011,15 @@ do
             -- @static
             -- @method  ValidateValue
             -- @owner   class
+            -- @format  (target, value[, onlyvalid])
             -- @param   target                      the target class
             -- @param   value                       the value used to validate
+            -- @param   onlyvalid                   if true use true instead of the error message
             -- @return  value                       the validated value, nil if not valid
-            ["ValidateValue"]   = function(cls, value)
-                local ocls      = getmetatable(value)
-                if not ocls     then return false end
-                if ocls == cls  then return true end
-                local info      = getICTargetInfo(ocls)
-                return info and info[FLD_IC_SUPINFO] and info[FLD_IC_SUPINFO][cls] and true or false
+            -- @return  error                       the error message if the value is not valid
+            ["ValidateValue"]   = function(target, value, onlyvalid)
+                if class.IsSubType(getmetatable(value), target) then return value end
+                return nil, onlyvalid or ("the %s is not an object of the [class]" .. tostring(target))
             end;
 
             -- Whether the target is a class
@@ -10446,6 +10299,7 @@ do
     environment.RegisterGlobalKeyword {
         namespace               = namespace,
         import                  = import,
+        export                  = export,
         enum                    = enum,
         struct                  = struct,
         class                   = class,
@@ -10456,7 +10310,7 @@ do
     -----------------------------------------------------------------------
     --                          struct keyword                           --
     -----------------------------------------------------------------------
-    environment.RegisterContextKeyword(structbuilder, {
+    environment.RegisterContextKeyword(struct.GetDefinitionContext(), {
         member                  = member,
         array                   = array,
         endstruct               = rawget(_PLoopEnv, "endstruct"),
@@ -10465,7 +10319,7 @@ do
     -----------------------------------------------------------------------
     --                         interface keyword                         --
     -----------------------------------------------------------------------
-    environment.RegisterContextKeyword(interfacebuilder, {
+    environment.RegisterContextKeyword(interface.GetDefinitionContext(), {
         require                 = require,
         extend                  = extend,
         field                   = field,
@@ -10477,7 +10331,7 @@ do
     -----------------------------------------------------------------------
     --                           class keyword                           --
     -----------------------------------------------------------------------
-    environment.RegisterContextKeyword(classbuilder, {
+    environment.RegisterContextKeyword(class.GetDefinitionContext(), {
         inherit                 = inherit,
         extend                  = extend,
         field                   = field,
@@ -10667,21 +10521,6 @@ do
             attribute.Register(prototype.NewObject(self, { value }))
         end,
         __newindex = readOnly, __tostring = getAttributeName
-    })
-
-    -----------------------------------------------------------------------
-    -- Set the enum as case ignored
-    --
-    -- @attribute   System.__CaseIgnored__
-    -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__CaseIgnored__",           prototype {
-        __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                enum.SetCaseIgnored(target, parsestack(stack) + 1)
-            end,
-            ["AttributeTarget"] = ATTRTAR_ENUM,
-        },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11008,22 +10847,6 @@ do
     })
 
     -----------------------------------------------------------------------
-    -- Set the class as a simple class, so it'll try to use the init-table
-    -- as the object
-    --
-    -- @attribute   System.__Simple__
-    -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Simple__",                prototype {
-        __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetAsSimpleClass(target, parsestack(stack) + 1)
-            end,
-            ["AttributeTarget"] = ATTRTAR_CLASS,
-        },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
-    })
-
-    -----------------------------------------------------------------------
     -- Set the class as a single version class, so all old objects of it
     -- will always use the newest definition
     --
@@ -11261,7 +11084,7 @@ do
 
         function (var, onlyvalid)
             if var.type and var.default ~= nil then
-                local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, onlyvalid)
+                local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, true)
                 if msg then return onlyvalid or "the %s.default don't match its type" end
             end
         end,
@@ -11270,6 +11093,8 @@ do
             var.valid = var.type and getprototypemethod(var.type, "ValidateValue")
             if var.valid and var.default ~= nil then
                 var.default     = var.valid(var.type, var.default)
+            end
+            if var.default ~= nil then
                 var.nilable     = true
             end
         end,
@@ -11340,19 +11165,19 @@ do
         --                       property                       --
         -----------------------------------------------------------
         --- the attribute target
-        property "AttributeTarget"  { type = AttributeTargets        }
+        __Abstract__() property "AttributeTarget"  { type = AttributeTargets        }
 
         --- whether the attribute is inheritable
-        property "Inheritable"      { type = Boolean                 }
+        __Abstract__() property "Inheritable"      { type = Boolean                 }
 
         --- whether the attribute is overridable
-        property "Overridable"      { type = Boolean, default = true }
+        __Abstract__() property "Overridable"      { type = Boolean, default = true }
 
         --- the attribute's priority
-        property "Priority"         { type = AttributePriorty        }
+        __Abstract__() property "Priority"         { type = AttributePriorty        }
 
         --- the attribute's sub level of priority
-        property "SubLevel"         { type = Number,  default = 0    }
+        __Abstract__() property "SubLevel"         { type = Number,  default = 0    }
 
         -----------------------------------------------------------
         --                      initializer                      --
@@ -11427,43 +11252,56 @@ do
     __Sealed__() __Final__()
     class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
         extend "IInitAttribtue"
+
         -----------------------------------------------------------
         --                        storage                        --
         -----------------------------------------------------------
-        local _OverloadMap      = newStorage(WEAK_KEY)
+        _OverloadMap            = newStorage(WEAK_KEY)
+
+        _SelfVLDListMap         = {}            -- has self, is  list map
+        _SelfVLDNLSTMap         = {}            -- has self, not list map
+        _FuncVLDListMap         = {}            -- no  self, is  list map
+        _FuncVLDNLSTMap         = {}            -- no  self, not list map
 
         -----------------------------------------------------------
         --                        constant                       --
         -----------------------------------------------------------
-        local FLD_ARG_FUNCTN    =  0
-        local FLD_ARG_MINARG    = -1
-        local FLD_ARG_MAXARG    = -2
-        local FLD_ARG_ISLIST    = -3
-        local FLD_ARG_IMMTBL    = -4
-        local FLD_ARG_USGMSG    = -5
+        FLD_ARG_FUNCTN          =  0
+        FLD_ARG_MINARG          = -1
+        FLD_ARG_MAXARG          = -2
+        FLD_ARG_ISLIST          = -3
+        FLD_ARG_IMMTBL          = -4
+        FLD_ARG_USGMSG          = -5
+        FLD_ARG_VARVLD          = -6
 
-        local TYPE_VALD_DISD    = Platform.TYPE_VALIDATION_DISABLED
+        TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
+
+        NO_SELF_METHOD          = {
+            __new               = true,
+            __exist             = true,
+        }
 
         -----------------------------------------------------------
         --                        helpers                        --
         -----------------------------------------------------------
-        local validate          = Struct.ValidateValue
-        local geterrmsg         = Struct.GetErrorMessage
-        local saveStorage       = saveStorage
-        local ipairs            = _G.ipairs
-        local getobjectvalue    = getobjectvalue
-        local tinsert           = tinsert
-        local tblconcat         = tblconcat
-        local strformat         = strformat
-        local type              = type
+        export {
+            _G                  = _G,
+            validate            = Struct.ValidateValue,
+            geterrmsg           = Struct.GetErrorMessage,
+            saveStorage         = saveStorage,
+            ipairs              = ipairs,
+            getobjectvalue      = getobjectvalue,
+            tinsert             = tinsert,
+            tblconcat           = tblconcat,
+            strformat           = strformat,
+            type                = type,
+            getmetatable        = getmetatable,
+            tostring            = tostring,
+            loadSnippet         = loadSnippet,
+            _Cache              = _Cache,
+        }
 
-        local Enum              = Enum
-        local Struct            = Struct
-        local Interface         = Interface
-        local Class             = Class
-        local Variables         = Variables
-        local AttributeTargets  = AttributeTargets
-        local StructCategory    = StructCategory
+        export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory }
 
         local function serializeData(data)
             local dtype         = type(data)
@@ -11487,7 +11325,7 @@ do
                         end
                         return tblconcat(cache, " + ")
                     else
-                        return ns(data)
+                        return Enum.Parse(ns, data)
                     end
                 elseif Struct.Validate(ns) then
                     if Struct.GetStructType(ns) == StructCategory.CUSTOM then
@@ -11515,7 +11353,7 @@ do
                 tinsert(usage, strformat("Usage: %s(", name))
             end
 
-            for i, var in ipairs(vars) do
+            for i, var in ipairs, vars, 0 do
                 if i > 1 then tinsert(usage, ", ") end
 
                 if var.nilable then tinsert(usage, "[") end
@@ -11544,6 +11382,52 @@ do
             vars[FLD_ARG_USGMSG]= tblconcat(usage, "")
         end
 
+        local function genVariablesValid(vars, hasself)
+            local token = 0
+            local upval = _Cache()
+
+            -- Build the validator generator
+            if not _SelfVLDListMap[token] then
+                local head      = _Cache()
+                local body      = _Cache()
+                local apis      = _Cache()
+
+                tinsert(body, "")                       -- remain for shareable variables
+                tinsert(body, "return function(%s)")    -- remain for special variables
+                tinsert(body, [[return function(...)]])
+
+                tinsert(body, [[
+                        end
+                    end
+                ]])
+
+                if #apis > 0 then
+                    local declare   = tblconcat(apis, ", ")
+                    body[1]         = strformat("local %s = %s", declare, declare)
+                end
+
+                body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
+
+                _SelfVLDListMap[token]  = loadSnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token)()
+
+                if #head == 0 then
+                    _SelfVLDListMap[token] = _SelfVLDListMap[token]()
+                end
+
+                _Cache(head)
+                _Cache(body)
+                _Cache(apis)
+            end
+
+            if #upval > 0 then
+                vars[FLD_ARG_VARVLD] = _SelfVLDListMap[token](unpack(upval))
+            else
+                vars[FLD_ARG_VARVLD] = _SelfVLDListMap[token]
+            end
+
+            _Cache(upval)
+        end
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -11565,6 +11449,7 @@ do
                 [FLD_ARG_ISLIST]= false,
                 [FLD_ARG_IMMTBL]= true,
                 [FLD_ARG_USGMSG]= "",
+                [FLD_ARG_VARVLD]= false,
             }
 
             local minargs
@@ -11632,17 +11517,22 @@ do
 
     --- Represents containers of several functions as event handlers
     __Sealed__() __Final__()
-    Delegate = class "System.Delegate"  (function(_ENV)
+    Delegate = class (_PLoopEnv, "System.Delegate") (function(_ENV)
         event "OnChange"
 
-        local tinsert       = table.insert
-        local tremove       = table.remove
-        local getmetatable  = getmetatable
-        local ipairs        = _G.ipairs
-        local type          = type
-        local error         = error
+        -----------------------------------------------------------
+        --                        helpers                        --
+        -----------------------------------------------------------
+        export {
+            tinsert             = tinsert,
+            tremove             = tremove,
+            getmetatable        = getmetatable,
+            ipairs              = ipairs,
+            type                = type,
+            error               = error,
+        }
 
-        local attribute     = Attribute
+        export { Attribute, AttributeTargets }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -11665,7 +11555,7 @@ do
             if ret then return end
 
             -- Call the stacked handlers
-            for _, func in ipairs(self) do
+            for _, func in ipairs, self, 0 do
                 ret = func(...)
 
                 if ret then return end
@@ -11737,21 +11627,21 @@ do
         function __add(self, func)
             if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
 
-            if attribute.HaveRegisteredAttributes() then
+            if Attribute.HaveRegisteredAttributes() then
                 local owner     = self.Owner
                 local name      = self.Name
 
-                attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
-                local ret = attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, owner, name, 2)
+                Attribute.SaveAttributes(func, AttributeTargets.Function, 2)
+                local ret = Attribute.InitDefinition(func, AttributeTargets.Function, func, owner, name, 2)
                 if ret ~= func then
-                    attribute.ToggleTarget(func, ret)
+                    Attribute.ToggleTarget(func, ret)
                     func = ret
                 end
-                attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, owner, name, 2)
-                attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
+                Attribute.ApplyAttributes (func, AttributeTargets.Function, owner, name, 2)
+                Attribute.AttachAttributes(func, AttributeTargets.Function, owner, name, 2)
             end
 
-            for _, f in ipairs(self) do
+            for _, f in ipairs, self, 0 do
                 if f == ret then return self end
             end
 
@@ -11763,7 +11653,7 @@ do
         --- Use to remove stackable handler from the delegate
         -- @usage   obj.OnEvent = obj.OnEvent - func
         function __sub(self, func)
-            for i, f in ipairs(self) do
+            for i, f in ipairs, self, 0 do
                 if f == func then
                     tremove(self, i)
                     OnChange(self)
