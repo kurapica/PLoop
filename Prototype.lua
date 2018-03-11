@@ -1761,7 +1761,7 @@ do
                     if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
                         uinsert(apis, "Warn")
                         uinsert(apis, "tostring")
-                        tinsert(body, [[Warn("The %q is auto saved to %s", (stack or 1) + 1, name, tostring(env))]])
+                        tinsert(body, [[Warn("The [%s] is auto saved to %s, need use 'export{ %q }'", (stack or 1) + 1, name, tostring(env), name)]])
                     end
                 else
                     uinsert(apis, "rawset")
@@ -2008,6 +2008,15 @@ do
         if not visitor  then error("Usage: export(name|namelist) - The system can't figure out the environment", stack + 1) end
 
         environment.ExportVariables(visitor, name or definition)
+    end
+
+    -----------------------------------------------------------------------
+    -- get the current environment
+    --
+    -- @keyword     currentenv
+    -----------------------------------------------------------------------
+    currentenv                  = function (...)
+        return environment.GetKeywordVisitor(currentenv)
     end
 end
 
@@ -10305,6 +10314,7 @@ do
         class                   = class,
         interface               = interface,
         throw                   = throw,
+        currentenv              = currentenv,
     }
 
     -----------------------------------------------------------------------
@@ -10908,37 +10918,30 @@ do
     })
 
     -----------------------------------------------------------------------
-    -- Set the enum as flags enumeration and add union enumeration value to
-    -- the enum
+    -- Create an index auto-increased enumeration
     --
-    -- @attribute   System.__Union__
+    -- @attribute   System.__Index__
+    -- @usage       __Index__ { A = 0, C = 10 }
+    --              enum "Test" { "A", "B", "C", "D" }
+    --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Union__",                 prototype {
+    namespace.SaveNamespace("System.__Index__",                 prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local value     = self[1]
                 stack           = parsestack(stack) + 1
-                if type(value) == "table" then
-                    __Flags__.InitDefinition(self, target, targettype, definition, owner, name, stack)
 
-                    for k, v in pairs, value do
-                        if type(v) == "table" then
-                            local total     = 0
-                            for _, en in ipairs, v, 0 do
-                                total       = total + definition[en] or error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union key must eixsted in the enumeration's definition", stack)
-                            end
+                local newdef    = {}
+                local idx       = 0
 
-                            definition[k]   = total
-                        else
-                            error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union keys must be contained in a table", stack)
-                        end
-                    end
-                else
-                    error("Usage: __Union__{ Key = { 'A', 'B' } } enum { 'A', 'B' } - the union table is not valid", stack)
+                if value and type(value) ~= "table" then value = nil end
+
+                for _, name in ipairs, definition, 0 do
+                    idx         = value and value[name] or (idx + 1)
+                    newdef[name]= idx
                 end
-            end,
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                enum.SetFlagsEnum(target, parsestack(stack) + 1)
+
+                return newdef
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
         },
@@ -11076,26 +11079,40 @@ do
 
     --- Represents the variable types for arguments or return values
     __Sealed__() Variable = struct "System.Variable"{
-        { name = "type",    type = AnyType },
-        { name = "nilable", type = Boolean },
-        { name = "default",                },
-        { name = "name",    type = String  },
-        { name = "islist",  type = Boolean },
+        { name = "type",        type = AnyType  },
+        { name = "nilable",     type = Boolean  },
+        { name = "default",                     },
+        { name = "name",        type = String   },
+        { name = "islist",      type = Boolean  },
+        { name = "validate"                     },  -- auto generated
+        { name = "immutable"                    },  -- auto generated
 
         function (var, onlyvalid)
-            if var.type and var.default ~= nil then
-                local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, true)
-                if msg then return onlyvalid or "the %s.default don't match its type" end
+            if var.default ~= nil then
+                if var.islist then return onlyvalid or "the %s is a list, can't have default value" end
+                if not var.nilable then return onlyvalid or "the %s is not nilable, can't have default value" end
+                if var.type then
+                    local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, true)
+                    if msg then return onlyvalid or "the %s.default don't match its type" end
+                end
             end
         end,
 
         __init = function (var)
-            var.valid = var.type and getprototypemethod(var.type, "ValidateValue")
-            if var.valid and var.default ~= nil then
-                var.default     = var.valid(var.type, var.default)
+            if var.type then
+                var.validate = getprototypemethod(var.type, "ValidateValue")
+                var.immutable= getobjectvalue(var.type, "IsImmutable")
+
+                if var.default ~= nil then
+                    var.default = var.validate(var.type, var.default)
+                end
+            else
+                var.validate = nil
+                var.immutable= true
             end
-            if var.default ~= nil then
-                var.nilable     = true
+
+            if var.nilable and var.default ~= nil then
+                var.immutable= false
             end
         end,
     }
@@ -11257,22 +11274,23 @@ do
         --                        storage                        --
         -----------------------------------------------------------
         _OverloadMap            = newStorage(WEAK_KEY)
-
-        _SelfVLDListMap         = {}            -- has self, is  list map
-        _SelfVLDNLSTMap         = {}            -- has self, not list map
-        _FuncVLDListMap         = {}            -- no  self, is  list map
-        _FuncVLDNLSTMap         = {}            -- no  self, not list map
+        _ArgValdMap             = {}
+        _OverloadMap            = {}
 
         -----------------------------------------------------------
         --                        constant                       --
         -----------------------------------------------------------
-        FLD_ARG_FUNCTN          =  0
-        FLD_ARG_MINARG          = -1
-        FLD_ARG_MAXARG          = -2
-        FLD_ARG_ISLIST          = -3
-        FLD_ARG_IMMTBL          = -4
-        FLD_ARG_USGMSG          = -5
-        FLD_ARG_VARVLD          = -6
+        FLD_VAR_FUNCTN          =  0
+        FLD_VAR_MINARG          = -1
+        FLD_VAR_MAXARG          = -2
+        FLD_VAR_ISLIST          = -3
+        FLD_VAR_IMMTBL          = -4
+        FLD_VAR_USGMSG          = -5
+        FLD_VAR_VARVLD          = -6
+
+        FLD_OVD_FUNCTN          =  0
+        FLD_OVD_OWNER           = -1
+        FLD_OVD_NAME            = -2
 
         TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
 
@@ -11281,24 +11299,48 @@ do
             __exist             = true,
         }
 
+        CTOR_NAME               = "__ctor"
+
+        FLG_VAR_METHOD          = newflags(true)    -- is method
+        FLG_VAR_SELFIN          = newflags()        -- has self
+        FLG_VAR_IMMTBL          = newflags()        -- all immutable
+        FLG_VAR_ISLIST          = newflags()        -- the last variable is list
+        FLG_VAR_IMMLST          = newflags()        -- the list variable is immutable
+        FLG_VAR_LSTNIL          = newflags()        -- the list variable is nilable
+        FLG_VAR_LSTVLD          = newflags()        -- the list variable has type
+        FLG_VAR_LENGTH          = newflags()        -- the multiply factor of length
+
+        FLG_OVD_SELFIN          = newflags(true)    -- has elf
+        FLG_OVD_THROW           = newflags()        -- use throw
+        FLG_OVD_ONECNT          = newflags()        -- only one variable list
+
+        ORDINAL_NUMBER          = { "1st", "2nd", "3rd" }
+
         -----------------------------------------------------------
         --                        helpers                        --
         -----------------------------------------------------------
         export {
-            _G                  = _G,
             validate            = Struct.ValidateValue,
             geterrmsg           = Struct.GetErrorMessage,
             saveStorage         = saveStorage,
             ipairs              = ipairs,
             getobjectvalue      = getobjectvalue,
             tinsert             = tinsert,
+            uinsert             = uinsert,
             tblconcat           = tblconcat,
             strformat           = strformat,
+            strgsub             = strgsub,
             type                = type,
             getmetatable        = getmetatable,
             tostring            = tostring,
             loadSnippet         = loadSnippet,
             _Cache              = _Cache,
+            turnOnFlags         = turnOnFlags,
+            validateFlags       = validateFlags,
+            parseOrdinalNumber  = function (i) return ORDINAL_NUMBER[i] or (i .. "th") end,
+            unpack              = unpack,
+            error               = error,
+            select              = select,
         }
 
         export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory }
@@ -11344,7 +11386,9 @@ do
             local usage         = {}
 
             if ismethod then
-                if getmetatable(owner).IsStaticMethod(owner, name) then
+                if CTOR_NAME == name then
+                    tinsert(usage, strformat("Usage: %s(", tostring(owner)))
+                elseif getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
                 else
                     tinsert(usage, strformat("Usage: %s:%s(", tostring(owner), name))
@@ -11379,22 +11423,238 @@ do
 
             tinsert(usage, ")")
 
-            vars[FLD_ARG_USGMSG]= tblconcat(usage, "")
+            vars[FLD_VAR_USGMSG]= tblconcat(usage, "")
         end
 
-        local function genVariablesValid(vars, hasself)
-            local token = 0
-            local upval = _Cache()
+        local function genArgumentValid(vars, ismethod, hasself)
+            local len   = #vars
+            if len     == 0 then return end
+
+            local token = len * FLG_VAR_LENGTH
+            local islist= false
+
+            if ismethod then
+                token   = turnOnFlags(FLG_VAR_METHOD, token)
+
+                if hasself then
+                    token = turnOnFlags(FLG_VAR_SELFIN, token)
+                end
+            end
+
+            if vars[FLD_VAR_IMMTBL] then
+                token   = turnOnFlags(FLG_VAR_IMMTBL, token)
+            end
+
+            if vars[FLD_VAR_ISLIST] then
+                islist  = true
+                token   = turnOnFlags(FLG_VAR_ISLIST, token)
+                if vars[len].immutable then
+                    token = turnOnFlags(FLG_VAR_IMMLST, token)
+                end
+                if vars[len].type then
+                    token = turnOnFlags(FLG_VAR_LSTVLD, token)
+                end
+                if vars[len].nilable then
+                    token = turnOnFlags(FLG_VAR_LSTNIL, token)
+                end
+            end
 
             -- Build the validator generator
-            if not _SelfVLDListMap[token] then
+            if not _ArgValdMap[token] then
                 local head      = _Cache()
                 local body      = _Cache()
                 local apis      = _Cache()
+                local args      = _Cache()
+
+                uinsert(apis, "type")
+                uinsert(apis, "strgsub")
+                uinsert(apis, "tostring")
 
                 tinsert(body, "")                       -- remain for shareable variables
-                tinsert(body, "return function(%s)")    -- remain for special variables
-                tinsert(body, [[return function(...)]])
+
+                for i = 1, len do args[i] = "v" .. i end
+                if ismethod then
+                    tinsert(body, strformat("return function(func, %s)", tblconcat(args, ", ")))
+                else
+                    tinsert(body, strformat("return function(usage, func, %s)", tblconcat(args, ", ")))
+                end
+
+                for i = 1, len do args[i] = "a" .. i end
+                if islist then args[len] = nil end
+                if ismethod and hasself then tinsert(args, 1, "self") end
+
+                args = tblconcat(args, ", ")
+
+                if ismethod then
+                    if islist then
+                        tinsert(body, strformat([[return function(onlyvalid, %s, ...)]], args))
+                    else
+                        tinsert(body, strformat([[return function(onlyvalid, %s)]], args))
+                    end
+                else
+                    uinsert(apis, "error")
+                    if islist then
+                        tinsert(body, strformat([[return function(%s, ...)]], args))
+                    else
+                        tinsert(body, strformat([[return function(%s)]], args))
+                    end
+                end
+
+                tinsert(body, [[local ret, msg]])
+
+                if ismethod then tinsert(body, [[local nochange = onlyvalid ~= nil]]) end
+
+                for i = 1, islist and (len - 1) or len do
+                    if ismethod then
+                        tinsert(body, (([[
+                            if _ai_ == nil then
+                                if not _vi_.nilable then return onlyvalid or "the _i_ argument can't be nil" end
+                                _ai_ = _vi_.default
+                            elseif _vi_.type then
+                                ret, msg = _vi_.validate(_vi_.type, _ai_, nochange)
+                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
+                                _ai_ = ret
+                            end
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseOrdinalNumber(i))))
+                    else
+                        tinsert(body, (([[
+                            if _ai_ == nil then
+                                if not _vi_.nilable then error(usage .. " - the _i_ argument can't be nil", 2) end
+                                _ai_ = _vi_.default
+                            elseif _vi_.type then
+                                ret, msg = _vi_.validate(_vi_.type, _ai_)
+                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 2) end
+                                _ai_ = ret
+                            end
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseOrdinalNumber(i))))
+                    end
+                end
+
+                if not islist then
+                    if ismethod then
+                        tinsert(body, [[if nochange then return end]])
+                    end
+                    tinsert(body, strformat([[return func(%s)]], args))
+                else
+                    if ismethod then
+                        if validateFlags(FLG_VAR_IMMLST, token) then
+                            if not validateFlags(FLG_VAR_LSTNIL, token) or validateFlags(FLG_VAR_LSTVLD, token) then
+                                uinsert(apis, "select")
+                                tinsert(body, [[
+                                    local vlen = select("#", ...)
+                                ]])
+                                if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, [[
+                                        if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
+                                    ]])
+                                end
+                                if validateFlags(FLG_VAR_LSTVLD, token) then
+                                    uinsert(apis, "parseOrdinalNumber")
+                                    tinsert(body, (([[
+                                        local vtype = _vi_.type
+                                        local valid = _vi_.validate
+                                        for i = 1, vlen do
+                                            ret, msg= valid(vtype, select(i, ...), nochange)
+                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                        end
+                                    ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                                end
+                            end
+
+                            tinsert(body, [[if nochange then return end]])
+                            tinsert(body, strformat([[return func(%s, ...)]], args))
+                        else
+                            uinsert(apis, "select")
+                            uinsert(apis, "parseOrdinalNumber")
+                            tinsert(body, [[
+                                local vlen = select("#", ...)
+                            ]])
+                            if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                tinsert(body, [[
+                                    if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
+                                ]])
+                            end
+                            tinsert(body, (([[
+                                if vlen > 0 then
+                                    local vtype = _vi_.type
+                                    local valid = _vi_.validate
+
+                                    if nochange then
+                                        for i = 1, vlen do
+                                            ret, msg= valid(vtype, select(i, ...), nochange)
+                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                        end
+                                        return
+                                    else
+                                        local vlst  = { ... }
+                                        for i = 1, vlen do
+                                            ret, msg= valid(vtype, vlst[i], nochange)
+                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                            vlst[i] = ret
+                                        end
+                                        return func(_arg_, unpack(vlst))
+                                    end
+                                else
+                                    if nochange then return end
+                                    return func(_arg_)
+                                end
+                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                        end
+                    else
+                        if validateFlags(FLG_VAR_IMMLST, token) then
+                            if not validateFlags(FLG_VAR_LSTNIL, token) or validateFlags(FLG_VAR_LSTVLD, token) then
+                                uinsert(apis, "select")
+                                tinsert(body, [[
+                                    local vlen = select("#", ...)
+                                ]])
+                                if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, [[
+                                        if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
+                                    ]])
+                                end
+                                if validateFlags(FLG_VAR_LSTVLD, token) then
+                                    uinsert(apis, "parseOrdinalNumber")
+                                    tinsert(body, (([[
+                                        local vtype = _vi_.type
+                                        local valid = _vi_.validate
+                                        for i = 1, vlen do
+                                            ret, msg= valid(vtype, (select(i, ...)))
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                        end
+                                    ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                                end
+                            end
+
+                            tinsert(body, strformat([[return func(%s, ...)]], args))
+                        else
+                            uinsert(apis, "select")
+                            uinsert(apis, "parseOrdinalNumber")
+                            tinsert(body, [[
+                                local vlen = select("#", ...)
+                            ]])
+                            if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                tinsert(body, [[
+                                    if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
+                                ]])
+                            end
+                            tinsert(body, (([[
+                                if vlen > 0 then
+                                    local vtype = _vi_.type
+                                    local valid = _vi_.validate
+                                    local vlst  = { ... }
+                                    for i = 1, vlen do
+                                        ret, msg= valid(vtype, vlst[i])
+                                        if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                        vlst[i] = ret
+                                    end
+                                    return func(_arg_, unpack(vlst))
+                                else
+                                    return func(_arg_)
+                                end
+                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                        end
+                    end
+                end
 
                 tinsert(body, [[
                         end
@@ -11406,26 +11666,136 @@ do
                     body[1]         = strformat("local %s = %s", declare, declare)
                 end
 
-                body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
+                _ArgValdMap[token]  = loadSnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
 
-                _SelfVLDListMap[token]  = loadSnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token)()
-
-                if #head == 0 then
-                    _SelfVLDListMap[token] = _SelfVLDListMap[token]()
-                end
-
-                _Cache(head)
                 _Cache(body)
                 _Cache(apis)
             end
 
-            if #upval > 0 then
-                vars[FLD_ARG_VARVLD] = _SelfVLDListMap[token](unpack(upval))
+            if ismethod then
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](unpack(vars, 0))
             else
-                vars[FLD_ARG_VARVLD] = _SelfVLDListMap[token]
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](vars[FLD_VAR_USGMSG], unpack(vars, 0))
+            end
+        end
+
+        local function genOverload(overload, hasself)
+            local token         = 0
+
+            if hasself then
+                token           = turnOnFlags(FLG_OVD_SELFIN, token)
             end
 
-            _Cache(upval)
+            if CTOR_NAME == overload[FLD_OVD_NAME] then
+                token           = turnOnFlags(FLG_OVD_THROW, token)
+            end
+
+            if #overload == 1 then
+                token           = turnOnFlags(FLG_OVD_ONECNT, token)
+            end
+
+            -- Build the validator generator
+            if not _OverloadMap[token] then
+                local body      = _Cache()
+                local apis      = _Cache()
+
+                uinsert(apis, "select")
+
+                tinsert(body, "")                       -- remain for shareable variables
+
+                tinsert(body, "return function(overload, count)")
+
+                if hasself then
+                    tinsert(body, [[return function(self, ...)]])
+                else
+                    tinsert(body, [[return function(...)]])
+                end
+
+                if #overload == 1 then
+                    tinsert(body, [[
+                        local vars= overload[1]
+                        local vald= vars[]] .. FLD_VAR_VARVLD .. [[]
+                        local msg = vald(false, ]] .. (hasself and "self, " or "") .. [[...)
+                    ]])
+                    if validateFlags(FLG_OVD_THROW, token) then
+                        tinsert(body, [[
+                            if msg then throw(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg) end
+                        ]])
+                    else
+                        uinsert(apis, "error")
+                        tinsert(body, [[
+                            if msg then error(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg, 2) end
+                        ]])
+                    end
+                    tinsert(body, [[
+                        if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                        else
+                            return vald(nil, ]] .. (hasself and "self, " or "") .. [[...)
+                        end
+                    ]])
+                else
+                    uinsert(apis, "tblconcat")
+                    tinsert(body, [[
+                        local argcnt = select("#", ...)
+                        if argcnt == 0 then
+                            for i = 1, count do
+                                local vars = overload[i]
+                                if vars[]] .. FLD_VAR_MAXARG .. [[] == 0 then
+                                    return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                end
+                            end
+                        else
+                            for i = 1, count do
+                                local vars = overload[i]
+                                if vars[]] .. FLD_VAR_MINARG .. [[] <= argcnt and argcnt <= vars[]] .. FLD_VAR_MAXARG .. [[] then
+                                    local valid = vars[]] .. FLD_VAR_VARVLD .. [[]
+
+                                    if valid(true, ]] .. (hasself and "self, " or "") .. [[...) == nil then
+                                        if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                        else
+                                            return vald(nil, ]] .. (hasself and "self, " or "") .. [[...)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        -- Raise the usages
+                        local usages = {}
+                        for i = 1, count do usages[i] = overload[i][]] .. FLD_VAR_USGMSG .. [[] end
+                        usages = "Usages: " .. tblconcat(usages, "\n        ")
+                    ]])
+                    if validateFlags(FLG_OVD_THROW, token) then
+                        tinsert(body, [[
+                            throw(usages)
+                        ]])
+                    else
+                        uinsert(apis, "error")
+                        tinsert(body, [[
+                           error(usages, 2)
+                        ]])
+                    end
+                end
+
+
+                tinsert(body, [[
+                        end
+                    end
+                ]])
+
+                if #apis > 0 then
+                    local declare   = tblconcat(apis, ", ")
+                    body[1]         = strformat("local %s = %s", declare, declare)
+                end
+
+                _OverloadMap[token]  = loadSnippet(tblconcat(body, "\n"), "Overload_Process_" .. token, currentenv())()
+
+                _Cache(body)
+                _Cache(apis)
+            end
+
+            overload[FLD_OVD_FUNCTN] = _OverloadMap[token](overload, #overload)
         end
 
         -----------------------------------------------------------
@@ -11443,13 +11813,13 @@ do
             local len           = #self
 
             local vars          = {
-                [FLD_ARG_FUNCTN]= definition,
-                [FLD_ARG_MINARG]= len,
-                [FLD_ARG_MAXARG]= len,
-                [FLD_ARG_ISLIST]= false,
-                [FLD_ARG_IMMTBL]= true,
-                [FLD_ARG_USGMSG]= "",
-                [FLD_ARG_VARVLD]= false,
+                [FLD_VAR_FUNCTN]= definition,
+                [FLD_VAR_MINARG]= len,
+                [FLD_VAR_MAXARG]= len,
+                [FLD_VAR_ISLIST]= false,
+                [FLD_VAR_IMMTBL]= true,
+                [FLD_VAR_USGMSG]= "",
+                [FLD_VAR_VARVLD]= false,
             }
 
             local minargs
@@ -11459,32 +11829,67 @@ do
                 local var       = self[i]
                 vars[i]         = var
                 if var.islist then
-                    vars[FLD_ARG_ISLIST]    = true
-                    vars[FLD_ARG_MAXARG]    = 255
+                    vars[FLD_VAR_ISLIST]    = true
+                    vars[FLD_VAR_MAXARG]    = 255
                 end
 
                 if var.nilable then
                     minargs     = minargs or i - 1
                 end
 
-                if immutable and var.type then
-                    immutable   = getobjectvalue(var.type, "IsImmutable") and getobjectvalue(var.type, "IsSealed") or false
+                if not var.immutable then
+                    immutable   = false
                 end
             end
 
-            vars[FLD_ARG_MINARG]= minargs or vars[FLD_ARG_MINARG]
-            vars[FLD_ARG_IMMTBL]= immutable
+            vars[FLD_VAR_MINARG]= minargs or vars[FLD_VAR_MINARG]
+            vars[FLD_VAR_IMMTBL]= immutable
 
             if targettype == AttributeTargets.Method then
+                local hasself = not (NO_SELF_METHOD[name] or getmetatable(owner).IsStaticMethod(owner, name))
+                buildUsage(vars, owner, name, true)
+                genArgumentValid(vars, true, hasself)
 
+                local overload  = _OverloadMap[owner] and _OverloadMap[owner][name]
+
+                if overload then
+                    local eidx
+                    -- Check if override
+                    for i, evars in ipairs, overload, 0 do
+                        if #evars == #vars then
+                            eidx= i
+                            for j, v in ipairs, evars, 0 do
+                                if v.type ~= vars[j].type then
+                                    eidx = nil
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    if eidx then
+                        overload= saveStorage(overload, eidx, vars)
+                    else
+                        overload= saveStorage(overload, #overload + 1, vars)
+                    end
+                else
+                    overload    = { vars, [FLD_OVD_OWNER] = owner, [FLD_OVD_NAME] = name }
+                end
+
+                genOverload(overload, hasself)
+
+                _OverloadMap    = saveStorage(_OverloadMap, owner, saveStorage(_OverloadMap[owner] or {}, name, overload))
+
+                if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] then return end
+
+                return overload[FLD_OVD_FUNCTN]
             else
-                if TYPE_VALD_DISD and vars[FLD_ARG_IMMTBL] then return end
+                if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] then return end
 
                 buildUsage(vars, owner, name, false)
+                genArgumentValid(vars, false)
 
-                return function (...)
-                    error(vars[FLD_ARG_USGMSG], 2)
-                end
+                return vars[FLD_VAR_VARVLD]
             end
         end
 
