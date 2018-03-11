@@ -11713,9 +11713,14 @@ do
 
                 if #overload == 1 then
                     tinsert(body, [[
-                        local vars= overload[1]
-                        local vald= vars[]] .. FLD_VAR_VARVLD .. [[]
-                        local msg = vald(false, ]] .. (hasself and "self, " or "") .. [[...)
+                        local vars = overload[1]
+                        local valid= vars[]] .. FLD_VAR_VARVLD .. [[]
+                        local msg
+                        if not valid then
+                            if select("#", ...) > 0 then msg = "no arguments can be accepted" end
+                        else
+                            msg  = valid(false, ]] .. (hasself and "self, " or "") .. [[...)
+                        end
                     ]])
                     if validateFlags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
@@ -11731,7 +11736,7 @@ do
                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
                             return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
                         else
-                            return vald(nil, ]] .. (hasself and "self, " or "") .. [[...)
+                            return valid(nil, ]] .. (hasself and "self, " or "") .. [[...)
                         end
                     ]])
                 else
@@ -11755,7 +11760,7 @@ do
                                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
                                             return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
                                         else
-                                            return vald(nil, ]] .. (hasself and "self, " or "") .. [[...)
+                                            return valid(nil, ]] .. (hasself and "self, " or "") .. [[...)
                                         end
                                     end
                                 end
