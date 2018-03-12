@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/07                                               --
+-- Update Date  :   2018/03/12                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -213,10 +213,16 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         OBJECT_NO_RAWSEST                   = false,
 
-
         --- Whether all class objects can't fetch nil value from it, combine it
         -- with @OBJ_NO_RAWSEST will force a strict mode for development.
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
         OBJECT_NO_NIL_ACCESS                = false,
+
+        --- Whether save the creation places (source and line) for all objects
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        OBJECT_DEBUG_SOURCE                 = false,
 
         --- The Log level used in the Prototype core part.
         --          1 : Trace
@@ -5297,6 +5303,8 @@ do
 
     local MOD_INITVAL_IF        = (PLOOP_PLATFORM_SETTINGS.INTERFACE_ALL_ANONYMOUS_CLASS and MOD_ANYMOUS_CLS   or 0)
 
+    local INI_FLD_DEBUGSR       = PLOOP_PLATFORM_SETTINGS.OBJECT_DEBUG_SOURCE or nil
+
     -- STATIC FIELDS
     local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
     local FLD_IC_SUPCLS         =  0                -- FIELD SUPER CLASS
@@ -5314,19 +5322,20 @@ do
     local FLD_IC_SUPER          =-12                -- FIELD SUPER
     local FLD_IC_THIS           =-13                -- FIELD THIS
     local FLD_IC_ANYMSCL        =-14                -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FLD_IC_DEBUGSR        =-15                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
 
     -- CACHE FIELDS
-    local FLD_IC_STAFTR         =-15                -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJMTD         =-16                -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM         =-17                -- FIELD OBJECT META-METHODS
-    local FLD_IC_OBJFTR         =-18                -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJFLD         =-19                -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_OBJEXT         =-20                -- FIELD OBJECT EXIST CHECK
-    local FLD_IC_OBJNEW         =-21                -- FIELD OBJECT NEW OBJECT
-    local FLD_IC_ONEABS         =-22                -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO        =-23                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD         =-24                -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR         =-25                -- FIELD SUPER FEATURE
+    local FLD_IC_STAFTR         =-16                -- FIELD STATIC TYPE FEATURES
+    local FLD_IC_OBJMTD         =-17                -- FIELD OBJECT METHODS
+    local FLD_IC_OBJMTM         =-18                -- FIELD OBJECT META-METHODS
+    local FLD_IC_OBJFTR         =-19                -- FIELD OBJECT FEATURES
+    local FLD_IC_OBJFLD         =-20                -- FIELD OBJECT INIT-FIELDS
+    local FLD_IC_OBJEXT         =-21                -- FIELD OBJECT EXIST CHECK
+    local FLD_IC_OBJNEW         =-22                -- FIELD OBJECT NEW OBJECT
+    local FLD_IC_ONEABS         =-23                -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    local FLD_IC_SUPINFO        =-24                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPMTD         =-25                -- FIELD SUPER METHOD & META-METHODS
+    local FLD_IC_SUPFTR         =-26                -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
     local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
@@ -5419,6 +5428,7 @@ do
     -- UNSAFE FIELD
     local FLD_IC_META           = "__PLOOP_IC_META"
     local FLD_IC_TYPE           = "__PLOOP_IC_TYPE"
+    local FLD_OBJ_SOURCE        = "__PLOOP_OBJ_SOURCE"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -5642,6 +5652,7 @@ do
             [FLD_IC_SUPER]      = info and info[FLD_IC_SUPER],
             [FLD_IC_THIS]       = info and info[FLD_IC_THIS],
             [FLD_IC_ANYMSCL]    = info and info[FLD_IC_ANYMSCL] or isclass and nil,
+            [FLD_IC_DEBUGSR]    = info and info[FLD_IC_DEBUGSR] or isclass and INI_FLD_DEBUGSR or nil,
 
             -- CACHE FIELDS
             [FLD_IC_STAFTR]     = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
@@ -6597,6 +6608,13 @@ do
         addSuperType(info, target, super)
     end
 
+    local setObjectSourceDebug  = function (target, stack)
+        local info, _, stack, msg  = preDefineCheck(target, nil, stack)
+        if not info then return msg, stack end
+        if not class.Validate(target) then return "the target is not valid", stack end
+        info[FLD_IC_DEBUGSR]    = true
+    end
+
     local setModifiedFlag       = function (tType, target, flag, methodName, stack)
         local info, _, stack, msg = preDefineCheck(target, nil, stack)
 
@@ -7455,6 +7473,18 @@ do
                 if msg then error("Usage: class.AddMethod(target, name, func[, stack]) - " .. msg, stack + 1) end
             end;
 
+            --- Attach source place to the object
+            -- @static
+            -- method   AttachObjectSource
+            -- @owner   class
+            -- @format  (object[, stack])
+            -- @param   object                      the target object
+            -- @param   stack                       the stack level
+            ["AttachObjectSource"] = function(object, stack)
+                if type(object) ~= "table" then error("Usage: class.AttachObjectSource(object[, stack]) - the object is not valid", 2) end
+                rawset(object, FLD_OBJ_SOURCE, getCallLine(parsestack(stack) + 1))
+            end;
+
             --- Begin the class's definition
             -- @static
             -- @method  BeginDefinition
@@ -7502,33 +7532,6 @@ do
                 saveICInfo(target, ninfo)
 
                 attribute.AttachAttributes(target, ATTRTAR_CLASS, nil, nil, stack)
-
-                reDefineChildren(target, stack)
-
-                return target
-            end;
-
-            --- Refresh the class's definition
-            -- @static
-            -- @method  EndDefinition
-            -- @owner   class
-            -- @format  (target[, stack])
-            -- @param   target                      the target class
-            -- @param   stack                       the stack level
-            ["RefreshDefinition"] = function(target, stack)
-                stack           = parsestack(stack) + 1
-
-                target          = class.Validate(target)
-                if not target then error("Usage: class.RefreshDefinition(target[, stack]) - the target is not valid", stack) end
-                if _ICBuilderInfo[target] then error(strformat("Usage: class.RefreshDefinition(target[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
-
-                local ninfo     = getInitICInfo(target, true)
-
-                -- Generate caches and constructor
-                genTypeCaches(target, ninfo, stack)
-
-                -- Save as new interface's info
-                saveICInfo(target, ninfo)
 
                 reDefineChildren(target, stack)
 
@@ -7634,6 +7637,16 @@ do
                 return class.Validate(getmetatable(object))
             end;
 
+            --- Get the object's creation place
+            -- @static
+            -- @method  GetObjectSource
+            -- @owner   class
+            -- @param   object                      the object
+            -- @return  source                      where the object is created
+            ["GetObjectSource"]     = function(object)
+                return type(object) == "table" and rawget(object, FLD_OBJ_SOURCE) or nil
+            end;
+
             --- Get the super class of the target class
             -- @static
             -- @method  GetSuperClass
@@ -7691,33 +7704,6 @@ do
                 return info and info[FLD_IC_THIS]
             end;
 
-            --- Whether the target class is a sub-type of another interface or class
-            -- @static
-            -- @method  IsSubType
-            -- @owner   class
-            -- @format  (target, extendIF)
-            -- @format  (target, superclass)
-            -- @param   target                      the target class
-            -- @param   extendIF                    the extened interface
-            -- @param   superclass                  the super class
-            -- @return  boolean                     true if the target class is a sub-type of another interface or class
-            ["IsSubType"]       = function(target, supertype)
-                if target == supertype then return true end
-                local info = getICTargetInfo(target)
-                if info then
-                    if getmetatable(supertype) == class then
-                        local sp= info[FLD_IC_SUPCLS]
-                        while sp and sp ~= supertype do
-                            sp  = getICTargetInfo(sp)[FLD_IC_SUPCLS]
-                        end
-                        return sp and true or false
-                    else
-                        for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == supertype then return true end end
-                    end
-                end
-                return false
-            end;
-
             --- Whether the class is abstract, can't generate objects
             -- @static
             -- @method  IsAbstract
@@ -7754,6 +7740,17 @@ do
             ["IsObjectFunctionAttributeEnabled"] = function(target)
                 local info      = getICTargetInfo(target)
                 return info and validateFlags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) or false
+            end;
+
+            --- Whether the class object'll save its source when created
+            -- @static
+            -- @method  IsObjectSourceDebug
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the class object'll save its source when created
+            ["IsObjectSourceDebug"] = function(target)
+                local info      = getICTargetInfo(target)
+                return info and info[FLD_IC_DEBUGSR] or false
             end;
 
             --- Whether the class object don't receive any value assignment excpet existed fields
@@ -7816,6 +7813,60 @@ do
             -- @param   name                        the method's name
             -- @return  boolean                     true if the method is static
             ["IsStaticMethod"]  = interface.IsStaticMethod;
+
+            --- Whether the target class is a sub-type of another interface or class
+            -- @static
+            -- @method  IsSubType
+            -- @owner   class
+            -- @format  (target, extendIF)
+            -- @format  (target, superclass)
+            -- @param   target                      the target class
+            -- @param   extendIF                    the extened interface
+            -- @param   superclass                  the super class
+            -- @return  boolean                     true if the target class is a sub-type of another interface or class
+            ["IsSubType"]       = function(target, supertype)
+                if target == supertype then return true end
+                local info = getICTargetInfo(target)
+                if info then
+                    if getmetatable(supertype) == class then
+                        local sp= info[FLD_IC_SUPCLS]
+                        while sp and sp ~= supertype do
+                            sp  = getICTargetInfo(sp)[FLD_IC_SUPCLS]
+                        end
+                        return sp and true or false
+                    else
+                        for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == supertype then return true end end
+                    end
+                end
+                return false
+            end;
+
+            --- Refresh the class's definition
+            -- @static
+            -- @method  EndDefinition
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["RefreshDefinition"] = function(target, stack)
+                stack           = parsestack(stack) + 1
+
+                target          = class.Validate(target)
+                if not target then error("Usage: class.RefreshDefinition(target[, stack]) - the target is not valid", stack) end
+                if _ICBuilderInfo[target] then error(strformat("Usage: class.RefreshDefinition(target[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+
+                local ninfo     = getInitICInfo(target, true)
+
+                -- Generate caches and constructor
+                genTypeCaches(target, ninfo, stack)
+
+                -- Save as new interface's info
+                saveICInfo(target, ninfo)
+
+                reDefineChildren(target, stack)
+
+                return target
+            end;
 
             --- Register a parser to analyse key-value pair as definition for the class or interface
             -- @static
@@ -8003,6 +8054,18 @@ do
                 if msg then error("Usage: class.SetSuperClass(target, superclass[, stack])  - " .. msg, stack + 1) end
             end;
 
+            --- Set the class object'll to save its source when created
+            -- @static
+            -- @method  SetObjectSourceDebug
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["SetObjectSourceDebug"]= function(target, stack)
+                local msg, stack    = setObjectSourceDebug(target, stack)
+                if msg then error("Usage: class.SetObjectSourceDebug(target[, stack])  - " .. msg, stack + 1) end
+            end;
+
             --- Mark the class's method as static
             -- @static
             -- @method  SetStaticMethod
@@ -8135,6 +8198,10 @@ do
                 else
                     error(tostring(obj), 2)
                 end
+            end
+            if info[FLD_IC_DEBUGSR] then
+                local src       = getCallLine(2)
+                if src then rawset(obj, FLD_OBJ_SOURCE, src) end
             end
             return obj
         end,
@@ -10349,21 +10416,6 @@ do
         property                = property,
         endclass                = rawget(_PLoopEnv, "endclass"),
     })
-
-    -----------------------------------------------------------------------
-    --                            _G keyword                             --
-    -----------------------------------------------------------------------
-    _G.namespace                = _G.namespace or namespace
-    _G.import                   = _G.import or import
-    _G.enum                     = _G.enum or enum
-    _G.struct                   = _G.struct or struct
-    _G.class                    = _G.class or class
-    _G.interface                = _G.interface or interface
-
-    -----------------------------------------------------------------------
-    --                             Must Have                             --
-    -----------------------------------------------------------------------
-    _G.PLoop                    = ROOT_NAMESPACE
 end
 
 -------------------------------------------------------------------------------
@@ -10397,6 +10449,8 @@ do
     end
 
     local getAttributeName      = function(self) return namespace.GetNamespaceName(getmetatable(self)) end
+
+    local regSelfOrObject       = function(self, tbl) attribute.Register(type(tbl) == "table" and prototype.NewObject(self, tbl) or self) end
 
     local parseLambda           = function(value, onlyvalid)
         if _LambdaCache[value] then return end
@@ -10464,7 +10518,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10504,7 +10558,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10599,7 +10653,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10698,7 +10752,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10739,7 +10793,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10755,7 +10809,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10771,7 +10825,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10787,7 +10841,25 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    -----------------------------------------------------------------------
+    -- Set the class's objects to save the source where it's created
+    --
+    -- @attribute   System.__ObjectSource__
+    -----------------------------------------------------------------------
+    __ObjectSource__ = namespace.SaveNamespace("System.__ObjectSource__", prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                if targettype == ATTRTAR_CLASS then
+                    class.SetObjectSourceDebug(target, parsestack(stack) + 1)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
+            ["Inheritable"]     = false,
+        },
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10820,7 +10892,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_INTERFACE + ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10869,7 +10941,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10896,7 +10968,7 @@ do
             ["AttributeTarget"] = ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
             ["Priority"]        = 9999,     -- Should be applied at the first for method
         },
-        __call = attribute.Register, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -10920,12 +10992,12 @@ do
     -----------------------------------------------------------------------
     -- Create an index auto-increased enumeration
     --
-    -- @attribute   System.__Index__
-    -- @usage       __Index__ { A = 0, C = 10 }
+    -- @attribute   System.__AutoIndex__
+    -- @usage       __AutoIndex__ { A = 0, C = 10 }
     --              enum "Test" { "A", "B", "C", "D" }
     --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Index__",                 prototype {
+    namespace.SaveNamespace("System.__AutoIndex__",             prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local value     = self[1]
@@ -11153,8 +11225,15 @@ do
     --                             interface                             --
     -----------------------------------------------------------------------
     --- the interface of attribtue
-    __Sealed__()
+    __Sealed__() __ObjectSource__{ Inheritable = true }
     interface "System.IAttribtue" (function(_ENV)
+
+        export {
+            GetObjectSource = Class.GetObjectSource,
+            tostring        = tostring,
+            getmetatable    = getmetatable,
+        }
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -11200,6 +11279,11 @@ do
         --                      initializer                      --
         -----------------------------------------------------------
         IAttribtue          = Attribute.Register
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __tostring(self) return tostring(getmetatable(self) .. (GetObjectSource(self) or "")) end
     end)
 
     --- the interface to modify the target's definition
@@ -11301,6 +11385,12 @@ do
 
         CTOR_NAME               = "__ctor"
 
+        THORW_METHOD            = {
+            __exist             = true,
+            __new               = true,
+            __ctor              = true,
+        }
+
         FLG_VAR_METHOD          = newflags(true)    -- is method
         FLG_VAR_SELFIN          = newflags()        -- has self
         FLG_VAR_IMMTBL          = newflags()        -- all immutable
@@ -11343,7 +11433,7 @@ do
             select              = select,
         }
 
-        export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory }
+        export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
 
         local function serializeData(data)
             local dtype         = type(data)
@@ -11388,7 +11478,7 @@ do
             if ismethod then
                 if CTOR_NAME == name then
                     tinsert(usage, strformat("Usage: %s(", tostring(owner)))
-                elseif getmetatable(owner).IsStaticMethod(owner, name) then
+                elseif NO_SELF_METHOD[name] or getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
                 else
                     tinsert(usage, strformat("Usage: %s:%s(", tostring(owner), name))
@@ -11686,13 +11776,17 @@ do
                 token           = turnOnFlags(FLG_OVD_SELFIN, token)
             end
 
-            if CTOR_NAME == overload[FLD_OVD_NAME] then
+            if THORW_METHOD[overload[FLD_OVD_NAME]] then
                 token           = turnOnFlags(FLG_OVD_THROW, token)
             end
 
             if #overload == 1 then
                 token           = turnOnFlags(FLG_OVD_ONECNT, token)
             end
+
+            local usages = { "the calling style must be one of the follow:" }
+            for i = 1, #overload do usages[i + 1] = overload[i][FLD_VAR_USGMSG] end
+            usages = tblconcat(usages, "\n    ")
 
             -- Build the validator generator
             if not _OverloadMap[token] then
@@ -11703,7 +11797,7 @@ do
 
                 tinsert(body, "")                       -- remain for shareable variables
 
-                tinsert(body, "return function(overload, count)")
+                tinsert(body, "return function(overload, count, usages)")
 
                 if hasself then
                     tinsert(body, [[return function(self, ...)]])
@@ -11767,9 +11861,6 @@ do
                             end
                         end
                         -- Raise the usages
-                        local usages = {}
-                        for i = 1, count do usages[i] = overload[i][]] .. FLD_VAR_USGMSG .. [[] end
-                        usages = "Usages: " .. tblconcat(usages, "\n        ")
                     ]])
                     if validateFlags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
@@ -11800,7 +11891,15 @@ do
                 _Cache(apis)
             end
 
-            overload[FLD_OVD_FUNCTN] = _OverloadMap[token](overload, #overload)
+            overload[FLD_OVD_FUNCTN] = _OverloadMap[token](overload, #overload, usages)
+        end
+
+        -----------------------------------------------------------
+        --                     static method                     --
+        -----------------------------------------------------------
+        --- Generate an overload method to handle all rest argument groups
+        __Static__() function Rest()
+            Class.AttachObjectSource(__Arguments__{ { islist = true, nilable = true} }, 2)
         end
 
         -----------------------------------------------------------
@@ -12072,9 +12171,46 @@ do
             end
             return self
         end
+
+        export { Delegate }
+    end)
+
+    --- Wrap the target function within the given function like pcall
+    __Sealed__() __Final__()
+    class "System.__Delegate__" (function(_ENV)
+        extend "IInitAttribtue"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            local wrap          = self[1]
+            return function(...) return wrap(target, ...) end
+        end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__ { Function }
+        function __new(func) return { func } end
     end)
 
     --- Represents errors that occur during application execution
+    __Sealed__()
     Exception = class "System.Exception"(function(_ENV)
         -----------------------------------------------------------
         --                       property                       --
@@ -12116,6 +12252,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{ String, Variable(Exception, true), Variable(Boolean, true) }
         function Exception(self, message, inner, savevariables)
             self.Message        = message
             self.InnerException = inner
@@ -12125,10 +12262,64 @@ do
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
-        function __tostring(self)
-            return self.Message
-        end
+        function __tostring(self) return self.Message end
     end)
+
+    --- Represents the tree containers for codes, it's the recommended
+    -- environment for coding with PLoop
+    __Sealed__()
+    Module = class (_PLoopEnv, "System.Module") (function(_ENV)
+
+        -----------------------------------------------------------
+        --                        storage                        --
+        -----------------------------------------------------------
+
+        -----------------------------------------------------------
+        --                        constant                       --
+        -----------------------------------------------------------
+
+        -----------------------------------------------------------
+        --                        helpers                        --
+        -----------------------------------------------------------
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+    end)
+end
+
+-------------------------------------------------------------------------------
+--                              _G installation                              --
+-------------------------------------------------------------------------------
+do
+    -----------------------------------------------------------------------
+    --                            _G keyword                             --
+    -----------------------------------------------------------------------
+    _G.namespace                = _G.namespace  or namespace
+    _G.import                   = _G.import     or import
+    _G.enum                     = _G.enum       or enum
+    _G.struct                   = _G.struct     or struct
+    _G.class                    = _G.class      or class
+    _G.interface                = _G.interface  or interface
+    _G.Module                   = _G.Module     or Module
+
+    -----------------------------------------------------------------------
+    --                             Must Have                             --
+    -----------------------------------------------------------------------
+    _G.PLoop                    = ROOT_NAMESPACE
 end
 
 return ROOT_NAMESPACE
