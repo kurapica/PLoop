@@ -1958,15 +1958,6 @@ do
             end;
         },
         __newindex              = readOnly,
-        __call                  = function(self, definition)
-            local env           = prototype.NewObject(tenvironment)
-            environment.Initialize(env)
-            if definition then
-                return env(definition)
-            else
-                return env
-            end
-        end,
     }
 
     tenvironment                = prototype {
@@ -1975,7 +1966,8 @@ do
         __call                  = function(self, definition)
             if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
             setfenv(definition, self)
-            return definition(self)
+            definition(self)
+            return self
         end,
     }
 
@@ -5009,7 +5001,7 @@ end
 --                  end
 --
 --                  -- The existence checker
---                  function __exist(name)
+--                  function __exist(cls, name)
 --                      if __ExistPerson[name] then
 --                          print("An object existed with " .. name)
 --                          return __ExistPerson[name]
@@ -5051,17 +5043,17 @@ end
 -- increased like :
 --
 --              class "List" (function(_ENV)
---                  function __new(...)
---                      return { ... }
+--                  function __new(cls, ...)
+--                      return { ... }, true
 --                  end
 --              end)
 --
 --              v = List(1, 2, 3, 4, 5, 6)
 --
--- The `__new` would recieve all parameters and return a table and a boolean
--- value, if the value is true, all parameters will be discarded so won't pass
--- to the constructor. So for the List class, the `__new` meta will eliminate
--- the rehash cost of the object's initialization.
+-- The `__new` would recieve the class and all parameters and return a table
+-- and a boolean value, if the value is true, all parameters will be discarded
+-- so won't pass to the constructor. So for the List class, the `__new` meta
+-- will eliminate the rehash cost of the object's initialization.
 --
 -- The `__field` meta is a table, contains several key-value paris to be saved
 -- in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the
@@ -5965,6 +5957,10 @@ do
 
         tinsert(upval, info[FLD_IC_OBJMTM])
 
+        if info[FLD_IC_OBJEXT] or info[FLD_IC_OBJNEW] then
+            tinsert(upval, target)
+        end
+
         if info[FLD_IC_OBJEXT] then
             token   = turnOnFlags(FLG_IC_EXIST, token)
             tinsert(upval, info[FLD_IC_OBJEXT])
@@ -6012,12 +6008,16 @@ do
 
             tinsert(body, [[local obj]])
 
+            if validateFlags(FLG_IC_EXIST, token) or validateFlags(FLG_IC_NEWOBJ, token) then
+                tinsert(head, "cls")
+            end
+
             if validateFlags(FLG_IC_EXIST, token) then
                 tinsert(head, "extobj")
                 if hasctor then
-                    tinsert(body, [[obj = extobj(...) if obj ~= nil then return obj end]])
+                    tinsert(body, [[obj = extobj(cls, ...) if obj ~= nil then return obj end]])
                 else
-                    tinsert(body, [[obj = extobj(first, ...) if obj ~= nil then return obj end]])
+                    tinsert(body, [[obj = extobj(cls, first, ...) if obj ~= nil then return obj end]])
                 end
             end
 
@@ -6026,9 +6026,9 @@ do
                 tinsert(head, "newobj")
                 tinsert(body, [[local cutargs]])
                 if hasctor then
-                    tinsert(body, [[obj, cutargs = newobj(...)]])
+                    tinsert(body, [[obj, cutargs = newobj(cls, ...)]])
                 else
-                    tinsert(body, [[obj, cutargs = newobj(first, ...)]])
+                    tinsert(body, [[obj, cutargs = newobj(cls, first, ...)]])
                 end
                 tinsert(body, [[if type(obj) ~= "table" then obj, cutargs = nil, false end]])
             end
@@ -8199,7 +8199,7 @@ do
                     error(tostring(obj), 2)
                 end
             end
-            if info[FLD_IC_DEBUGSR] then
+            if info[FLD_IC_DEBUGSR] and rawget(obj, FLD_OBJ_SOURCE) == nil then
                 local src       = getCallLine(2)
                 if src then rawset(obj, FLD_OBJ_SOURCE, src) end
             end
@@ -10303,6 +10303,16 @@ end
 -- call. A normal scenario is use the throw-exception style in the constructor
 -- of the classes.
 --
+--              class "A" (function(_ENV)
+--                  function A(self)
+--                      throw("The error will be thrown to where A() is called")
+--                  end
+--              end)
+--
+--              A()     -- Error: The error will be thrown to where A() is called
+--
+-- Now we can diff the calling errors(by throw) and code errors(like `1 = v`)
+--
 -- @keyword     throw
 -------------------------------------------------------------------------------
 do
@@ -11114,7 +11124,7 @@ do
     __Sealed__() struct "System.AnyBool"            { false, __init = function(val) return val and true or false end }
 
     --- Represents non-empty string
-    __Sealed__() struct "System.NEString"           { __base = String, function(val, onlyvalid) return strtrim(val) == "" and (onlyvalid or "the %s can't be an empty string") or nil end, __init = strtrim }
+    __Sealed__() struct "System.NEString"           { __base = String, function(val, onlyvalid) return strtrim(val) == "" and (onlyvalid or "the %s can't be an empty string") or nil end }
 
     --- Represents table value without meta-table
     __Sealed__() struct "System.RawTable"           { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
@@ -11154,7 +11164,7 @@ do
         { name = "type",        type = AnyType  },
         { name = "nilable",     type = Boolean  },
         { name = "default",                     },
-        { name = "name",        type = String   },
+        { name = "name",        type = NEString },
         { name = "islist",      type = Boolean  },
         { name = "validate"                     },  -- auto generated
         { name = "immutable"                    },  -- auto generated
@@ -11227,7 +11237,6 @@ do
     --- the interface of attribtue
     __Sealed__() __ObjectSource__{ Inheritable = true }
     interface "System.IAttribtue" (function(_ENV)
-
         export {
             GetObjectSource = Class.GetObjectSource,
             tostring        = tostring,
@@ -11346,6 +11355,35 @@ do
         end
     end)
 
+    --- the interface for code environment
+    __Sealed__()
+    interface "System.IEnvironment" {
+        -----------------------------------------------------------
+        --                      initializer                      --
+        -----------------------------------------------------------
+        __init                  = environment.Initialize,
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __index                 = environment.GetValue,
+        __newindex              = environment.SaveValue,
+        __call                  = function(self, ...)
+            local visitor, env, name, definition, flag, stack  = getFeatureParams(nil, nil, ...)
+
+            -- Module "Test" (function(_ENV) ... end)
+            if definition and type(definition) == "function" then
+                setfenv(definition, self)
+                definition(self)
+                return self
+            end
+
+            -- _ENV = Module "Test" "v1.0.0"
+            setfenv(stack + 1, self)
+            return self
+        end,
+    }
+
     -----------------------------------------------------------------------
     --                              classes                              --
     -----------------------------------------------------------------------
@@ -11378,13 +11416,6 @@ do
 
         TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
 
-        NO_SELF_METHOD          = {
-            __new               = true,
-            __exist             = true,
-        }
-
-        CTOR_NAME               = "__ctor"
-
         THORW_METHOD            = {
             __exist             = true,
             __new               = true,
@@ -11414,7 +11445,6 @@ do
             geterrmsg           = Struct.GetErrorMessage,
             saveStorage         = saveStorage,
             ipairs              = ipairs,
-            getobjectvalue      = getobjectvalue,
             tinsert             = tinsert,
             uinsert             = uinsert,
             tblconcat           = tblconcat,
@@ -11476,9 +11506,9 @@ do
             local usage         = {}
 
             if ismethod then
-                if CTOR_NAME == name then
+                if THORW_METHOD[name] then
                     tinsert(usage, strformat("Usage: %s(", tostring(owner)))
-                elseif NO_SELF_METHOD[name] or getmetatable(owner).IsStaticMethod(owner, name) then
+                elseif getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
                 else
                     tinsert(usage, strformat("Usage: %s:%s(", tostring(owner), name))
@@ -11950,7 +11980,7 @@ do
             vars[FLD_VAR_IMMTBL]= immutable
 
             if targettype == AttributeTargets.Method then
-                local hasself = not (NO_SELF_METHOD[name] or getmetatable(owner).IsStaticMethod(owner, name))
+                local hasself = not getmetatable(owner).IsStaticMethod(owner, name)
                 buildUsage(vars, owner, name, true)
                 genArgumentValid(vars, true, hasself)
 
@@ -12012,7 +12042,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        function __new(vars)
+        function __new(_, vars)
             if vars ~= nil then
                 local ret, msg  = validate(Variables, vars)
                 if msg then throw("Usage: __Arguments__{ ... } - " .. geterrmsg(msg, "")) end
@@ -12035,25 +12065,22 @@ do
         export {
             tinsert             = tinsert,
             tremove             = tremove,
-            getmetatable        = getmetatable,
             ipairs              = ipairs,
-            type                = type,
-            error               = error,
+            ATTRTAR_FUNCTION    = AttributeTargets.Function,
         }
 
-        export { Attribute, AttributeTargets }
+        export { Attribute }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Copy the handlers to the target delegate
         -- @param   target                      the target delegate
+        __Arguments__{ Delegate }
         function CopyTo(self, target)
-            if getmetatable(target) == Delegate then
-                local len = #self
-                for i = -1, len do target[i] = self[i] end
-                for i = len + 1, #target do target[i] = nil end
-            end
+            local len = #self
+            for i = -1, len do target[i] = self[i] end
+            for i = len + 1, #target do target[i] = nil end
         end
 
         --- Invoke the handlers with arguments
@@ -12081,30 +12108,24 @@ do
         end
 
         --- Set the init function to the delegate
-        -- @format  (init[, stack])
         -- @param   init                        the init function
-        -- @param   stack                       the stack level
-        function SetInitFunction(self, func, stack)
-            if func == nil or type(func) == "function" then
-                func = func or false
-                if self[0] ~= func then
-                    self[0] = func
-                    return OnChange(self)
-                end
+        __Arguments__{ Variable(Function, true) }
+        function SetInitFunction(self, func)
+            func = func or false
+            if self[0] ~= func then
+                self[0] = func
+                return OnChange(self)
             end
         end
 
         --- Set the final function to the delegate
-        -- @format  (final[, stack])
         -- @param   final                       the final function
-        -- @param   stack                       the stack level
-        function SetFinalFunction(self, func, stack)
-            if func == nil or type(func) == "function" then
-                func = func or false
-                if self[-1] ~= func then
-                    self[-1] = func
-                    return OnChange(self)
-                end
+        __Arguments__{ Variable(Function, true) }
+        function SetFinalFunction(self, func)
+            func = func or false
+            if self[-1] ~= func then
+                self[-1] = func
+                return OnChange(self)
             end
         end
 
@@ -12133,21 +12154,20 @@ do
 
         --- Use to add stackable handler to the delegate
         -- @usage   obj.OnEvent = obj.OnEvent + func
+        __Arguments__{ Function }
         function __add(self, func)
-            if type(func) ~= "function" then error("Usage: (Delegate + func) - the func must be a function", 2) end
-
             if Attribute.HaveRegisteredAttributes() then
                 local owner     = self.Owner
                 local name      = self.Name
 
-                Attribute.SaveAttributes(func, AttributeTargets.Function, 2)
-                local ret = Attribute.InitDefinition(func, AttributeTargets.Function, func, owner, name, 2)
+                Attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
+                local ret = Attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, owner, name, 2)
                 if ret ~= func then
                     Attribute.ToggleTarget(func, ret)
                     func = ret
                 end
-                Attribute.ApplyAttributes (func, AttributeTargets.Function, owner, name, 2)
-                Attribute.AttachAttributes(func, AttributeTargets.Function, owner, name, 2)
+                Attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, owner, name, 2)
+                Attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
             end
 
             for _, f in ipairs, self, 0 do
@@ -12161,6 +12181,7 @@ do
 
         --- Use to remove stackable handler from the delegate
         -- @usage   obj.OnEvent = obj.OnEvent - func
+        __Arguments__{ Function }
         function __sub(self, func)
             for i, f in ipairs, self, 0 do
                 if f == func then
@@ -12171,8 +12192,6 @@ do
             end
             return self
         end
-
-        export { Delegate }
     end)
 
     --- Wrap the target function within the given function like pcall
@@ -12206,7 +12225,7 @@ do
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__ { Function }
-        function __new(func) return { func } end
+        function __new(_, func) return { func } end
     end)
 
     --- Represents errors that occur during application execution
@@ -12269,31 +12288,199 @@ do
     -- environment for coding with PLoop
     __Sealed__()
     Module = class (_PLoopEnv, "System.Module") (function(_ENV)
+        extend "IEnvironment"
+
+        export {
+            rawget              = rawget,
+            rawset              = rawset,
+            saveStorage         = saveStorage,
+            type                = type,
+            strgsub             = strgsub,
+            strgmatch           = strgmatch,
+            strmatch            = strmatch,
+            fakefunc            = fakefunc,
+            wipe                = wipe,
+            pairs               = pairs,
+        }
+
+        export { Environment }
 
         -----------------------------------------------------------
         --                        storage                        --
         -----------------------------------------------------------
+        local _ModuleInfo       = Platform.UNSAFE_MODE and setmetatable({}, { __index = function(_, mdl) return type(mdl) == "table" and rawget(mdl, FLD_MDL_INFO) or nil end })
+                                                        or {}
 
         -----------------------------------------------------------
         --                        constant                       --
         -----------------------------------------------------------
+        FLD_MDL_CHILD           = 0
+        FLD_MDL_NAME            = 1
+        FLD_MDL_VER             = 2
+
+        FLD_MDL_INFO            = "__PLOOP_MODULE_META"
 
         -----------------------------------------------------------
         --                        helpers                        --
         -----------------------------------------------------------
+        local saveModuleInfo    = Platform.UNSAFE_MODE and function(mdl, info) rawset(mdl, FLD_MDL_INFO, info) end
+                                                        or function(mdl, info) _ModuleInfo = saveStorage(_ModuleInfo, mdl, info) end
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        --- Valiate the version if it's bigger than the current version of the module
+        -- @param   version:string                  the new version
+        -- @return  boolean                         true if the new version is bigger
+        __Arguments__{ NEString }
+        function ValidateVersion(self, version)
+            local info          = _ModuleInfo[self]
+            if info then
+                local oldver    = info[FLD_MDL_VER]
+                if not oldver then return true end
+
+                -- "a 1.0.0" < "b 1.0.0" < "v 1.0.0" < "r 1.0.0" < "r 1.1"
+                local oprefix   = strmatch(oldver, "^%D+")
+                local nprefix   = strmatch(version, "^%D+")
+
+                if oprefix ~= nprefix then
+                    if not oprefix then return true end
+                    if not nprefix then return false end
+                    return oprefix < nprefix
+                end
+
+                local onums     = strmatch(oldver, "%d+[%d%.]*")
+                local nnums     = strmatch(version, "%d+[%d%.]*")
+                if not onums then return nnums and true or false end
+                if not nnums then return false end
+
+                local f1        = strgmatch(onums .. ".", "(.-)%.")
+                local f2        = strgmatch(nnums .. ".", "(.-)%.")
+
+                local v1        = f1 and f1()
+                local v2        = f2 and f2()
+
+                while true do
+                    v1          = tonumber(v1)
+                    v2          = tonumber(v2)
+
+                    if not v1 then
+                        return v2 and true or false
+                    elseif not v2 then
+                        return false
+                    elseif v1 < v2 then
+                        return true
+                    elseif v1 > v2 then
+                        return false
+                    end
+
+                    v1          = f1()
+                    v2          = f2()
+                end
+            end
+            return false
+        end
+
+        --- Get all child modules
+        -- @param   cache                           whether save the result in cache
+        -- @rformat cache                           if save the result in cache
+        -- @rformat iterator                        if not save to cache
+        function GetModules(self, cache)
+            local info          = _ModuleInfo[self]
+            local child         = info and info[FLD_MDL_CHILD]
+            if child then
+                if cache then
+                    cache       = type(cache) == "table" and wipe(cache) or {}
+                    for k, v in pairs, child do cache[k] = v end
+                    return cache
+                else
+                    return function(self, n)
+                        return next(child, n)
+                    end, self
+                end
+            end
+            if cache then
+                return type(cache) == "table" and cache or nil
+            else
+                return fakefunc, self
+            end
+        end
 
         -----------------------------------------------------------
         --                       property                       --
         -----------------------------------------------------------
+        --- the module itself
+        property "_M"       { get = function(self) return self end }
 
+        --- the module's parent environment
+        property "_Parent"  { get = Environment.GetParent }
+
+        --- the module name
+        property "_Name"    { get = function(self) return _ModuleInfo[self][FLD_MDL_NAME] end }
+
+        --- the module version
+        property "_Version" { get = function(self) return _ModuleInfo[self][FLD_MDL_VER] or nil end }
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{
+            Variable{ type = NEString, name = "name" },
+            Variable{ type = Module,   name = "parent", nilable = true }
+        }
+        function __exist(cls, path, root)
+            root                = root or cls
+            path                = strgsub(path, "%s+", "")
+            local iter          = strgmatch(path, "[%P_]+")
+            local subname       = iter()
+
+            while subname do
+                local info      = _ModuleInfo[root]
+                if not info then return end
+                local child     = info[FLD_MDL_CHILD]
+                if not child or not child[subname] then return end
+                root = child[subname]
+                local nxt       = iter()
+                if not nxt then return root end
+                subname     = nxt
+            end
+        end
+
+        function Module(self, path, root)
+            local cls           = getmetatable(self)
+            root                = root or cls
+            if not _ModuleInfo[root] then
+                saveModuleInfo(root, { [FLD_MDL_CHILD] = false })
+            end
+
+            path                = strgsub(path, "%s+", "")
+            local iter          = strgmatch(path, "[%P_]+")
+            local subname       = iter()
+
+            while subname do
+                local nxt       = iter()
+                if not nxt then break end
+                if cls == root then
+                    root            = cls(subname)
+                else
+                    root            = cls(subname, root)
+                end
+                subname         = nxt
+            end
+
+            _ModuleInfo[root][FLD_MDL_CHILD] = saveStorage(_ModuleInfo[root][FLD_MDL_CHILD] or {}, subname, self)
+
+            saveModuleInfo(self, {
+                [FLD_MDL_CHILD] = false,
+                [FLD_MDL_NAME]  = subname,
+                [FLD_MDL_VER]   = false,
+            })
+
+            if root ~= cls then
+                Environment.SetParent(self, root)
+                Environment.SetNamespace(self, Environment.GetNamespace(root))
+            end
+        end
 
         -----------------------------------------------------------
         --                      meta-method                      --
