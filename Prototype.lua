@@ -1553,6 +1553,31 @@ do
     environment                 = prototype {
         __tostring              = "environment",
         __index                 = {
+            --- Apply the environment to the function or stack
+            -- @static
+            -- @method  Apply
+            -- @owner   environment
+            -- @format  (env, func)
+            -- @format  (env, [stack])
+            -- @param   env                         the environment
+            -- @param   func:function               the target function
+            -- @param   stack:number                the target stack level
+            ["Apply"]           = function(env, func)
+                -- Module "Test" (function(_ENV) ... end)
+                if type(func) == "function" then
+                    setfenv(func, env)
+                    definition(env)
+                    return env
+                end
+
+                if func == nil or type(func) == "number" then
+                    setfenv((func or 1) + 1, env)
+                    return env
+                end
+
+                error("Usage: environment.Apply(env[, stack]) - the stack should be number or nil", 2)
+            end;
+
             --- Export variables by name or a list of names, those variables are
             -- fetched from the namespaces or base environment
             -- @static
@@ -1963,12 +1988,7 @@ do
     tenvironment                = prototype {
         __index                 = environment.GetValue,
         __newindex              = environment.SaveValue,
-        __call                  = function(self, definition)
-            if type(definition) ~= "function" then error("Usage: environment(definition) - the definition must be a function", 2) end
-            setfenv(definition, self)
-            definition(self)
-            return self
-        end,
+        __call                  = environment.Apply,
     }
 
     -----------------------------------------------------------------------
@@ -4408,13 +4428,13 @@ do
                 end
             end;
 
-            --- Get the struct type of the structure
+            --- Get the struct category of the structure
             -- @static
-            -- @method  GetStructType
+            -- @method  GetStructCategory
             -- @owner   struct
             -- @param   structure                   the structure
-            -- @return  string                      the structure's type: CUSTOM|ARRAY|MEMBER
-            ["GetStructType"]   = function(target)
+            -- @return  string                      the structure's category: CUSTOM|ARRAY|MEMBER
+            ["GetStructCategory"] = function(target)
                 local info      = getStructTargetInfo(target)
                 if info then
                     if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
@@ -6470,6 +6490,14 @@ do
         addSuperType(info, target, extendIF)
     end
 
+    local addFields             = function (target, fields, stack)
+        local info, name, stack, msg = preDefineCheck(target, nil, stack)
+        if not info then return msg, stack end
+        if type(fields) ~= "table" then return "the fields must be a table", stack end
+
+        info[FLD_IC_FIELD]      = tblclone(fields, info[FLD_IC_FIELD] or _Cache(), true, true)
+    end
+
     local addMethod             = function (target, name, func, stack)
         local info, name, stack, msg, def = preDefineCheck(target, name, stack, true)
 
@@ -6552,6 +6580,8 @@ do
             if metaFld ~= name then
                 info[FLD_IC_TYPMTM][metaFld] = tdata == "table" and function(_, k) return data[k] end or data
             end
+        elseif name == IC_META_FIELD then
+            addFields(target, data, stack)
         else
             info[metaFld]       = data
         end
@@ -6571,14 +6601,6 @@ do
         elseif info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][name] then
             info[FLD_IC_OBJFTR][name] = nil
         end
-    end
-
-    local addFields             = function (target, fields, stack)
-        local info, name, stack, msg = preDefineCheck(target, nil, stack)
-        if not info then return msg, stack end
-        if type(fields) ~= "table" then return "the fields must be a table", stack end
-
-        info[FLD_IC_FIELD]      = tblclone(fields, info[FLD_IC_FIELD] or _Cache(), true, true)
     end
 
     local setRequireClass       = function (target, cls, stack)
@@ -7480,9 +7502,11 @@ do
             -- @format  (object[, stack])
             -- @param   object                      the target object
             -- @param   stack                       the stack level
+            -- @return  object                      the target object
             ["AttachObjectSource"] = function(object, stack)
                 if type(object) ~= "table" then error("Usage: class.AttachObjectSource(object[, stack]) - the object is not valid", 2) end
                 rawset(object, FLD_OBJ_SOURCE, getCallLine(parsestack(stack) + 1))
+                return object
             end;
 
             --- Begin the class's definition
@@ -9202,6 +9226,30 @@ end
 --                  o.Name = "Test"
 --                  print(o.Name)   -- Test
 --
+-- You also can build indexer properties like :
+--
+--                  class "A" (function( _ENV )
+--                      __Indexer__()
+--                      property "Items" {
+--                          set = function(self, idx, value)
+--                              self[idx] = value
+--                          end,
+--                          get = function(self, idx)
+--                              return self[idx]
+--                          end,
+--                          type = String,
+--                      }
+--                  end)
+--
+--                  o = A()
+--
+--                  o.Items[1] = "Hello"
+--
+--                  print(o.Items[1])   -- Hello
+--
+-- The indexer property can only accept set, get, getmethod, setmethod, type
+-- and static definitions.
+--
 -- @prototype   property
 -------------------------------------------------------------------------------
 do
@@ -9224,6 +9272,8 @@ do
     local MOD_PROP_GETCLONE     = newflags()
     local MOD_PROP_GETDEEPCL    = newflags()
 
+    local MOD_PROP_INDEXER      = newflags()
+
     -- PROPERTY FIELDS
     local FLD_PROP_MOD          =  0
     local FLD_PROP_RAWGET       =  1
@@ -9242,6 +9292,9 @@ do
     local FLD_PROP_HANDLER      = 14
     local FLD_PROP_EVENT        = 15
     local FLD_PROP_STATIC       = 16
+    local FLD_PROP_INDEXERGET   = 17
+    local FLD_PROP_INDEXERSET   = 18
+    local FLD_PROP_INDEXERFLD   = 19
 
     -- FLAGS FOR PROPERTY BUILDING
     local FLG_PROPGET_DISABLE   = newflags(true)
@@ -9255,6 +9308,7 @@ do
     local FLG_PROPGET_CLONE     = newflags()
     local FLG_PROPGET_DEEPCLONE = newflags()
     local FLG_PROPGET_STATIC    = newflags()
+    local FLG_PROPGET_INDEXER   = newflags()
 
     local FLG_PROPSET_DISABLE   = newflags(true)
     local FLG_PROPSET_TYPE      = newflags()
@@ -9270,9 +9324,14 @@ do
     local FLG_PROPSET_HANDLER   = newflags()
     local FLG_PROPSET_EVENT     = newflags()
     local FLG_PROPSET_STATIC    = newflags()
+    local FLG_PROPSET_INDEXER   = newflags()
 
     local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
     local FLD_PROP_OBJ_WEAK     = "__PLOOP_PROPERTY_WEAK"
+
+    local FLD_INDEXER_OBJECT    = function() end
+    local FLD_INDEXER_GET       = function() end
+    local FLD_INDEXER_SET       = function() end
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -9292,10 +9351,21 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
+    local globalIndexerOwner
+    local globalIndexerGet
+    local globalIndexerSet
+    local globalPropertyIndexer = not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and prototype {
+                                    __index                 = function(self, idxname)
+                                        return globalIndexerGet(globalIndexerOwner, idxname)
+                                    end,
+                                    __newindex              = function(self, idxname, value)
+                                        globalIndexerSet(globalIndexerOwner, idxname, value)
+                                    end,
+                                }
+
     local savePropertyInfo      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_PROP_META, info) end
                                     or  function(target, info) _PropertyInfo = saveStorage(_PropertyInfo, target, info) end
-
 
     local genProperty           = function(owner, name, stack)
         local prop              = prototype.NewProxy(tproperty)
@@ -9316,34 +9386,52 @@ do
         return prop
     end
 
+    local getPropertyIndexer    = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(get, set, fld)
+            return function(_, self)
+                local indexer   = rawget(self, fld)
+                if not indexer then
+                    indexer     = prototype.NewObject(tindexer, { [FLD_INDEXER_OBJECT] = self, [FLD_INDEXER_GET] = get, [FLD_INDEXER_SET] = set})
+                    rawset(self, fld, indexer)
+                end
+                return indexer
+            end
+        end or function(get, set)
+            return function(_, self)
+                globalIndexerOwner  = self
+                globalIndexerGet    = get
+                globalIndexerSet    = set
+                return globalPropertyIndexer
+            end
+        end
+
     local genPropertyGet        = function (info)
-        local token         = 0
-        local usename       = false
-        local upval         = _Cache()
+        local token             = 0
+        local usename           = false
+        local upval             = _Cache()
 
         if info[FLD_PROP_GET] == false or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and info[FLD_PROP_DEFAULT] == nil) then
-            token           = turnOnFlags(FLG_PROPGET_DISABLE, token)
-            usename         = true
+            token               = turnOnFlags(FLG_PROPGET_DISABLE, token)
+            usename             = true
         else
             if info[FLD_PROP_DEFAULTFUNC] then
-                token       = turnOnFlags(FLG_PROPGET_DEFTFUNC, token)
+                token           = turnOnFlags(FLG_PROPGET_DEFTFUNC, token)
                 tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
                 if info[FLD_PROP_SET] == false then
-                    token   = turnOnFlags(FLG_PROPGET_SETFALSE, token)
+                    token       = turnOnFlags(FLG_PROPGET_SETFALSE, token)
                 else
-                    usename = true
+                    usename     = true
                 end
             elseif info[FLD_PROP_DEFAULT] ~= nil then
-                token       = turnOnFlags(FLG_PROPGET_DEFAULT, token)
+                token           = turnOnFlags(FLG_PROPGET_DEFAULT, token)
                 tinsert(upval, info[FLD_PROP_DEFAULT])
             end
 
             if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
-                token       = turnOnFlags(FLG_PROPGET_SETWEAK, token)
+                token           = turnOnFlags(FLG_PROPGET_SETWEAK, token)
             end
 
             if validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
-                token       = turnOnFlags(FLG_PROPGET_STATIC, token)
+                token           = turnOnFlags(FLG_PROPGET_STATIC, token)
                 if validateFlags(FLG_PROPGET_SETWEAK, token) then
                     tinsert(upval, info[FLD_PROP_STATIC])
                 else
@@ -9352,21 +9440,25 @@ do
             end
 
             if info[FLD_PROP_GET] then
-                token       = turnOnFlags(FLG_PROPGET_GET, token)
+                token           = turnOnFlags(FLG_PROPGET_GET, token)
                 tinsert(upval, info[FLD_PROP_GET])
             elseif info[FLD_PROP_GETMETHOD] then
-                token       = turnOnFlags(FLG_PROPGET_GETMETHOD, token)
+                token           = turnOnFlags(FLG_PROPGET_GETMETHOD, token)
                 tinsert(upval, info[FLD_PROP_GETMETHOD])
             elseif info[FLD_PROP_FIELD] ~= nil then
-                token       = turnOnFlags(FLG_PROPGET_FIELD, token)
+                token           = turnOnFlags(FLG_PROPGET_FIELD, token)
                 tinsert(upval, info[FLD_PROP_FIELD])
             end
 
             if validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
-                token       = turnOnFlags(FLG_PROPGET_CLONE, token)
+                token           = turnOnFlags(FLG_PROPGET_CLONE, token)
                 if validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) then
-                    token   = turnOnFlags(FLG_PROPGET_DEEPCLONE, token)
+                    token       = turnOnFlags(FLG_PROPGET_DEEPCLONE, token)
                 end
+            end
+
+            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnOnFlags(FLG_PROPGET_INDEXER, token)
             end
         end
 
@@ -9374,13 +9466,17 @@ do
 
         -- Building
         if not _PropGetMap[token] then
-            local head      = _Cache()
-            local body      = _Cache()
-            local apis      = _Cache()
+            local head          = _Cache()
+            local body          = _Cache()
+            local apis          = _Cache()
 
             tinsert(body, "")                       -- remain for shareable variables
             tinsert(body, "return function(%s)")    -- remain for special variables
-            tinsert(body, [[return function(_, self)]])
+            if validateFlags(FLG_PROPGET_INDEXER, token) then
+                tinsert(body, [[return function(self, idxname)]])
+            else
+                tinsert(body, [[return function(_, self)]])
+            end
 
             if validateFlags(FLG_PROPGET_DISABLE, token) then
                 uinsert(apis, "error")
@@ -9402,11 +9498,19 @@ do
 
                 if validateFlags(FLG_PROPGET_GET, token) then
                     tinsert(head, "get")
-                    tinsert(body, [[value = get(self)]])
+                    if validateFlags(FLG_PROPGET_INDEXER, token) then
+                        tinsert(body, [[value = get(self, idxname)]])
+                    else
+                        tinsert(body, [[value = get(self)]])
+                    end
                 elseif validateFlags(FLG_PROPGET_GETMETHOD, token) then
                     -- won't be static
                     tinsert(head, "getMethod")
-                    tinsert(body, [[value = self[getMethod](self)]])
+                    if validateFlags(FLG_PROPGET_INDEXER, token) then
+                        tinsert(body, [[value = self[getMethod](self, idxname)]])
+                    else
+                        tinsert(body, [[value = self[getMethod](self)]])
+                    end
                 elseif validateFlags(FLG_PROPGET_FIELD, token) then
                     tinsert(head, "field")
                     if validateFlags(FLG_PROPGET_STATIC, token) then
@@ -9520,6 +9624,11 @@ do
             info[FLD_PROP_RAWGET]   = _PropGetMap[token]
         end
 
+        if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+            info[FLD_PROP_INDEXERGET] = info[FLD_PROP_RAWGET]
+            info[FLD_PROP_RAWGET]   = getPropertyIndexer(info[FLD_PROP_INDEXERGET], info[FLD_PROP_INDEXERSET], info[FLD_PROP_INDEXERFLD])
+        end
+
         _Cache(upval)
     end
 
@@ -9561,39 +9670,43 @@ do
             end
 
             if info[FLD_PROP_SET] then
-                token = turnOnFlags(FLG_PROPSET_SET, token)
+                token           = turnOnFlags(FLG_PROPSET_SET, token)
                 tinsert(upval, info[FLD_PROP_SET])
             elseif info[FLD_PROP_SETMETHOD] and not validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
-                token = turnOnFlags(FLG_PROPSET_SETMETHOD, token)
+                token           = turnOnFlags(FLG_PROPSET_SETMETHOD, token)
                 tinsert(upval, info[FLD_PROP_SETMETHOD])
             elseif info[FLD_PROP_FIELD] then
-                token = turnOnFlags(FLG_PROPSET_FIELD, token)
+                token           = turnOnFlags(FLG_PROPSET_FIELD, token)
                 tinsert(upval, info[FLD_PROP_FIELD])
 
                 if info[FLD_PROP_DEFAULT] ~= nil then
-                    token = turnOnFlags(FLG_PROPSET_DEFAULT, token)
+                    token       = turnOnFlags(FLG_PROPSET_DEFAULT, token)
                     tinsert(upval, info[FLD_PROP_DEFAULT])
 
                     if type(info[FLD_PROP_DEFAULT]) ~= "table" then
-                        token = turnOnFlags(FLG_PROPSET_SIMPDEFT, token)
+                        token   = turnOnFlags(FLG_PROPSET_SIMPDEFT, token)
                     end
                 end
 
                 if validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) then
-                    token = turnOnFlags(FLG_PROPSET_RETAIN, token)
+                    token       = turnOnFlags(FLG_PROPSET_RETAIN, token)
                 end
 
                 if info[FLD_PROP_HANDLER] then
-                    token = turnOnFlags(FLG_PROPSET_HANDLER, token)
+                    token       = turnOnFlags(FLG_PROPSET_HANDLER, token)
                     tinsert(upval, info[FLD_PROP_HANDLER])
-                    usename = true
+                    usename     = true
                 end
 
                 if info[FLD_PROP_EVENT] then
-                    token = turnOnFlags(FLG_PROPSET_EVENT, token)
+                    token       = turnOnFlags(FLG_PROPSET_EVENT, token)
                     tinsert(upval, info[FLD_PROP_EVENT])
-                    usename = true
+                    usename     = true
                 end
+            end
+
+            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnOnFlags(FLG_PROPSET_INDEXER, token)
             end
         end
 
@@ -9608,7 +9721,11 @@ do
             tinsert(body, "")                       -- remain for shareable variables
             tinsert(body, "return function(%s)")    -- remain for special variables
 
-            tinsert(body, [[return function(_, self, value)]])
+            if validateFlags(FLG_PROPSET_INDEXER, token) then
+                tinsert(body, [[return function(self, idxname, value)]])
+            else
+                tinsert(body, [[return function(_, self, value)]])
+            end
 
             if validateFlags(FLG_PROPSET_DISABLE, token) then
                 uinsert(apis, "error")
@@ -9652,10 +9769,18 @@ do
 
                 if validateFlags(FLG_PROPSET_SET, token) then
                     tinsert(head, "set")
-                    tinsert(body, [[return set(self, value)]])
+                    if validateFlags(FLG_PROPSET_INDEXER, token) then
+                        tinsert(body, [[return set(self, idxname, value)]])
+                    else
+                        tinsert(body, [[return set(self, value)]])
+                    end
                 elseif validateFlags(FLG_PROPSET_SETMETHOD, token) then
                     tinsert(head, "setmethod")
-                    tinsert(body, [[return self[setmethod](self, value)]])
+                    if validateFlags(FLG_PROPSET_INDEXER, token) then
+                        tinsert(body, [[return self[setmethod](self, idxname, value)]])
+                    else
+                        tinsert(body, [[return self[setmethod](self, value)]])
+                    end
                 elseif validateFlags(FLG_PROPSET_FIELD, token) then
                     tinsert(head, "field")
 
@@ -9779,6 +9904,14 @@ do
             info[FLD_PROP_RAWSET]   = _PropSetMap[token]
         end
 
+        if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+            info[FLD_PROP_INDEXERSET] = info[FLD_PROP_RAWSET]
+            local emsg = "the " .. info[FLD_PROP_NAME] .. " can't be set"
+            info[FLD_PROP_RAWSET]   = function()
+                error(emsg, e)
+            end
+        end
+
         _Cache(upval)
     end
 
@@ -9831,87 +9964,88 @@ do
                         end
                     end
 
-                    -- Auto-gen get (only check GetXXX, getXXX, IsXXX, isXXX for simple)
-                    if info[FLD_PROP_GET] == true or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
-                        info[FLD_PROP_GET]  = nil
+                    if not validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                        -- Auto-gen get (only check GetXXX, getXXX, IsXXX, isXXX for simple)
+                        if info[FLD_PROP_GET] == true or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
+                            info[FLD_PROP_GET]  = nil
 
-                        for _, prefix in ipairs, _PropGetPrefix, 0 do
-                            local mtd, st   = interface.GetMethod(owner, prefix .. name)
-                            if mtd and isstatic == st then
-                                info[FLD_PROP_GET] = mtd
-                                Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. name)
-                                break
-                            end
-
-                            if uname ~= name then
-                                mtd, st     = interface.GetMethod(owner, prefix .. uname)
+                            for _, prefix in ipairs, _PropGetPrefix, 0 do
+                                local mtd, st   = interface.GetMethod(owner, prefix .. name)
                                 if mtd and isstatic == st then
                                     info[FLD_PROP_GET] = mtd
-                                    Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. uname)
+                                    Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. name)
                                     break
+                                end
+
+                                if uname ~= name then
+                                    mtd, st     = interface.GetMethod(owner, prefix .. uname)
+                                    if mtd and isstatic == st then
+                                        info[FLD_PROP_GET] = mtd
+                                        Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. uname)
+                                        break
+                                    end
                                 end
                             end
                         end
-                    end
 
-                    -- Auto-gen set (only check SetXXX, setXXX)
-                    if info[FLD_PROP_SET] == true or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
-                        info[FLD_PROP_SET]  = nil
+                        -- Auto-gen set (only check SetXXX, setXXX)
+                        if info[FLD_PROP_SET] == true or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
+                            info[FLD_PROP_SET]  = nil
 
-                        for _, prefix in ipairs, _PropSetPrefix, 0 do
-                            local mtd, st   = interface.GetMethod(owner, prefix .. name)
-                            if mtd and isstatic == st then
-                                info[FLD_PROP_SET]  = mtd
-                                Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. name)
-                                break
-                            end
-
-                            if uname ~= name then
-                                local mtd, st   = interface.GetMethod(owner, prefix .. uname)
+                            for _, prefix in ipairs, _PropSetPrefix, 0 do
+                                local mtd, st   = interface.GetMethod(owner, prefix .. name)
                                 if mtd and isstatic == st then
                                     info[FLD_PROP_SET]  = mtd
-                                    Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. uname)
+                                    Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. name)
                                     break
+                                end
+
+                                if uname ~= name then
+                                    local mtd, st   = interface.GetMethod(owner, prefix .. uname)
+                                    if mtd and isstatic == st then
+                                        info[FLD_PROP_SET]  = mtd
+                                        Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. uname)
+                                        break
+                                    end
                                 end
                             end
                         end
-                    end
 
-                    -- Check the handler
-                    if type(info[FLD_PROP_HANDLER]) == "string" then
-                        local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_HANDLER])
-                        if mtd and isstatic == st then
-                            info[FLD_PROP_HANDLER]  = mtd
-                        else
-                            Warn("The %s don't have a %smethod named %q for property %q's handler", tostring(owner), isstatic and "static " or "", info[FLD_PROP_HANDLER], name)
-                            info[FLD_PROP_HANDLER]  = nil
+                        -- Check the handler
+                        if type(info[FLD_PROP_HANDLER]) == "string" then
+                            local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_HANDLER])
+                            if mtd and isstatic == st then
+                                info[FLD_PROP_HANDLER]  = mtd
+                            else
+                                Warn("The %s don't have a %smethod named %q for property %q's handler", tostring(owner), isstatic and "static " or "", info[FLD_PROP_HANDLER], name)
+                                info[FLD_PROP_HANDLER]  = nil
+                            end
                         end
-                    end
 
-                    -- Auto-gen field
-                    if (info[FLD_PROP_SET] == nil or (info[FLD_PROP_SET] == false and info[FLD_PROP_DEFAULTFUNC]))
-                        and info[FLD_PROP_SETMETHOD] == nil
-                        and info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil then
+                        -- Auto-gen field
+                        if (info[FLD_PROP_SET] == nil or (info[FLD_PROP_SET] == false and info[FLD_PROP_DEFAULTFUNC]))
+                            and info[FLD_PROP_SETMETHOD] == nil
+                            and info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil then
 
-                        if info[FLD_PROP_FIELD] == true then info[FLD_PROP_FIELD] = nil end
+                            if info[FLD_PROP_FIELD] == true then info[FLD_PROP_FIELD] = nil end
 
-                        info[FLD_PROP_FIELD] = info[FLD_PROP_FIELD] or "_" .. namespace.GetNamespaceName(owner, true) .. "_" .. uname
+                            info[FLD_PROP_FIELD] = info[FLD_PROP_FIELD] or "_" .. namespace.GetNamespaceName(owner, true) .. "_" .. uname
+                        end
 
-                    end
-
-                    -- Gen static value container
-                    if isstatic then
-                        -- Use fakefunc as nil object
-                        if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
-                            info[FLD_PROP_STATIC] = setmetatable({ [0] = fakefunc }, WEAK_VALUE)
-                        else
-                            info[FLD_PROP_STATIC] = fakefunc
+                        -- Gen static value container
+                        if isstatic then
+                            -- Use fakefunc as nil object
+                            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                                info[FLD_PROP_STATIC] = setmetatable({ [0] = fakefunc }, WEAK_VALUE)
+                            else
+                                info[FLD_PROP_STATIC] = fakefunc
+                            end
                         end
                     end
 
                     -- Generate the get & set
-                    genPropertyGet(info)
                     genPropertySet(info)
+                    genPropertyGet(info)
                 end
 
                 return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET] }
@@ -9937,6 +10071,17 @@ do
             ["IsGetDeepClone"]  = function(self)
                 local info      = _PropertyInfo[self]
                 return info and validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) or false
+            end;
+
+            --- Whether the property is an indexer property, used like `obj.prop[xxx] = xxx`
+            -- @static
+            -- @method  IsIndexer
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is an indexer
+            ["IsIndexer"]       = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property should save a clone copy to the value
@@ -10058,6 +10203,22 @@ do
                 end
             end;
 
+            --- Set the property as an indexer property, used like `obj.prop[xxx] = xxx`
+            -- @static
+            -- @method  IsIndexer
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
+            ["SetIndexer"]      = function(self, stack)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetIndexer([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                end
+            end;
+
             --- Set the property whether it should dispose the old value
             -- @static
             -- @method  SetRetainObject
@@ -10141,6 +10302,7 @@ do
             ["GetAccessor"]     = property.GetAccessor;
             ["IsGetClone"]      = property.IsGetClone;
             ["IsGetDeepClone"]  = property.IsGetDeepClone;
+            ["IsIndexer"]       = property.IsIndexer;
             ["IsSetClone"]      = property.IsSetClone;
             ["IsSetDeepClone"]  = property.IsSetDeepClone;
             ["IsRetainObject"]  = property.IsRetainObject;
@@ -10149,6 +10311,7 @@ do
             ["IsWeak"]          = property.IsWeak;
             ["GetClone"]        = property.GetClone;
             ["SetClone"]        = property.SetClone;
+            ["SetIndexer"]      = property.SetIndexer;
             ["SetRetainObject"] = property.SetRetainObject;
             ["SetStatic"]       = property.SetStatic;
             ["SetWeak"]         = property.SetWeak;
@@ -10261,6 +10424,28 @@ do
 
             attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
 
+            -- Check indexer
+            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                if not (info[FLD_PROP_GET] or info[FLD_PROP_GETMETHOD] or info[FLD_PROP_SET] or info[FLD_PROP_SETMETHOD]) then
+                    error([[Usage: property "name" { get = ..., set = ...} - the indexer property must have get or set method]], stack)
+                end
+
+                if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD then
+                    info[FLD_PROP_INDEXERFLD] = "_" .. namespace.GetNamespaceName(owner, true) .. "_" .. name .. "_Indexer"
+
+                    -- Other type object may only be used in one thread, but environment is special
+                    if interface.IsSubType(owner, IEnvironment) then
+                        interface.AddFields(owner, { [info[FLD_PROP_INDEXERFLD]] = false }, stack)
+                    end
+                end
+
+                info[FLD_PROP_FIELD]        = nil
+                info[FLD_PROP_EVENT]        = nil
+                info[FLD_PROP_HANDLER]      = nil
+                info[FLD_PROP_DEFAULT]      = nil
+                info[FLD_PROP_DEFAULTFUNC]  = nil
+            end
+
             -- Check the event
             if type(info[FLD_PROP_EVENT]) == "string" then
                 local ename     = info[FLD_PROP_EVENT]
@@ -10288,6 +10473,15 @@ do
         __newindex              = readOnly,
         __metatable             = property,
     }
+
+    tindexer                    = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and prototype {
+        __index                 = function(self, idxname)
+            return self[FLD_INDEXER_GET](self[FLD_INDEXER_OBJECT], idxname)
+        end,
+        __newindex              = function(self, idxname, value)
+            self[FLD_INDEXER_SET](self[FLD_INDEXER_OBJECT], idxname, value)
+        end,
+    } or nil
 
     -----------------------------------------------------------------------
     --                            registration                           --
@@ -10788,6 +10982,21 @@ do
             attribute.Register(prototype.NewObject(self, { value }))
         end,
         __newindex = readOnly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
+    -- Set a property as indexer property
+    --
+    -- @attribute   System.__Indexer__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Indexer__",         prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                property.SetIndexer(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_PROPERTY,
+        },
+        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11356,33 +11565,20 @@ do
     end)
 
     --- the interface for code environment
-    __Sealed__()
-    interface "System.IEnvironment" {
+    __Sealed__() __ObjectSource__{ Inheritable = true }
+    IEnvironment = interface "System.IEnvironment" (function(_ENV)
         -----------------------------------------------------------
         --                      initializer                      --
         -----------------------------------------------------------
-        __init                  = environment.Initialize,
+        __init                  = environment.Initialize
 
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
-        __index                 = environment.GetValue,
-        __newindex              = environment.SaveValue,
-        __call                  = function(self, ...)
-            local visitor, env, name, definition, flag, stack  = getFeatureParams(nil, nil, ...)
-
-            -- Module "Test" (function(_ENV) ... end)
-            if definition and type(definition) == "function" then
-                setfenv(definition, self)
-                definition(self)
-                return self
-            end
-
-            -- _ENV = Module "Test" "v1.0.0"
-            setfenv(stack + 1, self)
-            return self
-        end,
-    }
+        __Abstract__() __index = environment.GetValue
+        __Abstract__() __newindex = environment.SaveValue
+        __Abstract__() __call  = environment.Apply
+    end)
 
     -----------------------------------------------------------------------
     --                              classes                              --
@@ -11490,7 +11686,7 @@ do
                         return Enum.Parse(ns, data)
                     end
                 elseif Struct.Validate(ns) then
-                    if Struct.GetStructType(ns) == StructCategory.CUSTOM then
+                    if Struct.GetStructCategory(ns) == StructCategory.CUSTOM then
                         return serializeData(data)
                     else
                         return "(inner)"
@@ -11929,7 +12125,7 @@ do
         -----------------------------------------------------------
         --- Generate an overload method to handle all rest argument groups
         __Static__() function Rest()
-            Class.AttachObjectSource(__Arguments__{ { islist = true, nilable = true} }, 2)
+            return Class.AttachObjectSource(__Arguments__{ { islist = true, nilable = true} }, 2)
         end
 
         -----------------------------------------------------------
@@ -12141,7 +12337,10 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable(Table, true), Variable(String, true) }
+        __Arguments__{
+            { type = Table, name = "owner", nilable = true },
+            { type = String, name = "name", nilable = true }
+        }
         function Delegate(self, owner, name)
             self.Owner      = owner
             self.Name       = name
@@ -12271,7 +12470,11 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ String, Variable(Exception, true), Variable(Boolean, true) }
+        __Arguments__{
+            { type = String,    name = "message" },
+            { type = Exception, name = "inner", nilable = true },
+            { type = Boolean,   name = "savevariables", nilable = true }
+        }
         function Exception(self, message, inner, savevariables)
             self.Message        = message
             self.InnerException = inner
@@ -12301,6 +12504,10 @@ do
             fakefunc            = fakefunc,
             wipe                = wipe,
             pairs               = pairs,
+            getmetatable        = getmetatable,
+            strtrim             = strtrim,
+            tonumber            = tonumber,
+            error               = error,
         }
 
         export { Environment }
@@ -12332,7 +12539,7 @@ do
         --- Valiate the version if it's bigger than the current version of the module
         -- @param   version:string                  the new version
         -- @return  boolean                         true if the new version is bigger
-        __Arguments__{ NEString }
+        __Arguments__{ String }
         function ValidateVersion(self, version)
             local info          = _ModuleInfo[self]
             if info then
@@ -12421,6 +12628,10 @@ do
         --- the module version
         property "_Version" { get = function(self) return _ModuleInfo[self][FLD_MDL_VER] or nil end }
 
+        --- the sub-modules
+        __Indexer__()
+        property "_Modules" { get = function(self, name) local child = _ModuleInfo[self][FLD_MDL_CHILD] return child and child[name] end }
+
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
@@ -12485,6 +12696,20 @@ do
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
+        --- _ENV = Module "TestCode" "v1.0.0"
+        __Arguments__{ String }
+        function __call(self, version)
+            if self:ValidateVersion(version) then
+                version = strtrim(version)
+                _ModuleInfo[self][FLD_MDL_VER] = version ~= "" and version or false
+                Environment.Apply(self, 2)
+            else
+                error("there is an equal or bigger version existed", 2)
+            end
+        end
+
+        __Arguments__.Rest()
+        __call                  = Environment.Apply
     end)
 end
 
