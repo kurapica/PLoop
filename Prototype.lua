@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/12                                               --
+-- Update Date  :   2018/03/14                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -10766,6 +10766,40 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Create an index auto-increased enumeration
+    --
+    -- @attribute   System.__AutoIndex__
+    -- @usage       __AutoIndex__ { A = 0, C = 10 }
+    --              enum "Test" { "A", "B", "C", "D" }
+    --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__AutoIndex__",             prototype {
+        __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                local value     = self[1]
+                stack           = parsestack(stack) + 1
+
+                local newdef    = {}
+                local idx       = 0
+
+                if value and type(value) ~= "table" then value = nil end
+
+                for _, name in ipairs, definition, 0 do
+                    idx         = value and value[name] or (idx + 1)
+                    newdef[name]= idx
+                end
+
+                return newdef
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the target struct's base struct, works like
     --
     --          struct "Number" { function (val) return type(val) ~= "number" and "the %s must be number" end }
@@ -11208,40 +11242,6 @@ do
         __newindex = readOnly, __tostring = getAttributeName
     })
 
-    -----------------------------------------------------------------------
-    -- Create an index auto-increased enumeration
-    --
-    -- @attribute   System.__AutoIndex__
-    -- @usage       __AutoIndex__ { A = 0, C = 10 }
-    --              enum "Test" { "A", "B", "C", "D" }
-    --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
-    -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoIndex__",             prototype {
-        __index                 = {
-            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
-                local value     = self[1]
-                stack           = parsestack(stack) + 1
-
-                local newdef    = {}
-                local idx       = 0
-
-                if value and type(value) ~= "table" then value = nil end
-
-                for _, name in ipairs, definition, 0 do
-                    idx         = value and value[name] or (idx + 1)
-                    newdef[name]= idx
-                end
-
-                return newdef
-            end,
-            ["AttributeTarget"] = ATTRTAR_ENUM,
-        },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readOnly, __tostring = getAttributeName
-    })
-
     -------------------------------------------------------------------------------
     --                               registration                                --
     -------------------------------------------------------------------------------
@@ -11501,7 +11501,8 @@ do
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
-        function __tostring(self) return tostring(getmetatable(self) .. (GetObjectSource(self) or "")) end
+        __Abstract__()
+        function __tostring(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
     --- the interface to modify the target's definition
@@ -11567,6 +11568,12 @@ do
     --- the interface for code environment
     __Sealed__() __ObjectSource__{ Inheritable = true }
     IEnvironment = interface "System.IEnvironment" (function(_ENV)
+        export {
+            tostring            = tostring,
+            getmetatable        = getmetatable,
+            GetObjectSource     = Class.GetObjectSource,
+        }
+
         -----------------------------------------------------------
         --                      initializer                      --
         -----------------------------------------------------------
@@ -11578,6 +11585,7 @@ do
         __Abstract__() __index = environment.GetValue
         __Abstract__() __newindex = environment.SaveValue
         __Abstract__() __call  = environment.Apply
+        __Abstract__() __tostring = function(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
     -----------------------------------------------------------------------
@@ -12508,6 +12516,8 @@ do
             strtrim             = strtrim,
             tonumber            = tonumber,
             error               = error,
+            GetObjectSource     = Class.GetObjectSource,
+            tostring            = tostring,
         }
 
         export { Environment }
@@ -12523,7 +12533,8 @@ do
         -----------------------------------------------------------
         FLD_MDL_CHILD           = 0
         FLD_MDL_NAME            = 1
-        FLD_MDL_VER             = 2
+        FLD_MDL_FULLNAME        = 2
+        FLD_MDL_VER             = 3
 
         FLD_MDL_INFO            = "__PLOOP_MODULE_META"
 
@@ -12625,6 +12636,9 @@ do
         --- the module name
         property "_Name"    { get = function(self) return _ModuleInfo[self][FLD_MDL_NAME] end }
 
+        --- the module full name
+        property "_FullName"{ get = function(self) return _ModuleInfo[self][FLD_MDL_FULLNAME] end}
+
         --- the module version
         property "_Version" { get = function(self) return _ModuleInfo[self][FLD_MDL_VER] or nil end }
 
@@ -12681,9 +12695,12 @@ do
 
             _ModuleInfo[root][FLD_MDL_CHILD] = saveStorage(_ModuleInfo[root][FLD_MDL_CHILD] or {}, subname, self)
 
+            local fullname = _ModuleInfo[root][FLD_MDL_FULLNAME]
+
             saveModuleInfo(self, {
                 [FLD_MDL_CHILD] = false,
                 [FLD_MDL_NAME]  = subname,
+                [FLD_MDL_FULLNAME]  = (fullname and fullname .. "." or "") .. subname,
                 [FLD_MDL_VER]   = false,
             })
 
@@ -12710,6 +12727,10 @@ do
 
         __Arguments__.Rest()
         __call                  = Environment.Apply
+
+        function __tostring(self)
+            return "[" .. tostring(getmetatable(self)) .. "]" .. self._FullName .. (GetObjectSource(self) or "")
+        end
     end)
 end
 
