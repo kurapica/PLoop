@@ -308,8 +308,8 @@ do
     -----------------------------------------------------------------------
     --                              storage                              --
     -----------------------------------------------------------------------
-    newStorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
-    saveStorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
+    newstorage                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
+    savestorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
                                         local new
                                         if value == nil then
                                             if self[key] == nil then return end
@@ -325,7 +325,7 @@ do
     -----------------------------------------------------------------------
     --                               debug                               --
     -----------------------------------------------------------------------
-    getCallLine                 = not debuginfo and fakefunc or function (stack)
+    getcallline                 = not debuginfo and fakefunc or function (stack)
         local info = debuginfo((stack or 2) + 1, "lS")
         if info then
             return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
@@ -369,8 +369,15 @@ do
     end
 
     clone                       = function (src, deep, safe)
-        if type(src) == "table" and getmetatable(src) == nil then
-            return tblclone(src, {}, deep, true, safe)
+        if type(src) == "table" then
+            local cls = getmetatable(src)
+            if cls == nil then
+                return tblclone(src, {}, deep, true, safe)
+            elseif class.IsSubType(cls, ICloneable) then
+                return src:Clone()
+            else
+                return src
+            end
         else
             return src
         end
@@ -380,19 +387,19 @@ do
     --                          loading snippet                          --
     -----------------------------------------------------------------------
     if LUA_VERSION > 5.1 then
-        loadSnippet             = function (chunk, source, env)
-            Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
+        loadsnippet             = function (chunk, source, env)
+            Debug("[core][loadsnippet] ==> %s ....", source or "anonymous")
             Trace(chunk)
-            Trace("[core][loadSnippet] <== %s", source or "anonymous")
-            return loadstring(chunk, source, nil, env or _PLoopEnv)
+            Trace("[core][loadsnippet] <== %s", source or "anonymous")
+            return loadstring(chunk, source, nil, env or _G)
         end
     else
-        loadSnippet             = function (chunk, source, env)
-            Debug("[core][loadSnippet] ==> %s ....", source or "anonymous")
+        loadsnippet             = function (chunk, source, env)
+            Debug("[core][loadsnippet] ==> %s ....", source or "anonymous")
             Trace(chunk)
-            Trace("[core][loadSnippet] <== %s", source or "anonymous")
+            Trace("[core][loadsnippet] <== %s", source or "anonymous")
             local v, err = loadstring(chunk, source)
-            if v then setfenv(v, env or _PLoopEnv) end
+            if v then setfenv(v, env or _G) end
             return v, err
         end
     end
@@ -401,19 +408,19 @@ do
     --                         flags management                          --
     -----------------------------------------------------------------------
     if LUA_VERSION >= 5.3 then
-        validateFlags           = loadstring [[
+        validateflags           = loadstring [[
             return function(checkValue, targetValue)
                 return (checkValue & (targetValue or 0)) > 0
             end
         ]] ()
 
-        turnOnFlags             = loadstring [[
+        turnonflags             = loadstring [[
             return function(checkValue, targetValue)
                 return checkValue | (targetValue or 0)
             end
         ]] ()
 
-        turnOffFlags            = loadstring [[
+        turnoffflags            = loadstring [[
             return function(checkValue, targetValue)
                 return (~checkValue) & (targetValue or 0)
             end
@@ -423,33 +430,33 @@ do
         local bor               = _G.bit32 and _G.bit32.bor  or _G.bit.bor
         local bnot              = _G.bit32 and _G.bit32.bnot or _G.bit.bnot
 
-        validateFlags           = function (checkValue, targetValue)
+        validateflags           = function (checkValue, targetValue)
             return band(checkValue, targetValue or 0) > 0
         end
 
-        turnOnFlags             = function (checkValue, targetValue)
+        turnonflags             = function (checkValue, targetValue)
             return bor(checkValue, targetValue or 0)
         end
 
-        turnOffFlags            = function (checkValue, targetValue)
+        turnoffflags            = function (checkValue, targetValue)
             return band(bnot(checkValue), targetValue or 0)
         end
     else
-        validateFlags           = function (checkValue, targetValue)
+        validateflags           = function (checkValue, targetValue)
             if not targetValue or checkValue > targetValue then return false end
             targetValue = targetValue % (2 * checkValue)
             return (targetValue - targetValue % checkValue) == checkValue
         end
 
-        turnOnFlags             = function (checkValue, targetValue)
-            if not validateFlags(checkValue, targetValue) then
+        turnonflags             = function (checkValue, targetValue)
+            if not validateflags(checkValue, targetValue) then
                 return checkValue + (targetValue or 0)
             end
             return targetValue
         end
 
-        turnOffFlags            = function (checkValue, targetValue)
-            if validateFlags(checkValue, targetValue) then
+        turnoffflags            = function (checkValue, targetValue)
+            if validateflags(checkValue, targetValue) then
                 return targetValue - checkValue
             end
             return targetValue
@@ -461,7 +468,7 @@ do
     -----------------------------------------------------------------------
     newproxy                    = not PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and newproxy or (function ()
         local falseMeta         = { __metatable = false }
-        local proxymap          = newStorage(WEAK_ALL)
+        local proxymap          = newstorage(WEAK_ALL)
 
         return function (prototype)
             if prototype == true then
@@ -540,7 +547,7 @@ do
         return PLOOP_PLATFORM_SETTINGS.CORE_LOG_LEVEL > loglvl and fakefunc or
             function(msg, stack, ...)
                 if type(stack) == "number" then
-                    msg = prefix .. strformat(msg, ...) .. (getCallLine(stack + 1) or "")
+                    msg = prefix .. strformat(msg, ...) .. (getcallline(stack + 1) or "")
                 elseif stack then
                     msg = prefix .. strformat(msg, stack, ...)
                 else
@@ -645,7 +652,7 @@ do
 
     parseDefinition             = function(definition, env, stack)
         if type(definition) == "string" then
-            local def, msg  = loadSnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
+            local def, msg  = loadsnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
             if def then
                 def, msg    = pcall(def)
                 if def then
@@ -738,14 +745,14 @@ do
     -----------------------------------------------------------------------
     local _Prototype            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, { __index = function(_, p) return type(p) == "table" and rawget(p, FLD_PROTOTYPE_META) or nil end })
-                                    or  newStorage(WEAK_ALL)
+                                    or  newstorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
     local savePrototype         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(p, meta) rawset(p, FLD_PROTOTYPE_META, meta) end
-                                    or  function(p, meta) _Prototype = saveStorage(_Prototype, p, meta) end
+                                    or  function(p, meta) _Prototype = savestorage(_Prototype, p, meta) end
 
     local newPrototype          = function (meta, super, nodeepclone, stack)
         local name
@@ -997,14 +1004,14 @@ do
     local _AttrTargetTypes      = { [ATTRTAR_ALL] = "All" }
 
     -- Attribute Target Data
-    local _AttrTargetData       = newStorage(WEAK_KEY)
-    local _AttrOwnerSubData     = newStorage(WEAK_KEY)
-    local _AttrTargetInrt       = newStorage(WEAK_KEY)
+    local _AttrTargetData       = newstorage(WEAK_KEY)
+    local _AttrOwnerSubData     = newstorage(WEAK_KEY)
+    local _AttrTargetInrt       = newstorage(WEAK_KEY)
 
     -- Temporary Cache
     local _RegisteredAttrs      = {}
     local _RegisteredAttrsStack = {}
-    local _TargetAttrs          = newStorage(WEAK_KEY)
+    local _TargetAttrs          = newstorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -1064,9 +1071,9 @@ do
 
     local saveAttributeData     = function (attrType, target, data, owner)
         if owner then
-            _AttrOwnerSubData   = saveStorage(_AttrOwnerSubData, attrType, saveStorage(_AttrOwnerSubData[attrType] or newStorage(WEAK_KEY), owner, saveStorage(_AttrOwnerSubData[attrType] and _AttrOwnerSubData[attrType][owner] or newStorage(WEAK_KEY), target, data)))
+            _AttrOwnerSubData   = savestorage(_AttrOwnerSubData, attrType, savestorage(_AttrOwnerSubData[attrType] or newstorage(WEAK_KEY), owner, savestorage(_AttrOwnerSubData[attrType] and _AttrOwnerSubData[attrType][owner] or newstorage(WEAK_KEY), target, data)))
         else
-            _AttrTargetData     = saveStorage(_AttrTargetData, attrType, saveStorage(_AttrTargetData[attrType] or newStorage(WEAK_KEY), target, data))
+            _AttrTargetData     = savestorage(_AttrTargetData, attrType, savestorage(_AttrTargetData[attrType] or newstorage(WEAK_KEY), target, data))
         end
     end
 
@@ -1163,7 +1170,7 @@ do
 
                 -- Save
                 if newInhrt then
-                    _AttrTargetInrt = saveStorage(_AttrTargetInrt, target, extInhrt)
+                    _AttrTargetInrt = savestorage(_AttrTargetInrt, target, extInhrt)
                 elseif extInhrt then
                     _Cache(extInhrt)
                 end
@@ -1182,7 +1189,7 @@ do
                 return clone(getAttributeData(aType, target, owner), true, true)
             end;
 
-            --- Get all targets have attached data of the attribtue
+            --- Get all targets have attached data of the attribute
             -- @static
             -- @method  GetAttributeTargets
             -- @owner   attribute
@@ -1206,7 +1213,7 @@ do
                 end
             end;
 
-            --- Get all target's owners that have attached data of the attribtue
+            --- Get all target's owners that have attached data of the attribute
             -- @static
             -- @method  GetAttributeTargetOwners
             -- @owner   attribute
@@ -1233,7 +1240,7 @@ do
             --- Whether there are registered attributes unused
             -- @static
             -- @method  HaveRegisteredAttributes
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @format  (target, targettype[, stack])
             -- @param   target                      the target
             -- @param   targettype                  the target type
@@ -1248,7 +1255,7 @@ do
             -- that need create new features with attributes.
             -- @static
             -- @method  IndependentCall
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @format  definition[, stack]
             -- @param   definition                  the function to be processed
             -- @param   stack                       the stack level
@@ -1292,8 +1299,8 @@ do
                         for _, sattr in pairs, _AttrTargetInrt[super] do
                             local aTar = getAttributeInfo(sattr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                            if aTar == ATTRTAR_ALL or validateFlags(targettype, aTar) then
-                                Trace("Inherit attribtue %s", tostring(sattr))
+                            if aTar == ATTRTAR_ALL or validateflags(targettype, aTar) then
+                                Trace("Inherit attribute %s", tostring(sattr))
                                 tarAttrs = tarAttrs or _Cache()
                                 addAttribute(tarAttrs, sattr, true)
                             end
@@ -1362,7 +1369,7 @@ do
             --- Register attribute target type
             -- @static
             -- @method  RegisterTargetType
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @param   name:string                 the target type's name
             -- @return  flag:number                 the target type's flag value
             ["RegisterTargetType"]  = function(name)
@@ -1376,7 +1383,7 @@ do
             --- Release the registered attribute of the target
             -- @static
             -- @method  RegisterTargetType
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @param   target                      the target, maybe class, method, object and etc
             ["ReleaseTargetAttributes"] = function(target)
                 local tarAttrs  = _TargetAttrs[target]
@@ -1386,7 +1393,7 @@ do
             --- Save the current registered attributes to the target
             -- @static
             -- @method  SaveAttributes
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @format  (target, targettype[, stack])
             -- @param   target                      the target
             -- @param   targettype                  the target type
@@ -1403,7 +1410,7 @@ do
                     local attr  = regAttrs[i]
                     local aTar  = getAttributeInfo(attr, "AttributeTarget", ATTRTAR_ALL, "number")
 
-                    if aTar ~= ATTRTAR_ALL and not validateFlags(targettype, aTar) then
+                    if aTar ~= ATTRTAR_ALL and not validateflags(targettype, aTar) then
                         if _UseWarnInstreadErr then
                             Warn("The attribute %s can't be applied to the [%s]%s", tostring(attr), _AttrTargetTypes[targettype] or "Unknown", tostring(target))
                             tremove(regAttrs, i)
@@ -1422,7 +1429,7 @@ do
             --- Toggle the target, save the old target's attributes to the new one
             -- @static
             -- @method  ToggleTarget
-            -- @owner   attribtue
+            -- @owner   attribute
             -- @format  (old, new)
             -- @param   old                         the old target
             -- @param   new                         the new target
@@ -1437,8 +1444,8 @@ do
             --- Un-register an attribute
             -- @static
             -- @method  Unregister
-            -- @owner   attribtue
-            -- @param   attr                        the attribtue to be un-registered
+            -- @owner   attribute
+            -- @param   attr                        the attribute to be un-registered
             ["Unregister"]      = function(attr)
                 for i, v in ipairs, _RegisteredAttrs, 0 do
                     if v == attr then
@@ -1508,6 +1515,7 @@ do
     local ENV_NS_IMPORTS        = "__PLOOP_ENV_IMPNS"
     local ENV_BASE_ENV          = "__PLOOP_ENV_BSENV"
     local ENV_GLOBAL_CACHE      = "__PLOOP_ENV_GLBCA"
+    local ENV_DEFINE_MODE       = "__PLOOP_ENV_DEFINEMODE"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -1532,7 +1540,7 @@ do
             tname               = type(value)
 
             if tname == "string" then
-                rawset(env, name, environment.GetValue(env, name, true, stack))
+                rawset(env, name, environment.GetValue(env, name, stack))
             elseif namespace.Validate(value) then
                 rawset(env, namespace.GetNamespaceName(value, true), value)
             end
@@ -1540,7 +1548,7 @@ do
             if value ~= nil then
                 rawset(env, name, value)
             else
-                rawset(env, name, environment.GetValue(env, name, true, stack))
+                rawset(env, name, environment.GetValue(env, name, stack))
             end
         elseif namespace.Validate(name) then
             rawset(env, namespace.GetNamespaceName(name, true), value)
@@ -1566,7 +1574,9 @@ do
                 -- Module "Test" (function(_ENV) ... end)
                 if type(func) == "function" then
                     setfenv(func, env)
-                    definition(env)
+                    environment.SetDefinitionMode(env, true)
+                    func(env)
+                    environment.SetDefinitionMode(env, false)
                     return env
                 end
 
@@ -1742,7 +1752,7 @@ do
                         return value
                     end
 
-                    return function(env, name, noautocache, stack)
+                    return function(env, name, stack)
                         if type(name) == "string" then
                             local value
                 ]])
@@ -1783,12 +1793,12 @@ do
 
                 -- Auto-Cache
                 tinsert(body, [[
-                    if value ~= nil and not noautocache then
+                    if value ~= nil and not rawget(env, "]] .. ENV_DEFINE_MODE .. [[") then
                 ]])
 
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
-                    uinsert(apis, "saveStorage")
-                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = saveStorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
+                    uinsert(apis, "savestorage")
+                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = savestorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
                     if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
                         uinsert(apis, "Warn")
                         uinsert(apis, "tostring")
@@ -1814,7 +1824,7 @@ do
                     body[2] = strformat("local %s = %s", declare, declare)
                 end
 
-                local func = loadSnippet(tblconcat(body, "\n"), "environment.GetValue")(unpack(upval))
+                local func = loadsnippet(tblconcat(body, "\n"), "environment.GetValue", _PLoopEnv)(unpack(upval))
 
                 _Cache(head)
                 _Cache(body)
@@ -1855,7 +1865,7 @@ do
                 if not ns then error("Usage: environment.ImportNamespace(env, namespace) - The namespace is not provided", parsestack(stack) + 1) end
 
                 local imports   = rawget(env, ENV_NS_IMPORTS)
-                if not imports then imports = newStorage(WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
+                if not imports then imports = newstorage(WEAK_VALUE) rawset(env, ENV_NS_IMPORTS, imports) end
                 for _, v in ipairs, imports, 0 do if v == ns then return end end
                 tinsert(imports, ns)
             end;
@@ -1931,7 +1941,7 @@ do
                 end
             end;
 
-            --- Save the value to the environment, useful to save attribtues for functions
+            --- Save the value to the environment, useful to save attributes for functions
             -- @static
             -- @method  SaveValue
             -- @owner   environment
@@ -1953,6 +1963,15 @@ do
                     attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
                 end
                 return rawset(env, key, value)
+            end;
+
+            --- Turn on/off the definition mode for an environment, the value won't be auto-cached
+            -- to the environment in definition mode
+            -- @param   env                         the environment
+            -- @param   mode:boolean                whether turn on the definition mode
+            ["SetDefinitionMode"] = function(env, mode, stack)
+                if type(env) ~= "table" then error("Usage: environment.SetDefinitionMode(env, mode) - the env must be a table", parsestack(stack) + 1) end
+                rawset(env, ENV_DEFINE_MODE, mode and true or nil)
             end;
 
             --- Set the namespace to the environment
@@ -2075,12 +2094,12 @@ do
     -----------------------------------------------------------------------
     local _NSTree               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_SUBNS) end end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
     local _NSName               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_NAME) end end})
-                                    or  newStorage(WEAK_KEY)
-    local _ValidTypeCombine     = newStorage(WEAK_KEY)
-    local _UnmSubTypeMap        = newStorage(WEAK_ALL)
+                                    or  newstorage(WEAK_KEY)
+    local _ValidTypeCombine     = newstorage(WEAK_KEY)
+    local _UnmSubTypeMap        = newstorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -2116,12 +2135,12 @@ do
     end
 
     local saveSubNamespace      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function(root, name, subns) rawset(root, FLD_NS_SUBNS, saveStorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) end
-                                    or  function(root, name, subns) _NSTree = saveStorage(_NSTree, root, saveStorage(_NSTree[root] or {}, name, subns)) end
+                                    and function(root, name, subns) rawset(root, FLD_NS_SUBNS, savestorage(rawget(root, FLD_NS_SUBNS) or {}, name, subns)) end
+                                    or  function(root, name, subns) _NSTree = savestorage(_NSTree, root, savestorage(_NSTree[root] or {}, name, subns)) end
 
     local saveNamespaceName     = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(ns, name) rawset(ns, FLD_NS_NAME, name) rawset(ns, FLD_NS_SUBNS, false) end
-                                    or  function(ns, name) _NSName = saveStorage(_NSName, ns, name) end
+                                    or  function(ns, name) _NSName = savestorage(_NSName, ns, name) end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -2377,7 +2396,7 @@ do
                 end or nil,
             }
 
-            local comb      = _ValidTypeCombine[a] or newStorage(WEAK_ALL)
+            local comb      = _ValidTypeCombine[a] or newstorage(WEAK_ALL)
             comb[b]         = strt
             _ValidTypeCombine[a] = comb
 
@@ -2476,10 +2495,10 @@ do
     -----------------------------------------------------------------------
     local _EnumInfo             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, e) return type(e) == "table" and rawget(e, FLD_ENUM_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
 
     -- BUILD CACHE
-    local _EnumBuilderInfo      = newStorage(WEAK_KEY)
+    local _EnumBuilderInfo      = newstorage(WEAK_KEY)
     local _EnumValidMap         = {}
 
     -----------------------------------------------------------------------
@@ -2492,7 +2511,7 @@ do
 
     local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (e, meta) rawset(e, FLD_ENUM_META, meta) end
-                                    or  function (e, meta) _EnumInfo = saveStorage(_EnumInfo, e, meta) end
+                                    or  function (e, meta) _EnumInfo = savestorage(_EnumInfo, e, meta) end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -2546,10 +2565,10 @@ do
 
                 local info      = _EnumInfo[target]
 
-                -- if info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                -- if info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
                     [FLD_ENUM_MOD    ]  = 0,
                     [FLD_ENUM_ITEMS  ]  = {},
                     [FLD_ENUM_CACHE  ]  = {},
@@ -2576,7 +2595,7 @@ do
 
                 attribute.ApplyAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
-                _EnumBuilderInfo = saveStorage(_EnumBuilderInfo, target, nil)
+                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, nil)
 
                 local enums = ninfo[FLD_ENUM_ITEMS]
                 local cache = wipe(ninfo[FLD_ENUM_CACHE])
@@ -2584,7 +2603,7 @@ do
                 for k, v in pairs, enums do cache[v] = k end
 
                 -- Check Flags Enumeration
-                if validateFlags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
+                if validateflags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
                     -- Mark the max value
                     local max = 1
                     for k, v in pairs, enums do
@@ -2594,7 +2613,7 @@ do
                     ninfo[FLD_ENUM_MAXVAL]  = max - 1
                 else
                     ninfo[FLD_ENUM_MAXVAL]  = false
-                    ninfo[FLD_ENUM_MOD]     = turnOnFlags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
+                    ninfo[FLD_ENUM_MOD]     = turnonflags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
                 end
 
                 -- Save as new enumeration's info
@@ -2650,7 +2669,7 @@ do
             -- @return  boolean                     true if the enumeration element values only are flags
             ["IsFlagsEnum"]     = function(target)
                 local info      = getEnumTargetInfo(target)
-                return info and validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
+                return info and validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
             --- Whether the enum's value is immutable through the validation, always true.
@@ -2669,7 +2688,7 @@ do
             -- @return  boolean                     true if the enumeration is sealed
             ["IsSealed"]        = function(target)
                 local info      = getEnumTargetInfo(target)
-                return info and validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
+                return info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
             --- Whether the enumeration is sub-type of others, always false, needed by struct system
@@ -2706,7 +2725,7 @@ do
                                     local ckv = 1
 
                                     while ckv <= value and ecache[ckv] do
-                                        if validateFlags(ckv, value) then ret[ecache[ckv]] = ckv end
+                                        if validateflags(ckv, value) then ret[ecache[ckv]] = ckv end
                                         ckv = ckv * 2
                                     end
                                 elseif value == 0 and ecache[0] then
@@ -2724,7 +2743,7 @@ do
                                     while ckv <= value and ecache[ckv] do
                                         local v = ckv
                                         ckv = ckv * 2
-                                        if validateFlags(v, value) then return ecache[v], v end
+                                        if validateflags(v, value) then return ecache[v], v end
                                     end
                                 end
                             end
@@ -2769,10 +2788,10 @@ do
                 stack           = parsestack(stack) + 1
 
                 if info then
-                    if not validateFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
+                    if not validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
                         if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        if validateFlags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
-                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
+                        if validateflags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
+                        info[FLD_ENUM_MOD] = turnonflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
                     error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
@@ -2790,8 +2809,8 @@ do
                 local info      = getEnumTargetInfo(target)
 
                 if info then
-                    if not validateFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
-                        info[FLD_ENUM_MOD] = turnOnFlags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
+                    if not validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
+                        info[FLD_ENUM_MOD] = turnonflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
                     end
                 else
                     error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", parsestack(stack) + 1)
@@ -2806,7 +2825,7 @@ do
             -- @param   check                       the check value
             -- @param   boolean                     true if the check value contains the target value
             -- @usage   print(enum.ValidateFlags(4, 7)) -- true : 7 = 1 + 2 + 4
-            ["ValidateFlags"]   = validateFlags;
+            ["ValidateFlags"]   = validateflags;
 
             --- Whether the value is the enumeration's element's name or value
             -- @static
@@ -3057,7 +3076,7 @@ end
 --
 --                  print(Location.GetRange{x = 3, y = 4}) -- 5
 --
---              The `__Static__` is an attribtue, it's used here to declare the
+--              The `__Static__` is an attribute, it's used here to declare the
 --          next defined method is a static one.
 --
 --              In the example, we declare the default value of the member in
@@ -3247,15 +3266,15 @@ do
     -----------------------------------------------------------------------
     local _StructInfo           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, s) return type(s) == "table" and rawget(s, FLD_STRUCT_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
     local _MemberInfo           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, s) return type(s) == "table" and rawget(s, FLD_MEMBER_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
-    local _DependenceMap        = newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
+    local _DependenceMap        = newstorage(WEAK_KEY)
 
     -- TYPE BUILDING
-    local _StructBuilderInfo    = newStorage(WEAK_KEY)
-    local _StructBuilderInDefine= newStorage(WEAK_KEY)
+    local _StructBuilderInfo    = newstorage(WEAK_KEY)
+    local _StructBuilderInDefine= newstorage(WEAK_KEY)
 
     local _StructValidMap       = {}
     local _StructCtorMap        = {}
@@ -3267,8 +3286,6 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
-    local getEnvValue           = environment.GetValue
-
     local getStructTargetInfo   = function (target)
         local info  = _StructBuilderInfo[target]
         if info then return info, true else return _StructInfo[target], false end
@@ -3359,13 +3376,13 @@ do
 
     local isNotSealedStruct     = function (target)
         local info, def         = getStructTargetInfo(target)
-        return info and (def or not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]))
+        return info and (def or not validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]))
     end
 
     local checkStructDependence = function (target, chkType)
         if chkType and target ~= chkType then
             if chkStructContents(chkType, isNotSealedStruct, true) then
-                _DependenceMap[chkType]         = _DependenceMap[chkType] or newStorage(WEAK_KEY)
+                _DependenceMap[chkType]         = _DependenceMap[chkType] or newstorage(WEAK_KEY)
                 _DependenceMap[chkType][target] = true
             elseif chkType and _DependenceMap[chkType] then
                 _DependenceMap[chkType][target] = nil
@@ -3405,9 +3422,9 @@ do
     local updateStructImmutable = function (target, info)
         info = info or getStructTargetInfo(target)
         if checkStructImmutable(info) then
-            info[FLD_STRUCT_MOD]= turnOnFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
+            info[FLD_STRUCT_MOD]= turnonflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
         else
-            info[FLD_STRUCT_MOD]= turnOffFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
+            info[FLD_STRUCT_MOD]= turnoffflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
         end
     end
 
@@ -3438,28 +3455,28 @@ do
         local upval = _Cache()
 
         if info[FLD_STRUCT_VALIDCACHE] then
-            token   = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
+            token   = turnonflags(FLG_STRUCT_VALIDCACHE, token)
         end
 
         if info[FLD_STRUCT_MEMBERSTART] then
-            token   = turnOnFlags(FLG_MEMBER_STRUCT, token)
+            token   = turnonflags(FLG_MEMBER_STRUCT, token)
             local i = FLD_STRUCT_MEMBERSTART
             while info[i + 1] do i = i + 1 end
             tinsert(upval, i)
         elseif info[FLD_STRUCT_ARRAY] then
-            token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
+            token   = turnonflags(FLG_ARRAY_STRUCT, token)
         else
-            token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
+            token   = turnonflags(FLG_CUSTOM_STRUCT, token)
         end
 
         if info[FLD_STRUCT_VALIDSTART] then
             if info[FLD_STRUCT_VALIDSTART + 1] then
                 local i = FLD_STRUCT_VALIDSTART + 2
                 while info[i] do i = i + 1 end
-                token = turnOnFlags(FLG_STRUCT_MULTI_VLD, token)
+                token = turnonflags(FLG_STRUCT_MULTI_VLD, token)
                 tinsert(upval, i - 1)
             else
-                token = turnOnFlags(FLG_STRUCT_SINGLE_VLD, token)
+                token = turnonflags(FLG_STRUCT_SINGLE_VLD, token)
                 tinsert(upval, info[FLD_STRUCT_VALIDSTART])
             end
         end
@@ -3468,10 +3485,10 @@ do
             if info[FLD_STRUCT_INITSTART + 1] then
                 local i = FLD_STRUCT_INITSTART + 2
                 while info[i] do i = i + 1 end
-                token = turnOnFlags(FLG_STRUCT_MULTI_INIT, token)
+                token = turnonflags(FLG_STRUCT_MULTI_INIT, token)
                 tinsert(upval, i - 1)
             else
-                token = turnOnFlags(FLG_STRUCT_SINGLE_INIT, token)
+                token = turnonflags(FLG_STRUCT_SINGLE_INIT, token)
                 tinsert(upval, info[FLD_STRUCT_INITSTART])
             end
         end
@@ -3479,7 +3496,7 @@ do
         if info[FLD_STRUCT_TYPEMETHOD] then
             for k, v in pairs, info[FLD_STRUCT_TYPEMETHOD] do
                 if v then
-                    token   = turnOnFlags(FLG_STRUCT_OBJ_METHOD, token)
+                    token   = turnonflags(FLG_STRUCT_OBJ_METHOD, token)
                     break
                 end
             end
@@ -3495,7 +3512,7 @@ do
             tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) or validateflags(FLG_ARRAY_STRUCT, token) then
                 uinsert(apis, "strformat")
                 uinsert(apis, "type")
                 uinsert(apis, "strgsub")
@@ -3507,7 +3524,7 @@ do
                     if getmetatable(value) ~= nil     then return nil, onlyValid or "the %s must be a table without meta-table" end
                 ]])
 
-                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                if validateflags(FLG_STRUCT_VALIDCACHE, token) then
                     uinsert(apis, "_Cache")
                     tinsert(body, [[
                         -- Cache to block recursive validation
@@ -3523,7 +3540,7 @@ do
                 end
             end
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) then
                 uinsert(apis, "clone")
 
                 tinsert(head, "count")
@@ -3572,7 +3589,7 @@ do
                         end
                     end
                 ]])
-            elseif validateFlags(FLG_ARRAY_STRUCT, token) then
+            elseif validateflags(FLG_ARRAY_STRUCT, token) then
                 uinsert(apis, "ipairs")
 
                 tinsert(body, [[
@@ -3593,17 +3610,17 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_STRUCT_SINGLE_VLD, token) or validateFlags(FLG_STRUCT_MULTI_VLD, token) then
+            if validateflags(FLG_STRUCT_SINGLE_VLD, token) or validateflags(FLG_STRUCT_MULTI_VLD, token) then
                 uinsert(apis, "type")
                 uinsert(apis, "strformat")
 
-                if validateFlags(FLG_STRUCT_SINGLE_VLD, token) then
+                if validateflags(FLG_STRUCT_SINGLE_VLD, token) then
                     tinsert(head, "svalid")
                     tinsert(body, [[
                         local msg = svalid(value, onlyValid)
                         if msg then return nil, onlyValid or type(msg) == "string" and msg or strformat("the %s must be [%s]", "%s", info[]] .. FLD_STRUCT_NAME .. [[]) end
                     ]])
-                elseif validateFlags(FLG_STRUCT_MULTI_VLD, token) then
+                elseif validateflags(FLG_STRUCT_MULTI_VLD, token) then
                     tinsert(head, "mvalid")
                     tinsert(body, [[
                         for i = ]] .. FLD_STRUCT_VALIDSTART .. [[, mvalid do
@@ -3614,18 +3631,18 @@ do
                 end
             end
 
-            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) or validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
+            if validateflags(FLG_STRUCT_SINGLE_INIT, token) or validateflags(FLG_STRUCT_MULTI_INIT, token) or validateflags(FLG_STRUCT_OBJ_METHOD, token) then
                 tinsert(body, [[if onlyValid then return value end]])
             end
 
-            if validateFlags(FLG_STRUCT_SINGLE_INIT, token) or validateFlags(FLG_STRUCT_MULTI_INIT, token) then
-                if validateFlags(FLG_STRUCT_SINGLE_INIT, token) then
+            if validateflags(FLG_STRUCT_SINGLE_INIT, token) or validateflags(FLG_STRUCT_MULTI_INIT, token) then
+                if validateflags(FLG_STRUCT_SINGLE_INIT, token) then
                     tinsert(head, "sinit")
                     tinsert(body, [[
                         local ret = sinit(value)
                     ]])
 
-                    if validateFlags(FLG_CUSTOM_STRUCT, token) then
+                    if validateflags(FLG_CUSTOM_STRUCT, token) then
                         tinsert(body, [[if ret ~= nil then value = ret end]])
                     end
                 else
@@ -3634,15 +3651,15 @@ do
                         for i = ]] .. FLD_STRUCT_INITSTART .. [[, minit do
                             local ret = info[i](value)
                         ]])
-                    if validateFlags(FLG_CUSTOM_STRUCT, token) then
+                    if validateflags(FLG_CUSTOM_STRUCT, token) then
                         tinsert(body, [[if ret ~= nil then value = ret end]])
                     end
                     tinsert(body, [[end]])
                 end
             end
 
-            if validateFlags(FLG_STRUCT_OBJ_METHOD, token) then
-                if validateFlags(FLG_CUSTOM_STRUCT, token) then
+            if validateflags(FLG_STRUCT_OBJ_METHOD, token) then
+                if validateflags(FLG_CUSTOM_STRUCT, token) then
                     uinsert(apis, "type")
                     tinsert(body, [[if type(value) == "table" then]])
                 end
@@ -3653,7 +3670,7 @@ do
                     end
                 ]])
 
-                if validateFlags(FLG_CUSTOM_STRUCT, token) then
+                if validateflags(FLG_CUSTOM_STRUCT, token) then
                     tinsert(body, [[end]])
                 end
             end
@@ -3672,7 +3689,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _StructValidMap[token]  = loadSnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token)()
+            _StructValidMap[token]  = loadsnippet(tblconcat(body, "\n"), "Struct_Validate_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _StructValidMap[token] = _StructValidMap[token]()
@@ -3698,11 +3715,11 @@ do
         local upval = _Cache()
 
         if info[FLD_STRUCT_VALIDCACHE] then
-            token   = turnOnFlags(FLG_STRUCT_VALIDCACHE, token)
+            token   = turnonflags(FLG_STRUCT_VALIDCACHE, token)
         end
 
         if info[FLD_STRUCT_MEMBERSTART] then
-            token   = turnOnFlags(FLG_MEMBER_STRUCT, token)
+            token   = turnonflags(FLG_MEMBER_STRUCT, token)
             local i = FLD_STRUCT_MEMBERSTART + 1
             local r = false
             while info[i] do
@@ -3711,24 +3728,24 @@ do
             end
             tinsert(upval, i - 1)
             if r then
-                token = turnOnFlags(FLG_STRUCT_MULTI_REQ, token)
+                token = turnonflags(FLG_STRUCT_MULTI_REQ, token)
             else
                 local ftype = info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_TYPE]
                 if ftype then
-                    token = turnOnFlags(FLG_STRUCT_FIRST_TYPE, token)
+                    token = turnonflags(FLG_STRUCT_FIRST_TYPE, token)
                     tinsert(upval, ftype)
                     tinsert(upval, info[FLD_STRUCT_MEMBERSTART][FLD_MEMBER_VALID])
                     tinsert(upval, getobjectvalue(ftype, "IsImmutable") or false)
                 end
             end
         elseif info[FLD_STRUCT_ARRAY] then
-            token   = turnOnFlags(FLG_ARRAY_STRUCT, token)
+            token   = turnonflags(FLG_ARRAY_STRUCT, token)
         else
-            token   = turnOnFlags(FLG_CUSTOM_STRUCT, token)
+            token   = turnonflags(FLG_CUSTOM_STRUCT, token)
         end
 
-        if validateFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) then
-            token           = turnOnFlags(FLG_STRUCT_IMMUTABLE, token)
+        if validateflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) then
+            token           = turnonflags(FLG_STRUCT_IMMUTABLE, token)
         end
 
         -- Build the validator generator
@@ -3743,7 +3760,7 @@ do
             uinsert(apis, "error")
             uinsert(apis, "strgsub")
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) then
                 uinsert(apis, "select")
                 uinsert(apis, "type")
                 uinsert(apis, "getmetatable")
@@ -3756,9 +3773,9 @@ do
                 ]])
 
                 tinsert(head, "count")
-                if not validateFlags(FLG_STRUCT_MULTI_REQ, token) then
+                if not validateflags(FLG_STRUCT_MULTI_REQ, token) then
                     -- So, it may be the first member
-                    if validateFlags(FLG_STRUCT_FIRST_TYPE, token) then
+                    if validateflags(FLG_STRUCT_FIRST_TYPE, token) then
                         tinsert(head, "ftype")
                         tinsert(head, "fvalid")
                         tinsert(head, "fimtbl")
@@ -3772,7 +3789,7 @@ do
                     tinsert(body, [[local fmatch, fimtbl = false, false]])
                 end
 
-                if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                if validateflags(FLG_STRUCT_VALIDCACHE, token) then
                     tinsert(body, [[
                         local cache = _Cache()
                         ret, msg    = ivalid(info, first, fmatch and not fimtbl, cache)
@@ -3784,10 +3801,10 @@ do
 
                 tinsert(body, [[if not msg then]])
 
-                if not validateFlags(FLG_STRUCT_IMMUTABLE, token) then
+                if not validateflags(FLG_STRUCT_IMMUTABLE, token) then
                     tinsert(body, [[if fmatch and not fimtbl then]])
 
-                    if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+                    if validateflags(FLG_STRUCT_VALIDCACHE, token) then
                         tinsert(body, [[
                             local cache = _Cache()
                             ret, msg = ivalid(info, first, false, cache)
@@ -3815,7 +3832,7 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) then
                 tinsert(body, [[
                     ret = {}
                     local j = 1
@@ -3827,7 +3844,7 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_STRUCT_VALIDCACHE, token) then
+            if validateflags(FLG_STRUCT_VALIDCACHE, token) then
                 uinsert(apis, "_Cache")
                 uinsert(apis, "pairs")
                 tinsert(body, [[
@@ -3843,7 +3860,7 @@ do
 
             tinsert(body, [[if not msg then return ret end]])
 
-            if validateFlags(FLG_MEMBER_STRUCT, token) or validateFlags(FLG_ARRAY_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) or validateflags(FLG_ARRAY_STRUCT, token) then
                 uinsert(apis, "type")
                 tinsert(body, [[
                     error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
@@ -3865,7 +3882,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _StructCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token)()
+            _StructCtorMap[token] = loadsnippet(tblconcat(body, "\n"), "Struct_Ctor_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _StructCtorMap[token] = _StructCtorMap[token]()
@@ -3919,11 +3936,11 @@ do
     -- Save Meta
     local saveStructMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end
-                                    or  function (s, meta) _StructInfo = saveStorage(_StructInfo, s, meta) end
+                                    or  function (s, meta) _StructInfo = savestorage(_StructInfo, s, meta) end
 
     local saveMemberMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (m, meta) rawset(m, FLD_MEMBER_META, meta) end
-                                    or  function (m, meta) _MemberInfo = saveStorage(_MemberInfo, m, meta) end
+                                    or  function (m, meta) _MemberInfo = savestorage(_MemberInfo, m, meta) end
 
     -----------------------------------------------------------------------
     --                             prototype                             --
@@ -4095,10 +4112,10 @@ do
 
                 local info      = _StructInfo[target]
 
-                if info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if info and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _StructBuilderInfo      = saveStorage(_StructBuilderInfo, target, {
+                _StructBuilderInfo      = savestorage(_StructBuilderInfo, target, {
                     [FLD_STRUCT_MOD ]   = 0,
                     [FLD_STRUCT_NAME]   = tostring(target),
                 })
@@ -4121,7 +4138,7 @@ do
 
                 attribute.ApplyAttributes(target, ATTRTAR_STRUCT, nil, nil, stack)
 
-                _StructBuilderInfo  = saveStorage(_StructBuilderInfo, target, nil)
+                _StructBuilderInfo  = savestorage(_StructBuilderInfo, target, nil)
 
                 -- Install base struct's features
                 if ninfo[FLD_STRUCT_BASE] then
@@ -4451,7 +4468,7 @@ do
             -- @return  boolean                     true if the value should be immutable
             ["IsImmutable"]     = function(target)
                 local info      = getStructTargetInfo(target)
-                return info and validateFlags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) or false
+                return info and validateflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) or false
             end;
 
             --- Whether a structure use the other as its base structure
@@ -4480,7 +4497,7 @@ do
             -- @return  boolean                     true if the structure is sealed
             ["IsSealed"]        = function(target)
                 local info      = getStructTargetInfo(target)
-                return info and validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
+                return info and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
             end;
 
             --- Whether the structure's given name method is static
@@ -4617,8 +4634,8 @@ do
                 stack           = parsestack(stack) + 1
 
                 if info then
-                    if not validateFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
-                        info[FLD_STRUCT_MOD] = turnOnFlags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])
+                    if not validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then
+                        info[FLD_STRUCT_MOD] = turnonflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])
                     end
                 else
                     error("Usage: struct.SetSealed(structure[, stack]) - The structure is not valid", stack)
@@ -4706,8 +4723,9 @@ do
             environment.Initialize  (builder)
             environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
+            environment.SetDefinitionMode(builder, true)
 
-            _StructBuilderInDefine  = saveStorage(_StructBuilderInDefine, builder, true)
+            _StructBuilderInDefine  = savestorage(_StructBuilderInDefine, builder, true)
 
             if definition then
                 builder(definition, stack)
@@ -4739,10 +4757,7 @@ do
             local owner         = environment.GetNamespace(self)
             return"[structbuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
-        __index                 = function(self, key)
-            local value         = getEnvValue(self, key, _StructBuilderInDefine[self], 2)
-            return value
-        end,
+        __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setStructBuilderValue(self, key, value, 2) then
                 return rawset(self, key, value)
@@ -4779,7 +4794,8 @@ do
                 end
             end
 
-            _StructBuilderInDefine = saveStorage(_StructBuilderInDefine, self, nil)
+            environment.SetDefinitionMode(self, false)
+            _StructBuilderInDefine = savestorage(_StructBuilderInDefine, self, nil)
             struct.EndDefinition(owner, stack)
 
             if getfenv(stack) == self then
@@ -4911,7 +4927,8 @@ do
         if not owner or not visitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
-        _StructBuilderInDefine = saveStorage(_StructBuilderInDefine, visitor, nil)
+        environment.SetDefinitionMode(visitor, false)
+        _StructBuilderInDefine = savestorage(_StructBuilderInDefine, visitor, nil)
         struct.EndDefinition(owner, stack)
 
         local baseEnv       = environment.GetParent(visitor) or _G
@@ -5447,20 +5464,20 @@ do
     -----------------------------------------------------------------------
     local _ICInfo               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
 
     local _ThisMap              = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_TYPE) or nil end})
-                                    or  newStorage(WEAK_ALL)
+                                    or  newstorage(WEAK_ALL)
     local _SuperMap             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_TYPE) or nil end})
-                                    or  newStorage(WEAK_ALL)
+                                    or  newstorage(WEAK_ALL)
 
     local _Parser               = {}
 
     -- TYPE BUILDING
-    local _ICBuilderInfo        = newStorage(WEAK_KEY)      -- TYPE BUILDER INFO
-    local _ICBuilderInDefine    = newStorage(WEAK_KEY)
+    local _ICBuilderInfo        = newstorage(WEAK_KEY)      -- TYPE BUILDER INFO
+    local _ICBuilderInDefine    = newstorage(WEAK_KEY)
     local _ICDependsMap         = {}                        -- CHILDREN MAP
 
     local _ICIndexMap           = {}
@@ -5470,21 +5487,19 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
-    local getEnvValue           = environment.GetValue
-
     local getICTargetInfo       = function (target) local info  = _ICBuilderInfo[target] if info then return info, true else return _ICInfo[target], false end end
 
     local saveICInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_IC_META, info) end
-                                    or  function(target, info) _ICInfo = saveStorage(_ICInfo, target, info) end
+                                    or  function(target, info) _ICInfo = savestorage(_ICInfo, target, info) end
 
     local saveThisMap           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
                                     and function(this, target) rawset(this, FLD_IC_TYPE, target) end
-                                    or  function(this, target) _ThisMap = saveStorage(_ThisMap, this, target) end
+                                    or  function(this, target) _ThisMap = savestorage(_ThisMap, this, target) end
 
     local saveSuperMap          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
                                     and function(super, target) rawset(super, FLD_IC_TYPE, target) end
-                                    or  function(super, target) _SuperMap = saveStorage(_SuperMap, super, target) end
+                                    or  function(super, target) _SuperMap = savestorage(_SuperMap, super, target) end
 
     -- Type Generator
     local iterSuperInfo         = function (info, reverse)
@@ -5681,33 +5696,33 @@ do
         local upval = _Cache()
         local meta  = info[FLD_IC_OBJMTM]
 
-        if info[FLD_IC_SUPINFO] and not validateFlags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_SUPACC, token)
+        if info[FLD_IC_SUPINFO] and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_SUPACC, token)
             tinsert(upval, info[FLD_IC_SUPINFO])
         end
 
         if info[FLD_IC_OBJMTD] then
-            token   = turnOnFlags(FLG_IC_OBJMTD, token)
+            token   = turnonflags(FLG_IC_OBJMTD, token)
             tinsert(upval, info[FLD_IC_OBJMTD])
         end
 
         if info[FLD_IC_OBJFTR] then
-            token   = turnOnFlags(FLG_IC_OBJFTR, token)
+            token   = turnonflags(FLG_IC_OBJFTR, token)
             tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
         local data  = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][IC_META_INDEX] or meta[META_KEYS[IC_META_INDEX]]
         if data then
             if type(data) == "function" then
-                token = turnOnFlags(FLG_IC_IDXFUN, token)
+                token = turnonflags(FLG_IC_IDXFUN, token)
             else
-                token = turnOnFlags(FLG_IC_IDXTBL, token)
+                token = turnonflags(FLG_IC_IDXTBL, token)
             end
             tinsert(upval, data)
         end
 
-        if validateFlags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_NNILVL, token)
+        if validateflags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_NNILVL, token)
         end
 
         -- No __index generated
@@ -5726,7 +5741,7 @@ do
             tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(self, key)]])
 
-            if validateFlags(FLG_IC_SUPACC, token) then
+            if validateflags(FLG_IC_SUPACC, token) then
                 uinsert(apis, "rawget")
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
@@ -5752,7 +5767,7 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_IC_OBJMTD, token) then
+            if validateflags(FLG_IC_OBJMTD, token) then
                 tinsert(head, "methods")
                 tinsert(body, [[
                     local mtd = methods[key]
@@ -5760,7 +5775,7 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_IC_OBJFTR, token) then
+            if validateflags(FLG_IC_OBJFTR, token) then
                 tinsert(head, "features")
                 tinsert(body, [[
                     local ftr = features[key]
@@ -5768,9 +5783,9 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_IC_IDXFUN, token) then
+            if validateflags(FLG_IC_IDXFUN, token) then
                 tinsert(head, "_index")
-                if validateFlags(FLG_IC_NNILVL, token) then
+                if validateflags(FLG_IC_NNILVL, token) then
                     tinsert(body, [[
                         local val = _index(self, key)
                         if val ~= nil then return val end
@@ -5778,9 +5793,9 @@ do
                 else
                     tinsert(body, [[return _index(self, key)]])
                 end
-            elseif validateFlags(FLG_IC_IDXTBL, token) then
+            elseif validateflags(FLG_IC_IDXTBL, token) then
                 tinsert(head, "_index")
-                if validateFlags(FLG_IC_NNILVL, token) then
+                if validateflags(FLG_IC_NNILVL, token) then
                     tinsert(body, [[
                         local val = _index[key]
                         if val ~= nil then return val end
@@ -5790,7 +5805,7 @@ do
                 end
             end
 
-            if validateFlags(FLG_IC_NNILVL, token) then
+            if validateflags(FLG_IC_NNILVL, token) then
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
@@ -5807,7 +5822,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _ICIndexMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Index_" .. token)()
+            _ICIndexMap[token] = loadsnippet(tblconcat(body, "\n"), "Class_Index_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _ICIndexMap[token] = _ICIndexMap[token]()
@@ -5832,27 +5847,27 @@ do
         local upval = _Cache()
         local meta  = info[FLD_IC_OBJMTM]
 
-        if info[FLD_IC_SUPINFO] and not validateFlags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_SUPACC, token)
+        if info[FLD_IC_SUPINFO] and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_SUPACC, token)
             tinsert(upval, info[FLD_IC_SUPINFO])
         end
 
         if info[FLD_IC_OBJFTR] and next(info[FLD_IC_OBJFTR]) then
-            token   = turnOnFlags(FLG_IC_OBJFTR, token)
+            token   = turnonflags(FLG_IC_OBJFTR, token)
             tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
-        if validateFlags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_OBJATR, token)
+        if validateflags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_OBJATR, token)
         end
 
         local data  = meta[META_KEYS[IC_META_NEWIDX]]
 
         if data then
-            token   = turnOnFlags(FLG_IC_NEWIDX, token)
+            token   = turnonflags(FLG_IC_NEWIDX, token)
             tinsert(upval, data)
-        elseif validateFlags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) then
-            token   = turnOnFlags(FLG_IC_NRAWST, token)
+        elseif validateflags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_NRAWST, token)
         end
 
         -- No __newindex generated
@@ -5869,7 +5884,7 @@ do
             tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(self, key, value)]])
 
-            if validateFlags(FLG_IC_SUPACC, token) then
+            if validateflags(FLG_IC_SUPACC, token) then
                 uinsert(apis, "rawget")
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
@@ -5891,7 +5906,7 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_IC_OBJFTR, token) then
+            if validateflags(FLG_IC_OBJFTR, token) then
                 tinsert(head, "feature")
                 tinsert(body, [[
                     local ftr = feature[key]
@@ -5899,8 +5914,8 @@ do
                 ]])
             end
 
-            if validateFlags(FLG_IC_NEWIDX, token) or not validateFlags(FLG_IC_NRAWST, token) then
-                if validateFlags(FLG_IC_OBJATR, token) then
+            if validateflags(FLG_IC_NEWIDX, token) or not validateflags(FLG_IC_NRAWST, token) then
+                if validateflags(FLG_IC_OBJATR, token) then
                     uinsert(apis, "type")
                     uinsert(apis, "attribute")
                     uinsert(apis, "ATTRTAR_FUNCTION")
@@ -5919,7 +5934,7 @@ do
                     ]])
                 end
 
-                if validateFlags(FLG_IC_NEWIDX, token) then
+                if validateflags(FLG_IC_NEWIDX, token) then
                     tinsert(head, "_newindex")
                     tinsert(body, [[_newindex(self, key, value)]])
                 else
@@ -5928,7 +5943,7 @@ do
                 end
             end
 
-            if validateFlags(FLG_IC_NRAWST, token) then
+            if validateflags(FLG_IC_NRAWST, token) then
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
@@ -5945,7 +5960,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _ICNewIdxMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token)()
+            _ICNewIdxMap[token] = loadsnippet(tblconcat(body, "\n"), "Class_NewIndex_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _ICNewIdxMap[token] = _ICNewIdxMap[token]()
@@ -5966,7 +5981,7 @@ do
     end
 
     local genConstructor        = function (target, info)
-        if validateFlags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) then
+        if validateflags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) then
             local msg = strformat("The %s is abstract, can't be used to create objects", tostring(target))
             info[FLD_IC_OBCTOR] = function() error(msg, 3) end
             return
@@ -5982,27 +5997,27 @@ do
         end
 
         if info[FLD_IC_OBJEXT] then
-            token   = turnOnFlags(FLG_IC_EXIST, token)
+            token   = turnonflags(FLG_IC_EXIST, token)
             tinsert(upval, info[FLD_IC_OBJEXT])
         end
 
         if info[FLD_IC_OBJNEW] then
-            token   = turnOnFlags(FLG_IC_NEWOBJ, token)
+            token   = turnonflags(FLG_IC_NEWOBJ, token)
             tinsert(upval, info[FLD_IC_OBJNEW])
         end
 
         if info[FLD_IC_FIELD] then
-            token   = turnOnFlags(FLG_IC_FIELD, token)
+            token   = turnonflags(FLG_IC_FIELD, token)
             tinsert(upval, info[FLD_IC_FIELD])
         end
 
         if info[FLD_IC_CLINIT] then
-            token   = turnOnFlags(FLG_IC_HSCLIN, token)
+            token   = turnonflags(FLG_IC_HSCLIN, token)
             tinsert(upval, info[FLD_IC_CLINIT])
         end
 
         if info[FLD_IC_STINIT] then
-            token   = turnOnFlags(FLG_IC_HSIFIN, token)
+            token   = turnonflags(FLG_IC_HSIFIN, token)
             local i = FLD_IC_STINIT
             while info[i + 1] do i = i + 1 end
             tinsert(upval, i)
@@ -6012,7 +6027,7 @@ do
             local head      = _Cache()
             local body      = _Cache()
             local apis      = _Cache()
-            local hasctor   = validateFlags(FLG_IC_HSCLIN, token)
+            local hasctor   = validateflags(FLG_IC_HSCLIN, token)
 
             uinsert(apis, "setmetatable")
 
@@ -6028,11 +6043,11 @@ do
 
             tinsert(body, [[local obj]])
 
-            if validateFlags(FLG_IC_EXIST, token) or validateFlags(FLG_IC_NEWOBJ, token) then
+            if validateflags(FLG_IC_EXIST, token) or validateflags(FLG_IC_NEWOBJ, token) then
                 tinsert(head, "cls")
             end
 
-            if validateFlags(FLG_IC_EXIST, token) then
+            if validateflags(FLG_IC_EXIST, token) then
                 tinsert(head, "extobj")
                 if hasctor then
                     tinsert(body, [[obj = extobj(cls, ...) if obj ~= nil then return obj end]])
@@ -6041,7 +6056,7 @@ do
                 end
             end
 
-            if validateFlags(FLG_IC_NEWOBJ, token) then
+            if validateflags(FLG_IC_NEWOBJ, token) then
                 uinsert(apis, "type")
                 tinsert(head, "newobj")
                 tinsert(body, [[local cutargs]])
@@ -6058,26 +6073,26 @@ do
                 uinsert(apis, "type")
                 uinsert(apis, "getmetatable")
 
-                if validateFlags(FLG_IC_NEWOBJ, token) then
+                if validateflags(FLG_IC_NEWOBJ, token) then
                     tinsert(body, [[local init = not cutargs and select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil and first or nil]])
                 else
                     tinsert(body, [[local init = select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil and first or nil]])
                 end
             end
 
-            if validateFlags(FLG_IC_NEWOBJ, token) then
+            if validateflags(FLG_IC_NEWOBJ, token) then
                 tinsert(body, [[obj = obj or {}]])
             else
                 tinsert(body, [[obj = {}]])
             end
 
-            if validateFlags(FLG_IC_FIELD, token) then
+            if validateflags(FLG_IC_FIELD, token) then
                 uinsert(apis, "pairs")
                 tinsert(head, "fields")
                 tinsert(body, [[for fld, val in pairs, fields do if obj[fld] == nil then obj[fld] = val end end]])
             end
 
-            if validateFlags(FLG_IC_NEWOBJ, token) then
+            if validateflags(FLG_IC_NEWOBJ, token) then
                 uinsert(apis, "pcall")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
@@ -6089,7 +6104,7 @@ do
 
             if hasctor then
                 tinsert(head, "clinit")
-                if validateFlags(FLG_IC_NEWOBJ, token) then
+                if validateflags(FLG_IC_NEWOBJ, token) then
                     tinsert(body, [[if cutargs then clinit(obj) else clinit(obj, ...) end]])
                 else
                     tinsert(body, [[clinit(obj, ...)]])
@@ -6102,7 +6117,7 @@ do
                 tinsert(body, [[if init then local ok, msg = pcall(loadInitTable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
-            if validateFlags(FLG_IC_HSIFIN, token) then
+            if validateflags(FLG_IC_HSIFIN, token) then
                 tinsert(head, "_max")
 
                 tinsert(body, [[for i = ]] .. FLD_IC_STINIT .. [[, _max do info[i](obj) end]])
@@ -6117,7 +6132,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _ClassCtorMap[token] = loadSnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token)()
+            _ClassCtorMap[token] = loadsnippet(tblconcat(body, "\n"), "Class_Ctor_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _ClassCtorMap[token] = _ClassCtorMap[token]()
@@ -6295,11 +6310,11 @@ do
             info[FLD_IC_OBJFTR] = objftr
 
             -- Gen anonymous class
-            if validateFlags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) and not info[FLD_IC_ANYMSCL] then
+            if validateflags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) and not info[FLD_IC_ANYMSCL] then
                 local aycls     = prototype.NewProxy(tclass)
                 local ainfo     = getInitICInfo(aycls, true)
 
-                ainfo[FLD_IC_MOD]   = turnOnFlags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
+                ainfo[FLD_IC_MOD]   = turnonflags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
                 ainfo[FLD_IC_STEXT] = target
 
                 -- Register the _ICDependsMap
@@ -6400,7 +6415,7 @@ do
         if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
 
         if info[FLD_IC_OBJMTD] ~= nil then
-            info[FLD_IC_OBJMTD] = saveStorage(info[FLD_IC_OBJMTD] or {}, name, func)
+            info[FLD_IC_OBJMTD] = savestorage(info[FLD_IC_OBJMTD] or {}, name, func)
             genMetaIndex(info)
         end
 
@@ -6507,7 +6522,7 @@ do
         if type(func) ~= "function" then return "the func must be a function", stack end
 
         local typmtd = info[FLD_IC_TYPMTD]
-        if not def and (typmtd and typmtd[name] ~= nil and (typmtd[name] == false or validateFlags(MOD_SEALED_IC, info[FLD_IC_MOD]))
+        if not def and (typmtd and typmtd[name] ~= nil and (typmtd[name] == false or validateflags(MOD_SEALED_IC, info[FLD_IC_MOD]))
             or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
             return strformat("The %s can't be overridden", name), stack
         end
@@ -6534,7 +6549,7 @@ do
                 info[FLD_IC_TYPMTD][name] = func
             end
         else
-            info[FLD_IC_TYPMTD]     = saveStorage(typmtd or _Cache(), name, func)
+            info[FLD_IC_TYPMTD]     = savestorage(typmtd or _Cache(), name, func)
             return saveObjectMethod(target, name, func)
         end
     end
@@ -6642,7 +6657,7 @@ do
 
         if not info then error(strformat("Usage: %s.%s(%s[, stack]) - ", tostring(tType), methodName, tostring(tType)) .. msg, stack + 2) end
 
-        info[FLD_IC_MOD]        = turnOnFlags(flag, info[FLD_IC_MOD])
+        info[FLD_IC_MOD]        = turnonflags(flag, info[FLD_IC_MOD])
     end
 
     local setStaticMethod       = function (target, name, stack)
@@ -6858,10 +6873,10 @@ do
                 target          = interface.Validate(target)
                 if not target then error("Usage: interface.BeginDefinition(target[, stack]) - the target is not valid", stack) end
 
-                if _ICInfo[target] and validateFlags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _ICInfo[target] and validateflags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _ICBuilderInfo[target] then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s's definition has already begun", tostring(target)), stack) end
 
-                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, getInitICInfo(target, false))
+                _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, getInitICInfo(target, false))
 
                 attribute.SaveAttributes(target, ATTRTAR_INTERFACE, stack)
             end;
@@ -6885,7 +6900,7 @@ do
                 genTypeCaches(target, ninfo, stack)
 
                 -- End interface's definition
-                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
+                _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, nil)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -7046,7 +7061,7 @@ do
             -- @param   fromobject:boolean          get the object methods
             -- @rformat (cache)                     the cache that contains the method list
             -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            -- @usage   for name, func, isstatic in interface.GetMethods(System.IAttribtue) do
+            -- @usage   for name, func, isstatic in interface.GetMethods(System.IAttribute) do
             --              print(name)
             --          end
             ["GetMethods"]      = function(target, cache, fromobj)
@@ -7189,7 +7204,7 @@ do
             -- @return  boolean                     true if the interface has anonymous class
             ["HasAnonymousClass"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the target interface is a sub-type of another interface
@@ -7214,7 +7229,7 @@ do
             -- @return  boolean                     true if the interface is final
             ["IsFinal"]         = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_FINAL_IC, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_FINAL_IC, info[FLD_IC_MOD]) or false
             end;
 
             --- The objects are always immutable for type validation
@@ -7235,7 +7250,7 @@ do
             -- @return  boolean                     true if the interface is sealed
             ["IsSealed"]        = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_SEALED_IC, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_SEALED_IC, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the interface's given name method is static
@@ -7262,7 +7277,7 @@ do
                 stack           = parsestack(stack) + 1
                 if not prototype.Validate(parser)           then error("Usage: interface.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
                 if not getprototypemethod(parser, "Parse")  then error("Usage: interface.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
-                _Parser         = saveStorage(_Parser, parser, true)
+                _Parser         = savestorage(_Parser, parser, true)
             end;
 
             --- Set the interface's method, meta-method or feature as abstract
@@ -7411,8 +7426,9 @@ do
             environment.Initialize  (builder)
             environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
+            environment.SetDefinitionMode(builder, true)
 
-            _ICBuilderInDefine  = saveStorage(_ICBuilderInDefine, builder, true)
+            _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
 
             if definition then
                 builder(definition, stack)
@@ -7505,7 +7521,7 @@ do
             -- @return  object                      the target object
             ["AttachObjectSource"] = function(object, stack)
                 if type(object) ~= "table" then error("Usage: class.AttachObjectSource(object[, stack]) - the object is not valid", 2) end
-                rawset(object, FLD_OBJ_SOURCE, getCallLine(parsestack(stack) + 1))
+                rawset(object, FLD_OBJ_SOURCE, getcallline(parsestack(stack) + 1))
                 return object
             end;
 
@@ -7522,10 +7538,10 @@ do
                 target          = class.Validate(target)
                 if not target then error("Usage: class.BeginDefinition(target[, stack]) - the target is not valid", stack) end
 
-                if _ICInfo[target] and validateFlags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                if _ICInfo[target] and validateflags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 if _ICBuilderInfo[target] then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, getInitICInfo(target, true))
+                _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, getInitICInfo(target, true))
 
                 attribute.SaveAttributes(target, ATTRTAR_CLASS, stack)
             end;
@@ -7550,7 +7566,7 @@ do
                 genTypeCaches(target, ninfo, stack)
 
                 -- End class's definition
-                _ICBuilderInfo  = saveStorage(_ICBuilderInfo, target, nil)
+                _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, nil)
 
                 -- Save as new interface's info
                 saveICInfo(target, ninfo)
@@ -7736,7 +7752,7 @@ do
             -- @return  boolean                     true if the class is abstract
             ["IsAbstract"]      = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class is final, can't be extended
@@ -7763,7 +7779,7 @@ do
             -- @return  boolean                     true if the class object enabled the function attribute
             ["IsObjectFunctionAttributeEnabled"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class object'll save its source when created
@@ -7785,7 +7801,7 @@ do
             -- @return  boolean                     true if the class object don't receive any value assignment excpet existed fields
             ["IsNilValueBlocked"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class don't use super object access style like `Super[obj].Name = "Ann"`
@@ -7796,7 +7812,7 @@ do
             -- @return  boolean                     true if the class don't use super object access style
             ["IsNoSuperObjectStyle"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class object don't receive any value assignment excpet existed fields
@@ -7807,7 +7823,7 @@ do
             -- @return  boolean                     true if the class object don't receive any value assignment excpet existed fields
             ["IsRawSetBlocked"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class is sealed, can't be re-defined
@@ -7826,7 +7842,7 @@ do
             -- @return  boolean                     true if the class is a single version class
             ["IsSingleVersion"] = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return false end or function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateFlags(MOD_SINGLEVER_CLS, info[FLD_IC_MOD]) or false
+                return info and validateflags(MOD_SINGLEVER_CLS, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class's given name method is static
@@ -7904,7 +7920,7 @@ do
                 stack           = parsestack(stack) + 1
                 if not prototype.Validate(parser)           then error("Usage: class.RegisterParser(parser[, stack] - the parser should be a prototype", stack) end
                 if not getprototypemethod(parser, "Parse")  then error("Usage: class.RegisterParser(parser[, stack] - the parser must have a 'Parse' method", stack) end
-                _Parser         = saveStorage(_Parser, parser, true)
+                _Parser         = savestorage(_Parser, parser, true)
             end;
 
             --- Set the class as abstract, or its method, meta-method or feature as abstract
@@ -8143,8 +8159,9 @@ do
             environment.Initialize  (builder)
             environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
+            environment.SetDefinitionMode(builder, true)
 
-            _ICBuilderInDefine  = saveStorage(_ICBuilderInDefine, builder, true)
+            _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
 
             if definition then
                 builder(definition, stack)
@@ -8224,7 +8241,7 @@ do
                 end
             end
             if info[FLD_IC_DEBUGSR] and rawget(obj, FLD_OBJ_SOURCE) == nil then
-                local src       = getCallLine(2)
+                local src       = getcallline(2)
                 if src then rawset(obj, FLD_OBJ_SOURCE, src) end
             end
             return obj
@@ -8287,10 +8304,7 @@ do
             local owner         = environment.GetNamespace(self)
             return "[interfacebuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
-        __index                 = function(self, key)
-            local value         = getEnvValue(self, key, _ICBuilderInDefine[self], 2)
-            return value
-        end,
+        __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setIFBuilderValue(self, key, value, 2) then
                 return rawset(self, key, value)
@@ -8321,7 +8335,8 @@ do
                 end
             end
 
-            _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
+            environment.SetDefinitionMode(self, false)
+            _ICBuilderInDefine = savestorage(_ICBuilderInDefine, self, nil)
             interface.EndDefinition(owner, stack)
 
             -- Save super refer
@@ -8341,10 +8356,7 @@ do
             local owner         = environment.GetNamespace(self)
             return "[classbuilder]" .. (owner and tostring(owner) or "anonymous")
         end,
-        __index                 = function(self, key)
-            local value         = getEnvValue(self, key, _ICBuilderInDefine[self], 2)
-            return value
-        end,
+        __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setClassBuilderValue(self, key, value, 2) then
                 return rawset(self, key, value)
@@ -8375,7 +8387,8 @@ do
                 end
             end
 
-            _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, self, nil)
+            environment.SetDefinitionMode(self, false)
+            _ICBuilderInDefine = savestorage(_ICBuilderInDefine, self, nil)
             class.EndDefinition(owner, stack)
 
             -- Save super refer
@@ -8498,7 +8511,8 @@ do
         if not owner or not visitor then error([[Usage: endinterface "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
-        _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
+        environment.SetDefinitionMode(visitor, false)
+        _ICBuilderInDefine = savestorage(_ICBuilderInDefine, visitor, nil)
         interface.EndDefinition(owner, stack)
 
         -- Save super refer
@@ -8530,7 +8544,8 @@ do
         if not owner or not visitor then error([[Usage: endclass "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
-        _ICBuilderInDefine = saveStorage(_ICBuilderInDefine, visitor, nil)
+        environment.SetDefinitionMode(visitor, false)
+        _ICBuilderInDefine = savestorage(_ICBuilderInDefine, visitor, nil)
         class.EndDefinition(owner, stack)
 
         -- Save super refer
@@ -8770,16 +8785,16 @@ do
     -----------------------------------------------------------------------
     local _EventInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_EVENT_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
 
-    local _EventInDefine        = newStorage(WEAK_KEY)
+    local _EventInDefine        = newstorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
     local saveEventInfo         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_EVENT_META, info) end
-                                    or  function(target, info) _EventInfo = saveStorage(_EventInfo, target, info) end
+                                    or  function(target, info) _EventInfo = savestorage(_EventInfo, target, info) end
 
     local genEvent              = function(owner, name, value, stack)
         local evt               = prototype.NewProxy(tevent)
@@ -8794,7 +8809,7 @@ do
 
         saveEventInfo(evt, info)
 
-        _EventInDefine          = saveStorage(_EventInDefine, evt, true)
+        _EventInDefine          = savestorage(_EventInDefine, evt, true)
 
         attribute.SaveAttributes(evt, ATTRTAR_EVENT, stack + 1)
 
@@ -8802,7 +8817,7 @@ do
         if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
         attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
 
-        _EventInDefine          = saveStorage(_EventInDefine, evt, nil)
+        _EventInDefine          = savestorage(_EventInDefine, evt, nil)
 
         -- Convert to static event
         if not value and event.IsStatic(evt) then
@@ -9338,9 +9353,9 @@ do
     -----------------------------------------------------------------------
     local _PropertyInfo         = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_PROP_META) or nil end})
-                                    or  newStorage(WEAK_KEY)
+                                    or  newstorage(WEAK_KEY)
 
-    local _PropertyInDefine     = newStorage(WEAK_KEY)
+    local _PropertyInDefine     = newstorage(WEAK_KEY)
 
     local _PropGetMap           = {}
     local _PropSetMap           = {}
@@ -9365,7 +9380,7 @@ do
 
     local savePropertyInfo      = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_PROP_META, info) end
-                                    or  function(target, info) _PropertyInfo = saveStorage(_PropertyInfo, target, info) end
+                                    or  function(target, info) _PropertyInfo = savestorage(_PropertyInfo, target, info) end
 
     local genProperty           = function(owner, name, stack)
         local prop              = prototype.NewProxy(tproperty)
@@ -9376,7 +9391,7 @@ do
 
         savePropertyInfo(prop, info)
 
-        _PropertyInDefine       = saveStorage(_PropertyInDefine, prop, true)
+        _PropertyInDefine       = savestorage(_PropertyInDefine, prop, true)
 
         attribute.SaveAttributes(prop, ATTRTAR_PROPERTY, stack + 1)
 
@@ -9410,29 +9425,29 @@ do
         local upval             = _Cache()
 
         if info[FLD_PROP_GET] == false or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and info[FLD_PROP_DEFAULT] == nil) then
-            token               = turnOnFlags(FLG_PROPGET_DISABLE, token)
+            token               = turnonflags(FLG_PROPGET_DISABLE, token)
             usename             = true
         else
             if info[FLD_PROP_DEFAULTFUNC] then
-                token           = turnOnFlags(FLG_PROPGET_DEFTFUNC, token)
+                token           = turnonflags(FLG_PROPGET_DEFTFUNC, token)
                 tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
                 if info[FLD_PROP_SET] == false then
-                    token       = turnOnFlags(FLG_PROPGET_SETFALSE, token)
+                    token       = turnonflags(FLG_PROPGET_SETFALSE, token)
                 else
                     usename     = true
                 end
             elseif info[FLD_PROP_DEFAULT] ~= nil then
-                token           = turnOnFlags(FLG_PROPGET_DEFAULT, token)
+                token           = turnonflags(FLG_PROPGET_DEFAULT, token)
                 tinsert(upval, info[FLD_PROP_DEFAULT])
             end
 
-            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPGET_SETWEAK, token)
+            if validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPGET_SETWEAK, token)
             end
 
-            if validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPGET_STATIC, token)
-                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+            if validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPGET_STATIC, token)
+                if validateflags(FLG_PROPGET_SETWEAK, token) then
                     tinsert(upval, info[FLD_PROP_STATIC])
                 else
                     tinsert(upval, info)
@@ -9440,25 +9455,25 @@ do
             end
 
             if info[FLD_PROP_GET] then
-                token           = turnOnFlags(FLG_PROPGET_GET, token)
+                token           = turnonflags(FLG_PROPGET_GET, token)
                 tinsert(upval, info[FLD_PROP_GET])
             elseif info[FLD_PROP_GETMETHOD] then
-                token           = turnOnFlags(FLG_PROPGET_GETMETHOD, token)
+                token           = turnonflags(FLG_PROPGET_GETMETHOD, token)
                 tinsert(upval, info[FLD_PROP_GETMETHOD])
             elseif info[FLD_PROP_FIELD] ~= nil then
-                token           = turnOnFlags(FLG_PROPGET_FIELD, token)
+                token           = turnonflags(FLG_PROPGET_FIELD, token)
                 tinsert(upval, info[FLD_PROP_FIELD])
             end
 
-            if validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPGET_CLONE, token)
-                if validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) then
-                    token       = turnOnFlags(FLG_PROPGET_DEEPCLONE, token)
+            if validateflags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPGET_CLONE, token)
+                if validateflags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) then
+                    token       = turnonflags(FLG_PROPGET_DEEPCLONE, token)
                 end
             end
 
-            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPGET_INDEXER, token)
+            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPGET_INDEXER, token)
             end
         end
 
@@ -9472,49 +9487,49 @@ do
 
             tinsert(body, "")                       -- remain for shareable variables
             tinsert(body, "return function(%s)")    -- remain for special variables
-            if validateFlags(FLG_PROPGET_INDEXER, token) then
+            if validateflags(FLG_PROPGET_INDEXER, token) then
                 tinsert(body, [[return function(self, idxname)]])
             else
                 tinsert(body, [[return function(_, self)]])
             end
 
-            if validateFlags(FLG_PROPGET_DISABLE, token) then
+            if validateflags(FLG_PROPGET_DISABLE, token) then
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 tinsert(body, [[error(strformat("the %s can't be read", name),2)]])
             else
-                if validateFlags(FLG_PROPGET_DEFTFUNC, token) then
+                if validateflags(FLG_PROPGET_DEFTFUNC, token) then
                     tinsert(head, "defaultFunc")
-                elseif validateFlags(FLG_PROPGET_DEFAULT, token) then
+                elseif validateflags(FLG_PROPGET_DEFAULT, token) then
                     tinsert(head, "default")
                 end
 
-                if validateFlags(FLG_PROPGET_STATIC, token) then
+                if validateflags(FLG_PROPGET_STATIC, token) then
                     uinsert(apis, "fakefunc")
                     tinsert(head, "storage")
                 end
 
                 tinsert(body, [[local value]])
 
-                if validateFlags(FLG_PROPGET_GET, token) then
+                if validateflags(FLG_PROPGET_GET, token) then
                     tinsert(head, "get")
-                    if validateFlags(FLG_PROPGET_INDEXER, token) then
+                    if validateflags(FLG_PROPGET_INDEXER, token) then
                         tinsert(body, [[value = get(self, idxname)]])
                     else
                         tinsert(body, [[value = get(self)]])
                     end
-                elseif validateFlags(FLG_PROPGET_GETMETHOD, token) then
+                elseif validateflags(FLG_PROPGET_GETMETHOD, token) then
                     -- won't be static
                     tinsert(head, "getMethod")
-                    if validateFlags(FLG_PROPGET_INDEXER, token) then
+                    if validateflags(FLG_PROPGET_INDEXER, token) then
                         tinsert(body, [[value = self[getMethod](self, idxname)]])
                     else
                         tinsert(body, [[value = self[getMethod](self)]])
                     end
-                elseif validateFlags(FLG_PROPGET_FIELD, token) then
+                elseif validateflags(FLG_PROPGET_FIELD, token) then
                     tinsert(head, "field")
-                    if validateFlags(FLG_PROPGET_STATIC, token) then
-                        if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                    if validateflags(FLG_PROPGET_STATIC, token) then
+                        if validateflags(FLG_PROPGET_SETWEAK, token) then
                             tinsert(body, [[value = storage[0] ]])
                         else
                             tinsert(body, [[value = storage[]] .. FLD_PROP_STATIC .. [[] ]])
@@ -9522,7 +9537,7 @@ do
                         tinsert(body, [[if value == fakefunc then value = nil end]])
                     else
                         uinsert(apis, "rawget")
-                        if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                        if validateflags(FLG_PROPGET_SETWEAK, token) then
                             tinsert(body, [[
                                 value = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
                                 if type(value) == "table" then value = value[field] else value = nil end
@@ -9534,16 +9549,16 @@ do
                 end
 
                 -- Nil Handler
-                if validateFlags(FLG_PROPGET_DEFTFUNC, token) or validateFlags(FLG_PROPGET_DEFAULT, token) then
+                if validateflags(FLG_PROPGET_DEFTFUNC, token) or validateflags(FLG_PROPGET_DEFAULT, token) then
                     tinsert(body, [[if value == nil then]])
 
-                    if validateFlags(FLG_PROPGET_DEFTFUNC, token) then
+                    if validateflags(FLG_PROPGET_DEFTFUNC, token) then
                         tinsert(body, [[value = defaultFunc(self)]])
                         tinsert(body, [[if value ~= nil then]])
 
-                        if validateFlags(FLG_PROPGET_STATIC, token) then
-                            if validateFlags(FLG_PROPGET_SETFALSE, token) then
-                                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                        if validateflags(FLG_PROPGET_STATIC, token) then
+                            if validateflags(FLG_PROPGET_SETFALSE, token) then
+                                if validateflags(FLG_PROPGET_SETWEAK, token) then
                                     tinsert(body, [[storage[0] = value]])
                                 else
                                     tinsert(body, [[storage[]] .. FLD_PROP_STATIC .. [[] = value]])
@@ -9552,9 +9567,9 @@ do
                                 tinsert(body, [[self[name]=value]])
                             end
                         else
-                            if validateFlags(FLG_PROPGET_SETFALSE, token) then
+                            if validateflags(FLG_PROPGET_SETFALSE, token) then
                                 uinsert(apis, "rawset")
-                                if validateFlags(FLG_PROPGET_SETWEAK, token) then
+                                if validateflags(FLG_PROPGET_SETWEAK, token) then
                                     uinsert(apis, "rawget")
                                     uinsert(apis, "type")
                                     uinsert(apis, "setmetatable")
@@ -9576,7 +9591,7 @@ do
                         end
 
                         tinsert(body, [[end]])
-                    elseif validateFlags(FLG_PROPGET_DEFAULT, token) then
+                    elseif validateflags(FLG_PROPGET_DEFAULT, token) then
                         tinsert(body, [[value = default]])
                     end
 
@@ -9584,9 +9599,9 @@ do
                 end
 
                 -- Clone
-                if validateFlags(FLG_PROPGET_CLONE, token) then
+                if validateflags(FLG_PROPGET_CLONE, token) then
                     uinsert(apis, "clone")
-                    if validateFlags(FLG_PROPGET_DEEPCLONE) then
+                    if validateflags(FLG_PROPGET_DEEPCLONE) then
                         tinsert(body, [[value = clone(value, true, true)]])
                     else
                         tinsert(body, [[value = clone(value)]])
@@ -9607,7 +9622,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _PropGetMap[token]  = loadSnippet(tblconcat(body, "\n"), "Property_Get_" .. token)()
+            _PropGetMap[token]  = loadsnippet(tblconcat(body, "\n"), "Property_Get_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _PropGetMap[token]  = _PropGetMap[token]()
@@ -9624,7 +9639,7 @@ do
             info[FLD_PROP_RAWGET]   = _PropGetMap[token]
         end
 
-        if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+        if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
             info[FLD_PROP_INDEXERGET] = info[FLD_PROP_RAWGET]
             info[FLD_PROP_RAWGET]   = getPropertyIndexer(info[FLD_PROP_INDEXERGET], info[FLD_PROP_INDEXERSET], info[FLD_PROP_INDEXERFLD])
         end
@@ -9639,30 +9654,30 @@ do
 
         -- Calc the token
         if info[FLD_PROP_SET] == false or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
-            token               = turnOnFlags(FLG_PROPSET_DISABLE, token)
+            token               = turnonflags(FLG_PROPSET_DISABLE, token)
             usename             = true
         else
             if info[FLD_PROP_TYPE] and not (PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED and getobjectvalue(info[FLD_PROP_TYPE], "IsImmutable")) then
-                token           = turnOnFlags(FLG_PROPSET_TYPE, token)
+                token           = turnonflags(FLG_PROPSET_TYPE, token)
                 tinsert(upval, info[FLD_PROP_VALID])
                 tinsert(upval, info[FLD_PROP_TYPE])
                 usename         = true
             end
 
-            if validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPSET_CLONE, token)
-                if validateFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) then
-                    token       = turnOnFlags(FLG_PROPSET_DEEPCLONE, token)
+            if validateflags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPSET_CLONE, token)
+                if validateflags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) then
+                    token       = turnonflags(FLG_PROPSET_DEEPCLONE, token)
                 end
             end
 
-            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
-                token = turnOnFlags(FLG_PROPSET_SETWEAK, token)
+            if validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                token = turnonflags(FLG_PROPSET_SETWEAK, token)
             end
 
-            if validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
-                token = turnOnFlags(FLG_PROPSET_STATIC, token)
-                if validateFlags(FLG_PROPSET_SETWEAK, token) then
+            if validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token = turnonflags(FLG_PROPSET_STATIC, token)
+                if validateflags(FLG_PROPSET_SETWEAK, token) then
                     tinsert(upval, info[FLD_PROP_STATIC])
                 else
                     tinsert(upval, info)
@@ -9670,43 +9685,43 @@ do
             end
 
             if info[FLD_PROP_SET] then
-                token           = turnOnFlags(FLG_PROPSET_SET, token)
+                token           = turnonflags(FLG_PROPSET_SET, token)
                 tinsert(upval, info[FLD_PROP_SET])
-            elseif info[FLD_PROP_SETMETHOD] and not validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPSET_SETMETHOD, token)
+            elseif info[FLD_PROP_SETMETHOD] and not validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPSET_SETMETHOD, token)
                 tinsert(upval, info[FLD_PROP_SETMETHOD])
             elseif info[FLD_PROP_FIELD] then
-                token           = turnOnFlags(FLG_PROPSET_FIELD, token)
+                token           = turnonflags(FLG_PROPSET_FIELD, token)
                 tinsert(upval, info[FLD_PROP_FIELD])
 
                 if info[FLD_PROP_DEFAULT] ~= nil then
-                    token       = turnOnFlags(FLG_PROPSET_DEFAULT, token)
+                    token       = turnonflags(FLG_PROPSET_DEFAULT, token)
                     tinsert(upval, info[FLD_PROP_DEFAULT])
 
                     if type(info[FLD_PROP_DEFAULT]) ~= "table" then
-                        token   = turnOnFlags(FLG_PROPSET_SIMPDEFT, token)
+                        token   = turnonflags(FLG_PROPSET_SIMPDEFT, token)
                     end
                 end
 
-                if validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) then
-                    token       = turnOnFlags(FLG_PROPSET_RETAIN, token)
+                if validateflags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) then
+                    token       = turnonflags(FLG_PROPSET_RETAIN, token)
                 end
 
                 if info[FLD_PROP_HANDLER] then
-                    token       = turnOnFlags(FLG_PROPSET_HANDLER, token)
+                    token       = turnonflags(FLG_PROPSET_HANDLER, token)
                     tinsert(upval, info[FLD_PROP_HANDLER])
                     usename     = true
                 end
 
                 if info[FLD_PROP_EVENT] then
-                    token       = turnOnFlags(FLG_PROPSET_EVENT, token)
+                    token       = turnonflags(FLG_PROPSET_EVENT, token)
                     tinsert(upval, info[FLD_PROP_EVENT])
                     usename     = true
                 end
             end
 
-            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
-                token           = turnOnFlags(FLG_PROPSET_INDEXER, token)
+            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPSET_INDEXER, token)
             end
         end
 
@@ -9721,22 +9736,22 @@ do
             tinsert(body, "")                       -- remain for shareable variables
             tinsert(body, "return function(%s)")    -- remain for special variables
 
-            if validateFlags(FLG_PROPSET_INDEXER, token) then
+            if validateflags(FLG_PROPSET_INDEXER, token) then
                 tinsert(body, [[return function(self, idxname, value)]])
             else
                 tinsert(body, [[return function(_, self, value)]])
             end
 
-            if validateFlags(FLG_PROPSET_DISABLE, token) then
+            if validateflags(FLG_PROPSET_DISABLE, token) then
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 tinsert(body, [[error(strformat("the %s can't be set", name), 3)]])
             else
-                if validateFlags(FLG_PROPSET_TYPE, token) or validateFlags(FLG_PROPSET_CLONE, token) then
+                if validateflags(FLG_PROPSET_TYPE, token) or validateflags(FLG_PROPSET_CLONE, token) then
                     tinsert(body, [[
                         if value ~= nil then
                     ]])
-                    if validateFlags(FLG_PROPSET_TYPE, token) then
+                    if validateflags(FLG_PROPSET_TYPE, token) then
                         uinsert(apis, "error")
                         uinsert(apis, "type")
                         uinsert(apis, "strgsub")
@@ -9749,9 +9764,9 @@ do
                         ]])
                     end
 
-                    if validateFlags(FLG_PROPSET_CLONE, token) then
+                    if validateflags(FLG_PROPSET_CLONE, token) then
                         uinsert(apis, "clone")
-                        if validateFlags(FLG_PROPSET_DEEPCLONE, token) then
+                        if validateflags(FLG_PROPSET_DEEPCLONE, token) then
                             tinsert(body, [[value = clone(value, true, true)]])
                         else
                             tinsert(body, [[value = clone(value)]])
@@ -9762,33 +9777,33 @@ do
                         end
                     ]])
                 end
-                if validateFlags(FLG_PROPSET_STATIC, token) then
+                if validateflags(FLG_PROPSET_STATIC, token) then
                     uinsert(apis, "fakefunc")
                     tinsert(head, "storage")
                 end
 
-                if validateFlags(FLG_PROPSET_SET, token) then
+                if validateflags(FLG_PROPSET_SET, token) then
                     tinsert(head, "set")
-                    if validateFlags(FLG_PROPSET_INDEXER, token) then
+                    if validateflags(FLG_PROPSET_INDEXER, token) then
                         tinsert(body, [[return set(self, idxname, value)]])
                     else
                         tinsert(body, [[return set(self, value)]])
                     end
-                elseif validateFlags(FLG_PROPSET_SETMETHOD, token) then
+                elseif validateflags(FLG_PROPSET_SETMETHOD, token) then
                     tinsert(head, "setmethod")
-                    if validateFlags(FLG_PROPSET_INDEXER, token) then
+                    if validateflags(FLG_PROPSET_INDEXER, token) then
                         tinsert(body, [[return self[setmethod](self, idxname, value)]])
                     else
                         tinsert(body, [[return self[setmethod](self, value)]])
                     end
-                elseif validateFlags(FLG_PROPSET_FIELD, token) then
+                elseif validateflags(FLG_PROPSET_FIELD, token) then
                     tinsert(head, "field")
 
-                    local useold = validateFlags(FLG_PROPSET_DEFAULT, token) or validateFlags(FLG_PROPSET_RETAIN, token) or validateFlags(FLG_PROPSET_HANDLER, token) or validateFlags(FLG_PROPSET_EVENT, token)
+                    local useold = validateflags(FLG_PROPSET_DEFAULT, token) or validateflags(FLG_PROPSET_RETAIN, token) or validateflags(FLG_PROPSET_HANDLER, token) or validateflags(FLG_PROPSET_EVENT, token)
 
                     if useold then
-                        if validateFlags(FLG_PROPSET_STATIC, token) then
-                            if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                        if validateflags(FLG_PROPSET_STATIC, token) then
+                            if validateflags(FLG_PROPSET_SETWEAK, token) then
                                 tinsert(body, [[local old = storage[0] ]])
                             else
                                 tinsert(body, [[local old = storage[]] .. FLD_PROP_STATIC .. [[] ]])
@@ -9798,7 +9813,7 @@ do
                         else
                             uinsert(apis, "rawset")
                             uinsert(apis, "rawget")
-                            if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                            if validateflags(FLG_PROPSET_SETWEAK, token) then
                                 uinsert(apis, "type")
                                 uinsert(apis, "setmetatable")
                                 uinsert(apis, "WEAK_VALUE")
@@ -9815,7 +9830,7 @@ do
                             end
                         end
 
-                        if validateFlags(FLG_PROPSET_DEFAULT, token) then
+                        if validateflags(FLG_PROPSET_DEFAULT, token) then
                             tinsert(head, "default")
                             tinsert(body, [[if (old == default or old == nil) and (value == nil or value == default) then return end]])
                         end
@@ -9823,14 +9838,14 @@ do
                         tinsert(body, [[if old == value then return end]])
                     end
 
-                    if validateFlags(FLG_PROPSET_STATIC, token) then
-                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                    if validateflags(FLG_PROPSET_STATIC, token) then
+                        if validateflags(FLG_PROPSET_SETWEAK, token) then
                             tinsert(body, [[storage[0] = value == nil and fakefunc or value ]])
                         else
                             tinsert(body, [[storage[]] .. FLD_PROP_STATIC .. [[] = value == nil and fakefunc or value ]])
                         end
                     else
-                        if validateFlags(FLG_PROPSET_SETWEAK, token) then
+                        if validateflags(FLG_PROPSET_SETWEAK, token) then
                             if useold then
                                 tinsert(body, [[container[field] = value)]])
                             else
@@ -9848,25 +9863,25 @@ do
                         end
                     end
 
-                    if validateFlags(FLG_PROPSET_DEFAULT, token) and validateFlags(FLG_PROPSET_SIMPDEFT, token) then
+                    if validateflags(FLG_PROPSET_DEFAULT, token) and validateflags(FLG_PROPSET_SIMPDEFT, token) then
                         tinsert(body, [[if old == nil then old = default end]])
                         tinsert(body, [[if value == nil then value = default end]])
                     end
 
-                    if validateFlags(FLG_PROPSET_HANDLER, token) then
+                    if validateflags(FLG_PROPSET_HANDLER, token) then
                         tinsert(head, "handler")
                         tinsert(body, [[handler(self, value, old, name)]])
                     end
 
-                    if validateFlags(FLG_PROPSET_EVENT, token) then
+                    if validateflags(FLG_PROPSET_EVENT, token) then
                         tinsert(head, "evt")
                         tinsert(body, [[evt(self, value, old, name)]])
                     end
 
-                    if validateFlags(FLG_PROPSET_RETAIN, token) then
+                    if validateflags(FLG_PROPSET_RETAIN, token) then
                         uinsert(apis, "pcall")
                         uinsert(apis, "diposeObj")
-                        if validateFlags(FLG_PROPSET_DEFAULT, token) then
+                        if validateflags(FLG_PROPSET_DEFAULT, token) then
                             tinsert(body, [[if old and old ~= default then pcall(diposeObj, old) end]])
                         else
                             tinsert(body, [[if old then pcall(diposeObj, old) end]])
@@ -9887,7 +9902,7 @@ do
 
             body[2]             = strformat(body[2], #head > 0 and tblconcat(head, ", ") or "")
 
-            _PropSetMap[token]  = loadSnippet(tblconcat(body, "\n"), "Property_Set_" .. token)()
+            _PropSetMap[token]  = loadsnippet(tblconcat(body, "\n"), "Property_Set_" .. token, _PLoopEnv)()
 
             if #head == 0 then
                 _PropSetMap[token]  = _PropSetMap[token]()
@@ -9904,7 +9919,7 @@ do
             info[FLD_PROP_RAWSET]   = _PropSetMap[token]
         end
 
-        if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+        if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
             info[FLD_PROP_INDEXERSET] = info[FLD_PROP_RAWSET]
             local emsg = "the " .. info[FLD_PROP_NAME] .. " can't be set"
             info[FLD_PROP_RAWSET]   = function()
@@ -9934,7 +9949,7 @@ do
                     local name      = info[FLD_PROP_NAME]
                     local uname     = name:gsub("^%a", strupper)
                     local owner     = info[FLD_PROP_OWNER]
-                    local isstatic  = validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                    local isstatic  = validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
 
                     -- Check get method
                     if info[FLD_PROP_GETMETHOD] then
@@ -9964,7 +9979,7 @@ do
                         end
                     end
 
-                    if not validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                    if not validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
                         -- Auto-gen get (only check GetXXX, getXXX, IsXXX, isXXX for simple)
                         if info[FLD_PROP_GET] == true or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
                             info[FLD_PROP_GET]  = nil
@@ -10035,7 +10050,7 @@ do
                         -- Gen static value container
                         if isstatic then
                             -- Use fakefunc as nil object
-                            if validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
+                            if validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
                                 info[FLD_PROP_STATIC] = setmetatable({ [0] = fakefunc }, WEAK_VALUE)
                             else
                                 info[FLD_PROP_STATIC] = fakefunc
@@ -10059,7 +10074,7 @@ do
             -- @return  boolean                     true if should return a clone copy of the value
             ["IsGetClone"]      = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property should return a deep clone copy of the value
@@ -10070,7 +10085,7 @@ do
             -- @return  boolean                     true if should return a deep clone copy of the value
             ["IsGetDeepClone"]  = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property is an indexer property, used like `obj.prop[xxx] = xxx`
@@ -10081,7 +10096,7 @@ do
             -- @return  boolean                     true if the property is an indexer
             ["IsIndexer"]       = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property should save a clone copy to the value
@@ -10092,7 +10107,7 @@ do
             -- @return  boolean                     true if should save a clone copy to the value
             ["IsSetClone"]      = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property should save a deep clone copy to the value
@@ -10103,7 +10118,7 @@ do
             -- @return  boolean                     true if should save a deep clone copy to the value
             ["IsSetDeepClone"]  = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property should dispose the old value
@@ -10114,7 +10129,7 @@ do
             -- @return  boolean                     true if should dispose the old value
             ["IsRetainObject"]  = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property data is shareable, always true
@@ -10133,7 +10148,7 @@ do
             -- @return  boolean                     true if the property is static
             ["IsStatic"]        = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) or false
             end;
 
             --- Whether the property value should kept in a weak table
@@ -10144,7 +10159,7 @@ do
             -- @return  boolean                     true if the property value should kept in a weak table
             ["IsWeak"]          = function(self)
                 local info      = _PropertyInfo[self]
-                return info and validateFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) or false
+                return info and validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) or false
             end;
 
             --- Set the property whether it should return a clone copy of the value
@@ -10158,8 +10173,8 @@ do
             ["GetClone"]     = function(self, deep, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD])
-                    if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) end
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD])
+                    if deep then info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_GETDEEPCL, info[FLD_PROP_MOD]) end
                 else
                     error("Usage: property:GetClone(deep, [stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10196,8 +10211,8 @@ do
             ["SetClone"]     = function(self, deep, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD])
-                    if deep then info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) end
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD])
+                    if deep then info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_SETDEEPCL, info[FLD_PROP_MOD]) end
                 else
                     error("Usage: property:SetClone(deep, [stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10213,7 +10228,7 @@ do
             ["SetIndexer"]      = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetIndexer([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10229,7 +10244,7 @@ do
             ["SetRetainObject"] = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD])
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_SETRETAIN, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10245,7 +10260,7 @@ do
             ["SetStatic"]       = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetStatic([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10261,7 +10276,7 @@ do
             ["SetWeak"]         = function(self, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD])
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetWeak([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
@@ -10396,7 +10411,7 @@ do
                         end
                     elseif k == "isstatic" or k == "static" then
                         if v then
-                            info[FLD_PROP_MOD]  = turnOnFlags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                            info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
                         end
                     end
                 end
@@ -10420,12 +10435,12 @@ do
 
             attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
 
-            _PropertyInDefine  = saveStorage(_PropertyInDefine, self, nil)
+            _PropertyInDefine  = savestorage(_PropertyInDefine, self, nil)
 
             attribute.AttachAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
 
             -- Check indexer
-            if validateFlags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
                 if not (info[FLD_PROP_GET] or info[FLD_PROP_GETMETHOD] or info[FLD_PROP_SET] or info[FLD_PROP_SETMETHOD]) then
                     error([[Usage: property "name" { get = ..., set = ...} - the indexer property must have get or set method]], stack)
                 end
@@ -10632,7 +10647,7 @@ do
     -----------------------------------------------------------------------
     --                          private storage                          --
     -----------------------------------------------------------------------
-    local _LambdaCache          = newStorage(WEAK_VALUE)
+    local _LambdaCache          = newstorage(WEAK_VALUE)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -10664,11 +10679,11 @@ do
         param                   = param and strgsub(param, "[^_%w]+", ",")
         body                    = body and strfind(body, "return") and body or ("return " .. (body or ""))
 
-        local func              = loadSnippet(strformat("return function(%s) %s end", param, body), value, _G)
+        local func              = loadsnippet(strformat("return function(%s) %s end", param, body), value, _G)
         if not func then return onlyvalid or "the %s must be a string like 'x,y => x+y'" end
         func                    = func()
 
-        _LambdaCache            = saveStorage(_LambdaCache, value, func)
+        _LambdaCache            = savestorage(_LambdaCache, value, func)
     end
 
     local parseCallable         = function(value, onlyvalid)
@@ -11266,9 +11281,9 @@ do
         Property    = ATTRTAR_PROPERTY,
     }
 
-    --- The attribute priorty
+    --- The attribute priority
     __Sealed__() __Default__(0)
-    enum "System.AttributePriorty" {
+    enum "System.AttributePriority" {
         Highest     =  2,
         Higher      =  1,
         Normal      =  0,
@@ -11369,16 +11384,57 @@ do
     __Sealed__() struct "System.Callable"           { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
 
     --- Represents the variable types for arguments or return values
-    __Sealed__() Variable = struct "System.Variable"{
-        { name = "type",        type = AnyType  },
-        { name = "nilable",     type = Boolean  },
-        { name = "default",                     },
-        { name = "name",        type = NEString },
-        { name = "islist",      type = Boolean  },
-        { name = "validate"                     },  -- auto generated
-        { name = "immutable"                    },  -- auto generated
+    __Sealed__() Variable = struct "System.Variable" (function(_ENV)
+        export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue }
 
-        function (var, onlyvalid)
+        --- the variable's name
+        member "name"       { type = NEString }
+
+        --- the variable's type
+        member "type"       { type = AnyType  }
+
+        --- whether the vairable is nilable
+        member "nilable"    { type = Boolean  }
+
+        --- the variable's default value
+        member "default"    {}
+
+        --- whether the variable is a list variable
+        member "islist"     { type = Boolean  }
+
+        --- the validate function auto fetched from the type
+        member "validate"   { type = Function }  -- auto generated
+
+        --- whether the variable is immutable(the value won't be changed)
+        member "immutable"  { type = Boolean  }  -- auto generated
+
+        -----------------------------------------------------------
+        --                     static method                     --
+        -----------------------------------------------------------
+        --- Return a list variable
+        -- @format  ([type][, atleastone])
+        -- @param   type                            the element's type
+        -- @param   atleastone                      whether there must be at least one element
+        -- @return  the list variable
+        __Static__()
+        function Rest(type, atleastone)
+            return { type = type, nilable = not atleastone or nil, islist = true }
+        end
+
+        --- Return a optional variable
+        -- @format  ([type][, default])
+        -- @parma   type                            the variable's type
+        -- @param   default                         the default value
+        -- @return  the optional variable
+        __Static__()
+        function Optional(type, default)
+            return { type = type, default = default, nilable = true }
+        end
+
+        -----------------------------------------------------------
+        --                       Validator                       --
+        -----------------------------------------------------------
+        function Variable(var, onlyvalid)
             if var.default ~= nil then
                 if var.islist then return onlyvalid or "the %s is a list, can't have default value" end
                 if not var.nilable then return onlyvalid or "the %s is not nilable, can't have default value" end
@@ -11387,9 +11443,12 @@ do
                     if msg then return onlyvalid or "the %s.default don't match its type" end
                 end
             end
-        end,
+        end
 
-        __init = function (var)
+        -----------------------------------------------------------
+        --                      Initializer                      --
+        -----------------------------------------------------------
+        function __init(var)
             if var.type then
                 var.validate = getprototypemethod(var.type, "ValidateValue")
                 var.immutable= getobjectvalue(var.type, "IsImmutable")
@@ -11405,8 +11464,8 @@ do
             if var.nilable and var.default ~= nil then
                 var.immutable= false
             end
-        end,
-    }
+        end
+    end)
 
     --- Represents variables list
     __Sealed__() struct "System.Variables"          { __array = Variable + AnyType,
@@ -11418,7 +11477,6 @@ do
                 if lst then return onlyvalid or "the %s's list variable must be the last one" end
                 if getmetatable(var) == nil then
                     if var.islist then
-                        if opt then return onlyvalid or "the %s's list variable and optional variable can't be use together" end
                         lst = true
                     elseif var.nilable then
                         opt = true
@@ -11434,7 +11492,7 @@ do
         __init  = function(vars)
             for i, var in ipairs, vars, 0 do
                 if getmetatable(var) ~= nil then
-                    vars[i] = Variable(var)
+                    vars[i] = Variable{ type = var }
                 end
             end
         end,
@@ -11443,9 +11501,9 @@ do
     -----------------------------------------------------------------------
     --                             interface                             --
     -----------------------------------------------------------------------
-    --- the interface of attribtue
+    --- the interface of attribute
     __Sealed__() __ObjectSource__{ Inheritable = true }
-    interface "System.IAttribtue" (function(_ENV)
+    interface "System.IAttribute" (function(_ENV)
         export {
             GetObjectSource = Class.GetObjectSource,
             tostring        = tostring,
@@ -11461,14 +11519,14 @@ do
         -- @return  any                         the attached data
         GetAttachedData             = Attribute.GetAttachedData
 
-        --- Get all targets have attached data of the attribtue
+        --- Get all targets have attached data of the attribute
         -- @format  ([cache])
         -- @param   cache                       the cache to save the result
         -- @rformat (cache)                     the cache that contains the targets
         -- @rformat (iter, attr)                without the cache parameter, used in generic for
         GetAttributeTargets         = Attribute.GetAttributeTargets
 
-        --- Get all target's owners that have attached data of the attribtue
+        --- Get all target's owners that have attached data of the attribute
         -- @format  ([cache])
         -- @param   cache                       the cache to save the result
         -- @rformat (cache)                     the cache that contains the targets
@@ -11488,7 +11546,7 @@ do
         __Abstract__() property "Overridable"      { type = Boolean, default = true }
 
         --- the attribute's priority
-        __Abstract__() property "Priority"         { type = AttributePriorty        }
+        __Abstract__() property "Priority"         { type = AttributePriority        }
 
         --- the attribute's sub level of priority
         __Abstract__() property "SubLevel"         { type = Number,  default = 0    }
@@ -11496,7 +11554,7 @@ do
         -----------------------------------------------------------
         --                      initializer                      --
         -----------------------------------------------------------
-        IAttribtue          = Attribute.Register
+        IAttribute          = Attribute.Register
 
         -----------------------------------------------------------
         --                      meta-method                      --
@@ -11505,31 +11563,10 @@ do
         function __tostring(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
-    --- the interface to modify the target's definition
-    __Sealed__()
-    interface "System.IInitAttribtue" (function(_ENV)
-        extend "IAttribtue"
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
-        __Abstract__()
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-        end
-    end)
-
     --- the interface to apply changes on the target
     __Sealed__()
-    interface "System.IApplyAttribtue" (function(_ENV)
-        extend "IAttribtue"
+    interface "System.IApplyAttribute" (function(_ENV)
+        extend "IAttribute"
 
         -----------------------------------------------------------
         --                        method                         --
@@ -11547,8 +11584,8 @@ do
 
     --- the interface to attach data on the target
     __Sealed__()
-    interface "System.IAttachAttribtue" (function(_ENV)
-        extend "IAttribtue"
+    interface "System.IAttachAttribute" (function(_ENV)
+        extend "IAttribute"
 
         -----------------------------------------------------------
         --                        method                         --
@@ -11563,6 +11600,39 @@ do
         __Abstract__()
         function AttachAttribute(self, target, targettype, owner, name, stack)
         end
+    end)
+
+    --- the interface to modify the target's definition
+    __Sealed__()
+    interface "System.IInitAttribute" (function(_ENV)
+        extend "IAttribute"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        __Abstract__()
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+        end
+    end)
+
+    --- the interface to of clone
+    __Sealed__()
+    ICloneable = interface "System.ICloneable" (function(_ENV)
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- return the clone of the object
+        -- @return  the clone
+        __Abstract__()
+        function Clone(self) end
     end)
 
     --- the interface for code environment
@@ -11588,18 +11658,63 @@ do
         __Abstract__() __tostring = function(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
+    -- a toolset to provide several compatible apis
+    __Sealed__() __Final__()
+    interface "System.Toolset" {
+        --- wipe the table
+        -- @param   table
+        wipe                    = wipe,
+
+        --- safe save the value into storage
+        -- @param   table
+        -- @param   key
+        -- @param   value
+        -- @return  table           maybe a new table to avoid re-hash conflict
+        savestorage             = savestorage,
+
+        --- clone the value
+        -- @param   value
+        -- @param   deep:boolean
+        -- @param   safe:boolean    only need if there'd be recursive reference in the table
+        clone                   = clone,
+
+        --- load the snippets
+        -- @param   chunk           the code
+        -- @param   source          the source name
+        -- @param   env             the environment, default _G
+        loadsnippet             = loadsnippet,
+
+        --- validate flags values
+        -- @param   chkvalue        the check value, must be 2^n
+        -- @param   targetvalue     the target value
+        -- @return  boolean         true if the target value contains the chkvalue
+        validateflags           = validateflags,
+
+        --- add the check value to the target value
+        -- @param   chkvalue        the check value, must be 2^n
+        -- @param   targetvalue     the target value
+        -- @return  targetvalue     the target value contains the check value
+        turnonflags             = turnonflags,
+
+        --- remove the check value to the target value
+        -- @param   chkvalue        the check value, must be 2^n
+        -- @param   targetvalue     the target value
+        -- @return  targetvalue     the target value don't contains the check value
+        turnoffflags            = turnoffflags,
+    }
+
     -----------------------------------------------------------------------
     --                              classes                              --
     -----------------------------------------------------------------------
     --- the attribute to build the overload system
     __Sealed__() __Final__()
     class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
-        extend "IInitAttribtue"
+        extend "IInitAttribute"
 
         -----------------------------------------------------------
         --                        storage                        --
         -----------------------------------------------------------
-        _OverloadMap            = newStorage(WEAK_KEY)
+        _OverloadMap            = newstorage(WEAK_KEY)
         _ArgValdMap             = {}
         _OverloadMap            = {}
 
@@ -11647,7 +11762,7 @@ do
         export {
             validate            = Struct.ValidateValue,
             geterrmsg           = Struct.GetErrorMessage,
-            saveStorage         = saveStorage,
+            savestorage         = savestorage,
             ipairs              = ipairs,
             tinsert             = tinsert,
             uinsert             = uinsert,
@@ -11657,10 +11772,10 @@ do
             type                = type,
             getmetatable        = getmetatable,
             tostring            = tostring,
-            loadSnippet         = loadSnippet,
+            loadsnippet         = loadsnippet,
             _Cache              = _Cache,
-            turnOnFlags         = turnOnFlags,
-            validateFlags       = validateFlags,
+            turnonflags         = turnonflags,
+            validateflags       = validateflags,
             parseOrdinalNumber  = function (i) return ORDINAL_NUMBER[i] or (i .. "th") end,
             unpack              = unpack,
             error               = error,
@@ -11758,28 +11873,28 @@ do
             local islist= false
 
             if ismethod then
-                token   = turnOnFlags(FLG_VAR_METHOD, token)
+                token   = turnonflags(FLG_VAR_METHOD, token)
 
                 if hasself then
-                    token = turnOnFlags(FLG_VAR_SELFIN, token)
+                    token = turnonflags(FLG_VAR_SELFIN, token)
                 end
             end
 
             if vars[FLD_VAR_IMMTBL] then
-                token   = turnOnFlags(FLG_VAR_IMMTBL, token)
+                token   = turnonflags(FLG_VAR_IMMTBL, token)
             end
 
             if vars[FLD_VAR_ISLIST] then
                 islist  = true
-                token   = turnOnFlags(FLG_VAR_ISLIST, token)
+                token   = turnonflags(FLG_VAR_ISLIST, token)
                 if vars[len].immutable then
-                    token = turnOnFlags(FLG_VAR_IMMLST, token)
+                    token = turnonflags(FLG_VAR_IMMLST, token)
                 end
                 if vars[len].type then
-                    token = turnOnFlags(FLG_VAR_LSTVLD, token)
+                    token = turnonflags(FLG_VAR_LSTVLD, token)
                 end
                 if vars[len].nilable then
-                    token = turnOnFlags(FLG_VAR_LSTNIL, token)
+                    token = turnonflags(FLG_VAR_LSTNIL, token)
                 end
             end
 
@@ -11861,18 +11976,18 @@ do
                     tinsert(body, strformat([[return func(%s)]], args))
                 else
                     if ismethod then
-                        if validateFlags(FLG_VAR_IMMLST, token) then
-                            if not validateFlags(FLG_VAR_LSTNIL, token) or validateFlags(FLG_VAR_LSTVLD, token) then
+                        if validateflags(FLG_VAR_IMMLST, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
                                 tinsert(body, [[
                                     local vlen = select("#", ...)
                                 ]])
-                                if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, [[
                                         if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
                                     ]])
                                 end
-                                if validateFlags(FLG_VAR_LSTVLD, token) then
+                                if validateflags(FLG_VAR_LSTVLD, token) then
                                     uinsert(apis, "parseOrdinalNumber")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
@@ -11893,7 +12008,7 @@ do
                             tinsert(body, [[
                                 local vlen = select("#", ...)
                             ]])
-                            if not validateFlags(FLG_VAR_LSTNIL, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) then
                                 tinsert(body, [[
                                     if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
                                 ]])
@@ -11925,18 +12040,18 @@ do
                             ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
                         end
                     else
-                        if validateFlags(FLG_VAR_IMMLST, token) then
-                            if not validateFlags(FLG_VAR_LSTNIL, token) or validateFlags(FLG_VAR_LSTVLD, token) then
+                        if validateflags(FLG_VAR_IMMLST, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
                                 tinsert(body, [[
                                     local vlen = select("#", ...)
                                 ]])
-                                if not validateFlags(FLG_VAR_LSTNIL, token) then
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, [[
                                         if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
                                     ]])
                                 end
-                                if validateFlags(FLG_VAR_LSTVLD, token) then
+                                if validateflags(FLG_VAR_LSTVLD, token) then
                                     uinsert(apis, "parseOrdinalNumber")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
@@ -11956,7 +12071,7 @@ do
                             tinsert(body, [[
                                 local vlen = select("#", ...)
                             ]])
-                            if not validateFlags(FLG_VAR_LSTNIL, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) then
                                 tinsert(body, [[
                                     if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
                                 ]])
@@ -11990,7 +12105,7 @@ do
                     body[1]         = strformat("local %s = %s", declare, declare)
                 end
 
-                _ArgValdMap[token]  = loadSnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
+                _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
 
                 _Cache(body)
                 _Cache(apis)
@@ -12007,15 +12122,15 @@ do
             local token         = 0
 
             if hasself then
-                token           = turnOnFlags(FLG_OVD_SELFIN, token)
+                token           = turnonflags(FLG_OVD_SELFIN, token)
             end
 
             if THORW_METHOD[overload[FLD_OVD_NAME]] then
-                token           = turnOnFlags(FLG_OVD_THROW, token)
+                token           = turnonflags(FLG_OVD_THROW, token)
             end
 
             if #overload == 1 then
-                token           = turnOnFlags(FLG_OVD_ONECNT, token)
+                token           = turnonflags(FLG_OVD_ONECNT, token)
             end
 
             local usages = { "the calling style must be one of the follow:" }
@@ -12050,7 +12165,7 @@ do
                             msg  = valid(false, ]] .. (hasself and "self, " or "") .. [[...)
                         end
                     ]])
-                    if validateFlags(FLG_OVD_THROW, token) then
+                    if validateflags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
                             if msg then throw(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg) end
                         ]])
@@ -12068,14 +12183,17 @@ do
                         end
                     ]])
                 else
-                    uinsert(apis, "tblconcat")
                     tinsert(body, [[
                         local argcnt = select("#", ...)
                         if argcnt == 0 then
                             for i = 1, count do
                                 local vars = overload[i]
-                                if vars[]] .. FLD_VAR_MAXARG .. [[] == 0 then
-                                    return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                if vars[]] .. FLD_VAR_MINARG .. [[] == 0 then
+                                    if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                                        return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                    else
+                                        return vars[]] .. FLD_VAR_VARVLD .. [[](nil, ]] .. (hasself and "self, " or "") .. [[...)
+                                    end
                                 end
                             end
                         else
@@ -12096,7 +12214,7 @@ do
                         end
                         -- Raise the usages
                     ]])
-                    if validateFlags(FLG_OVD_THROW, token) then
+                    if validateflags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
                             throw(usages)
                         ]])
@@ -12119,7 +12237,7 @@ do
                     body[1]         = strformat("local %s = %s", declare, declare)
                 end
 
-                _OverloadMap[token]  = loadSnippet(tblconcat(body, "\n"), "Overload_Process_" .. token, currentenv())()
+                _OverloadMap[token]  = loadsnippet(tblconcat(body, "\n"), "Overload_Process_" .. token, currentenv())()
 
                 _Cache(body)
                 _Cache(apis)
@@ -12206,9 +12324,9 @@ do
                     end
 
                     if eidx then
-                        overload= saveStorage(overload, eidx, vars)
+                        overload= savestorage(overload, eidx, vars)
                     else
-                        overload= saveStorage(overload, #overload + 1, vars)
+                        overload= savestorage(overload, #overload + 1, vars)
                     end
                 else
                     overload    = { vars, [FLD_OVD_OWNER] = owner, [FLD_OVD_NAME] = name }
@@ -12216,7 +12334,7 @@ do
 
                 genOverload(overload, hasself)
 
-                _OverloadMap    = saveStorage(_OverloadMap, owner, saveStorage(_OverloadMap[owner] or {}, name, overload))
+                _OverloadMap    = savestorage(_OverloadMap, owner, savestorage(_OverloadMap[owner] or {}, name, overload))
 
                 if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] then return end
 
@@ -12238,7 +12356,7 @@ do
         property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
 
         --- the attribute's priority
-        property "Priority"         { type = AttributePriorty,  default = AttributePriorty.Lowest }
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lowest }
 
         --- the attribute's sub level of priority
         property "SubLevel"         { type = Number,            default = -99999 }
@@ -12313,7 +12431,7 @@ do
 
         --- Set the init function to the delegate
         -- @param   init                        the init function
-        __Arguments__{ Variable(Function, true) }
+        __Arguments__{ Variable.Optional(Function) }
         function SetInitFunction(self, func)
             func = func or false
             if self[0] ~= func then
@@ -12324,7 +12442,7 @@ do
 
         --- Set the final function to the delegate
         -- @param   final                       the final function
-        __Arguments__{ Variable(Function, true) }
+        __Arguments__{ Variable.Optional(Function) }
         function SetFinalFunction(self, func)
             func = func or false
             if self[-1] ~= func then
@@ -12345,10 +12463,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{
-            { type = Table, name = "owner", nilable = true },
-            { type = String, name = "name", nilable = true }
-        }
+        __Arguments__{ Variable("owner", Table, true), Variable("name", String, true) }
         function Delegate(self, owner, name)
             self.Owner      = owner
             self.Name       = name
@@ -12404,7 +12519,7 @@ do
     --- Wrap the target function within the given function like pcall
     __Sealed__() __Final__()
     class "System.__Delegate__" (function(_ENV)
-        extend "IInitAttribtue"
+        extend "IInitAttribute"
 
         -----------------------------------------------------------
         --                        method                         --
@@ -12478,11 +12593,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{
-            { type = String,    name = "message" },
-            { type = Exception, name = "inner", nilable = true },
-            { type = Boolean,   name = "savevariables", nilable = true }
-        }
+        __Arguments__{ Variable("message", String), Variable("inner", Exception, true), Variable("savevariables", Boolean, true) }
         function Exception(self, message, inner, savevariables)
             self.Message        = message
             self.InnerException = inner
@@ -12504,7 +12615,7 @@ do
         export {
             rawget              = rawget,
             rawset              = rawset,
-            saveStorage         = saveStorage,
+            savestorage         = savestorage,
             type                = type,
             strgsub             = strgsub,
             strgmatch           = strgmatch,
@@ -12542,7 +12653,7 @@ do
         --                        helpers                        --
         -----------------------------------------------------------
         local saveModuleInfo    = Platform.UNSAFE_MODE and function(mdl, info) rawset(mdl, FLD_MDL_INFO, info) end
-                                                        or function(mdl, info) _ModuleInfo = saveStorage(_ModuleInfo, mdl, info) end
+                                                        or function(mdl, info) _ModuleInfo = savestorage(_ModuleInfo, mdl, info) end
 
         -----------------------------------------------------------
         --                        method                         --
@@ -12649,10 +12760,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{
-            Variable{ type = NEString, name = "name" },
-            Variable{ type = Module,   name = "parent", nilable = true }
-        }
+        __Arguments__{ Variable("name", NEString), Variable("parent", Module, true) }
         function __exist(cls, path, root)
             root                = root or cls
             path                = strgsub(path, "%s+", "")
@@ -12693,7 +12801,7 @@ do
                 subname         = nxt
             end
 
-            _ModuleInfo[root][FLD_MDL_CHILD] = saveStorage(_ModuleInfo[root][FLD_MDL_CHILD] or {}, subname, self)
+            _ModuleInfo[root][FLD_MDL_CHILD] = savestorage(_ModuleInfo[root][FLD_MDL_CHILD] or {}, subname, self)
 
             local fullname = _ModuleInfo[root][FLD_MDL_FULLNAME]
 
@@ -12714,19 +12822,23 @@ do
         --                      meta-method                      --
         -----------------------------------------------------------
         --- _ENV = Module "TestCode" "v1.0.0"
-        __Arguments__{ String }
         function __call(self, version)
-            if self:ValidateVersion(version) then
-                version = strtrim(version)
-                _ModuleInfo[self][FLD_MDL_VER] = version ~= "" and version or false
-                Environment.Apply(self, 2)
-            else
-                error("there is an equal or bigger version existed", 2)
+            local tver  = type(version)
+            if tver == "string" then
+                if self:ValidateVersion(version) then
+                    version = strtrim(version)
+                    _ModuleInfo[self][FLD_MDL_VER] = version ~= "" and version or false
+                    Environment.Apply(self, 2)
+                else
+                    error("there is an equal or bigger version existed", 2)
+                end
+            elseif tver == "function" then
+                Environment.Apply(self, version)
+            elseif version == nil or tver == "number" then
+                Environment.Apply(self, (version or 1) + 1)
             end
+            return self
         end
-
-        __Arguments__.Rest()
-        __call                  = Environment.Apply
 
         function __tostring(self)
             return "[" .. tostring(getmetatable(self)) .. "]" .. self._FullName .. (GetObjectSource(self) or "")
