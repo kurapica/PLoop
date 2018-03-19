@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/14                                               --
+-- Update Date  :   2018/03/17                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -62,13 +62,9 @@ do
             select              = select,
 
             -- String
-            strlen              = string.len,
             strformat           = string.format,
             strfind             = string.find,
             strsub              = string.sub,
-            strbyte             = string.byte,
-            strchar             = string.char,
-            strrep              = string.rep,
             strgsub             = string.gsub,
             strupper            = string.upper,
             strlower            = string.lower,
@@ -80,7 +76,6 @@ do
             tinsert             = table.insert,
             tremove             = table.remove,
             unpack              = table.unpack or unpack,
-            sort                = table.sort,
             setmetatable        = setmetatable,
             getmetatable        = getmetatable,
             rawset              = rawset,
@@ -94,15 +89,6 @@ do
             -- Math
             floor               = math.floor,
             mlog                = math.log,
-            mabs                = math.abs,
-
-            -- Coroutine
-            create              = coroutine.create,
-            resume              = coroutine.resume,
-            running             = coroutine.running,
-            status              = coroutine.status,
-            wrap                = coroutine.wrap,
-            yield               = coroutine.yield,
 
             -- Safe
             pcall               = pcall,
@@ -280,8 +266,14 @@ do
 
         --- Whether try to save the stack data into the exception object, so
         -- we can have more details about the exception.
-        -- Default true
-        EXCEPTION_SAVE_STACK_DATA           = true,
+        -- Default false
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        EXCEPTION_SAVE_STACK_DATA           = false,
+
+        --- The max pool size of the thread pool
+        -- Default 40
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        THREAD_POOL_MAX_SIZE                = 40,
     }
 
     -- Special constraint
@@ -6522,8 +6514,7 @@ do
         if type(func) ~= "function" then return "the func must be a function", stack end
 
         local typmtd = info[FLD_IC_TYPMTD]
-        if not def and (typmtd and typmtd[name] ~= nil and (typmtd[name] == false or validateflags(MOD_SEALED_IC, info[FLD_IC_MOD]))
-            or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
+        if not def and (typmtd and (typmtd[name] or (typmtd[name] == false and info[name])) or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
             return strformat("The %s can't be overridden", name), stack
         end
 
@@ -6541,6 +6532,8 @@ do
         attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
 
+        typmtd = info[FLD_IC_TYPMTD]    -- Maybe generated after attribtues applied
+
         if def then
             if typmtd and typmtd[name] == false then
                 info[name] = func
@@ -6548,8 +6541,10 @@ do
                 info[FLD_IC_TYPMTD] = typmtd or _Cache()
                 info[FLD_IC_TYPMTD][name] = func
             end
+        elseif typmtd and typmtd[name] == false then
+            info[name]              = func
         else
-            info[FLD_IC_TYPMTD]     = savestorage(typmtd or _Cache(), name, func)
+            info[FLD_IC_TYPMTD]     = savestorage(typmtd or {}, name, func)
             return saveObjectMethod(target, name, func)
         end
     end
@@ -6661,9 +6656,15 @@ do
     end
 
     local setStaticMethod       = function (target, name, stack)
-        local info, name, stack, msg = preDefineCheck(target, name, stack)
+        local info, name, stack, msg, def = preDefineCheck(target, name, stack, true)
 
         if msg then return msg, stack end
+
+        if not def then
+            if info[name] then return end
+            if not validateflags(MOD_SEALED_IC, info[FLD_IC_MOD]) then return "can't set a static method to an un-sealed " .. tostring(getmetatable(target)) .. " without definition", stack end
+            if info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil then return "can't set an existed object method as static", stack end
+        end
 
         if info[name] == nil then
             info[FLD_IC_TYPMTD] = info[FLD_IC_TYPMTD] or {}
@@ -7207,29 +7208,29 @@ do
                 return info and validateflags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) or false
             end;
 
-            --- Whether the target interface is a sub-type of another interface
+            --- Whether the interface's method, meta-method or feature is abstract
             -- @static
-            -- @method  IsSubType
+            -- @method  IsAbstract
             -- @owner   interface
             -- @param   target                      the target interface
-            -- @param   extendIF                    the extened interface
-            -- @return  boolean                     true if the target interface is a sub-type of another interface
-            ["IsSubType"]       = function(target, extendIF)
-                if target == extendIF then return true end
-                local info = getICTargetInfo(target)
-                if info then for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == extendIF then return true end end end
-                return false
+            -- @param   name                        the method, meta-method, feature name
+            -- @return  boolean                     true if it abstract
+            ["IsAbstract"]      = function(target, name)
+                local info      = getICTargetInfo(target)
+                return info and info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT or false
             end;
 
-            --- Whether the interface is final, can't be extended
+            --- Whether the interface or its method, meta-method, feature is final
             -- @static
             -- @method  IsFinal
             -- @owner   interface
+            -- @format  (target[, name])
             -- @param   target                      the target interface
-            -- @return  boolean                     true if the interface is final
-            ["IsFinal"]         = function(target)
+            -- @param   name                        the method, meta-method, feature name
+            -- @return  boolean                     true if is final
+            ["IsFinal"]         = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and validateflags(MOD_FINAL_IC, info[FLD_IC_MOD]) or false
+                return info and ((name == nil and validateflags(MOD_FINAL_IC, info[FLD_IC_MOD])) or (name and info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_FINAL)) or false
             end;
 
             --- The objects are always immutable for type validation
@@ -7263,6 +7264,20 @@ do
             ["IsStaticMethod"]  = function(target, name)
                 local info      = getICTargetInfo(target)
                 return info and type(name) == "string" and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] == false or false
+            end;
+
+            --- Whether the target interface is a sub-type of another interface
+            -- @static
+            -- @method  IsSubType
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   extendIF                    the extened interface
+            -- @return  boolean                     true if the target interface is a sub-type of another interface
+            ["IsSubType"]       = function(target, extendIF)
+                if target == extendIF then return true end
+                local info = getICTargetInfo(target)
+                if info then for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == extendIF then return true end end end
+                return false
             end;
 
             --- Register a parser to analyse key-value pair as definition for the class or interface
@@ -7744,23 +7759,26 @@ do
                 return info and info[FLD_IC_THIS]
             end;
 
-            --- Whether the class is abstract, can't generate objects
+            --- Whether the class's method, meta-method or feature is abstract
             -- @static
             -- @method  IsAbstract
             -- @owner   class
             -- @param   target                      the target class
-            -- @return  boolean                     true if the class is abstract
-            ["IsAbstract"]      = function(target)
+            -- @param   name                        the method, meta-method, feature name
+            -- @return  boolean                     true if it abstract
+            ["IsAbstract"]      = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and validateflags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) or false
+                return info and ((name == nil and validateflags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD])) or (name and info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) or false
             end;
 
-            --- Whether the class is final, can't be extended
+            --- Whether the class or its method, meta-method, feature is final
             -- @static
             -- @method  IsFinal
             -- @owner   class
+            -- @format  (target[, name])
             -- @param   target                      the target class
-            -- @return  boolean                     true if the class is final
+            -- @param   name                        the method, meta-method, feature name
+            -- @return  boolean                     true if is final
             ["IsFinal"]         = interface.IsFinal;
 
             --- The objects are always immutable for type validation
@@ -8987,7 +9005,7 @@ do
                         attribute.ApplyAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
                         attribute.AttachAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
                     end
-                    odel:SetFinalFunction(ret)
+                    odel:SetFinalFunction(delegate)
                 elseif getmetatable(delegate) == Delegate then
                     if delegate ~= odel then
                         delegate:CopyTo(odel)
@@ -10099,6 +10117,17 @@ do
                 return info and validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property is readable
+            -- @static
+            -- @method  IsReadable
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is readable
+            ["IsReadable"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and not (info[FLD_PROP_GET] == false or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil and info[FLD_PROP_DEFAULTFUNC] == nil and info[FLD_PROP_DEFAULT] == nil)) or false
+            end;
+
             --- Whether the property should save a clone copy to the value
             -- @static
             -- @method  IsSetClone
@@ -10162,6 +10191,17 @@ do
                 return info and validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property is writable
+            -- @static
+            -- @method  IsWritable
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is writable
+            ["IsWritable"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and not (info[FLD_PROP_SET] == false or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil)) or false
+            end;
+
             --- Set the property whether it should return a clone copy of the value
             -- @static
             -- @method  GetClone
@@ -10170,7 +10210,7 @@ do
             -- @param   target                      the target property
             -- @param   deep                        true if need deep clone
             -- @param   stack                       the stack level
-            ["GetClone"]     = function(self, deep, stack)
+            ["GetClone"]        = function(self, deep, stack)
                 if _PropertyInDefine[self] then
                     local info  = _PropertyInfo[self]
                     info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_GETCLONE, info[FLD_PROP_MOD])
@@ -10178,6 +10218,17 @@ do
                 else
                     error("Usage: property:GetClone(deep, [stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
+            end;
+
+            --- Get the property type
+            -- @static
+            -- @method  GetType
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @pram    type                        the value type
+            ["GetType"]         = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_TYPE] or nil
             end;
 
             --- Parse a string-[table|type] pair as the property's definition, the string is the property's name and the value should be a table or a valid type
@@ -10318,13 +10369,16 @@ do
             ["IsGetClone"]      = property.IsGetClone;
             ["IsGetDeepClone"]  = property.IsGetDeepClone;
             ["IsIndexer"]       = property.IsIndexer;
+            ["IsReadable"]      = property.IsReadable;
+            ["IsRetainObject"]  = property.IsRetainObject;
             ["IsSetClone"]      = property.IsSetClone;
             ["IsSetDeepClone"]  = property.IsSetDeepClone;
-            ["IsRetainObject"]  = property.IsRetainObject;
             ["IsShareable"]     = property.IsShareable;
             ["IsStatic"]        = property.IsStatic;
             ["IsWeak"]          = property.IsWeak;
+            ["IsWritable"]      = property.IsWritable;
             ["GetClone"]        = property.GetClone;
+            ["GetType"]         = property.GetType;
             ["SetClone"]        = property.SetClone;
             ["SetIndexer"]      = property.SetIndexer;
             ["SetRetainObject"] = property.SetRetainObject;
@@ -10726,7 +10780,7 @@ do
     --
     -- @attribute   System.__Abstract__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Abstract__",              prototype {
+    __Abstract__ = namespace.SaveNamespace("System.__Abstract__", prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -11359,6 +11413,9 @@ do
     --- Represents natural number value
     __Sealed__() struct "System.NaturalNumber"      { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
 
+    --- Represents negative integer value
+    __Sealed__() struct "System.NegativeInteger"     { __base = Integer, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative number") or nil end }
+
     --- Represents namespace type
     __Sealed__() struct "System.NamespaceType"      { genTypeValidator(namespace)   }
 
@@ -11501,7 +11558,7 @@ do
     -----------------------------------------------------------------------
     --                             interface                             --
     -----------------------------------------------------------------------
-    --- the interface of attribute
+    --- Represents the interface of attribute
     __Sealed__() __ObjectSource__{ Inheritable = true }
     interface "System.IAttribute" (function(_ENV)
         export {
@@ -11563,7 +11620,7 @@ do
         function __tostring(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
-    --- the interface to apply changes on the target
+    --- Represents the interface to apply changes on the target
     __Sealed__()
     interface "System.IApplyAttribute" (function(_ENV)
         extend "IAttribute"
@@ -11582,7 +11639,7 @@ do
         end
     end)
 
-    --- the interface to attach data on the target
+    --- Represents the interface to attach data on the target
     __Sealed__()
     interface "System.IAttachAttribute" (function(_ENV)
         extend "IAttribute"
@@ -11602,7 +11659,7 @@ do
         end
     end)
 
-    --- the interface to modify the target's definition
+    --- Represents the interface to modify the target's definition
     __Sealed__()
     interface "System.IInitAttribute" (function(_ENV)
         extend "IAttribute"
@@ -11623,7 +11680,7 @@ do
         end
     end)
 
-    --- the interface to of clone
+    --- Represents the interface to of clone
     __Sealed__()
     ICloneable = interface "System.ICloneable" (function(_ENV)
         -----------------------------------------------------------
@@ -11635,7 +11692,7 @@ do
         function Clone(self) end
     end)
 
-    --- the interface for code environment
+    --- Represents the interface for code environment
     __Sealed__() __ObjectSource__{ Inheritable = true }
     IEnvironment = interface "System.IEnvironment" (function(_ENV)
         export {
@@ -11658,7 +11715,7 @@ do
         __Abstract__() __tostring = function(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
-    -- a toolset to provide several compatible apis
+    -- Represents a toolset to provide several compatible apis
     __Sealed__() __Final__()
     interface "System.Toolset" {
         --- wipe the table
@@ -11728,6 +11785,7 @@ do
         FLD_VAR_IMMTBL          = -4
         FLD_VAR_USGMSG          = -5
         FLD_VAR_VARVLD          = -6
+        FLD_VAR_THRABL          = -7
 
         FLD_OVD_FUNCTN          =  0
         FLD_OVD_OWNER           = -1
@@ -11748,9 +11806,10 @@ do
         FLG_VAR_IMMLST          = newflags()        -- the list variable is immutable
         FLG_VAR_LSTNIL          = newflags()        -- the list variable is nilable
         FLG_VAR_LSTVLD          = newflags()        -- the list variable has type
+        FLG_VAR_THRABL          = newflags()        -- the target may throw exception
         FLG_VAR_LENGTH          = newflags()        -- the multiply factor of length
 
-        FLG_OVD_SELFIN          = newflags(true)    -- has elf
+        FLG_OVD_SELFIN          = newflags(true)    -- has self
         FLG_OVD_THROW           = newflags()        -- use throw
         FLG_OVD_ONECNT          = newflags()        -- only one variable list
 
@@ -11768,6 +11827,7 @@ do
             uinsert             = uinsert,
             tblconcat           = tblconcat,
             strformat           = strformat,
+            strsub              = strsub,
             strgsub             = strgsub,
             type                = type,
             getmetatable        = getmetatable,
@@ -11780,6 +11840,12 @@ do
             unpack              = unpack,
             error               = error,
             select              = select,
+            errorstack          = (LUA_VERSION == 5.1 and not _G.jit) and 3 or 2,
+            chkandret           = function (ok, msg, ...)
+                if ok then return msg, ... end
+                error(tostring(msg), errorstack)
+            end,
+            pcall               = pcall,
         }
 
         export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
@@ -11867,7 +11933,7 @@ do
 
         local function genArgumentValid(vars, ismethod, hasself)
             local len   = #vars
-            if len     == 0 then return end
+            if len     == 0 and not vars[FLD_VAR_THRABL] then return end
 
             local token = len * FLG_VAR_LENGTH
             local islist= false
@@ -11898,6 +11964,10 @@ do
                 end
             end
 
+            if vars[FLD_VAR_THRABL] then
+                token   = turnonflags(FLG_VAR_THRABL, token)
+            end
+
             -- Build the validator generator
             if not _ArgValdMap[token] then
                 local head      = _Cache()
@@ -11913,9 +11983,17 @@ do
 
                 for i = 1, len do args[i] = "v" .. i end
                 if ismethod then
-                    tinsert(body, strformat("return function(func, %s)", tblconcat(args, ", ")))
+                    if len == 0 then
+                        tinsert(body, "return function(func)")
+                    else
+                        tinsert(body, strformat("return function(func, %s)", tblconcat(args, ", ")))
+                    end
                 else
-                    tinsert(body, strformat("return function(usage, func, %s)", tblconcat(args, ", ")))
+                    if len == 0 then
+                        tinsert(body, "return function(usage, func)")
+                    else
+                        tinsert(body, strformat("return function(usage, func, %s)", tblconcat(args, ", ")))
+                    end
                 end
 
                 for i = 1, len do args[i] = "a" .. i end
@@ -11925,14 +12003,18 @@ do
                 args = tblconcat(args, ", ")
 
                 if ismethod then
-                    if islist then
+                    if len == 0 then
+                        tinsert(body, [[return function(onlyvalid)]])
+                    elseif islist then
                         tinsert(body, strformat([[return function(onlyvalid, %s, ...)]], args))
                     else
                         tinsert(body, strformat([[return function(onlyvalid, %s)]], args))
                     end
                 else
                     uinsert(apis, "error")
-                    if islist then
+                    if len == 0 then
+                        tinsert(body, [[return function()]])
+                    elseif islist then
                         tinsert(body, strformat([[return function(%s, ...)]], args))
                     else
                         tinsert(body, strformat([[return function(%s)]], args))
@@ -12100,12 +12182,21 @@ do
                     end
                 ]])
 
+                if validateflags(FLG_VAR_THRABL, token) then
+                    uinsert(apis, "chkandret")
+                    uinsert(apis, "pcall")
+                end
+
                 if #apis > 0 then
                     local declare   = tblconcat(apis, ", ")
                     body[1]         = strformat("local %s = %s", declare, declare)
                 end
 
-                _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
+                if validateflags(FLG_VAR_THRABL, token) then
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, currentenv())()
+                else
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
+                end
 
                 _Cache(body)
                 _Cache(apis)
@@ -12143,6 +12234,8 @@ do
                 local apis      = _Cache()
 
                 uinsert(apis, "select")
+                uinsert(apis, "chkandret")
+                uinsert(apis, "pcall")
 
                 tinsert(body, "")                       -- remain for shareable variables
 
@@ -12177,7 +12270,11 @@ do
                     end
                     tinsert(body, [[
                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
-                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                            if vars[]] .. FLD_VAR_THRABL .. [[] then
+                                return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                            else
+                                return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                            end
                         else
                             return valid(nil, ]] .. (hasself and "self, " or "") .. [[...)
                         end
@@ -12190,7 +12287,11 @@ do
                                 local vars = overload[i]
                                 if vars[]] .. FLD_VAR_MINARG .. [[] == 0 then
                                     if vars[]] .. FLD_VAR_IMMTBL .. [[] then
-                                        return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                        if vars[]] .. FLD_VAR_THRABL .. [[] then
+                                            return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                                        else
+                                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                        end
                                     else
                                         return vars[]] .. FLD_VAR_VARVLD .. [[](nil, ]] .. (hasself and "self, " or "") .. [[...)
                                     end
@@ -12204,7 +12305,11 @@ do
 
                                     if valid(true, ]] .. (hasself and "self, " or "") .. [[...) == nil then
                                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
-                                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                            if vars[]] .. FLD_VAR_THRABL .. [[] then
+                                                return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                                            else
+                                                return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                            end
                                         else
                                             return valid(nil, ]] .. (hasself and "self, " or "") .. [[...)
                                         end
@@ -12254,6 +12359,11 @@ do
             return Class.AttachObjectSource(__Arguments__{ { islist = true, nilable = true} }, 2)
         end
 
+        --- Mark the target function as throwable
+        function Throwable(self)
+            self.IsThrowable = true
+        end
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -12276,6 +12386,7 @@ do
                 [FLD_VAR_IMMTBL]= true,
                 [FLD_VAR_USGMSG]= "",
                 [FLD_VAR_VARVLD]= false,
+                [FLD_VAR_THRABL]= self.IsThrowable,
             }
 
             local minargs
@@ -12336,11 +12447,11 @@ do
 
                 _OverloadMap    = savestorage(_OverloadMap, owner, savestorage(_OverloadMap[owner] or {}, name, overload))
 
-                if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] then return end
+                if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
                 return overload[FLD_OVD_FUNCTN]
             else
-                if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] then return end
+                if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
                 buildUsage(vars, owner, name, false)
                 genArgumentValid(vars, false)
@@ -12360,6 +12471,9 @@ do
 
         --- the attribute's sub level of priority
         property "SubLevel"         { type = Number,            default = -99999 }
+
+        --- whether the target function may throw exceptions instead of error message
+        property "IsThrowable"      { type = Boolean }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -12842,6 +12956,108 @@ do
 
         function __tostring(self)
             return "[" .. tostring(getmetatable(self)) .. "]" .. self._FullName .. (GetObjectSource(self) or "")
+        end
+    end)
+
+    -----------------------------------------------------------------------
+    --                              context                              --
+    -----------------------------------------------------------------------
+    interface "System.IContext" {}
+
+    --- Represents the context object used to process the operations in a
+    -- coroutine, normally used in multi-os thread platforms
+    __Sealed__()
+    class (_PLoopEnv, "System.Context") (function(_ENV)
+        export {
+            getlocal            = getlocal,
+            getobjectclass      = Class.GetObjectClass,
+            isclass             = Class.IsSubType,
+            isinterface         = Interface.IsSubType,
+            pcall               = pcall,
+            type                = type,
+        }
+
+        export { Context, IContext }
+
+        local getCurrentContext = getlocal and function(stack)
+            local n, v          = getlocal(stack, 1)
+
+            while true do
+                local cls = getobjectclass(v)
+                if cls then
+                    if isclass(cls, Context) then
+                        return v
+                    elseif isinterface(cls, IContext) then
+                        return v.Context
+                    end
+                end
+
+                stack           = stack + 1
+                n, v            = getlocal(stack, 1)
+            end
+        end or fakefunc
+
+        -----------------------------------------------------------
+        --                     static method                     --
+        -----------------------------------------------------------
+        --- Retrieve the context object from the begin stack to the top stack
+        -- @param   stack                           the begin stack to check
+        __Static__()
+        function GetContextFromStack(stack)
+            local ok, ret       = pcall(getCurrentContext, (type(stack) == "number" and stack or 1) + 3)
+            return ok and ret or nil
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Process the operations under the context
+        __Abstract__()
+        function Process(self) end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        __Static__()
+        --- the current context object
+        property "Current" {
+            get = function ()
+                local ok, ret = pcall(getCurrentContext, 5)
+                return ok and ret or nil
+            end
+        }
+    end)
+
+    --- Represents the interface of using coroutine context, which will
+    -- cache all sharable datas for the coroutine, if the platform is
+    -- single os thread, the context will be the same one
+    __Sealed__()
+    interface "System.IContext" (function(_ENV)
+        export {
+            getcontext          = Context.GetContextFromStack,
+        }
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        if Platform.MULTI_OS_THREAD then
+            __Final__() property "Context" { type = Context }
+        else
+            __Final__() property "Context" { set = false, default = Context() }
+        end
+
+        -----------------------------------------------------------
+        --                      initializer                      --
+        -----------------------------------------------------------
+        if Platform.MULTI_OS_THREAD and getlocal then
+            function IContext(self)
+                if self.Context then return end
+                local context   = getcontext(5)
+
+                if context then
+                    self.Context= context
+                end
+            end
         end
     end)
 end
