@@ -1,164 +1,171 @@
---========================================================--
---                System.Recycle                          --
---                                                        --
--- Author      :  kurapica125@outlook.com                 --
--- Create Date :  2015/07/22                              --
---========================================================--
+--===========================================================================--
+--                                                                           --
+--                              System.Recycle                               --
+--                                                                           --
+--===========================================================================--
 
---========================================================--
-_ENV = Module     "System.Recycle"                   "1.1.0"
---========================================================--
+--===========================================================================--
+-- Author       :   kurapica125@outlook.com                                  --
+-- URL          :   http://github.com/kurapica/PLoop                         --
+-- Create Date  :   2015/07/22                                               --
+-- Update Date  :   2018/03/15                                               --
+-- Version      :   1.0.0                                                    --
+--===========================================================================--
 
-namespace "System"
+PLoop(function(_ENV)
+    namespace "System"
 
-__Doc__[[
-    Recycle is used as an object factory and recycle manager.
+    --- Recycle is used as an object factory and recycle manager.
+    --
+    -- Recycle's constructor receive a class or struct as it's first argument,
+    -- the class|struct would be used to generate a new object for recycling.
+    -- The other arugments for the constructor is passed to the class|struct's
+    -- constructor as init arugments, if one argument is string and containts
+    -- '%d', the '%d' will be converted to the factory index.The factory index
+    -- in alwasy increased by 1 when a new object is created.
+    --
+    -- After the recycle object is created as 'recycleObject', you can use
+    -- 'recycleObject()' to get an object, and use 'recycleObject(object)'
+    -- to put the object back for another query.
+    --
+    --     ry = Recycle( class { print }, "Name%d" )
+    --     -- table: 00FA96B0  Name1
+    --     o = ry()
+    --     -- table: 00F4B730  Name2
+    --     o = ry()
+    --
+    -- Also you can give the recycle object a "New" method used to generate the
+    -- new object if the creation of the recycled object is too complex like :
+    --
+    --     -- The class would print all arguments when its object created
+    --     ry = Recycle( class { print } )
+    --
+    --     function ry:New()
+    --         -- Add a count for it
+    --         self.Cnt = (self.Cnt or 0) + 1
+    --         return self.Type(self.Cnt)
+    --     end
+    --
+    __Sealed__()
+    class "Recycle" (function(_ENV)
+        export {
+            type                = type,
+            ipairs              = ipairs,
+            unpack              = table.unpack or unpack,
+            tinsert             = table.insert,
+            tremove             = table.remove,
+            strfind             = string.find,
+            strformat           = string.format,
+        }
 
-    Recycle's constructor receive a class or struct as it's first argument, the class|struct would be used to generate a new object for recycling.
-    The other arugments for the constructor is passed to the class|struct's constructor as init arugments, and if one argument is string and containts '%d', the '%d' will be converted to the factory index.The factory index in alwasy increased by 1 when a new object is created.
+        -----------------------------------------------------------
+        --                         event                         --
+        -----------------------------------------------------------
+        --- Fired when an no-used object is put in
+        -- @param   object
+        event "OnPush"
 
-    After the recycle object is created as 'recycleObject', you can use 'recycleObject()' to get an un-used object, and use 'recycleObject(object)' to put no-use object back for another query.
+        --- Fired when an un-used object is send out
+        -- @param   object
+        event "OnPop"
 
-        ry = Recycle( class { print }, "Name%d" )
+        --- Fired when a new object is created
+        -- @param   object
+        event "OnInit"
 
-        -- table: 00FA96B0  Name1
-        o = ry()
-        -- table: 00F4B730  Name2
-        o = ry()
+        local function parseArgs(self, ...)
+            local index     = (self.__index or 0) + 1
+            self.__index    = index
 
-    Also you can give the recycle object a "New" method used to generate the new object if the creation of the recycled object is too complex like :
+            local cache     = self.__args or {}
 
-        -- The class would print all arguments when its object created
-        ry = Recycle( class { print } )
+            for i, arg in ipairs(self.__arguments) do
+                if type(arg) == "string" and strfind(arg, "%%d") then
+                    arg     = strformat(arg, index)
+                end
 
-        function ry:New()
-            -- Add a count for it
-            self.Cnt = (self.Cnt or 0) + 1
-            return self.Type(self.Cnt)
-        end
-
-        -- Only one object would be created
-        o = ry()
-        ry(o)
-        o = ry()
-]]
-__Sealed__()
-class "Recycle" (function(_ENV)
-    ------------------------------------------------------
-    -- Event
-    ------------------------------------------------------
-    __Doc__[[
-        <desc>Fired when an no-used object is put in</desc>
-        <param name="object">no-used object</param>
-    ]]
-    event "OnPush"
-
-    __Doc__[[
-        <desc>Fired when an un-used object is send out</desc>
-        <param name="object">send-out object</param>
-    ]]
-    event "OnPop"
-
-    __Doc__[[
-        <desc>Fired when a new object is created</desc>
-        <param name="object">the new object</param>
-    ]]
-    event "OnInit"
-
-    local function parseArgs(self)
-        if not self.Arguments then return end
-
-        local index = (self.Index or 0) + 1
-        self.Index = index
-
-        self.__NowArgs = self.__NowArgs or {}
-
-        for i, arg in ipairs(self.Arguments) do
-            if type(arg) == "string" and arg:find("%%d") then
-                arg = arg:format(index)
+                cache[i]    = arg
             end
 
-            self.__NowArgs[i] = arg
+            self.__args     = cache
+
+            return unpack(cache)
         end
 
-        return unpack(self.__NowArgs)
-    end
-
-    ------------------------------------------------------
-    -- Method
-    ------------------------------------------------------
-    __Doc__[[ Create a new recycled object, should be overwrited.]]
-    function New(self)
-        if not self.Type then
-            return {}
-        else
-            return self.Type(parseArgs(self))
-        end
-    end
-
-    __Doc__[[
-        <desc>Push object in recycle bin</desc>
-        <param name="object">the object that put in</param>
-    ]]
-    function Push(self, obj)
-        if obj then
-            for i, v in ipairs(self) do if v == obj then return end end
-            -- Won't check obj because using cache means want quick-using.
-            tinsert(self, obj)
-
-            return OnPush(self, obj)
-        end
-    end
-
-    __Doc__[[
-        <desc>Pop object from recycle bin</desc>
-        <return name="object">the object that pop out</return>
-    ]]
-    function Pop(self)
-        local ret = tremove(self)
-
-        if not ret then
-            ret = self:New()
-            OnInit(self, ret)
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Create a new recycled object, should be overwrited
+        function New(self)
+            if not self.Type then
+                return {}
+            elseif self.__arguments then
+                if self.__needparse then
+                    return self.Type(parseArgs(self))
+                else
+                    return self.Type(unpack(self.__arguments))
+                end
+            else
+                return self.Type()
+            end
         end
 
-        OnPop(self, ret)
+        --- Push object into the recycle bin
+        -- @param   object              the object that put in
+        function Push(self, obj)
+            if obj then
+                for i, v in ipairs(self) do if v == obj then return end end
+                -- Won't check obj because using cache means want quick-using.
+                tinsert(self, obj)
 
-        return ret
-    end
-
-    ------------------------------------------------------
-    -- Property
-    ------------------------------------------------------
-    __Doc__[[The recycled object's type]]
-    property "Type" { Type = Struct + Class }
-
-    ------------------------------------------------------
-    -- Constructor
-    ------------------------------------------------------
-    __Doc__ [[
-        <param name="class" type="class">the class used to generate objects</param>
-        <param name="...">the arguments that transform to the class's constructor</param>
-    ]]
-    __Arguments__{ Struct + Class, { IsList = true, Nilable = true } }
-    function Recycle(self, cls, ...)
-        if cls and (Reflector.IsClass(cls) or Reflector.IsStruct(cls)) then
-            self.Type = cls
-            self.Arguments = select('#', ...) > 0 and {...}
+                return OnPush(self, obj)
+            end
         end
-    end
 
-    __Arguments__{ }
-    function Recycle(self) end
+        --- Pop object from recycle bin
+        -- @return  object              the object that pop out
+        function Pop(self)
+            local ret = tremove(self)
 
-    ------------------------------------------------------
-    -- __call
-    ------------------------------------------------------
-    function __call(self, obj)
-        if obj then
-            return Push(self, obj)
-        else
-            return Pop(self)
+            if not ret then
+                ret = self:New()
+                OnInit(self, ret)
+            end
+
+            OnPop(self, ret)
+
+            return ret
         end
-    end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The recycled object's type
+        property "Type" { Type = StructType + ClassType }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ Variable("type", StructType + ClassType, true), Variable.Rest() }
+        function Recycle(self, cls, ...)
+            if cls then
+                self.Type = cls
+                self.__arguments = select('#', ...) > 0 and {...} or false
+                if self.__arguments then
+                    self.__needparse = false
+                    for _, arg in ipairs(self.__arguments) do
+                        if type(arg) == "string" and arg:find("%%d") then
+                            self.__needparse = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __call(self, obj) if obj then return self:Push(obj) else return self:Pop() end end
+    end)
 end)

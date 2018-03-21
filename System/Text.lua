@@ -1,26 +1,31 @@
---========================================================--
---                System.Text                             --
---                                                        --
--- Author      :  kurapica125@outlook.com                 --
--- Create Date :  2014/10/05                              --
---========================================================--
+--===========================================================================--
+--                                                                           --
+--                                System.Text                                --
+--                                                                           --
+--===========================================================================--
 
---========================================================--
-_ENV = Module     "System.Text"                      "0.1.0"
---========================================================--
+--===========================================================================--
+-- Author       :   kurapica125@outlook.com                                  --
+-- URL          :   http://github.com/kurapica/PLoop                         --
+-- Create Date  :   2014/10/05                                               --
+-- Update Date  :   2018/03/16                                               --
+-- Version      :   0.1.0                                                    --
+--===========================================================================--
 
-namespace "System.Text"
+PLoop(function(_ENV)
+	namespace "System.Text"
 
-__Doc__[[Represents a character encoding.]]
-__Abstract__() __Sealed__()
-class "Encoding" (function(_ENV)
-    __Doc__[[The name of the encoding]]
-    __Static__()
-    property "EncodingName" { Set = false, Default = "Encoding" }
+	--- Represents a character encoding.
+	__Abstract__() __Sealed__()
+	class "Encoding" (function(_ENV)
+	    --- The name of the encoding
+	    __Static__()
+	    property "EncodingName" { set = false, default = "Encoding" }
 
-    __Doc__[[Decode to the unicode code points]]
-    function Decode() end
+	    --- Decode to the unicode code points
+	    function Decode() end
 
-    __Doc__[[Encode the unicode code points]]
-    function Encode() end
+	    --- Encode the unicode code points
+	    function Encode() end
+	end)
 end)

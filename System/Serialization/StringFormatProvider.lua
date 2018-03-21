@@ -1,24 +1,35 @@
---========================================================--
---        System.Serialization.StringFormatProvider       --
---                                                        --
--- Author      :  kurapica125@outlook.com                 --
--- Create Date :  2015/09/14                              --
---========================================================--
+--===========================================================================--
+--                                                                           --
+--                 System.Serialization.StringFormatProvider                 --
+--                                                                           --
+--===========================================================================--
 
---========================================================--
-_ENV = Module "System.Serialization.StringFormatProvider" "1.0.0"
---========================================================--
+--===========================================================================--
+-- Author       :   kurapica125@outlook.com                                  --
+-- URL          :   http://github.com/kurapica/PLoop                         --
+-- Create Date  :   2015/09/14                                               --
+-- Update Date  :   2018/03/16                                               --
+-- Version      :   1.0.0                                                    --
+--===========================================================================--
 
-namespace "System.Serialization"
+PLoop(function(_ENV)
+    namespace "System.Serialization"
 
-import "System.Reflector"
+    export {
+        type                    = type,
+        tostring                = tostring,
+        next                    = next,
+        tinsert                 = table.insert,
+        tblconcat               = table.concat,
+        strformat               = string.format,
+        loadsnippet             = Toolset.loadsnippet,
+        validnamespace          = Namespace.Validate,
+        isanonymous             = Namespace.IsAnonymousNamespace,
+    }
 
------------------------------------
--- Serialize
------------------------------------
-do
-    _Cache = setmetatable({}, {__call = function(self, key) if key then wipe(key) tinsert(self, key) else return tremove(self) or {} end end })
-
+    -----------------------------------------------------------------------
+    --                              prepare                              --
+    -----------------------------------------------------------------------
     function SerializeSimpleData(data)
         local dtType = type(data)
 
@@ -26,7 +37,7 @@ do
             return strformat("%q", data)
         elseif dtType == "number" or dtType == "boolean" then
             return tostring(data)
-        elseif GetNameSpaceType(data) and Reflector.GetSuperNameSpace(data) then
+        elseif validnamespace(data) and not isanonymous(data) then
             return strformat("%q", tostring(data))
         end
     end
@@ -35,15 +46,15 @@ do
         write("{")
 
         local field = Serialization.ObjectTypeField
-        local val = data[field]
+        local val   = data[field]
         if val then
             data[field] = nil
 
-            if not objectTypeIgnored and Reflector.GetSuperNameSpace(val) then
+            if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
                     write(strformat("%s=%q,", field, tostring(val)))
                 else
-                    write(strformat("%s=%q", field, tostring(val)))
+                    write(strformat("%s=%q",  field, tostring(val)))
                 end
             end
         end
@@ -83,7 +94,7 @@ do
         if val then
             data[field] = nil
 
-            if not objectTypeIgnored and Reflector.GetSuperNameSpace(val) then
+            if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
                     write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
                 else
@@ -125,15 +136,15 @@ do
         write(object, "{")
 
         local field = Serialization.ObjectTypeField
-        local val = data[field]
+        local val   = data[field]
         if val then
             data[field] = nil
 
-            if not objectTypeIgnored and Reflector.GetSuperNameSpace(val) then
+            if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
                     write(object, strformat("%s=%q,", field, tostring(val)))
                 else
-                    write(object, strformat("%s=%q", field, tostring(val)))
+                    write(object, strformat("%s=%q",  field, tostring(val)))
                 end
             end
         end
@@ -169,15 +180,15 @@ do
         local subIndentChar = preIndentChar .. indentChar
 
         local field = Serialization.ObjectTypeField
-        local val = data[field]
+        local val   = data[field]
         if val then
             data[field] = nil
 
-            if not objectTypeIgnored and Reflector.GetSuperNameSpace(val) then
+            if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
                     write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
                 else
-                    write(object, strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+                    write(object, strformat("%s%s = %q%s",  subIndentChar, field, tostring(val), lineBreak))
                 end
             end
         end
@@ -210,90 +221,96 @@ do
 
         write(object, preIndentChar .. "}")
     end
-end
 
-__Doc__ [[Serialization format provider for string]]
-class "StringFormatProvider" (function(_ENV)
-    inherit "FormatProvider"
+    --- Serialization format provider for string
+    class "StringFormatProvider" (function(_ENV)
+        inherit "FormatProvider"
 
-    -----------------------------------
-    -- Property
-    -----------------------------------
-    __Doc__[[Whether using indented format, default false]]
-    property "Indent" { Type = Boolean }
+        export {
+            SerializeDataWithWriter         = SerializeDataWithWriter,
+            SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
+            SerializeDataWithWrite          = SerializeDataWithWrite,
+            SerializeDataWithWriteNoIndent  = SerializeDataWithWriteNoIndent,
+            SerializeSimpleData             = SerializeSimpleData,
+        }
 
-    __Doc__[[The line break, default '\n']]
-    property "LineBreak" { Type = String, Default = "\n" }
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- Whether using indented format, default false
+        property "Indent"           { type = Boolean }
 
-    __Doc__[[The char used as the indented character, default '\t']]
-    property "IndentChar" { Type = String, Default = "\t" }
+        --- The line break, default '\n'
+        property "LineBreak"        { type = String, Default = "\n" }
 
-    __Doc__[[Whether ignore the object's type for serialization]]
-    property "ObjectTypeIgnored" { Type = Boolean }
+        --- The char used as the indented character, default '\t'
+        property "IndentChar"       { type = String, Default = "\t" }
 
-    -----------------------------------
-    -- Method
-    -----------------------------------
-    __Arguments__{ Any }
-    function Serialize(self, data)
-        if type(data) == "table" then
-            local cache = _Cache()
+        --- Whether ignore the object's type for serialization
+        property "ObjectTypeIgnored"{ type = Boolean, default = false }
 
-            if self.Indent then
-                SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+        -----------------------------------
+        -- Method
+        -----------------------------------
+        __Arguments__{ Any }
+        function Serialize(self, data)
+            if type(data) == "table" then
+                local cache = {}
+
+                if self.Indent then
+                    SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+                else
+                    SerializeDataWithWriterNoIndent(data, tinsert, cache, self.ObjectTypeIgnored)
+                end
+
+                local ret = tblconcat(cache)
+
+                return ret
             else
-                SerializeDataWithWriterNoIndent(data, tinsert, cache, self.ObjectTypeIgnored)
+                return SerializeSimpleData(data)
             end
-
-            local ret = tblconcat(cache)
-
-            _Cache(cache)
-
-            return ret
-        else
-            return SerializeSimpleData(data)
         end
-    end
 
-    __Arguments__{ Any, Function }
-    function Serialize(self, data, write)
-        if type(data) == "table" then
-            if self.Indent then
-                SerializeDataWithWrite(data, write, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+        __Arguments__{ Any, Function }
+        function Serialize(self, data, write)
+            if type(data) == "table" then
+                if self.Indent then
+                    SerializeDataWithWrite(data, write, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+                else
+                    SerializeDataWithWriteNoIndent(data, write, self.ObjectTypeIgnored)
+                end
             else
-                SerializeDataWithWriteNoIndent(data, write, self.ObjectTypeIgnored)
+                write(SerializeSimpleData(data))
             end
-        else
-            write(SerializeSimpleData(data))
         end
-    end
 
-    __Arguments__{ Any, System.IO.TextWriter }
-    function Serialize(self, data, writer)
-        if type(data) == "table" then
-            if self.Indent then
-                SerializeDataWithWriter(data, writer.Write, writer, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+        __Arguments__{ Any, System.IO.TextWriter }
+        function Serialize(self, data, writer)
+            if type(data) == "table" then
+                if self.Indent then
+                    SerializeDataWithWriter(data, writer.Write, writer, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
+                else
+                    SerializeDataWithWriterNoIndent(data, writer.Write, writer, self.ObjectTypeIgnored)
+                end
             else
-                SerializeDataWithWriterNoIndent(data, writer.Write, writer, self.ObjectTypeIgnored)
+                writer:Write(SerializeSimpleData(data))
             end
-        else
-            writer:Write(SerializeSimpleData(data))
+            writer:Flush()
         end
-        writer:Flush()
-    end
 
-    __Doc__[[Deserialize the data to common lua data.]]
-    __Arguments__{ System.IO.TextReader }
-    function Deserialize(self, reader)
-        local data = reader:ReadToEnd()
+        --- Deserialize the data to common lua data.
+        __Arguments__{ System.IO.TextReader }
+        function Deserialize(self, reader)
+            local data = reader:ReadToEnd()
 
-        if data then
-            return loadstring("return " .. data)()
+            if data then
+                return loadsnippet("return " .. data)()
+            end
         end
-    end
 
-    __Arguments__{ Any }
-    function Deserialize(self, data)
-        return loadstring("return " .. data)()
-    end
+        __Arguments__{ Any }
+        function Deserialize(self, data)
+            return loadsnippet("return " .. data)()
+        end
+    end)
 end)

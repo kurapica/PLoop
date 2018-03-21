@@ -1,22 +1,24 @@
---========================================================--
---                System.Collections                      --
---                                                        --
--- Author      :  kurapica125@outlook.com                 --
--- Create Date :  2014/10/13                              --
---========================================================--
+--===========================================================================--
+--                                                                           --
+--                            System.Collections                             --
+--                                                                           --
+--===========================================================================--
 
---========================================================--
-_ENV = Module     "System.Collections"               "1.0.0"
---========================================================--
+--===========================================================================--
+-- Author       :   kurapica125@outlook.com                                  --
+-- URL          :   http://github.com/kurapica/PLoop                         --
+-- Create Date  :   2014/10/13                                               --
+-- Update Date  :   2018/03/15                                               --
+-- Version      :   1.0.0                                                    --
+--===========================================================================--
 
-namespace "System.Collections"
+PLoop(function(_ENV)
+	namespace "System.Collections"
 
------------------------
--- Interface
------------------------
-__Doc__[[Provide basic support for collection]]
-__Sealed__()
-interface "Iterable" (function (_ENV)
-    __Doc__[[Return the iterator, maybe with obj and start index]]
-    __Require__() function GetIterator(self) end
+	--- Represents the interface of collections
+	__Sealed__()
+	interface "Iterable" (function (_ENV)
+	    --- Return the iterator, maybe with obj and start index
+	    __Abstract__() function GetIterator(self) end
+	end)
 end)

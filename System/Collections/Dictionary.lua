@@ -1,219 +1,280 @@
---========================================================--
---                System.Collections.Dictionary           --
---                                                        --
--- Author      :  kurapica125@outlook.com                 --
--- Create Date :  2016/02/28                              --
---========================================================--
+--===========================================================================--
+--                                                                           --
+--                       System.Collections.Dictionary                       --
+--                                                                           --
+--===========================================================================--
 
---========================================================--
-_ENV = Module     "System.Collections.Dictionary"    "1.1.1"
---========================================================--
+--===========================================================================--
+-- Author       :   kurapica125@outlook.com                                  --
+-- URL          :   http://github.com/kurapica/PLoop                         --
+-- Create Date  :   2016/02/28                                               --
+-- Update Date  :   2018/03/16                                               --
+-- Version      :   1.0.0                                                    --
+--===========================================================================--
 
-namespace "System.Collections"
+PLoop(function(_ENV)
+    namespace "System.Collections"
 
-import "System.Threading"
+    --- Represents the key-value pairs collections
+    interface "IDictionary" { Iterable }
 
------------------------
--- Interface
------------------------
--- Interface for Dictionay
-__Doc__[[Provide basic support for collection of key-value pairs]]
-interface "IDictionary" { Iterable }
+    --- The default dictionary
+    __Sealed__()
+    class "Dictionary" (function (_ENV)
+        extend "IDictionary"
 
------------------------
--- Dictionary
------------------------
-__Sealed__() __SimpleClass__()
-class "Dictionary" (function (_ENV)
-    extend "IDictionary"
+        export {
+            ipairs              = ipairs,
+        }
 
-    -----------------------
-    -- Method
-    -----------------------
-    GetIterator = pairs
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        GetIterator = pairs
 
-    -----------------------
-    -- Constructor
-    -----------------------
-    __Arguments__{ }
-    function Dictionary(self) end
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ RawTable }
+        function __new(_, dict) return dict, true end
 
-    __Arguments__{ RawTable, RawTable }
-    function Dictionary(self, lstKey, lstValue)
-        local iter, o, idx, value = ipairs(lstValue)
-        for _, key in ipairs(lstKey) do
-            idx, value = iter(o, idx)
-            if idx then
-                rawset(self, key, value)
-            else
-                break
+        __Arguments__{ RawTable, RawTable }
+        function __new(_, lstKey, lstValue)
+            local dict  = {}
+            local iter, o, idx, value = ipairs(lstValue)
+            for _, key in ipairs(lstKey) do
+                idx, value = iter(o, idx)
+                if idx then
+                    dict[key] = value
+                else
+                    break
+                end
             end
+            return dict, true
         end
-    end
 
-    __Arguments__{ IDictionary }
-    function Dictionary(self, dict)
-        for key, value in lst:GetIterator() do
-            rawset(self, key, value)
-        end
-    end
-
-    __Arguments__{ IList, IList }
-    function Dictionary(self, lstKey, lstValue)
-        local iter, o, idx, value = lstValue:GetIterator()
-        for _, key in lstKey:GetIterator() do
-            idx, value = iter(o, idx)
-            if idx then
-                rawset(self, key, value)
-            else
-                break
+        __Arguments__{ IDictionary }
+        function __new(_, dict)
+            local dict  = {}
+            for key, value in dict:GetIterator() do
+                dict[key] = value
             end
+            return dict, true
         end
-    end
 
-    __Arguments__{ Callable, Argument(Any, true), Argument(Any, true) }
-    function Dictionary(self, iter, obj, idx)
-        for key, value in iter, obj, idx do
-            rawset(self, key, value)
+        __Arguments__{ IList, IList }
+        function __new(_, lstKey, lstValue)
+            local dict  = {}
+            local iter, o, idx, value = lstValue:GetIterator()
+            for _, key in lstKey:GetIterator() do
+                idx, value = iter(o, idx)
+                if idx then
+                    dict[key] = value
+                else
+                    break
+                end
+            end
+            return dict, true
         end
-    end
-end)
 
------------------------
--- DictionaryStreamWorker
------------------------
-__Final__() __Sealed__()
-class "DictionaryStreamWorker" (function (_ENV)
-    extend "IDictionary"
+        __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
+        function __new(_, iter, obj, idx)
+            local dict  = {}
+            for key, value in iter, obj, idx do
+                dict[key] = value
+            end
+            return dict, true
+        end
+    end)
 
-    -- Keep idle workers for re-usage
-    IdleWorkers = {}
+    --- the dictionary stream worker, used to provide stream filter, map and
+    -- etc operations on a dictionary without creating any temp caches
+    __Final__() __Sealed__()
+    class "DictionaryStreamWorker" (function (_ENV)
+        extend "IDictionary"
 
-    ---------------------------
-    -- Method
-    ---------------------------
-    function GetIterator(self)
-        local targetDict = self.TargetDict
-        local map = self.MapAction
-        local filter = self.FilterAction
+        export {
+            type                = type,
+            yield               = coroutine.yield,
+            tinsert             = table.insert,
+            tremove             = table.remove,
+        }
 
-        -- Clear self and put self into IdleWorkers
-        self.TargetDict = nil
-        self.MapAction = nil
-        self.FilterAction = nil
+        -----------------------------------------------------------
+        --                        helpers                        --
+        -----------------------------------------------------------
+        local getIdleworkers
+        local rycIdleworkers
 
-        if #IdleWorkers < 10 then tinsert(IdleWorkers, self) end
+        if Platform.MULTI_OS_THREAD then
+            export { Context }
 
-        -- Generate the iterator
-        local dowork
+            getIdleworkers      = function()
+                local context   = Context.Current
+                return context and context[DictionaryStreamWorker]
+            end
 
-        -- Generate the do-work
-        if filter then
-            -- Check Function
-            if map then
-                dowork = function(key, value) if filter(key, value) then yield(key, map(key, value)) end end
-            else
-                dowork = function(key, value) if filter(key, value) then yield(key, value) end end
+            rycIdleworkers      = function(worker)
+                local context   = Context.Current
+                if context then context[DictionaryStreamWorker] = worker end
             end
         else
-            -- No filter
-            if map then
-                dowork = function(key, value) yield(key, map(key, value)) end
+            -- Keep idle workers for re-usage
+            idleworkers         = {}
+            getIdleworkers      = function() return tremove(idleworkers) end
+            rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
+        end
+
+        -----------------------------------------------------------
+        --                       constant                        --
+        -----------------------------------------------------------
+        FLD_STREAM_TARGETDICT   = 0
+        FLD_STREAM_MAPACTITON   = 1
+        FLD_STREAM_FILTERACTN   = 2
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        __Iterator__()
+        function GetIterator(self)
+            local targetDict= self[FLD_STREAM_TARGETDICT]
+            local map       = self[FLD_STREAM_MAPACTITON]
+            local filter    = self[FLD_STREAM_FILTERACTN]
+
+            -- Clear self and put self into recycle
+            self[FLD_STREAM_TARGETDICT] = nil
+            self[FLD_STREAM_MAPACTITON] = nil
+            self[FLD_STREAM_FILTERACTN] = nil
+
+            rycIdleworkers(self)
+
+            -- Generate the iterator
+            local dowork
+
+            -- Generate the do-work
+            if filter then
+                -- Check Function
+                if map then
+                    for key, value in targetDict:GetIterator() do
+                        if filter(key, value) then yield(key, map(key, value)) end
+                    end
+                else
+                    for key, value in targetDict:GetIterator() do
+                        if filter(key, value) then yield(key, value) end
+                    end
+                end
             else
-                dowork = function(key, value) yield(key, value) end
+                -- No filter
+                if map then
+                    for key, value in targetDict:GetIterator() do
+                        yield(key, map(key, value))
+                    end
+                else
+                    for key, value in targetDict:GetIterator() do
+                        yield(key, value)
+                    end
+                end
             end
         end
 
-        -- Generate the for iterator
-        return Threading.Iterator(function() for key, value in targetDict:GetIterator() do dowork(key, value) end end)
-    end
+        -----------------------------------------------------------
+        --                     Queue method                      --
+        -----------------------------------------------------------
+        --- Map the items to other type datas
+        __Arguments__{ Callable }
+        function Map(self, func) self[FLD_STREAM_MAPACTITON] = func return self end
 
-    ---------------------------
-    -- Queue Method
-    ---------------------------
-    __Doc__[[Map the items to other type datas]]
-    __Arguments__{ Callable }
-    function Map(self, func) self.MapAction = func return self end
+        --- Used to filter the items with a check function
+        __Arguments__{ Callable }
+        function Filter(self, func) self[FLD_STREAM_FILTERACTN] = func return self end
 
-    __Doc__[[Used to filter the items with a check function]]
-    __Arguments__{ Callable }
-    function Filter(self, func) self.FilterAction = func return self end
-
-    ----------------------------
-    -- Constructor
-    ----------------------------
-    __Arguments__{ IDictionary }
-    function DictionaryStreamWorker(self, dict)
-        self.TargetDict = dict
-    end
-
-    ----------------------------
-    -- Meta-method
-    ----------------------------
-    __Arguments__{ IDictionary }
-    function __exist(dict)
-        local worker = tremove(IdleWorkers)
-        if worker then worker.TargetDict = dict end
-        return worker
-    end
-end)
-
-----------------------------
--- Install to IDictionary
-----------------------------
-__Sealed__()
-interface "IDictionary" (function (_ENV)
-    ---------------------------
-    -- Queue Method
-    ---------------------------
-    __Doc__[[Map the items to other type datas]]
-    __Arguments__{ Callable }
-    function Map(self, func) return DictionaryStreamWorker(self):Map(func) end
-
-    __Doc__[[Used to filter the items with a check function]]
-    __Arguments__{ Callable }
-    function Filter(self, func) return DictionaryStreamWorker(self):Filter(func) end
-
-    ---------------------------
-    -- Final Method
-    ---------------------------
-    __Doc__[[Combine the key-value pairs to get a result]]
-    __Arguments__{ Callable, Argument(Any, true) }
-    function Reduce(self, func, init)
-        for key, value in self:GetIterator() do init = func(key, value, init) end
-        return init
-    end
-
-    __Doc__[[Call the function for each element or set property's value for each element]]
-    __Arguments__{ Callable, Argument(Any, true, nil, nil, true)  }
-    function Each(self, func, ...) for key, value in self:GetIterator() do func(key, value, ...) end end
-
-    ---------------------------
-    -- List - Property
-    ---------------------------
-    __Doc__[[Get a list stream worker of the dictionary's keys]]
-    property "Keys" {
-        Get = function (self)
-            return ListStreamWorker.GetWorker( Threading.Iterator(function()
-                local index = 0
-                for key in self:GetIterator() do
-                    index = index + 1
-                    yield(index, key)
-                end
-            end) )
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ IDictionary }
+        function DictionaryStreamWorker(self, dict)
+            self[FLD_STREAM_TARGETDICT] = dict
         end
-    }
 
-    __Doc__[[Get a list stream worker of the dictionary's values]]
-    property "Values" {
-        Get = function (self)
-            return ListStreamWorker.GetWorker( Threading.Iterator(function()
-                local index = 0
-                for _, value in self:GetIterator() do
-                    index = index + 1
-                    yield(index, value)
-                end
-            end) )
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __Arguments__{ IDictionary }
+        function __exist(_, dict)
+            local worker = getIdleworkers()
+            if worker then worker[FLD_STREAM_TARGETDICT] = dict end
+            return worker
         end
-    }
+    end)
+
+    __Sealed__()
+    interface "IDictionary" (function (_ENV)
+        export {
+            yield               = coroutine.yield,
+        }
+
+        export { DictionaryStreamWorker, ListStreamWorker }
+
+        -----------------------------------------------------------
+        --                     Queue method                      --
+        -----------------------------------------------------------
+        --- Map the items to other type datas
+        __Arguments__{ Callable }
+        function Map(self, func) return DictionaryStreamWorker(self):Map(func) end
+
+        --- Used to filter the items with a check function
+        __Arguments__{ Callable }
+        function Filter(self, func) return DictionaryStreamWorker(self):Filter(func) end
+
+        -----------------------------------------------------------
+        --                     Final method                      --
+        -----------------------------------------------------------
+        --- Combine the key-value pairs to get a result
+        __Arguments__{ Callable, Variable.Optional()}
+        function Reduce(self, func, init)
+            for key, value in self:GetIterator() do init = func(key, value, init) end
+            return init
+        end
+
+        --- Call the function for each element or set property's value for each element
+        __Arguments__{ Callable, Variable.Rest() }
+        function Each(self, func, ...) for key, value in self:GetIterator() do func(key, value, ...) end end
+
+        --- get the keys
+        __Iterator__()
+        function GetKeys(self)
+            local index = 0
+            for key in self:GetIterator() do
+                index = index + 1
+                yield(index, key)
+            end
+        end
+
+        -- get the values
+        __Iterator__()
+        function GetValues(self)
+            local index = 0
+            for _, value in self:GetIterator() do
+                index = index + 1
+                yield(index, value)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                     list property                     --
+        -----------------------------------------------------------
+        --- Get a list stream worker of the dictionary's keys
+        property "Keys" {
+            Get = function (self)
+                return ListStreamWorker( self:GetKeys() )
+            end
+        }
+
+        --- Get a list stream worker of the dictionary's values
+        property "Values" {
+            Get = function (self)
+                return ListStreamWorker( self:GetValues() )
+            end
+        }
+    end)
 end)

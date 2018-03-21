@@ -1,7 +1,7 @@
-Pure Lua Object-Oriented Program
+# Prototype Lua Object-Oriented Program System
 ====
 
-__PLoop__ is used to provide a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also the luajit.
+__PLoop__ is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also the luajit.
 
 * __namespace__ supported.
 * Four data type included : __enum__, __struct__, __class__, __interface__.

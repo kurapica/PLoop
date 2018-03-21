@@ -34,7 +34,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
 -- Update Date  :   2018/03/17                                               --
--- Version      :   1.0.0                                                    --
+-- Version      :   1.0.0-beta001                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -296,6 +296,7 @@ do
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     diposeObj                   = function (obj) obj:Dispose() end
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
+    parseIndex                  = function(idx) if idx == 1 then return "1st" end if idx == 2 then return "2nd" end if idx == 3 then return "3rd" end return idx .. "th" end
 
     -----------------------------------------------------------------------
     --                              storage                              --
@@ -619,7 +620,7 @@ do
         if target then
             if type(target) == "string" then
                 local path  = target
-                local full  = path:find("%p+")
+                local full  = path:find("[^%P_]+")
                 target      = namespace.GetNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path)
                 if not target then
                     target  = prototype.NewProxy(ptype)
@@ -660,11 +661,20 @@ do
     end
 
     parseNamespace              = function(name, visitor, env)
-        if type(name) == "string" and not strfind(name, "%p+") then
+        if type(name) == "string" and not strfind(name, "[^%P_]+") then
             name    = strtrim(name)
             name    = visitor and visitor[name] or env and env[name]
         end
         return name and namespace.Validate(name)
+    end
+
+    checkTemplateParam          = function (origin, param)
+        if not param then return false, "the %s parameter can't be nil" end
+        if not struct.ValidateValue(AnyType, param) then return false, "the %s parameter must be a validation type" end
+        if origin == Any then return true end
+        local issubtype = getprototypemethod(origin, "IsSubType")
+        if not issubtype or issubtype(param, origin) then return true end
+        return false, "the %s must be a sub type of " .. tostring(origin)
     end
 end
 
@@ -2191,6 +2201,17 @@ do
                 return name and (onlyLast and strmatch(name, "[%P_]+$") or name) or "Anonymous"
             end;
 
+            --- Whether the target is anonymous namespace
+            -- @static
+            -- @method  IsAnonymousNamespace
+            -- @owner   namespace
+            -- param    ns                          the target namespace
+            -- @return  boolean                     true if the target is anonymous namespace
+            ["IsAnonymousNamespace"] = function(ns)
+                local name = _NSName[ns]
+                return name == false
+            end;
+
             --- Save feature to the namespace
             -- @static
             -- @method  SaveNamespace
@@ -3213,6 +3234,9 @@ do
     local FLD_STRUCT_NAME       = -7                -- FEILD STRUCT NAME
     local FLD_STRUCT_ERRMSG     = -8                -- FIELD ERROR MESSAGE
     local FLD_STRUCT_VALIDCACHE = -9                -- FIELD VALIDATOR CACHE
+    local FLD_STRUCT_TEMPPRM    = -10               -- FIELD TEMPLATE PARAMS
+    local FLD_STRUCT_TEMPDEF    = -11               -- FIELD TEMPLATE DEFINITION
+    local FLD_STRUCT_TEMPIMP    = -12               -- FIELD TEMPLATE IMPLEMENTATION
 
     local FLD_STRUCT_ARRAY      =  0                -- FIELD ARRAY ELEMENT
     local FLD_STRUCT_ARRVALID   =  2                -- FIELD ARRAY ELEMENT VALIDATOR
@@ -3925,6 +3949,32 @@ do
         end
     end
 
+    -- template
+    local setStructTemplate     = function(target, params, template, stack, isimplement)
+        local info, def         = getStructTargetInfo(target)
+        stack                   = parsestack(stack)
+        if not info then return "The structure is not valid", stack end
+        if not def then  return strformat("The %s's definition is finished", tostring(target)), stack end
+
+        if type(params) ~= "table" then return "the params must be a table", stack end
+        local tparams           = {}
+        for i, n in ipairs, params, 0 do
+            if not struct.ValidateValue(AnyType, n) then return "the parameter elements must be validation type", stack end
+            tparams[i]          = n
+        end
+        if #tparams == 0 then return "the params can't be empty", stack end
+        if not isimplement and type(template) ~= "function" then return "the template must be a function", stack end
+
+        -- the template must be sealed, too complex to allow it can be re-defined
+        struct.SetSealed(target, stack)
+
+        info[FLD_STRUCT_TEMPPRM]    = tparams
+        if not isimplement then
+            info[FLD_STRUCT_TEMPDEF]= template
+            info[FLD_STRUCT_TEMPIMP]= {}
+        end
+    end
+
     -- Save Meta
     local saveStructMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end
@@ -4452,6 +4502,19 @@ do
                 end
             end;
 
+            --- Get the template parameters
+            -- @static
+            -- @method  GetTemplateParameters
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  ...                         the paramter list
+            ["GetTemplateParameters"] = function(target)
+                local info      = getStructTargetInfo(target)
+                if info and info[FLD_STRUCT_TEMPPRM] then
+                    return unpack(info[FLD_STRUCT_TEMPPRM])
+                end
+            end;
+
             --- Whether the struct's value is immutable through the validation, means no object method, no initializer
             -- @static
             -- @method  IsImmutable
@@ -4662,6 +4725,20 @@ do
                 end
             end;
 
+            --- Set the template parameters and definition
+            -- @static
+            -- @method  SetTemplate
+            -- @owner   class
+            -- @format  (target, params, template[, stack])
+            -- @param   target                      the target class
+            -- @param   params                      the type parameters for template
+            -- @param   template                    the template to define the classes
+            -- @param   stack                       the stack level
+            ["SetTemplate"]     = function(target, params, template, stack)
+                local msg, stack = setStructTemplate(target, params, template, stack)
+                if msg then error("Usage: struct.SetTemplate(target, params, template[, stack]) - " .. msg, stack + 1) end
+            end;
+
             --- Validate the value with a structure
             -- @static
             -- @method  ValidateValue
@@ -4730,10 +4807,76 @@ do
     }
 
     tstruct                     = prototype (tnamespace, {
-        __index                 = function(self, name)
-            if type(name) == "string" then
+        __index                 = function(self, key)
+            if type(key) == "string" then
                 local info  = _StructBuilderInfo[self] or _StructInfo[self]
-                return info and (info[name] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name]) or namespace.GetNamespace(self, name)
+                return info and (info[key] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][key]) or namespace.GetNamespace(self, key)
+            else
+                local info          = _StructInfo[self]
+                if info[FLD_STRUCT_TEMPDEF] then
+                    local container = info[FLD_STRUCT_TEMPIMP]
+                    local origins   = info[FLD_STRUCT_TEMPPRM]
+                    local count     = #origins
+                    local implement
+
+                    if count == 1 then
+                        implement   = container[key]
+                        if implement then return implement end
+
+                        local ok, msg = checkTemplateParam(origins[1], key)
+                        if not ok then error("Usage: " .. tostring(self) .. "[type] - " .. strformat(msg, "type"), 2) end
+
+                        key         = { key }
+
+                        attribute.IndependentCall(function()
+                            implement = struct{}
+                            local builder = struct(implement, true)
+                            setStructTemplate(implement, key, nil, nil, true)
+                            builder(info[FLD_STRUCT_TEMPDEF])
+                        end)
+
+                        info[FLD_STRUCT_TEMPIMP] = savestorage(container, key[1], implement)
+
+                        return implement
+                    elseif type(key) == "table" and getmetatable(key) == nil then
+                        local pcontainer= info
+                        local pkey      = FLD_STRUCT_TEMPIMP
+
+                        for i = 1, count do
+                            local param = key[i]
+                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseIndex(i)), 2) end
+
+                            if not container[param] then
+                                local ok, msg = checkTemplateParam(origins[i], param)
+                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseIndex(i)), 2) end
+
+                                if i < count then
+                                    pcontainer[pkey] = savestorage(pcontainer[pkey], param, {})
+                                    container = pcontainer[pkey]
+                                else
+                                    attribute.IndependentCall(function()
+                                        implement = struct{}
+                                        local builder = struct(implement, true)
+                                        setStructTemplate(implement, key, nil, nil, true)
+                                        builder(info[FLD_STRUCT_TEMPDEF])
+                                    end)
+
+                                    pcontainer[pkey] = savestorage(pcontainer[pkey], param, implement)
+
+                                    return implement
+                                end
+                            end
+                            pcontainer  = container
+                            pkey        = param
+                            container   = container[param]
+                        end
+                        return container
+                    else
+                        error("Usage: " .. tostring(self) .. "[{...}] - the template paramters must be a table", 2)
+                    end
+                end
+
+                error("the " .. tostring(self) .. " can't be used as template", 2)
             end
         end,
         __call                  = function(self, ...)
@@ -4766,7 +4909,7 @@ do
 
             if type(definition) == "function" then
                 setfenv(definition, self)
-                definition(self)
+                definition(self, struct.GetTemplateParameters(owner))
             else
                 -- Check base struct first
                 if definition[STRUCT_KEYWORD_BASE] ~= nil then
@@ -5344,19 +5487,22 @@ do
     local FLD_IC_THIS           =-13                -- FIELD THIS
     local FLD_IC_ANYMSCL        =-14                -- FIELD ANONYMOUS CLASS FOR INTERFACE
     local FLD_IC_DEBUGSR        =-15                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
+    local FLD_IC_TEMPPRM        =-16                -- FIELD TEMPLATE ARGUMENTS
+    local FLD_IC_TEMPDEF        =-17                -- FIELD TEMPlATE DEFINITION
+    local FLD_IC_TEMPIMP        =-18                -- FIELD TEMPLATE IMPLEMENTATION
 
     -- CACHE FIELDS
-    local FLD_IC_STAFTR         =-16                -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJMTD         =-17                -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM         =-18                -- FIELD OBJECT META-METHODS
-    local FLD_IC_OBJFTR         =-19                -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJFLD         =-20                -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_OBJEXT         =-21                -- FIELD OBJECT EXIST CHECK
-    local FLD_IC_OBJNEW         =-22                -- FIELD OBJECT NEW OBJECT
-    local FLD_IC_ONEABS         =-23                -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO        =-24                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD         =-25                -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR         =-26                -- FIELD SUPER FEATURE
+    local FLD_IC_STAFTR         =-20                -- FIELD STATIC TYPE FEATURES
+    local FLD_IC_OBJMTD         =-21                -- FIELD OBJECT METHODS
+    local FLD_IC_OBJMTM         =-22                -- FIELD OBJECT META-METHODS
+    local FLD_IC_OBJFTR         =-23                -- FIELD OBJECT FEATURES
+    local FLD_IC_OBJFLD         =-24                -- FIELD OBJECT INIT-FIELDS
+    local FLD_IC_OBJEXT         =-25                -- FIELD OBJECT EXIST CHECK
+    local FLD_IC_OBJNEW         =-26                -- FIELD OBJECT NEW OBJECT
+    local FLD_IC_ONEABS         =-27                -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    local FLD_IC_SUPINFO        =-28                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPMTD         =-29                -- FIELD SUPER METHOD & META-METHODS
+    local FLD_IC_SUPFTR         =-30                -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
     local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
@@ -6682,6 +6828,43 @@ do
         info[FLD_IC_INHRTP][name] = priority
     end
 
+    local setTemplate           = function(target, params, template, stack, isimplement)
+        local info, _, stack, msg = preDefineCheck(target, nil, stack)
+        if not info then return msg, stack end
+        if type(params) ~= "table" then return "the params must be a table", stack end
+        local tparams           = {}
+        for i, n in ipairs, params, 0 do
+            if not struct.ValidateValue(AnyType, n) then return "the parameter elements must be validation type", stack end
+            tparams[i]          = n
+        end
+        if #tparams == 0 then return "the params can't be empty", stack end
+        if not isimplement and type(template) ~= "function" then return "the template must be a function", stack end
+
+        -- the template must be sealed, too complex to allow it can be re-defined
+        interface.SetSealed(target, stack + 1)
+
+        info[FLD_IC_TEMPPRM]    = tparams
+        if not isimplement then
+            info[FLD_IC_TEMPDEF]= template
+            info[FLD_IC_TEMPIMP]= {}
+        end
+    end
+
+    local copyClassSettings     = function(source, target)
+        if class.IsObjectFunctionAttributeEnabled(source) then
+            class.SetObjectFunctionAttributeEnabled(target)
+        end
+        if class.IsRawSetBlocked(source) then
+            class.SetRawSetBlocked(target)
+        end
+        if class.IsNilValueBlocked(source) then
+            class.SetNilValueBlocked(target)
+        end
+        if class.IsNoSuperObjectStyle(source) then
+            class.SetNoSuperObjectStyle(target)
+        end
+    end
+
     -- Buidler helpers
     local setIFBuilderValue     = function (self, key, value, stack, notenvset)
         local owner = environment.GetNamespace(self)
@@ -7197,6 +7380,19 @@ do
                 return info and info[FLD_IC_SUPER]
             end;
 
+            --- Get the template parameters
+            -- @static
+            -- @method  GetTemplateParameters
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @return  ...                         the paramter list
+            ["GetTemplateParameters"] = function(target)
+                local info      = getICTargetInfo(target)
+                if info and info[FLD_IC_TEMPPRM] then
+                    return unpack(info[FLD_IC_TEMPPRM])
+                end
+            end;
+
             --- Whether the interface has anonymous class
             -- @static
             -- @method  HasAnonymousClass
@@ -7399,6 +7595,20 @@ do
             ["SetStaticMethod"] = function(target, name, stack)
                 local msg, stack= setStaticMethod(target, name, stack)
                 if msg then error("Usage: interface.SetStaticMethod(target, name[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Set the template parameters
+            -- @static
+            -- @method  SetTemplate
+            -- @owner   interface
+            -- @format  (target, params, template[, stack])
+            -- @param   target                      the target interface
+            -- @param   params                      the type parameters for template
+            -- @param   template                    the template to define the interfacees
+            -- @param   stack                       the stack level
+            ["SetTemplate"]     = function(target, params, template, stack)
+                local msg, stack= setTemplate(target, params, template, stack)
+                if msg then error("Usage: interface.SetTemplate(target, params, template[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Whether the value is an object whose class extend the interface
@@ -7610,7 +7820,6 @@ do
             -- @rformat (iter, target)              without the cache parameter, used in generic for
             ["GetExtends"]      = interface.GetExtends;
 
-
             --- Get a type feature of the target class
             -- @static
             -- @method  GetFeature
@@ -7747,6 +7956,14 @@ do
             -- @param   target                      the target class
             -- @return  super                       the super refer
             ["GetSuperRefer"]   = interface.GetSuperRefer;
+
+            --- Get the template parameters
+            -- @static
+            -- @method  GetTemplateParameters
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  ...                         the paramter list
+            ["GetTemplateParameters"] = interface.GetTemplateParameters;
 
             --- Get the this refer of the target class
             -- @static
@@ -8057,13 +8274,25 @@ do
 
             --- Make the class don't use super object access style like `Super[obj].Name = "Ann"`
             -- @static
-            -- @method  SetNoSuperObject
+            -- @method  SetNoSuperObjectStyle
             -- @owner   class
             -- @format  (target[, stack])
             -- @param   target                      the target class
             -- @param   stack                       the stack level
-            ["SetNoSuperObject"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_NOSUPER_OBJ, "SetNoSuperObject", stack)
+            ["SetNoSuperObjectStyle"]= function(target, stack)
+                setModifiedFlag(class, target, MOD_NOSUPER_OBJ, "SetNoSuperObjectStyle", stack)
+            end;
+
+            --- Set the class object'll to save its source when created
+            -- @static
+            -- @method  SetObjectSourceDebug
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["SetObjectSourceDebug"]= function(target, stack)
+                local msg, stack    = setObjectSourceDebug(target, stack)
+                if msg then error("Usage: class.SetObjectSourceDebug(target[, stack])  - " .. msg, stack + 1) end
             end;
 
             --- Make the class object don't receive any value assignment excpet existed fields
@@ -8112,18 +8341,6 @@ do
                 if msg then error("Usage: class.SetSuperClass(target, superclass[, stack])  - " .. msg, stack + 1) end
             end;
 
-            --- Set the class object'll to save its source when created
-            -- @static
-            -- @method  SetObjectSourceDebug
-            -- @owner   class
-            -- @format  (target[, stack])
-            -- @param   target                      the target class
-            -- @param   stack                       the stack level
-            ["SetObjectSourceDebug"]= function(target, stack)
-                local msg, stack    = setObjectSourceDebug(target, stack)
-                if msg then error("Usage: class.SetObjectSourceDebug(target[, stack])  - " .. msg, stack + 1) end
-            end;
-
             --- Mark the class's method as static
             -- @static
             -- @method  SetStaticMethod
@@ -8134,7 +8351,21 @@ do
             -- @param   stack                       the stack level
             ["SetStaticMethod"] = function(target, name, stack)
                 local msg, stack= setStaticMethod(target, name, stack)
-                if msg then error("Usage: class.SetStaticMethod(class, name[, stack]) - " .. msg, stack + 1) end
+                if msg then error("Usage: class.SetStaticMethod(target, name[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Set the template parameters
+            -- @static
+            -- @method  SetTemplate
+            -- @owner   class
+            -- @format  (target, params, template[, stack])
+            -- @param   target                      the target class
+            -- @param   params                      the type parameters for template
+            -- @param   template                    the template to define the classes
+            -- @param   stack                       the stack level
+            ["SetTemplate"]     = function(target, params, template, stack)
+                local msg, stack= setTemplate(target, params, template, stack)
+                if msg then error("Usage: class.SetTemplate(target, params, template[, stack]) - " .. msg, stack + 1) end
             end;
 
             --- Whether the value is an object whose class inherit the target class
@@ -8208,6 +8439,76 @@ do
 
                 -- Access child-namespaces
                 return namespace.GetNamespace(self, key)
+            else
+                local info          = _ICInfo[self]
+                if info[FLD_IC_TEMPDEF] then
+                    local container = info[FLD_IC_TEMPIMP]
+                    local origins   = info[FLD_IC_TEMPPRM]
+                    local count     = #origins
+                    local implement
+
+                    if count == 1 then
+                        implement   = container[key]
+                        if implement then return implement end
+
+                        local ok, msg = checkTemplateParam(origins[1], key)
+                        if not ok then error("Usage: " .. tostring(self) .. "[type] - " .. strformat(msg, "type"), 2) end
+
+                        key         = { key }
+
+                        attribute.IndependentCall(function()
+                            local prototype = getmetatable(self)
+                            implement = prototype{}
+                            local builder = prototype(implement, true)
+                            setTemplate(implement, key, nil, nil, true)
+                            if prototype == class then copyClassSettings(self, implement) end
+                            builder(info[FLD_IC_TEMPDEF])
+                        end)
+
+                        info[FLD_IC_TEMPIMP] = savestorage(container, key[1], implement)
+
+                        return implement
+                    elseif type(key) == "table" and getmetatable(key) == nil then
+                        local pcontainer= info
+                        local pkey      = FLD_IC_TEMPIMP
+
+                        for i = 1, count do
+                            local param = key[i]
+                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseIndex(i)), 2) end
+
+                            if not container[param] then
+                                local ok, msg = checkTemplateParam(origins[i], param)
+                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseIndex(i)), 2) end
+
+                                if i < count then
+                                    pcontainer[pkey] = savestorage(pcontainer[pkey], param, {})
+                                    container = pcontainer[pkey]
+                                else
+                                    attribute.IndependentCall(function()
+                                        local prototype = getmetatable(self)
+                                        implement = prototype{}
+                                        local builder = prototype(implement, true)
+                                        setTemplate(implement, key, nil, nil, true)
+                                        if prototype == class then copyClassSettings(self, implement) end
+                                        builder(info[FLD_IC_TEMPDEF])
+                                    end)
+
+                                    pcontainer[pkey] = savestorage(pcontainer[pkey], param, implement)
+
+                                    return implement
+                                end
+                            end
+                            pcontainer  = container
+                            pkey        = param
+                            container   = container[param]
+                        end
+                        return container
+                    else
+                        error("Usage: " .. tostring(self) .. "[{...}] - the template paramters must be a table", 2)
+                    end
+                end
+
+                error("the " .. tostring(self) .. " can't be used as template", 2)
             end
         end,
         __newindex              = function(self, key, value)
@@ -8339,7 +8640,7 @@ do
 
             if type(definition) == "function" then
                 setfenv(definition, self)
-                definition(self)
+                definition(self, interface.GetTemplateParameters(owner))
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -8391,7 +8692,7 @@ do
 
             if type(definition) == "function" then
                 setfenv(definition, self)
-                definition(self)
+                definition(self, class.GetTemplateParameters(owner))
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -11143,7 +11444,7 @@ do
     namespace.SaveNamespace("System.__NoSuperObject__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetNoSuperObject(target, parsestack(stack) + 1)
+                class.SetNoSuperObjectStyle(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
@@ -11254,7 +11555,7 @@ do
     -- Set the class as a single version class, so all old objects of it
     -- will always use the newest definition
     --
-    -- @attribute   System.__Simple__
+    -- @attribute   System.__SingleVer__
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__SingleVer__",             prototype {
         __index                 = {
@@ -11270,7 +11571,7 @@ do
     -- Set the object methods or object features as static, so they can only
     -- be used by the struct, interface or class itself
     --
-    -- @attribute   System.__Simple__
+    -- @attribute   System.__Static__
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Static__",                prototype {
         __index                 = {
@@ -11296,7 +11597,7 @@ do
     -----------------------------------------------------------------------
     -- Set a super class to the target class
     --
-    -- @attribute   System.__Require__
+    -- @attribute   System.__Super__
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Super__",                 prototype {
         __index                 = {
@@ -11727,7 +12028,7 @@ do
         -- @param   key
         -- @param   value
         -- @return  table           maybe a new table to avoid re-hash conflict
-        savestorage             = savestorage,
+        safeset                 = savestorage,
 
         --- clone the value
         -- @param   value
@@ -11915,7 +12216,11 @@ do
                 end
 
                 if var.type then
-                    tinsert(usage, tostring(var.type))
+                    if Struct.Validate(var.type) and Struct.GetStructCategory(var.type) == StructCategory.ARRAY then
+                        tinsert(usage, "{" .. tostring(Struct.GetArrayElement(var.type)) .. ", ...}")
+                    else
+                        tinsert(usage, tostring(var.type))
+                    end
                 end
 
                 if var.default ~= nil then
@@ -12000,22 +12305,32 @@ do
                 if islist then args[len] = nil end
                 if ismethod and hasself then tinsert(args, 1, "self") end
 
-                args = tblconcat(args, ", ")
+                args = tblconcat(args, ", ") or ""
+
+                local alen = #args
 
                 if ismethod then
-                    if len == 0 then
-                        tinsert(body, [[return function(onlyvalid)]])
-                    elseif islist then
-                        tinsert(body, strformat([[return function(onlyvalid, %s, ...)]], args))
+                    if islist then
+                        if alen == 0 then
+                            tinsert(body, [[return function(onlyvalid, ...)]])
+                        else
+                            tinsert(body, strformat([[return function(onlyvalid, %s, ...)]], args))
+                        end
                     else
-                        tinsert(body, strformat([[return function(onlyvalid, %s)]], args))
+                        if alen == 0 then
+                            tinsert(body, [[return function(onlyvalid)]])
+                        else
+                            tinsert(body, strformat([[return function(onlyvalid, %s)]], args))
+                        end
                     end
                 else
                     uinsert(apis, "error")
-                    if len == 0 then
-                        tinsert(body, [[return function()]])
-                    elseif islist then
-                        tinsert(body, strformat([[return function(%s, ...)]], args))
+                    if islist then
+                        if alen == 0 then
+                            tinsert(body, [[return function(...)]])
+                        else
+                            tinsert(body, strformat([[return function(%s, ...)]], args))
+                        end
                     else
                         tinsert(body, strformat([[return function(%s)]], args))
                     end
@@ -12066,7 +12381,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, [[
-                                        if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
+                                        if vlen == 0 or select(1, ...) == nil or select(1, ...) == nil then return onlyvalid or "the ... must contains at least one argument" end
                                     ]])
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
@@ -12075,15 +12390,24 @@ do
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
                                         for i = 1, vlen do
-                                            ret, msg= valid(vtype, select(i, ...), nochange)
-                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                                break
+                                            else
+                                                ret, msg= valid(vtype, ival, nochange)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                            end
                                         end
                                     ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
                                 end
                             end
 
                             tinsert(body, [[if nochange then return end]])
-                            tinsert(body, strformat([[return func(%s, ...)]], args))
+                            if alen == 0 then
+                                tinsert(body, [[return func(...)]])
+                            else
+                                tinsert(body, strformat([[return func(%s, ...)]], args))
+                            end
                         else
                             uinsert(apis, "select")
                             uinsert(apis, "parseOrdinalNumber")
@@ -12092,7 +12416,7 @@ do
                             ]])
                             if not validateflags(FLG_VAR_LSTNIL, token) then
                                 tinsert(body, [[
-                                    if vlen == 0 then return onlyvalid or "the ... must contains at least one argument" end
+                                    if vlen == 0 or select(1, ...) == nil then return onlyvalid or "the ... must contains at least one argument" end
                                 ]])
                             end
                             tinsert(body, (([[
@@ -12102,18 +12426,28 @@ do
 
                                     if nochange then
                                         for i = 1, vlen do
-                                            ret, msg= valid(vtype, select(i, ...), nochange)
-                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                                break
+                                            else
+                                                ret, msg= valid(vtype, ival, nochange)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                            end
                                         end
                                         return
                                     else
                                         local vlst  = { ... }
                                         for i = 1, vlen do
-                                            ret, msg= valid(vtype, vlst[i], nochange)
-                                            if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))) end
-                                            vlst[i] = ret
+                                            local ival = vlst[i]
+                                            if ival == nil then
+                                                break
+                                            else
+                                                ret, msg= valid(vtype, ival, nochange)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                vlst[i] = ret
+                                            end
                                         end
-                                        return func(_arg_, unpack(vlst))
+                                        ]] .. alen == 0 and [[return func(unpack(vlst))]] or [[return func(_arg_, unpack(vlst))]] .. [[
                                     end
                                 else
                                     if nochange then return end
@@ -12130,7 +12464,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, [[
-                                        if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
+                                        if vlen == 0 or select(1, ...) == nil then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
                                     ]])
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
@@ -12139,14 +12473,23 @@ do
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
                                         for i = 1, vlen do
-                                            ret, msg= valid(vtype, (select(i, ...)))
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                                break
+                                            else
+                                                ret, msg= valid(vtype, ival)
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            end
                                         end
                                     ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
                                 end
                             end
 
-                            tinsert(body, strformat([[return func(%s, ...)]], args))
+                            if alen == 0 then
+                                tinsert(body, [[return func(...)]])
+                            else
+                                tinsert(body, strformat([[return func(%s, ...)]], args))
+                            end
                         else
                             uinsert(apis, "select")
                             uinsert(apis, "parseOrdinalNumber")
@@ -12155,7 +12498,7 @@ do
                             ]])
                             if not validateflags(FLG_VAR_LSTNIL, token) then
                                 tinsert(body, [[
-                                    if vlen == 0 then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
+                                    if vlen == 0 or select(1, ...) == nil then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
                                 ]])
                             end
                             tinsert(body, (([[
@@ -12164,11 +12507,16 @@ do
                                     local valid = _vi_.validate
                                     local vlst  = { ... }
                                     for i = 1, vlen do
-                                        ret, msg= valid(vtype, vlst[i])
-                                        if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. (i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
-                                        vlst[i] = ret
+                                        local ival = vlst[i]
+                                        if ival == nil then
+                                            break
+                                        else
+                                            ret, msg= valid(vtype, ival)
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            vlst[i] = ret
+                                        end
                                     end
-                                    return func(_arg_, unpack(vlst))
+                                    ]] .. alen == 0 and [[return func(unpack(vlst))]] or [[return func(_arg_, unpack(vlst))]] .. [[
                                 else
                                     return func(_arg_)
                                 end
@@ -12282,6 +12630,9 @@ do
                 else
                     tinsert(body, [[
                         local argcnt = select("#", ...)
+                        while argcnt > 0 and select(argcnt, ...) == nil do
+                            argcnt   = argcnt - 1
+                        end
                         if argcnt == 0 then
                             for i = 1, count do
                                 local vars = overload[i]
@@ -12478,8 +12829,14 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        function __new(_, vars)
+        function __new(_, vars, ...)
             if vars ~= nil then
+                if select("#", ...) > 0 then
+                    vars = { vars, ... }
+                elseif getmetatable(vars) ~= nil then
+                    vars = { vars }
+                end
+
                 local ret, msg  = validate(Variables, vars)
                 if msg then throw("Usage: __Arguments__{ ... } - " .. geterrmsg(msg, "")) end
 
@@ -12487,6 +12844,67 @@ do
             else
                 return {}
             end
+        end
+    end)
+
+    -- set the class to be a template class
+    __Sealed__() __Final__()
+    class "System.__Template__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export { parsestack = parsestack, type = type, error = error }
+
+        export { Class, Interface, Struct, AttributeTargets }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if type(definition) == "function" then
+                stack           = parsestack(stack) + 1
+                if targettype == AttributeTargets.Class then
+                    Class.SetTemplate(target, self, definition, stack)
+                elseif targettype == AttributeTargets.Interface then
+                    Interface.SetTemplate(target, self, definition, stack)
+                elseif targettype == AttributeTargets.Struct then
+                    Struct.SetTemplate(target, self, definition, stack)
+                end
+            else
+                error("the class template's definition body must be function", parsestack(stack) + 1)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Class + AttributeTargets.Interface + AttributeTargets.Struct }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lowest }
+
+        --- the attribute's sub level of priority
+        property "SubLevel"         { type = Number,            default = -99999 }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ RawTable }
+        function __new(_, params)
+            return params, true
+        end
+
+        __Arguments__{ Variable.Rest(AnyType) }
+        function __new(_, ...)
+            return { ... }, true
         end
     end)
 
