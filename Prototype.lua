@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/17                                               --
--- Version      :   1.0.0-beta001                                            --
+-- Update Date  :   2018/03/22                                               --
+-- Version      :   1.0.0-beta002                                           --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2047,15 +2047,6 @@ do
         if not visitor  then error("Usage: export(name|namelist) - The system can't figure out the environment", stack + 1) end
 
         environment.ExportVariables(visitor, name or definition)
-    end
-
-    -----------------------------------------------------------------------
-    -- get the current environment
-    --
-    -- @keyword     currentenv
-    -----------------------------------------------------------------------
-    currentenv                  = function (...)
-        return environment.GetKeywordVisitor(currentenv)
     end
 end
 
@@ -10955,7 +10946,6 @@ do
         class                   = class,
         interface               = interface,
         throw                   = throw,
-        currentenv              = currentenv,
     }
 
     -----------------------------------------------------------------------
@@ -12541,9 +12531,9 @@ do
                 end
 
                 if validateflags(FLG_VAR_THRABL, token) then
-                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, currentenv())()
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, _ENV)()
                 else
-                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, currentenv())()
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, _ENV)()
                 end
 
                 _Cache(body)
@@ -12693,7 +12683,7 @@ do
                     body[1]         = strformat("local %s = %s", declare, declare)
                 end
 
-                _OverloadMap[token]  = loadsnippet(tblconcat(body, "\n"), "Overload_Process_" .. token, currentenv())()
+                _OverloadMap[token]  = loadsnippet(tblconcat(body, "\n"), "Overload_Process_" .. token, _ENV)()
 
                 _Cache(body)
                 _Cache(apis)
@@ -12847,7 +12837,7 @@ do
         end
     end)
 
-    -- set the class to be a template class
+    -- set the target struct, class or interface as template
     __Sealed__() __Final__()
     class "System.__Template__" (function(_ENV)
         extend "IInitAttribute"

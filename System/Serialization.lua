@@ -336,7 +336,7 @@ PLoop(function(_ENV)
 
     --- Serialization is the process of converting the state of an object into a form that can be persisted or transported.
     __Final__() __Sealed__()
-    interface (currentenv(), "System.Serialization") (function (_ENV)
+    interface (_ENV, "System.Serialization") (function (_ENV)
         export {
             regSerializableType = regSerializableType,
             savenonserializable = savenonserializable,

@@ -1,189 +1,177 @@
 # Prototype Lua Object-Oriented Program System
-====
 
-__PLoop__ is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also the luajit.
+**PLoop** is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also include the luajit. It's also designed to be used on multi-os thread platforms like the **OpenResty**.
 
-* __namespace__ supported.
-* Four data type included : __enum__, __struct__, __class__, __interface__.
-* Property supported with several features : getter/setter, value changed handler or event, default value or default value factory, etc.
-* Constructor/dispose supported for class, initializer/dispose supported for interface, validator supported for struct.
-* Method supported for class, interface and struct.
-* Event supported, event handlers are stackable.
-* Ovload-method supported.
-* Overload-constructor supported.
-* Attribute supported to provided predefined system information or user-defined custom information.
-* Isolated definition environment for each class, interface and struct.
-* Several definition format supported for easy using.
-* System.Reflector interface contains everything to get the informations of those features.
+It also provide common useful classes like thread pool, collection, serialization and etc.
 
-----
+You also can find useful features for large enterprise development like code organization, type validation and etc.
 
-Take an example to start, Here is a __Person__ class with _Name_ and _Age_ properties.
 
-	require "PLoop"
+## Install
 
-	import "System"	-- import a namespace
+After install the **Lua**, download the **PLoop** and save it to **LUA_PATH**, or you can use
 
-	-- Define a Person class with two properties
-	-- String & Number are struct types defined in System namespace,
-	-- Full path : System.String, System.Number
-	class "Person" {
-		Name = String,
-		Age = Number,
-	}
+        package.path = package.path .. ";PATH TO PLOOP PARENT FOLDER/?/init.lua;PATH TO PLOOP PARENT FOLDER/?.lua"
 
-	-- Create an object of the Person class
-	ann = Person{ Name = "Ann", Age = 24 }
-	-- Or
-	ann = Person()
-	ann.Name = "Ann"
-	ann.Age = 24
+        require "PLoop"
 
-	-- Give the Person class a method, it only accept a person object as argument
-	__Arguments__{ Person }
-	function Person:Greet( another )
-		print( ("Hi %s, my name's %s."):format(another.Name, self.Name) )
-	end
+to load the **PLoop**. If you need to load files by yourself, you could check the **PLoop/init.lua** for more details.
 
-	king = Person{ Name = "King" }
 
-	-- Hi King, my name's Ann
-	ann:Greet(king)
+## Start with the Collections
 
-	-- Try using the Greet method with wrong value
-	-- false	Error : Usage : Person:Greet( Person )
-	print(pcall(function() ann:Greet("King") end))
+The common use of collections is **List** and **Dictionary** classes, here is a sample of **List**:
 
-	-- Try to set a wrong type value to ann's Name
-	-- Error : Name must be a string, got number.
-	ann.Name = 123
+        require "PLoop"
 
-Here are some details about the example :
+        PLoop(function(_ENV)
 
-* __import__ and __class__ are all keywords(functions) that defined in PLoop, there are many other keywords like __interface__, __struct__, __enum__, etc.
+            List(10):Each(print)
 
-* __import__ is used to import __namespace__ to current environment for quick access, in the previous code, __System__ is imported, so we can use __Number__ instead of __System.Number__, so for __String__ and `__Arguments__` .
+        end)
 
-	__PLoop__ use __namespace__ to manage classes, interfaces, enums and structs, so same name features can exist at same time with different __namespace__, such like __System.Widget.Frame__ and __MyNS.Frame__.
+The example will create a list with 1-10 numbers and then print each of them.
 
-* __class__ is used to start the definition of a class, the declaration format is like
+The first important things is about the `PLoop(function(_ENV) end)`, you may find many other things like it in **PLoop**, such as the definition of a class :
 
-		class class-name declaration-body
+        class "Person" (function(_ENV)
+            property "Name" { type = String }
+            property "Age"  { type = Number }
+        end)
 
-	The _class-name_ is a string, we can use the name as a variable after we defined it.
+The **PLoop** using standalone environment for normal code and type definitions to avoid the conflict of the global variable abusing and provide many special techniques like namespace accessing, context keywords(you can only use property keyword in class and interface's definition), decorate for functions, code spell error check and etc.
 
-	The _declaration-body_ has many forms, it can be a table, a function or a string. In the previous example, we use a table as the declaration-body, it contains two key-value pairs, since the values are types(Technically, __Number__ and __String__ are struct types), the two key-value pairs would be used as property declarations.
+For now, we only need to know, we can use **PLoop** to call a function whose first argument is `_ENV`, the code in the function will be processed in a private environment, you can access anything in the `_G` without any problem, the only different is when you decalre a global variable, it won't be saved in to the `_G`, and that's why it's designed.
 
-	Ploop has many different declaration formats for some history reasons.
+Also we can get more features like types defined in the **global namespaces**, the **List** is defined in **System.Collections** namespace, and it's a global namespace that can be accessed by any **PLoop** environment(you also can use it in without the **PLoop** environment, we'll see in the **namespace** part)
 
-	The system is first used in World of Warcraft to provide a poweful widget system for addon development, it's designed under lua 5.1 by using setfenv/getfenv to control the declaration-environment.In that time, it's using an extremely rigorous declaration-format :
+Let's see more about the **List** :
 
-		import "System"
+        PLoop(function(_ENV)
+             -- 950
+            print(List(100):Range(2, -1, 2):Filter("x=>x>50"):Map("x=>x/2"):Reduce("x,y=>x+y"))
+        end)
 
-		class "Person"
+In here, we have **List**'s stream operations, we can use *Range* to specific the start, stop, step, the *Filter* to filter the element data, the *Map* to convert the data, and the final *Reduce* to combine all the datas. There are no temp caches or anonymous functions will be generated during those operations, so the cost is very little.
 
-			-- Property
-			property "Name"	{ Type = String }
-			property "Age"	{ Type = Number }
+And we have strings like "x=>x/2", it's a simple version of Lambda expressions, it'll be converted to an anonymous function like `function(x) return x/2 end`. We'll see why those methods can accept Lambda expressions in the **overload and validation** part.
 
-			-- Method
-			__Arguments__{ Person }
-			function Greet( self, another )
-				print( ("Hi %s, my name's %s."):format(another.Name, self.Name) )
-			end
 
-		endclass "Person"
+## Attribute and Thread Pool
 
-	The declaration-body must be ended with __endclass__ keyword, and __property__ keyword is used to declare properties, the property's declaration-body must be a table that contains all property informations.
+We have see how to use classes in the previous example, for the second example, I'll show special usage of the **PLoop** environment:
 
-	When lua 5.2 is released, setfenv/getfenv is replaced by _ENV, so the declaration will be
+            PLoop(function(_ENV)
+                __Iterator__()
+                function iter(i, j)
+                    for k = i, j do
+                        coroutine.yield(k)
+                    end
+                end
 
-		import "System"
+                -- print 1-10 for each line
+                for i in iter(1, 10) do
+                    print(i)
+                end
+            end)
 
-		_ENV = class "Person"
+            print(iter) -- nil, the PLoop environment is private
 
-			-- Property
-			property "Name"	{ Type = String }
-			property "Age"	{ Type = Number }
+Unlike the `_G`, the **PLoop** environments are very sensitive about new variables, when the *iter* is defiend, the system will check if there is any attribtues should be applied on the function, here we have the `__Iterator__()`.
 
-			-- Method
-			__Arguments__{ Person }
-			function Greet( self, another )
-				print( ("Hi %s, my name's %s."):format(another.Name, self.Name) )
-			end
+The `__Iterator__` is an attribute class, used to modify or attach datas to the target features like a function.
 
-		_ENV = endclass "Person"
+The `__Iterator__` is used to wrap the target function, so it'll be used as a coroutine iterator who use *coroutine.yield* to return values.
 
-	Although the format is supported, it's not likely to be used. So many other declaration formats are added, you can select whatever you like to define features.
+Also you can use *coroutine.wrap* to do the same job, but the different is, the **PLoop** is using thread pools to generate coroutines for those functions and recycle the coroutines when those function have done their jobs:
 
-	In lua 5.2 and above, if the _debug_ lib is used, the PLoop would try to create setfenv/getfenv api based on it, so the __class__ - __endclass__ declaration format can be used on it.
+            PLoop(function(_ENV)
+                __Async__()
+                function printco(i, j)
+                    print(coroutine.running())
+                end
 
-	To make sure the PLoop can be used in several lua versions, the common declaration format is using function :
+                -- you'll get the same thread
+                for i = 1, 10 do
+                    printco()
+                end
+            end)
 
-		import "System"
+The **Thread Pool** will reduce the cost of the coroutine's creation and also avoid the GC for those coroutines. The attributes like `__Async__` and `__Iterator__` have eliminated the management of coroutines, you only need to focus on the async logics.
 
-		class "Person" (function(_ENV)
 
-			-- Property
-			property "Name"	{ Type = String }
-			property "Age"	{ Type = Number }
+## Spell Error Checks And More
 
-			-- Method
-			__Arguments__{ Person }
-			function Greet( self, another )
-				print( ("Hi %s, my name's %s."):format(another.Name, self.Name) )
-			end
+Before defined the **PLoop**, we can create a **PLOOP_PLATFORM_SETTINGS** table to toggle the **PLoop**'s system settings:
 
-		end)
+            PLOOP_PLATFORM_SETTINGS = { ENV_ALLOW_GLOBAL_VAR_BE_NIL = false }
 
-	It's simple to use table as declaration-body, but use function would make the whole things together.
+            require "PLoop"
 
-* You can re-define most features(like the _Greet_ method) after define the __class__, and the object created before the re-definition will receive the new features.
+            PLoop(function(_ENV)
+                local a = ture  -- Error: The global variable "ture" can't be nil.
 
-	You can re-difine the class by just give it a key-value pair, if the value is a function, it woule be a method, if the value is a type, it would be a property. There are also many re-definition ways.
+                if a then
+                    print("ok")
+                end
+            end)
 
-* `__Arguments__` is an __attribute__ class, the __attribute__ system is used to associate predefined system information or user-defined custom information with a target feature.
+When access not existed global variables(normally spell error), the system will help you location the error place.
 
-	`__Arguments__` is used to check the arguments to make sure the method only receive the arguments that it want, it can be used to create overload methods :
+The next is about the object field:
 
+            PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
 
-		import "System"
+            require "PLoop"
 
-		class "Person"
+            PLoop(function(_ENV)
+                class "Person" (function(_ENV)
+                    property "Name" { type = String }
+                    property "Age"  { type = Number }
+                end)
 
-			-- Property
-			property "Name"	{ Type = String }
-			property "Age"	{ Type = Number }
+                o = Person()
 
-			-- Method
-			__Arguments__{ Person }
-			function Greet( self, another )
-				print( ("Hi %s, my name's %s."):format(another.Name, self.Name) )
-			end
+                o.Name = "King" -- Ok
 
-			__Arguments__{ String }
-			function Greet( self, another )
-				print( ("Hi %s, my name's %s."):format(another, self.Name) )
-			end
-		endclass "Person"
+                o.name = "Ann"  -- Error: The object can't accept field that named "name"
 
-		ann = Person{ Name = "Ann" }
+                print(o.name)   -- Error: The object don't have any field that named "name"
+            end)
 
-		-- Hi King, my name's Ann.
-		ann:Greet( "King" )
+This three settings will help authors to avoid many spell errors during the development.
 
-		-- Hi King, my name's Ann.
-		ann:Greet( Person{ Name = "King"} )
 
-	There are many other attributes, and custom attributes are also fully supported.
+## Function Argument Validation
 
-* If a __property__ is given a type, the value would be validated before it's set to the property, that would take a tiny cost, but it'll stop the mistake flow to other place where we can't trace back.
+The function validation is always a complex part, we need to do many checks before the function logic for the arguments and when need to tell the caller the input is bad, the error is not caused by the function, within **PLoop**, it'll be a small problem:
 
+            PLoop(function(_ENV)
+                __Arguments__{ String, Number }
+                function SetInfo(name, age)
+                end
 
-For more features, you should go checking the [wiki](https://github.com/kurapica/PLoop/wiki).
+                -- Error: Usage: SetInfo(System.String, System.Number) - the 2nd argument must be number, got boolean
+                SetInfo("Ann", true)
+            end)
 
+The arguments's valiation is a repeatable work, so the **PLoop** have provided a full type validation system to simple those works.
 
-Install
-====
+If we need to release the project, there is also no need to remove those `__Arguments__`, you can change a settings for the **PLoop**:
 
-Download the zip-file, extract it and rename it to PLoop, move it in your **LUA_PATH** folder, or where your lua file saved.
+            PLOOP_PLATFORM_SETTINGS = { TYPE_VALIDATION_DISABLED = true }
+
+            require "PLoop"
+
+            PLoop(function(_ENV)
+                __Arguments__{ String, Number }
+                function SetInfo(name, age)
+                end
+
+                -- No error now
+                SetInfo("Ann", true)
+            end)
+
+If the arguments's type are immutable, the `__Arguments__` won't wrap the target function, so there is no need to remove those attribute declarations for speed.
+
+

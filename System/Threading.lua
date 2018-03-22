@@ -59,7 +59,7 @@ PLoop(function(_ENV)
             for i = 1, count do args[i] = "arg" .. i end
             args    = tblconcat(args, ", ")
 
-            local pass = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, currentenv())()
+            local pass = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, _ENV)()
 
             _PassArgs  = safeset(_PassArgs, count, pass)
 

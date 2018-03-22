@@ -237,7 +237,7 @@ PLoop(function(_ENV)
 
                 error(("%s is not a valid unicode."):format(code))
             end
-        ]], "UTF16_ENCODE_DECODE", currentenv())()
+        ]], "UTF16_ENCODE_DECODE", _ENV)()
     end
 
     -- Lua 5.2 - bit32 lib or luajit bit lib
@@ -420,5 +420,4 @@ PLoop(function(_ENV)
             end
         end
     end)
-
 end)

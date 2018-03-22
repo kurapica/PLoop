@@ -89,7 +89,7 @@ PLoop(function(_ENV)
 
     --- the dictionary stream worker, used to provide stream filter, map and
     -- etc operations on a dictionary without creating any temp caches
-    __Final__() __Sealed__()
+    __Final__() __Sealed__() __NoSuperObject__()
     class "DictionaryStreamWorker" (function (_ENV)
         extend "IDictionary"
 

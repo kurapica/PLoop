@@ -15,6 +15,8 @@
 PLoop(function(_ENV)
 	namespace "System.Collections"
 
+    Environment.RegisterGlobalNamespace("System.Collections")
+
 	--- Represents the interface of collections
 	__Sealed__()
 	interface "Iterable" (function (_ENV)

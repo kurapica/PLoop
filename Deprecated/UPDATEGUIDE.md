@@ -3,32 +3,25 @@ This is a guide for people who want update codes from the Pure Lua OOP to the ne
 
 ## enum
 
-The old enum types are all case-ignored, there are cost to call the _string.upper_, and also make it can't be used with the _import_. If you have problem with it, and still need case-ignored enumeration, there are two ways :
+The old enum types are all case-ignored, since there are cost to call the _string.upper_, and also make it can't be used with the _import_, the new PLoop's enumerations are all case sensitive, and only the enumeration value can pass the validation of the enum, you can't use the enumeration name:
 
-    * Use the `__CaseIgnored__` attribute on the enum type. Like :
-
-            import "System"
-
-            __CaseIgnored__()
-            enum "Test" {
-                One = 1,
-                Two = 2
+        PLoop(function(_ENV)
+            enum "Dir" {
+                EAST = 1,
+                SOUTH = 2,
+                WEST = 3,
+                NORTH = 4,
             }
+            __Arguments__{ Dir }
+            function checkdir(dir)
+                print(Dir(dir))
+            end
 
-            print(Test.one)  -- 1
-
-    * Turn on **ENUM_GLOBAL_IGNORE_CASE** flag in **PLOOP_PLATFORM_SETTINGS** table before loading the PLoop
-
-            PLOOP_PLATFORM_SETTINGS = { ENUM_GLOBAL_IGNORE_CASE = true }
-
-            require "PLoop"
-
-            enum "Test" {
-                One = 1,
-                Two = 2
-            }
-
-            print(Test.one)  -- 1
+            checkdir(Dir.SOUTH) -- SOUTH
+            checkdir(NORTH)     -- NORTH, it's also ok, the enumeration name can be used directly where it's imported or created
+            checkdir(2)         -- SOUTH
+            checkdir("EAST")    -- Error: Usage: checkdir(Dir) - 1st argument must be a value of [Dir]
+        end)
 
 
 ## struct
@@ -95,6 +88,7 @@ Some struct are renamed, the old name is taken by reflection types :
     * System.Class      -> System.ClassType
     * System.NameSpace  -> System.NamespaceType
 
+
 ## class
 
 The class are now multi-version types, objects created before the re-definition of the class will still using old definition(also their super methods and features). In many scenarios like the Unity games, the object need using the newest definition, so you can use the `__SingleVer__` attribute on the classes, or just turn on the **CLASS_NO_MULTI_VERSION_CLASS** option in the **PLOOP_PLATFORM_SETTINGS** like :
@@ -118,3 +112,113 @@ The class are now multi-version types, objects created before the re-definition 
         end)
 
         o:Test()  -- new call
+
+
+the `__exist` in the old system only receive all arguments from the object construction, in the new system, it also receive the class as its first argument
+
+the keyword _Super_ and _This_ is changed to _super_, _this_.
+
+## Type changes
+
+OLD                         | New
+System.RawBoolean           -> System.Boolean
+System.Boolean              -> System.AnyBool
+System.NumberNil            -> System.Number
+System.Class                -> System.ClassType
+System.Interface            -> System.InterfaceType
+System.Struct               -> System.StructType
+System.Enum                 -> System.EnumType
+System.NameSpace            -> System.NamespaceType
+System.Guid                 -> [removed]
+System.Reflector            -> [removed]
+System.__Unique__           -> [removed], easily be done with `__exist`
+System.__AttributeUsage__   -> [removed], the attribute system is re-designed
+System.Argument             -> System.Variable
+System.__AutoCache__        -> [removed], conclict with several design
+System.StructType           -> System.StructCategory
+System.__InitTable__        -> [removed], easily be done with `__call`
+System.__Synthesize__       -> [removed], useless
+System.__Event__            -> [removed]
+System.__Handler__          -> [removed]
+System.__Setter__           -> System.__Set__
+System.__Getter__           -> System.__Get__
+System.__Doc__              -> [removed]
+System.__NameSpace__        -> [removed]
+System.__SimpleClass__      -> [removed], easily be done with `__new`
+System.__AutoProperty__     -> [removed], get/set/isxxx still can be used
+System.__ObjMethodAttr__    -> System.__ObjFuncAttr__
+System.__WeakObject__       -> [removed]
+System.__NoAutoSet__        -> System.__NoRawSet__
+
+
+## Reflect
+
+Since the System.Reflector is removed, there are new types to fetch inner datas.
+
+* System.Enum
+    * Fetch enumerations:
+
+        for name, value in Enum.GetEnumValues(target) do
+            print(name, value)
+        end
+
+* System.Struct
+    * Fetch array struct element type:
+
+        type = Struct.GetArrayElement(target)
+
+    * Fetch struct members:
+
+        for _, member in Struct.GetMembers(target) do
+            print(member:GetName())
+            print(member:GetDefault())
+            print(member:GetType())
+        end
+
+    * Fetch struct methods
+
+        for name, func, isstatic in Struct.GetMethods(target) do
+        end
+
+* System.Class | System.Interface
+    * Fetch methods
+
+        for name, func, isstaic in Class.GetMethods(target) do
+        end
+
+    * Fetch events
+
+        for name, feature in Class.GetFeatures(target) do
+            if Event.Validate(feature) then
+                print(name)
+            end
+        end
+
+    * Fetch properties
+
+        for name, feature in Class.GetFeatures(target) do
+            if Property.Validate(feature) then
+                print(feature:GetType())
+            end
+        end
+
+
+## overload changes
+
+The overload system is using System.Variable instead of the System.Argument as variable decalration.
+
+You still can define the System.Argument to avoid changing all your code:
+
+    __Sealed__()
+    struct "System.Argument" (function(_ENV)
+        Type    = AnyType
+        Nilable = Boolean
+        Default = Any
+        Name    = String
+        IsList  = Boolean
+    end)
+
+
+## attributes
+
+The attribute system are greatly re-designed, you need check the new attribute system to know how to re-code them.

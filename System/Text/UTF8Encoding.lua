@@ -155,7 +155,7 @@ PLoop(function(_ENV)
                     return startp + 1, byte + 0xDC00
                 end
             end
-        ]], "UTF8_DECODE", currentenv())()
+        ]], "UTF8_DECODE", _ENV)()
 
         encode = loadsnippet([[
             return function (code)
@@ -193,7 +193,7 @@ PLoop(function(_ENV)
 
                 error(("%s is not a valid code_point."):format(code))
             end
-        ]], "UTF8_ENCODE", currentenv())()
+        ]], "UTF8_ENCODE", _ENV)()
     end
 
     -- Lua 5.2 - bit32 lib or luajit bit lib
