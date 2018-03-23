@@ -254,7 +254,7 @@ All enum types are immutable, that means the value won't change through the enum
 
 The structures are types for basic and complex organized datas and also the data contracts for value validation. There are three struct types:
 
-### **Custom**  The basic data types like number, string and more advanced types like nature number. Take the *Number* as an example:
+i. **Custom**  The basic data types like number, string and more advanced types like nature number. Take the *Number* as an example:
 
         PLoop(function(_ENV)
             struct "Number" (function(_ENV)
@@ -266,11 +266,11 @@ The structures are types for basic and complex organized datas and also the data
             v = Number(true)  -- Error : the value must be number, got boolean
         end)
 
-    Unlike the enumeration, the structure's definition is a little complex, the definition body is a function with _ENV as its first parameter, the pattern is designed to make sure the **PLoop** works with Lua 5.1 and all above versions. The code in the body function will be processed in a private context used to define the struct.
+Unlike the enumeration, the structure's definition is a little complex, the definition body is a function with _ENV as its first parameter, the pattern is designed to make sure the **PLoop** works with Lua 5.1 and all above versions. The code in the body function will be processed in a private context used to define the struct.
 
-    The function with the struct's name is the validator, also you can use `__valid` instead of the struct's name(there are anonymous structs). The validator would be called with the target value, if the return value is non-false, that means the target value can't pass the validation, normally the return value should be an error message, the `%s` in the message'll be replaced by words based on where it's used, if the return value is true, the system would generte the error message for it.
+The function with the struct's name is the validator, also you can use `__valid` instead of the struct's name(there are anonymous structs). The validator would be called with the target value, if the return value is non-false, that means the target value can't pass the validation, normally the return value should be an error message, the `%s` in the message'll be replaced by words based on where it's used, if the return value is true, the system would generte the error message for it.
 
-    If the struct has only the validator, it's an immutable struct that won't modify the validated value. We also need mutable struct like AnyBool :
+If the struct has only the validator, it's an immutable struct that won't modify the validated value. We also need mutable struct like AnyBool :
 
         struct "AnyBool" (function(_ENV)
             function __init(value)
@@ -280,9 +280,9 @@ The structures are types for basic and complex organized datas and also the data
 
         print(AnyBool(1))  -- true
 
-    The function named `__init` is the initializer, it's used to modify the target value, if the return value is non-nil, it'll be used as the new value.
+The function named `__init` is the initializer, it's used to modify the target value, if the return value is non-nil, it'll be used as the new value.
 
-    The struct can have one base struct so it will inherit the base struct's validator and initializer, the base struct's validator and initializer should be called before the struct's own:
+The struct can have one base struct so it will inherit the base struct's validator and initializer, the base struct's validator and initializer should be called before the struct's own:
 
         struct "Integer" (function(_ENV)
             __base = Number
@@ -297,35 +297,35 @@ The structures are types for basic and complex organized datas and also the data
         v = Integer(true)  -- Error : the value must be number, got boolean
         v = Integer(1.23)  -- Error : the value must be integer
 
-    There system have provide many fundamental custom struct types like :
+There system have provide many fundamental custom struct types like :
 
-        * **System.Any**                represents any value
-        * **System.Boolean**            represents boolean value
-        * **System.String**             represents string value
-        * **System.Number**             represents number value
-        * **System.Function**           represents function value
-        * **System.Table**              represents table value
-        * **System.Userdata**           represents userdata value
-        * **System.Thread**             represents thread value
-        * **System.AnyBool**            represents anybool value
-        * **System.NEString**           represents nestring value
-        * **System.RawTable**           represents rawtable value
-        * **System.Integer**            represents integer value
-        * **System.NaturalNumber**      represents natural number value
-        * **System.NegativeInteger**    represents negative interger value
-        * **System.NamespaceType**      represents namespace type
-        * **System.EnumType**           represents enum type
-        * **System.StructType**         represents struct type
-        * **System.InterfaceType**      represents interface type
-        * **System.ClassType**          represents class type
-        * **System.AnyType**            represents any validation type
-        * **System.Lambda**             represents lambda value
-        * **System.Callable**           represents callable value, like function, callable objecct, lambda
-        * **System.Variable**           represents variable
-        * **System.Variables**          represents variables
+* **System.Any**                represents any value
+* **System.Boolean**            represents boolean value
+* **System.String**             represents string value
+* **System.Number**             represents number value
+* **System.Function**           represents function value
+* **System.Table**              represents table value
+* **System.Userdata**           represents userdata value
+* **System.Thread**             represents thread value
+* **System.AnyBool**            represents anybool value
+* **System.NEString**           represents nestring value
+* **System.RawTable**           represents rawtable value
+* **System.Integer**            represents integer value
+* **System.NaturalNumber**      represents natural number value
+* **System.NegativeInteger**    represents negative interger value
+* **System.NamespaceType**      represents namespace type
+* **System.EnumType**           represents enum type
+* **System.StructType**         represents struct type
+* **System.InterfaceType**      represents interface type
+* **System.ClassType**          represents class type
+* **System.AnyType**            represents any validation type
+* **System.Lambda**             represents lambda value
+* **System.Callable**           represents callable value, like function, callable objecct, lambda
+* **System.Variable**           represents variable
+* **System.Variables**          represents variables
 
 
-### **Member**  The member structure represent tables with fixed fields of certain types. Take an example to start:
+ii. **Member**  The member structure represent tables with fixed fields of certain types. Take an example to start:
 
         struct "Location" (function(_ENV)
             x = Number
@@ -336,9 +336,9 @@ The structures are types for basic and complex organized datas and also the data
         loc = Location(100, 20)
         print(loc.x, loc.y)          -- 100  20
 
-    The member sturt can also be used as value constructor(and only the member struct can be used as constructor), the argument order is the same order as the declaration of it members.
+The member sturt can also be used as value constructor(and only the member struct can be used as constructor), the argument order is the same order as the declaration of it members.
 
-    The `x = Number` is the simplest way to declare a member to the struct, but there are other details to be filled in, here is the formal version:
+The `x = Number` is the simplest way to declare a member to the struct, but there are other details to be filled in, here is the formal version:
 
         struct "Location" (function(_ENV)
             member "x" { type = Number, require = true }
@@ -349,12 +349,13 @@ The structures are types for basic and complex organized datas and also the data
         loc = Location(100)
         print(loc.x, loc.y)         -- 100  0
 
-    The member is a keyword can only be used in the definition body of a struct, it need a member name and a table contains several settings(the field is case ignored) for the member:
-        * type      - The member's type, it could be any enum, struct, class or interface, also could be 3rd party types that follow rules.
-        * require   - Whether the member can't be nil.
-        * default   - The default value of the member.
+The member is a keyword can only be used in the definition body of a struct, it need a member name and a table contains several settings(the field is case ignored) for the member:
 
-    The member struct also support the validator and initializer :
+* type      - The member's type, it could be any enum, struct, class or interface, also could be 3rd party types that follow rules.
+* require   - Whether the member can't be nil.
+* default   - The default value of the member.
+
+The member struct also support the validator and initializer :
 
         struct "MinMax" (function(_ENV)
             member "min" { Type = Number, Require = true }
@@ -367,7 +368,7 @@ The structures are types for basic and complex organized datas and also the data
 
         v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
 
-    Since the member struct's value are tables, we also can define struct methods that would be saved to those values:
+Since the member struct's value are tables, we also can define struct methods that would be saved to those values:
 
         struct "Location" (function(_ENV)
             member "x" { Type = Number, Require = true }
@@ -380,7 +381,7 @@ The structures are types for basic and complex organized datas and also the data
 
         print(Location(3, 4):GetRange()) -- 5
 
-    We can also declare static methods that can only be used by the struct itself(also for the custom struct):
+We can also declare static methods that can only be used by the struct itself(also for the custom struct):
 
         struct "Location" (function(_ENV)
             member "x" { Type = Number, Require = true }
@@ -394,9 +395,9 @@ The structures are types for basic and complex organized datas and also the data
 
         print(Location.GetRange{x = 3, y = 4}) -- 5
 
-    The `__Static__` is an attribute, it's used here to declare the next defined method is a static one.
+The `__Static__` is an attribute, it's used here to declare the next defined method is a static one.
 
-    In the example, we declare the default value of the member in the member's definition, but we also can provide the default value in the custom struct like :
+In the example, we declare the default value of the member in the member's definition, but we also can provide the default value in the custom struct like :
 
         struct "Number" (function(_ENV)
             __default = 0
@@ -414,9 +415,9 @@ The structures are types for basic and complex organized datas and also the data
         loc = Location()
         print(loc.x, loc.y)         -- 0    0
 
-    The member struct can also have base struct, it will inherit members, non-static methods, validator and initializer, but it's not recommended.
+The member struct can also have base struct, it will inherit members, non-static methods, validator and initializer, but it's not recommended.
 
-    iii. **Array**  The array structure represent tables that contains a list of same type items. Here is an example to declare an array:
+iii. **Array**  The array structure represent tables that contains a list of same type items. Here is an example to declare an array:
 
         struct "Locations" (function(_ENV)
             __array = Location
@@ -424,7 +425,7 @@ The structures are types for basic and complex organized datas and also the data
 
         v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
 
-    The array structure also support methods, static methods, base struct, validator and initializer.
+The array structure also support methods, static methods, base struct, validator and initializer.
 
 
 To simplify the definition of the struct, table can be used instead of the function as the definition body.
@@ -1461,7 +1462,7 @@ i.  modify the target's definitions, normally used on functions or enums:
             print(test2()) -- nothing
         end)
 
-    the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attribtues are called before the define process of the target.
+the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attribtues are called before the define process of the target.
 
 ii. Apply changes on the target, normally this is only used by the system attributes, take the `__Sealed__` as an example:
 
@@ -1489,7 +1490,7 @@ ii. Apply changes on the target, normally this is only used by the system attrib
             property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
         end)
 
-    the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attribtues are applied during the define process of the target.
+the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attribtues are applied during the define process of the target.
 
 iii. Attach attribtue datas on the target, also can be used to register the final result to other systems.
 
@@ -1519,4 +1520,4 @@ iii. Attach attribtue datas on the target, also can be used to register the fina
             print(IAttribute.GetAttachedData(__DataTable__, Person))
         end)
 
-    the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
+the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
