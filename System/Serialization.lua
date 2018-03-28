@@ -431,7 +431,7 @@ PLoop(function(_ENV)
                 end
             end,
 
-            __new               = function(storage, cache)
+            __new               = function(_, storage, cache)
                 return { __storage = storage, __cache = cache }
             end,
         }

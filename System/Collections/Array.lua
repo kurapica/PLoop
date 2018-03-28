@@ -88,11 +88,6 @@ PLoop(function(_ENV)
             return {...}, true
         end
 
-        __Arguments__{ struct { eletype } }
-        function __n2ew(cls, lst)
-            return lst, true
-        end
-
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------

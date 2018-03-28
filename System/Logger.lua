@@ -26,6 +26,7 @@ PLoop(function(_ENV)
             pairs               = pairs,
             strformat           = string.format,
             tblconcat           = table.concat,
+            rawset              = rawset,
         }
 
         export { Logger }
@@ -44,7 +45,7 @@ PLoop(function(_ENV)
         -- @param   logLevel                the message's log level, if lower than object.LogLevel, the message will be discarded
         -- @param   message                 the send out message, can be a formatted string
         -- @param   ...                     the list values to be included into the formatted string
-        __Arguments__{ LogLevel, String, Variable.Rest(String) }
+        __Arguments__{ LogLevel, String, Variable.Rest() }
         function Log(self, logLvl, msg, ...)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
@@ -85,21 +86,12 @@ PLoop(function(_ENV)
         end
 
         --- Set a prefix for a log level, thre prefix will be added to the message when the message is with the same log level
-        -- @param   logLeve                 the log level
+        -- @param   logLevel                the log level
         -- @param   prefix                  the prefix string
-        -- @param   createMethod            if true, will return a function to be called as Log function
-        -- @usage   Info = object:SetPrefix(LogLevel.Info, "[Info]", true)
-        --
-        --          -- Then you can use Info function to output log message with Info log level
-        --          Info("This is a test message") -- log out '[Info]This is a test message'
-        __Arguments__{ LogLevel, Variable.Optional(String), Variable.Optional(Boolean) }
-        function SetPrefix(self, loglvl, prefix, createMethod)
+        __Arguments__{ LogLevel, Variable.Optional(String) }
+        function SetPrefix(self, loglvl, prefix)
             self.__Prefix[loglvl] = prefix
-
-            -- Register
-            if createMethod then
-                return function(msg, ...) if loglvl >= self.LogLevel then return self(loglvl, msg, ...) end end
-            end
+            return self[loglvl]
         end
 
         -----------------------------------------------------------
@@ -124,6 +116,14 @@ PLoop(function(_ENV)
         --                      meta-method                      --
         -----------------------------------------------------------
         __call = Log
+
+        --- get a function for special log level to send the messages
+        __Arguments__{ LogLevel }
+        function __index(self, loglvl)
+            local func = function(msg, ...) if loglvl >= self.LogLevel then return self(loglvl, msg, ...) end end
+            rawset(self, loglvl, func)
+            return func
+        end
     end)
 
     -----------------------------------------------------------

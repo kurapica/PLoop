@@ -1,4 +1,4 @@
--- Core
+-- The init file of PLoop Core
 local root = require "PLoop.Prototype"
 
 -- System
@@ -8,7 +8,7 @@ require "PLoop.System.Collections"
 require "PLoop.System.Recycle"
 require "PLoop.System.Threading"
 require "PLoop.System.Text"
-require "PLoop.System.IO"
+require "PLoop.System.IO.TextAccessor"
 require "PLoop.System.Serialization"
 
 -- System.Collections

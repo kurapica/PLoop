@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/22                                               --
--- Version      :   1.0.0-beta002                                           --
+-- Update Date  :   2018/03/28                                               --
+-- Version      :   1.0.0-beta004                                           --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -178,11 +178,11 @@ do
         CLASS_NO_MULTI_VERSION_CLASS        = false,
 
         --- Whether all interfaces & classes only use the classic format
-        -- `Super.Method(obj, ...)` to call super's features, don't use new
+        -- `super.Method(obj, ...)` to call super's features, don't use new
         -- style like :
-        --      Super[obj].Name = "Ann"
-        --      Super[obj].OnNameChanged = Super[obj].OnNameChanged + print
-        --      Super[obj]:Greet("King")
+        --      super[obj].Name = "Ann"
+        --      super[obj].OnNameChanged = super[obj].OnNameChanged + print
+        --      super[obj]:Greet("King")
         -- Default false
         -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_NO_SUPER_OBJECT_STYLE         = false,
@@ -294,9 +294,15 @@ do
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
-    diposeObj                   = function (obj) obj:Dispose() end
+    disposeObj                  = function (obj) obj:Dispose() end
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
     parseIndex                  = function(idx) if idx == 1 then return "1st" end if idx == 2 then return "2nd" end if idx == 3 then return "3rd" end return idx .. "th" end
+
+    --- new type events
+    newenum                     = fakefunc
+    newstruct                   = fakefunc
+    newclass                    = fakefunc
+    newinterface                = fakefunc
 
     -----------------------------------------------------------------------
     --                              storage                              --
@@ -670,7 +676,7 @@ do
 
     checkTemplateParam          = function (origin, param)
         if not param then return false, "the %s parameter can't be nil" end
-        if not struct.ValidateValue(AnyType, param) then return false, "the %s parameter must be a validation type" end
+        if not getprototypemethod(param, "ValidateValue") then return false, "the %s parameter must be a validation type" end
         if origin == Any then return true end
         local issubtype = getprototypemethod(origin, "IsSubType")
         if not issubtype or issubtype(param, origin) then return true end
@@ -1467,7 +1473,7 @@ end
 -- namespace management, get/set management and etc.
 --
 --      -- Module is an environment type for codes works like _G
---      Module "Test" "v1.0.0"
+--      _ENV = Module "Test" "v1.0.0"
 --
 --      -- Declare the namespace for the module
 --      namespace "NS.Test"
@@ -1477,7 +1483,7 @@ end
 --
 --      -- By using the get/set management we can use attributes for features
 --      -- like functions.
---      __Thread__()
+--      __Async__()
 --      function DoThreadTask()
 --      end
 --
@@ -1498,7 +1504,7 @@ end
 --              environment(function(_ENV)
 --                  import "System.Threading"
 --
---                  __Thread__()
+--                  __Async__()
 --                  function DoTask()
 --                  end
 --              end)
@@ -2628,6 +2634,8 @@ do
 
                 attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
+                newenum(target)
+
                 return target
             end;
 
@@ -2876,16 +2884,13 @@ do
 
             stack = stack + 1
 
-            if visitor then
-                environment.ImportNamespace(visitor, target)
-            end
-
             enum.BeginDefinition(target, stack)
 
             Debug("[enum] %s created", stack, tostring(target))
 
             local builder = prototype.NewObject(enumbuilder)
             environment.SetNamespace(builder, target)
+            environment.SetParent   (builder, visitor)
 
             if definition then
                 builder(definition, stack)
@@ -2928,6 +2933,12 @@ do
             end
 
             enum.EndDefinition(owner, stack)
+
+            local visitor = environment.GetParent(self)
+            if visitor then
+                environment.ImportNamespace(visitor, owner)
+            end
+
             return owner
         end,
     }
@@ -4317,6 +4328,8 @@ do
                     updateStructDepends(target, cache)
                     _Cache(cache)
                 end
+
+                newstruct(target)
 
                 return target
             end;
@@ -6376,6 +6389,10 @@ do
             genCacheOnPriority(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, true, nil, nil, stack)
         end
 
+        -- __new, __exist
+        if info[FLD_IC_EXIST]  and supext then super[IC_META_EXIST] = supext end
+        if info[FLD_IC_NEWOBJ] and supnew then super[IC_META_NEW]   = supnew end
+
         if next(super) then info[FLD_IC_SUPMTD] = super else _Cache(super) end
 
         if info[FLD_IC_TYPFTR] then
@@ -6823,7 +6840,7 @@ do
         if type(params) ~= "table" then return "the params must be a table", stack end
         local tparams           = {}
         for i, n in ipairs, params, 0 do
-            if not struct.ValidateValue(AnyType, n) then return "the parameter elements must be validation type", stack end
+            if not getprototypemethod(n, "ValidateValue") then return "the parameter elements must be validation type", stack end
             tparams[i]          = n
         end
         if #tparams == 0 then return "the params can't be empty", stack end
@@ -7082,6 +7099,8 @@ do
 
                 reDefineChildren(target, stack)
 
+                newinterface(target)
+
                 return target
             end;
 
@@ -7330,7 +7349,7 @@ do
             -- @param   name                        the method name
             -- @return  function                    the super method
             ["GetSuperMethod"]  = function(target, name)
-                local info      = _ICInfo[target]
+                local info      = getICTargetInfo(target)
                 return info and getSuperMethod(info, name)
             end;
 
@@ -7735,7 +7754,7 @@ do
             -- @return  object                      the target object
             ["AttachObjectSource"] = function(object, stack)
                 if type(object) ~= "table" then error("Usage: class.AttachObjectSource(object[, stack]) - the object is not valid", 2) end
-                rawset(object, FLD_OBJ_SOURCE, getcallline(parsestack(stack) + 1))
+                rawset(object, FLD_OBJ_SOURCE, getcallline(parsestack(stack) + 1) or nil)
                 return object
             end;
 
@@ -7788,6 +7807,8 @@ do
                 attribute.AttachAttributes(target, ATTRTAR_CLASS, nil, nil, stack)
 
                 reDefineChildren(target, stack)
+
+                newclass(target)
 
                 return target
             end;
@@ -8597,7 +8618,7 @@ do
         __tostring              = function(self) return tostring(_ThisMap[self]) end,
         __call                  = function(self, obj, ...)
             local cls           = _ThisMap[self]
-            if obj and getmetatable(obj) == cls then
+            if obj and class.IsSubType(getmetatable(obj), cls) then
                 local ctor      = _ICInfo[cls][FLD_IC_CTOR]
                 if ctor then return ctor(obj, ...) end
             else
@@ -8973,7 +8994,7 @@ end
 --                          if owner:GetScript(eventname) == nil then
 --                              owner:SetScript(eventname, function(self, ...)
 --                                  -- Call the delegate directly
---                                  delegate(self, ...)
+--                                  delegate(owner, ...)
 --                              end)
 --                          end
 --                      end
@@ -8995,7 +9016,7 @@ end
 --                          if owner:GetScript(eventname) == nil then
 --                              owner:SetScript(eventname, function(self, ...)
 --                                  -- Call the delegate directly
---                                  delegate(self, ...)
+--                                  delegate(owner, ...)
 --                              end)
 --                          end
 --                      end
@@ -9435,6 +9456,9 @@ end
 -- Like the **member** of the **struct**, we use table to give the property's
 -- definition, the key is case ignored, here is a full list:
 --
+--      * auto          whether use the auto-binding mechanism for the property
+--              see blow example for details.
+--
 --      * get           the function used to get the property value from the
 --              object like `get(obj)`, also you can set **false** to it, so
 --              the property can't be read
@@ -9497,9 +9521,9 @@ end
 --
 --      * static        true if the property is a static property
 --
--- There is also a auto-binding mechanism for the property, if the definition
--- don't provide get/set, getmethod/setmethod and field, the system will check
--- the property owner's method(object method if non-static, static method if it
+-- If the **auto** auto-binding mechanism is using and the definition don't
+-- provide get/set, getmethod/setmethod and field, the system will check the
+-- property owner's method(object method if non-static, static method if it
 -- is static), if the property name is **name**:
 --
 --      * The *setname*, *Setname*, *SetName*, *setName* will be scanned, if it
@@ -9594,6 +9618,8 @@ do
 
     local MOD_PROP_GETCLONE     = newflags()
     local MOD_PROP_GETDEEPCL    = newflags()
+
+    local MOD_PROP_AUTOSCAN     = newflags()
 
     local MOD_PROP_INDEXER      = newflags()
 
@@ -10188,11 +10214,11 @@ do
 
                     if validateflags(FLG_PROPSET_RETAIN, token) then
                         uinsert(apis, "pcall")
-                        uinsert(apis, "diposeObj")
+                        uinsert(apis, "disposeObj")
                         if validateflags(FLG_PROPSET_DEFAULT, token) then
-                            tinsert(body, [[if old and old ~= default then pcall(diposeObj, old) end]])
+                            tinsert(body, [[if old and old ~= default then pcall(disposeObj, old) end]])
                         else
-                            tinsert(body, [[if old then pcall(diposeObj, old) end]])
+                            tinsert(body, [[if old then pcall(disposeObj, old) end]])
                         end
                     end
                 end
@@ -10262,6 +10288,7 @@ do
                     -- Check get method
                     if info[FLD_PROP_GETMETHOD] then
                         local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_GETMETHOD])
+                        if not mtd and not isstatic then mtd, st = interface.GetSuperMethod(owner, info[FLD_PROP_GETMETHOD]), false end
                         if mtd and isstatic == st then
                             if isstatic then
                                 info[FLD_PROP_GETMETHOD]    = nil
@@ -10276,6 +10303,7 @@ do
                     -- Check set method
                     if info[FLD_PROP_SETMETHOD] then
                         local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_SETMETHOD])
+                        if not mtd and not isstatic then mtd, st = interface.GetSuperMethod(owner, info[FLD_PROP_SETMETHOD]), false end
                         if mtd and isstatic == st then
                             if isstatic then
                                 info[FLD_PROP_SETMETHOD]    = nil
@@ -10292,21 +10320,27 @@ do
                         if info[FLD_PROP_GET] == true or (info[FLD_PROP_GET] == nil and info[FLD_PROP_GETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
                             info[FLD_PROP_GET]  = nil
 
-                            for _, prefix in ipairs, _PropGetPrefix, 0 do
-                                local mtd, st   = interface.GetMethod(owner, prefix .. name)
-                                if mtd and isstatic == st then
-                                    info[FLD_PROP_GET] = mtd
-                                    Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. name)
-                                    break
-                                end
-
-                                if uname ~= name then
-                                    mtd, st     = interface.GetMethod(owner, prefix .. uname)
+                            if validateflags(MOD_PROP_AUTOSCAN, info[FLD_PROP_MOD]) then
+                                for _, prefix in ipairs, _PropGetPrefix, 0 do
+                                    local mtd, st   = interface.GetMethod(owner, prefix .. name)
                                     if mtd and isstatic == st then
                                         info[FLD_PROP_GET] = mtd
-                                        Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. uname)
+                                        Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. name)
                                         break
                                     end
+
+                                    if uname ~= name then
+                                        mtd, st     = interface.GetMethod(owner, prefix .. uname)
+                                        if mtd and isstatic == st then
+                                            info[FLD_PROP_GET] = mtd
+                                            Debug("The %s's property %q use method named %q as get method", tostring(owner), name, prefix .. uname)
+                                            break
+                                        end
+                                    end
+                                end
+
+                                if not info[FLD_PROP_GET] then
+                                    Warn("The %s don't have %smethod for property %q's get method", tostring(owner), isstatic and "static " or "", name)
                                 end
                             end
                         end
@@ -10315,21 +10349,27 @@ do
                         if info[FLD_PROP_SET] == true or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
                             info[FLD_PROP_SET]  = nil
 
-                            for _, prefix in ipairs, _PropSetPrefix, 0 do
-                                local mtd, st   = interface.GetMethod(owner, prefix .. name)
-                                if mtd and isstatic == st then
-                                    info[FLD_PROP_SET]  = mtd
-                                    Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. name)
-                                    break
-                                end
-
-                                if uname ~= name then
-                                    local mtd, st   = interface.GetMethod(owner, prefix .. uname)
+                            if validateflags(MOD_PROP_AUTOSCAN, info[FLD_PROP_MOD]) then
+                                for _, prefix in ipairs, _PropSetPrefix, 0 do
+                                    local mtd, st   = interface.GetMethod(owner, prefix .. name)
                                     if mtd and isstatic == st then
                                         info[FLD_PROP_SET]  = mtd
-                                        Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. uname)
+                                        Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. name)
                                         break
                                     end
+
+                                    if uname ~= name then
+                                        local mtd, st   = interface.GetMethod(owner, prefix .. uname)
+                                        if mtd and isstatic == st then
+                                            info[FLD_PROP_SET]  = mtd
+                                            Debug("The %s's property %q use method named %q as set method", tostring(owner), name, prefix .. uname)
+                                            break
+                                        end
+                                    end
+                                end
+
+                                if not info[FLD_PROP_SET] then
+                                    Warn("The %s don't have %smethod for property %q's set method", tostring(owner), isstatic and "static " or "", name)
                                 end
                             end
                         end
@@ -10337,6 +10377,7 @@ do
                         -- Check the handler
                         if type(info[FLD_PROP_HANDLER]) == "string" then
                             local mtd, st   = interface.GetMethod(owner, info[FLD_PROP_HANDLER])
+                            if not mtd and not isstatic then mtd, st = interface.GetSuperMethod(owner, info[FLD_PROP_HANDLER]), false end
                             if mtd and isstatic == st then
                                 info[FLD_PROP_HANDLER]  = mtd
                             else
@@ -10693,7 +10734,11 @@ do
                     k   = strlower(k)
                     local tval  = type(v)
 
-                    if k == "get" then
+                    if k == "auto" then
+                        if v then
+                            info[FLD_PROP_MOD] = turnonflags(MOD_PROP_AUTOSCAN, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "get" then
                         if tval == "function" or tval == "boolean" then
                             info[FLD_PROP_GET] = v
                         elseif tval == "string" then
@@ -11190,6 +11235,12 @@ do
     -----------------------------------------------------------------------
     __Default__ = namespace.SaveNamespace("System.__Default__", prototype {
         __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                local value     = self[1]
+                if value       ~= nil and targettype == ATTRTAR_MEMBER then
+                    definition.default = value
+                end
+            end,
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 local value     = self[1]
                 if value       ~= nil then
@@ -11202,7 +11253,7 @@ do
                     end
                 end
             end,
-            ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT,
+            ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_MEMBER,
         },
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
@@ -11873,6 +11924,7 @@ do
         -- @param   target                      the target
         -- @param   owner                       the target's owner
         -- @return  any                         the attached data
+        __Static__()
         GetAttachedData             = Attribute.GetAttachedData
 
         --- Get all targets have attached data of the attribute
@@ -11880,6 +11932,7 @@ do
         -- @param   cache                       the cache to save the result
         -- @rformat (cache)                     the cache that contains the targets
         -- @rformat (iter, attr)                without the cache parameter, used in generic for
+        __Static__()
         GetAttributeTargets         = Attribute.GetAttributeTargets
 
         --- Get all target's owners that have attached data of the attribute
@@ -11887,6 +11940,7 @@ do
         -- @param   cache                       the cache to save the result
         -- @rformat (cache)                     the cache that contains the targets
         -- @rformat (iter, attr)                without the cache parameter, used in generic for
+        __Static__()
         GetAttributeTargetOwners    = Attribute.GetAttributeTargetOwners
 
         -----------------------------------------------------------
@@ -13023,10 +13077,10 @@ do
             end
 
             for _, f in ipairs, self, 0 do
-                if f == ret then return self end
+                if f == func then return self end
             end
 
-            tinsert(self, ret)
+            tinsert(self, func)
             OnChange(self)
             return self
         end
@@ -13044,6 +13098,9 @@ do
             end
             return self
         end
+
+        -- Invoke the delegate
+        __call = Invoke
     end)
 
     --- Wrap the target function within the given function like pcall
@@ -13352,20 +13409,21 @@ do
         --                      meta-method                      --
         -----------------------------------------------------------
         --- _ENV = Module "TestCode" "v1.0.0"
-        function __call(self, version)
+        function __call(self, version, stack)
+            stack = type(stack) == "number" and stack or 1
             local tver  = type(version)
             if tver == "string" then
                 if self:ValidateVersion(version) then
                     version = strtrim(version)
                     _ModuleInfo[self][FLD_MDL_VER] = version ~= "" and version or false
-                    Environment.Apply(self, 2)
+                    Environment.Apply(self, stack + 1)
                 else
-                    error("there is an equal or bigger version existed", 2)
+                    error("there is an equal or bigger version existed", stack + 1)
                 end
             elseif tver == "function" then
                 Environment.Apply(self, version)
             elseif version == nil or tver == "number" then
-                Environment.Apply(self, (version or 1) + 1)
+                Environment.Apply(self, (version or stack) + 1)
             end
             return self
         end
@@ -13380,8 +13438,8 @@ do
     -----------------------------------------------------------------------
     interface "System.IContext" {}
 
-    --- Represents the context object used to process the operations in a
-    -- coroutine, normally used in multi-os thread platforms
+    --- Represents the context object used to process the operations in an
+    -- os thread, normally used in multi-os thread platforms
     __Sealed__()
     class (_PLoopEnv, "System.Context") (function(_ENV)
         export {
@@ -13475,6 +13533,23 @@ do
                 end
             end
         end
+    end)
+
+    -----------------------------------------------------------------------
+    --                             runtime                              --
+    -----------------------------------------------------------------------
+    --- Represents the informations of the runtime
+    __Final__() __Sealed__() __Abstract__()
+    class (_PLoopEnv, "System.Runtime", function(_ENV)
+        export{ Enum, Struct, Class, Interface }
+
+        --- Fired when a new type is generated
+        __Static__() event "OnNewTypes"
+
+        _PLoopEnv.newenum       = function(target) OnNewTypes(Enum, target) end
+        _PLoopEnv.newstruct     = function(target) OnNewTypes(Struct, target) end
+        _PLoopEnv.newinterface  = function(target) OnNewTypes(Interface, target) end
+        _PLoopEnv.newclass      = function(target) OnNewTypes(Class, target) end
     end)
 end
 

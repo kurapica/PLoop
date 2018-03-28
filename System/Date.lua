@@ -11,7 +11,6 @@
 -- Update Date  :   2018/03/15                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
-if not _G.os then return end
 
 PLoop(function(_ENV)
     namespace "System"
@@ -39,6 +38,8 @@ PLoop(function(_ENV)
             end
         end
     }
+
+    if not _G.os then return end
 
     --- Represents the date object
     __Final__() __Sealed__()

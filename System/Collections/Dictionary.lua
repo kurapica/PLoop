@@ -35,6 +35,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{ }
+        function __new() return {} end
+
         __Arguments__{ RawTable }
         function __new(_, dict) return dict, true end
 

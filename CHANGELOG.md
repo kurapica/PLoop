@@ -101,8 +101,9 @@ All notable changes to this project will be documented in this file.
 - [class]      **System.Exception** added, represents errors that occur during application execution
 - [class]      **System.Module** added, represents the tree containers for codes, it's the recommended environment for coding with PLoop
 - [class]      **System.Context** added, represents the context used as share storages for objects of the **System.IContext**
+- [class]      **System.Runtime** added, represents the runtime informations, like add watch for new generated types
 
-- [file]        **System.Date.lua** added, provide types for date management.
+- [file]       **System.Date.lua** added, provide types for date management.
 
 - [struct]     **System.TimeFormat** added, represents valid time format strings
 - [class]      **System.Date** added, represent the date object

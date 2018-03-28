@@ -1007,6 +1007,8 @@ The **Person** class has two properties: *Name* and *Age*, the table after `prop
 
 Like the **member** of the **struct**, we use table to give the property's definition, the key is case ignored, here is a full list:
 
+* auto          whether use the auto-binding mechanism for the property see blow example for details.
+
 * get           the function used to get the property value from the object like `get(obj)`, also you can set **false** to it, so the property can't be read
 
 * set           the function used to set the property value of the object like `set(obj, value)`, also you can set **false** to it, so the property can't be written
@@ -1053,7 +1055,7 @@ Like the **member** of the **struct**, we use table to give the property's defin
 
 * static        true if the property is a static property
 
-There is also a auto-binding mechanism for the property, if the definition don't provide get/set, getmethod/setmethod and field, the system will check the property owner's method(object method if non-static, static method if it is static), if the property name is **name**:
+If the **auto** auto-binding mechanism is using and the definition don't provide get/set, getmethod/setmethod and field, the system will check the property owner's method(object method if non-static, static method if it is static), if the property name is **name**:
 
 * The *setname*, *Setname*, *SetName*, *setName* will be scanned, if it existed, the method will be used as the **set** setting
 
