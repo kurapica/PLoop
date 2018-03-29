@@ -29,16 +29,18 @@ PLoop(function(_ENV)
             yield               = coroutine.yield,
         }
 
-        if OperationSystem.Current == OperationSystem.Windows then
-            --- Get sub-directories 
+        if OperationSystem.Current == OperationSystemType.Windows then
+            --- Get sub-directories
             __PipeRead__("dir \"%s\"", ".*", OperationSystemType.Windows)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
-                for line in strgmatch(result, "[^\n]+") do
-                    local dir = strmatch(line, "<DIR>%s+(.*)$")
-                    if dir and (dir ~= "" and dir ~= "." and dir ~= "..") then
-                        yield(dir)
+                if result then
+                    for line in strgmatch(result, "[^\n]+") do
+                        local dir = strmatch(line, "<DIR>%s+(.*)$")
+                        if dir and (dir ~= "" and dir ~= "." and dir ~= "..") then
+                            yield(dir)
+                        end
                     end
                 end
             end
@@ -48,24 +50,28 @@ PLoop(function(_ENV)
             __Iterator__()
             __Static__()
             function GetFiles(path, result)
-                for line in strgmatch(result, "[^\n]+") do
-                    local file = strmatch(line, "^%d+[%d/%s:,]+(.*)$")
-                    if file and not strfind(file, "^<DIR>") then
-                        yield(file)
+                if result then
+                    for line in strgmatch(result, "[^\n]+") do
+                        local file = strmatch(line, "^%d+[%d/%s:,]+(.*)$")
+                        if file and not strfind(file, "^<DIR>") then
+                            yield(file)
+                        end
                     end
                 end
             end
         else
-            --- Get sub-directories 
+            --- Get sub-directories
             __PipeRead__("ls -l \"%s\"", ".*", OperationSystemType.Linux)
             __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
-                for line in strgmatch(result, "[^\n]+") do
-                    if strsub(line, 1, 1) == "d" then
-                        local dir = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
-                        if dir and dir ~= "" then yield(dir) end
+                if result then
+                    for line in strgmatch(result, "[^\n]+") do
+                        if strsub(line, 1, 1) == "d" then
+                            local dir = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
+                            if dir and dir ~= "" then yield(dir) end
+                        end
                     end
                 end
             end
@@ -76,10 +82,12 @@ PLoop(function(_ENV)
             __Iterator__()
             __Static__()
             function GetFiles(path, result)
-                for line in strgmatch(result, "[^\n]+") do
-                    if strsub(line, 1, 1) == "-" then
-                        local file = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
-                        if file and file ~= "" then yield(file) end
+                if result then
+                    for line in strgmatch(result, "[^\n]+") do
+                        if strsub(line, 1, 1) == "-" then
+                            local file = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
+                            if file and file ~= "" then yield(file) end
+                        end
                     end
                 end
             end
