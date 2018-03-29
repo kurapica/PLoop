@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/28                                               --
--- Version      :   1.0.0-beta004                                           --
+-- Update Date  :   2018/03/29                                               --
+-- Version      :   1.0.0-beta005                                           --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -4504,6 +4504,17 @@ do
                 end
             end;
 
+            --- Get template struct
+            -- @static
+            -- @method  GetTemplate
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  template                    the template struct, maybe itself
+            ["GetTemplate"]     = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and (info[FLD_STRUCT_TEMPDEF] and target or info[FLD_STRUCT_TEMPIMP])
+            end;
+
             --- Get the template parameters
             -- @static
             -- @method  GetTemplateParameters
@@ -4838,6 +4849,9 @@ do
                         end)
 
                         info[FLD_STRUCT_TEMPIMP] = savestorage(container, key[1], implement)
+
+                        -- Save the template to the implment
+                        _StructInfo[implement][FLD_STRUCT_TEMPIMP] = self
 
                         return implement
                     elseif type(key) == "table" and getmetatable(key) == nil then
@@ -5491,7 +5505,7 @@ do
     local FLD_IC_DEBUGSR        =-15                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
     local FLD_IC_TEMPPRM        =-16                -- FIELD TEMPLATE ARGUMENTS
     local FLD_IC_TEMPDEF        =-17                -- FIELD TEMPlATE DEFINITION
-    local FLD_IC_TEMPIMP        =-18                -- FIELD TEMPLATE IMPLEMENTATION
+    local FLD_IC_TEMPIMP        =-18                -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
 
     -- CACHE FIELDS
     local FLD_IC_STAFTR         =-20                -- FIELD STATIC TYPE FEATURES
@@ -7388,6 +7402,17 @@ do
                 return info and info[FLD_IC_SUPER]
             end;
 
+            --- Get template interface
+            -- @static
+            -- @method  GetTemplate
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @return  template                    the template interface, maybe itself
+            ["GetTemplate"]     = function(target)
+                local info      = getICTargetInfo(target)
+                return info and (info[FLD_IC_TEMPDEF] and target or info[FLD_IC_TEMPIMP])
+            end;
+
             --- Get the template parameters
             -- @static
             -- @method  GetTemplateParameters
@@ -7967,6 +7992,14 @@ do
             -- @return  super                       the super refer
             ["GetSuperRefer"]   = interface.GetSuperRefer;
 
+            --- Get template class
+            -- @static
+            -- @method  GetTemplate
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  template                    the template class, maybe itself
+            ["GetTemplate"]     = interface.GetTemplate;
+
             --- Get the template parameters
             -- @static
             -- @method  GetTemplateParameters
@@ -8476,6 +8509,9 @@ do
                         end)
 
                         info[FLD_IC_TEMPIMP] = savestorage(container, key[1], implement)
+
+                        -- Save the template to the implment
+                        _ICInfo[implement][FLD_IC_TEMPIMP] = self
 
                         return implement
                     elseif type(key) == "table" and getmetatable(key) == nil then
@@ -9299,7 +9335,7 @@ do
                 local info      = _EventInfo[self]
                 stack           = parsestack(stack) + 1
                 if not info then error("Usage: event:Set(obj, delegate[, stack]) - the event is not valid", stack) end
-                if type(obj) ~= "table" then error("Usage: event:Set(obj, delegate[, stack]) - the object is not valid", stack) end
+                if type(obj) ~= "table" and type(obj) ~= "userdata" then error("Usage: event:Set(obj, delegate[, stack]) - the object is not valid", stack) end
 
                 local odel      = self:Get(obj)
                 if delegate == nil then
@@ -13039,7 +13075,7 @@ do
         --                       property                        --
         -----------------------------------------------------------
         --- The delegate's owner
-        property "Owner"    { type = Table }
+        property "Owner"    { type = Table + Userdata }
 
         --- The delegate's name
         property "Name"     { type = String }
@@ -13047,7 +13083,7 @@ do
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable("owner", Table, true), Variable("name", String, true) }
+        __Arguments__{ Variable("owner", Table + Userdata, true), Variable("name", String, true) }
         function Delegate(self, owner, name)
             self.Owner      = owner
             self.Name       = name
@@ -13544,12 +13580,12 @@ do
         export{ Enum, Struct, Class, Interface }
 
         --- Fired when a new type is generated
-        __Static__() event "OnNewTypes"
+        __Static__() event "OnTypeDefined"
 
-        _PLoopEnv.newenum       = function(target) OnNewTypes(Enum, target) end
-        _PLoopEnv.newstruct     = function(target) OnNewTypes(Struct, target) end
-        _PLoopEnv.newinterface  = function(target) OnNewTypes(Interface, target) end
-        _PLoopEnv.newclass      = function(target) OnNewTypes(Class, target) end
+        _PLoopEnv.newenum       = function(target) OnTypeDefined(Enum, target) end
+        _PLoopEnv.newstruct     = function(target) OnTypeDefined(Struct, target) end
+        _PLoopEnv.newinterface  = function(target) OnTypeDefined(Interface, target) end
+        _PLoopEnv.newclass      = function(target) OnTypeDefined(Class, target) end
     end)
 end
 

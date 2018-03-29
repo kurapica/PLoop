@@ -15,41 +15,101 @@
 PLoop(function(_ENV)
     namespace "System.IO"
 
+    local _ResourceLoader       = {}
+
+    export {
+        strfind                 = string.find,
+        strlower                = string.lower,
+        safeset                 = Toolset.safeset,
+        saveloader              = function(suffix, loader) _ResourceLoader = safeset(_ResourceLoader, suffix, loader) end,
+        getloader               = function(_, suffix) suffix = strlower(suffix) if not strfind(suffix, "^%.") then suffix = "." .. suffix end return _ResourceLoader[suffix] end,
+    }
+
+
     --- The interface for the file loaders
     __Sealed__()
     interface "IResourceLoader" (function (_ENV)
-        --- Load the target resource
-        -- @param
+        -----------------------------------------------------------
+        --                         method                        --
+        -----------------------------------------------------------
+        --- Load the target resource from file or text reader
+        -- @format  path
+        -- @format  reader
+        -- @param   path            the file path
+        -- @param   reader          the text reader of the file
         __Abstract__() function Load(self, path) end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the loader of suffix
+        __Static__() __Indexer__()
+        property "Loader" { get = getloader }
     end)
 
     --- The resource loader for specific suffix files to generate type features or others.
-    __AttributeUsage__{AttributeTarget = AttributeTargets.Class, RunOnce = true, AllowMultiple = true}
     __Final__() __Sealed__()
     class "__ResourceLoader__" (function (_ENV)
-        extend "IAttribute"
+        extend "IAttachAttribute"
 
-        _ResourceLoader = {}
+        export { 
+            getloader           = getloader,
+            saveloader          = saveloader, 
+            tinsert             = table.insert, 
+            select              = select, 
+            ipairs              = ipairs, 
+            strlower            = string.lower,
+            strfind             = string.find,
+            strformat           = string.format,
 
-        __Doc__[[The suffix of the file.]]
-        property "Suffix" { Type = NEString }
+            Class, IResourceLoader,
+        }
 
-        __Static__()
-        __Doc__[[Get the resource loader for specific suffix]]
-        function GetResourceLoader(suffix) return _ResourceLoader[suffix] end
+        -----------------------------------------------------------
+        --                         method                        --
+        -----------------------------------------------------------
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+            if not Class.IsSubType(target, IResourceLoader) then
+                error("the class must extend System.IO.IResourceLoader", stack + 1)
+            end
 
-        function ApplyAttribute(self, target)
-            assert(Reflector.IsExtendedInterface(target, IResourceLoader), "The class must extend System.IO.IResourceLoader.")
-
-            local suffix = self.Suffix and self.Suffix:lower()
-            if suffix then
-                if not suffix:find("^%.") then suffix = "." .. suffix end
-                _ResourceLoader[suffix] = target
+            for _, v in ipairs(self) do
+                v   = strlower(v)
+                if not strfind(suffix, "^%.") then
+                    suffix = "." .. suffix
+                end
+                local loader = getloader(_, suffix)
+                if loader then
+                    error(strformat("the suffix %q has been registered by %s", suffix, loader), stack + 1)
+                else
+                    saveloader(suffix, target)
+                end
             end
         end
 
-        __Arguments__{ NEString }
-        function __ResourceLoader__(self, name) self.Suffix = name end
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ Variable.Rest(NEString) }
+        function __new(_, ...)
+            return { ... }, true
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __Abstract__{ NEString }
+        function __call(self, ...)
+            for i = 1, select("#", ...) do
+                tinsert(self, (select(i, ...)))
+            end
+        end
     end)
 
     __Final__() __Sealed__() __Abstract__()
@@ -197,7 +257,7 @@ PLoop(function(_ENV)
         ----------------------------------
         -- Static Method
         ----------------------------------
-        __Doc__[[Load the target resource files]]
+        --- Load the target resource files
         __Static__()
         function LoadResource(path)
             if type(path) ~= "string" then return end
@@ -209,11 +269,11 @@ PLoop(function(_ENV)
             Error("[System.IO.Resource][Load Fail] %s - %s", path, res)--]]
         end
 
-        __Doc__[[Get the resource's path]]
+        --- Get the resource's path
         __Static__()
         function GetResourcePath(res) return _ResourceMapInfo[res] and _ResourceMapInfo[res].Path end
 
-        __Doc__[[Add the related path for reload checking]]
+        --- Add the related path for reload checking
         __Static__()
         __Arguments__{ NEString, NEString }
         function AddRelatedPath(path, related)
@@ -223,7 +283,7 @@ PLoop(function(_ENV)
             end
         end
 
-        __Doc__[[Mark the path reload when modified]]
+        --- Mark the path reload when modified
         __Static__()
         __Arguments__{ NEString }
         function SetReloadRequired(path)

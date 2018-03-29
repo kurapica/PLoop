@@ -39,6 +39,7 @@ PLoop(function(_ENV)
         validenum           = Enum.ValidateValue,
         validstruct         = Struct.ValidateValue,
         validprop           = Property.Validate,
+        gettemplate         = Class.GetTemplate,
     }
     export { Enum, Struct, Class, Property }
 
@@ -104,8 +105,17 @@ PLoop(function(_ENV)
 
     function isSerializableType(stype)
         if not stype then return false end
-        if _SerializeInfo[stype] then return true end
-        if isenum(stype)      then return true end
+        if _SerializeInfo[stype]then return true end
+        if isenum(stype)        then return true end
+        if isclass(stype)       then
+            local template      = gettemplate(stype)
+            if template and _SerializeInfo[template] then
+                if issealclass(stype) then
+                    regSerializableType(stype)
+                end
+                return true
+            end
+        end
         if not isstruct(stype)then return false end
 
         local category          = getstructcategory(stype)
