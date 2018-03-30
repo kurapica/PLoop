@@ -102,7 +102,7 @@ PLoop(function(_ENV)
         end
 
         --- Create directory if not existed
-        __PipeRead__ (function(dir) return strformat("[ ! -d \"%s\" ] && mkdir -p \"%s\"", dir, dir) end, "", OperationSystemType.MacOS + OperationSystemType.Linux)
+        __PipeRead__ (function(dir) return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\n[ ! -d \"%s\" ] && mkdir -p \"%s\"", dir, dir) end, "", OperationSystemType.MacOS + OperationSystemType.Linux)
         __PipeRead__ (function(dir) return strformat("IF NOT EXIST \"%s\" (mkdir \"%s\")", dir, dir) end, "", OperationSystemType.Windows)
         __Static__()
         function Create(dir)
