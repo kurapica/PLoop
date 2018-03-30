@@ -50,11 +50,9 @@ PLoop(function(_ENV)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
                 local tfmt      = self.TimeFormat
-                self[1]         = tfmt and date and date(tfmt) or ""
-                self[2]         = self.__Prefix[logLvl] or ""
-                self[3]         = select("#", ...) > 0 and strformat(msg, ...) or msg
-
-                msg             = tblconcat(self)
+                msg             = (tfmt and date and date(tfmt) or "") ..
+                                    (self.__Prefix[logLvl] or "") ..
+                                    (select("#", ...) > 0 and strformat(msg, ...) or msg)
 
                 -- Send message to handlers
                 for handler, lvl in pairs(self.__Handler) do

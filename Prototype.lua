@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/29                                               --
--- Version      :   1.0.0-beta005                                           --
+-- Update Date  :   2018/03/30                                               --
+-- Version      :   1.0.0-beta006                                           --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -10587,12 +10587,23 @@ do
                 end
             end;
 
+            --- Get the property default value
+            -- @static
+            -- @method  GetType
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  default                     the default value
+            ["GetDefault"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and clone(info[FLD_PROP_DEFAULT]) or ni
+            end;
+
             --- Get the property type
             -- @static
             -- @method  GetType
             -- @owner   property
             -- @param   target                      the target property
-            -- @pram    type                        the value type
+            -- @return  type                        the value type
             ["GetType"]         = function(self)
                 local info      = _PropertyInfo[self]
                 return info and info[FLD_PROP_TYPE] or nil
@@ -10745,6 +10756,7 @@ do
             ["IsWeak"]          = property.IsWeak;
             ["IsWritable"]      = property.IsWritable;
             ["GetClone"]        = property.GetClone;
+            ["GetDefault"]      = property.GetDefault;
             ["GetType"]         = property.GetType;
             ["SetClone"]        = property.SetClone;
             ["SetIndexer"]      = property.SetIndexer;
@@ -12870,6 +12882,7 @@ do
                                     break
                                 end
                             end
+                            if eidx then break end
                         end
                     end
 
