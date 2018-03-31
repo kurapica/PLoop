@@ -2629,7 +2629,7 @@ do
 
                 -- Check Default
                 if ninfo[FLD_ENUM_DEFAULT] ~= nil then
-                    ninfo[FLD_ENUM_DEFAULT] = enum.ValidateValue(target, ninfo[FLD_ENUM_DEFAULT])
+                    ninfo[FLD_ENUM_DEFAULT] = enum.ValidateValue(target, ninfo[FLD_ENUM_DEFAULT]) or enums[ninfo[FLD_ENUM_DEFAULT]]
                 end
 
                 attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
@@ -11396,6 +11396,7 @@ do
                         local v     = tonumber(val)
 
                         if v then
+                            v       = floor(v)
                             if v == 0 then
                                 if cache[0] then
                                     error(strformat("The %s and %s can't be the same value", k, cache[0]), stack)
@@ -11419,6 +11420,7 @@ do
                             else
                                 error(strformat("The %s's value is not a valid flags value(2^n)", k), stack)
                             end
+                            definition[k] = v
                         else
                             count   = count + 1
                             definition[k]= -1
