@@ -896,7 +896,7 @@ Take the *Frame* widget from the *World of Warcraft* as an example, ignore the o
                     if owner:GetScript(eventname) == nil then
                         owner:SetScript(eventname, function(self, ...)
                             -- Call the delegate directly
-                            delegate(self, ...)
+                            delegate(owner, ...)
                         end)
                     end
                 end
@@ -915,7 +915,7 @@ With the `__EventChangeHandler__` attribute, we can bind a function to the targe
                     if owner:GetScript(eventname) == nil then
                         owner:SetScript(eventname, function(self, ...)
                             -- Call the delegate directly
-                            delegate(self, ...)
+                            delegate(owner, ...)
                         end)
                     end
                 end

@@ -2389,22 +2389,26 @@ do
                 msg         = "the %s must be value of " .. cname
             end
 
-            __Sealed__()
-            local strt      = struct {
-                function (val, onlyvalid)
-                    local _, err = valida(a, val, true)
-                    if not err then return end
-                    _, err = validb(b, val, true)
-                    if not err then return end
-                    return onlyvalid or msg
-                end,
-                __init      = not (isimmua and isimmub and isseala and issealb) and function(val)
-                    local ret, err = valida(a, val)
-                    if not err then return ret end
-                    ret, err = validb(b, val)
-                    if not err then return ret end
-                end or nil,
-            }
+            local strt
+
+            attribute.IndependentCall(function()
+                __Sealed__()
+                strt        = struct {
+                    function (val, onlyvalid)
+                        local _, err = valida(a, val, true)
+                        if not err then return end
+                        _, err = validb(b, val, true)
+                        if not err then return end
+                        return onlyvalid or msg
+                    end,
+                    __init      = not (isimmua and isimmub and isseala and issealb) and function(val)
+                        local ret, err = valida(a, val)
+                        if not err then return ret end
+                        ret, err = validb(b, val)
+                        if not err then return ret end
+                    end or nil,
+                }
+            end)
 
             local comb      = _ValidTypeCombine[a] or newstorage(WEAK_ALL)
             comb[b]         = strt
@@ -2425,12 +2429,14 @@ do
             local sname         = _NSName[self]
             local msg           = sname and ("the %s must be a sub type of " .. sname) or "the %s don't meet the requirement"
 
-            __Sealed__() __Default__(self)
-            _UnmSubTypeMap[self]= struct {
-                function (val, onlyvalid)
-                    return not issubtype(val, self) and (onlyvalid or msg) or nil
-                end
-            }
+            attribute.IndependentCall(function()
+                __Sealed__() __Default__(self)
+                _UnmSubTypeMap[self]= struct {
+                    function (val, onlyvalid)
+                        return not issubtype(val, self) and (onlyvalid or msg) or nil
+                    end
+                }
+            end)
 
             saveNamespaceName(_UnmSubTypeMap[self], sname and ("-" .. sname) or false)
 
