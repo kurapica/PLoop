@@ -630,7 +630,7 @@ do
                 target      = namespace.GetNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path)
                 if not target then
                     target  = prototype.NewProxy(ptype)
-                    namespace.SaveNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path, target, stack + 2)
+                    namespace.SaveNamespace(full and ROOT_NAMESPACE or namespace.GetNamespaceForNext() or environment.GetNamespace(visitor or env), path, target, stack + 2)
                 end
 
                 if not nType.Validate(target) then
@@ -2099,6 +2099,7 @@ do
                                     or  newstorage(WEAK_KEY)
     local _ValidTypeCombine     = newstorage(WEAK_KEY)
     local _UnmSubTypeMap        = newstorage(WEAK_ALL)
+    local _NextNSForType
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -2196,6 +2197,17 @@ do
             ["GetNamespaceName"]= function(ns, onlyLast)
                 local name = _NSName[ns]
                 return name and (onlyLast and strmatch(name, "[%P_]+$") or name) or "Anonymous"
+            end;
+
+            --- Get the namespace for next generated type
+            -- @static
+            -- @method  GetNamespaceForNext
+            -- @owner   namespace
+            -- @return  namesapce                   the namespace for next generated type
+            ["GetNamespaceForNext"] = function()
+                local ns = _NextNSForType
+                _NextNSForType = nil
+                return ns
             end;
 
             --- Whether the target is anonymous namespace
@@ -2300,6 +2312,21 @@ do
                 saveNamespaceName(feature, false)
             end;
 
+            --- Set the namespace for next generated type
+            -- @static
+            -- @method  GetNamespaceForNext
+            -- @owner   namespace
+            -- @param   namesapce                   the namespace for next generated type
+            -- @param   stack                       the stack level
+            ["SetNamespaceForNext"] = function(name, stack)
+                local ns        = namespace.Validate(name)
+                if not ns and type(name) == "string" then
+                    ns = prototype.NewProxy(tnamespace)
+                    namespace.SaveNamespace(name, ns, parsestack(stack) + 1)
+                end
+                _NextNSForType  = ns
+            end;
+
             --- Whether the target is a namespace
             -- @static
             -- @method  Validate
@@ -2367,7 +2394,7 @@ do
             if comb then return comb end
 
             local valida    = getprototypemethod(a, "ValidateValue")
-            local validb    = getprototypemethod(a, "ValidateValue")
+            local validb    = getprototypemethod(b, "ValidateValue")
 
             if not valida or not validb then
                 error("the both value of the addition must be validation type", 2)
@@ -7539,6 +7566,7 @@ do
             -- @param   name                        the interface's method, meta-method or feature
             -- @param   stack                       the stack level
             ["SetAbstract"]     = function(target, name, stack)
+                if type(name)  == "number" then name, stack = nil, name end
                 local msg, stack= setPriority(target, name, INRT_PRIORITY_ABSTRACT, stack)
                 if msg then error("Usage: interface.SetAbstract(target, name[, stack]) - " .. msg, stack + 1) end
             end;
@@ -8222,7 +8250,7 @@ do
                     if msg then error("Usage: class.SetAbstract(target, name[, stack]) - " .. msg, stack + 1) end
                 else
                     stack = name
-                    setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack)
+                    setModifiedFlag(class, target, MOD_ABSTRACT_CLS, "SetAbstract", stack + 1)
                 end
             end;
 
@@ -11509,6 +11537,18 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Set the namespace for next generated type
+    --
+    -- @attribute   System.__Namespace__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Namespace__",     prototype {
+        __call = function(self, value)
+            namespace.SetNamespaceForNext(value)
+        end,
+        __index = writeOnly, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the class's objects so access non-existent fields on them will
     -- be denied
     --
@@ -11847,7 +11887,7 @@ do
     __Sealed__() struct "System.Callable"           { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
 
     --- Represents the variable types for arguments or return values
-    __Sealed__() Variable = struct "System.Variable" (function(_ENV)
+    __Sealed__() Variable = struct "System.Variable"(function(_ENV)
         export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue }
 
         --- the variable's name
@@ -11960,6 +12000,41 @@ do
             end
         end,
     }
+
+    --- Represents guid
+    __Sealed__() struct "System.Guid"               (function(_ENV)
+        if _G.os and os.time then math.randomseed(os.time()) end
+
+        export {
+            random              = math.random,
+            strmatch            = string.match,
+            strformat           = string.format,
+            strgsub             = string.gsub,
+            type                = type,
+        }
+
+        local GUID_TEMPLTE = [[xx-x-x-x-xxx]]
+        local GUID_FORMAT = "^" .. GUID_TEMPLTE:gsub("x", "%%x%%x%%x%%x"):gsub("%-", "%%-") .. "$"
+
+        local function GenerateGUIDPart(v) return strformat("%04X", random(0xffff)) end
+
+        -----------------------------------------------------------
+        --                     static method                     --
+        -----------------------------------------------------------
+        --- Generate a new guid
+        __Static__() function New()
+            return (strgsub(GUID_TEMPLTE, "x", GenerateGUIDPart))
+        end
+
+        -----------------------------------------------------------
+        --                       validator                       --
+        -----------------------------------------------------------
+        function Guid(value, onlyvalid)
+            if type(value) ~= "string" or #value ~= 36 or not strmatch(value, GUID_FORMAT) then
+                return onlyvalid or "the %s must be a string like 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX'"
+            end
+        end
+    end)
 
     -----------------------------------------------------------------------
     --                             interface                             --

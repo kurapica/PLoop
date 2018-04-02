@@ -7,6 +7,7 @@ require "PLoop.System.IO.File"
 require "PLoop.System.IO.FileWriter"
 require "PLoop.System.IO.FileReader"
 
--- System.IO.ResourceLoader
-require "PLoop.System.IO.ResourceLoader"
-require "PLoop.System.IO.ResourceLoader.LuaLoader"
+-- System.IO.Resource
+require "PLoop.System.IO.Resource.IResourceLoader"
+require "PLoop.System.IO.Resource.IResourceManager"
+require "PLoop.System.IO.Resource.LuaLoader"

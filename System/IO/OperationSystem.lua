@@ -76,6 +76,8 @@ PLoop(function(_ENV)
             popen                   = _G.io.popen,
             ftype                   = _G.io.type,
             loadsnippet             = Toolset.loadsnippet,
+
+            Enum, OperationSystem,
         }
 
         _PipeFunc = [[

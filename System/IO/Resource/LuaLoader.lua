@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                    System.IO.ResourceLoader.LuaLoader                     --
+--                        System.IO.Resource.LuaLoader                        --
 --                                                                           --
 --===========================================================================--
 
@@ -13,9 +13,9 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    __Sealed__() System.IO.__ResourceLoader__"lua"
-    class "System.IO.ResourceLoader.LuaLoader" (function (_ENV)
-        inherit (System.IO.ResourceLoader)
+    __Sealed__() System.IO.Resource.__ResourceLoader__"lua"
+    class "System.IO.Resource.LuaLoader" (function (_ENV)
+        extend (System.IO.Resource.IResourceLoader)
 
         export {
             pairs               = pairs,
