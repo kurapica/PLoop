@@ -29,6 +29,9 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceLoader.LoadResource,
             isanonymous         = Namespace.IsAnonymousNamespace,
 
+            TryRunWithLock      = ILockManager.TryRunWithLock,
+            RunWithLock         = ILockManager.RunWithLock,
+
             IResourceManager,
         }
 
@@ -100,15 +103,15 @@ PLoop(function(_ENV)
                 local path      = self.resourcePath
                 local ok, res
                 if self.resource then
-                    ok, res     = IResourceManager.Manager.TryLock(loadresource, path)
-                    if not ok then
-                        res = self.resource
+                    res         = TryRunWithLock("PLOOP_IRESOURCE_MANAGER", loadresource, path)
+                    if not res then
+                        res     = self.resource
                     else
                         Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
                         if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                     end
                 else
-                    res         = IResourceManager.Manager.Lock(loadresource, path)
+                    res         = RunWithLock("PLOOP_IRESOURCE_MANAGER", loadresource, path)
                     Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
                     if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                 end
@@ -211,19 +214,6 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        --- Run the target function with a global lock
-        -- @param   func                the process
-        -- @param   ...                 the process's arguments
-        -- @return  result              the process's result
-        __Abstract__() function Lock(func, ...) return func(...) end
-
-        --- Try run tthe target function with a global lock, the same lock like Lock method
-        -- @param   func                the process
-        -- @param   ...                 the process's arguments
-        -- @return  boolean             true if locked and processed
-        -- @return  result              the process's result
-        __Abstract__() function TryLock(func, ...) return true, func(...) end
-
         --- Get the resource last modified time
         __Abstract__() GetLastWriteTime = IO.File.GetLastWriteTime
 
