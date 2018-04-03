@@ -21,6 +21,7 @@ PLoop(function(_ENV)
             tostring            = tostring,
             rawget              = rawget,
             safeset             = Toolset.safeset,
+            pairs               = pairs,
 
             Trace               = Logger.Default[Logger.LogLevel.Trace],
             Debug               = Logger.Default[Logger.LogLevel.Debug],

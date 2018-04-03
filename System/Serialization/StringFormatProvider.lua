@@ -25,6 +25,8 @@ PLoop(function(_ENV)
         loadsnippet             = Toolset.loadsnippet,
         validnamespace          = Namespace.Validate,
         isanonymous             = Namespace.IsAnonymousNamespace,
+
+        Serialization,
     }
 
     -----------------------------------------------------------------------
@@ -227,6 +229,10 @@ PLoop(function(_ENV)
         inherit "FormatProvider"
 
         export {
+            tinsert                         = tinsert,
+            tblconcat                       = tblconcat,
+            loadsnippet                     = Toolset.loadsnippet,
+            type                            = type,
             SerializeDataWithWriter         = SerializeDataWithWriter,
             SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
             SerializeDataWithWrite          = SerializeDataWithWrite,
