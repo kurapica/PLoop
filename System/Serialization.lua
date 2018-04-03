@@ -355,6 +355,7 @@ PLoop(function(_ENV)
             serialize           = serialize,
             deserialize         = deserialize,
             error               = error,
+            type                = type,
         }
 
         export { AttributeTargets, StructCategory, Struct }

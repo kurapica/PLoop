@@ -24,6 +24,7 @@ PLoop(function(_ENV)
             getname             = Namespace.GetNamespaceName,
             require             = _G.require,
             loadfile            = _G.loadfile,
+            pcall               = pcall,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
             Runtime,

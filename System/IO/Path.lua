@@ -94,5 +94,11 @@ PLoop(function(_ENV)
         --- Get the file name without the suffix
         __Static__()
         function GetFileNameWithoutSuffix(path) return (strgsub(GetFileName(path), "%.[^%.]*$", "")) end
+
+        export {
+            GetFileName         = Path.GetFileName,
+            GetDirectory        = Path.GetDirectory,
+            GetPathRoot         = Path.GetPathRoot,
+        }
     end)
 end)

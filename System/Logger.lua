@@ -27,6 +27,7 @@ PLoop(function(_ENV)
             strformat           = string.format,
             tblconcat           = table.concat,
             rawset              = rawset,
+            pcall               = pcall,
         }
 
         export { Logger }

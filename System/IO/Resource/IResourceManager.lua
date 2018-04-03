@@ -18,6 +18,7 @@ PLoop(function(_ENV)
     __Sealed__() interface "System.IO.Resource.IResourceManager" (function(_ENV)
 
         export {
+            tostring            = tostring,
             rawget              = rawget,
             safeset             = Toolset.safeset,
 
