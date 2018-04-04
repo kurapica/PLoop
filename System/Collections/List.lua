@@ -80,17 +80,17 @@ PLoop(function(_ENV)
         __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
         function __new(_, iter, obj, idx)
             local i     = 1
-            local obj   = {}
+            local lst   = {}
             for key, item in iter, obj, idx do
                 if item ~= nil then
-                    obj[i]  = item
+                    lst[i]  = item
                     i   = i + 1
                 else
-                    obj[i]  = key
+                    lst[i]  = key
                     i   = i + 1
                 end
             end
-            return obj, true
+            return lst, true
         end
 
         __Arguments__{ NaturalNumber, Callable }
