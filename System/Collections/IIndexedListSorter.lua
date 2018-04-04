@@ -22,6 +22,7 @@ PLoop(function(_ENV)
         random                  = math.random,
         tinsert                 = table.insert,
         tremove                 = table.remove,
+        tsort                   = table.sort,
         pcall                   = pcall,
         assert                  = assert,
     }
@@ -589,7 +590,7 @@ PLoop(function(_ENV)
     --- Apply default sort on the indexed list
     __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
     function IIndexedList:Sort(func, start, stop)
-        if start == 1 and (stop == -1 or stop == self.Count) then table.sort(self, func) return self end
+        if start == 1 and (stop == -1 or stop == self.Count) then tsort(self, func) return self end
         return self:TimSort(func, start, stop)
     end
 end)
