@@ -2,14 +2,14 @@
 local root = require "PLoop.Prototype"
 
 -- System
+require "PLoop.System.Text"
+require "PLoop.System.IO.TextAccessor"
+require "PLoop.System.Serialization"
 require "PLoop.System.Date"
 require "PLoop.System.Logger"
 require "PLoop.System.Collections"
 require "PLoop.System.Recycle"
 require "PLoop.System.Threading"
-require "PLoop.System.Text"
-require "PLoop.System.IO.TextAccessor"
-require "PLoop.System.Serialization"
 
 -- System.Collections
 require "PLoop.System.Collections.List"

@@ -245,9 +245,9 @@ PLoop(function(_ENV)
 
     function deserialize(storage, otype)
         if type(storage) == "table" then
-            local dtype = storage[SerializationInfo.ObjectTypeField]
+            local dtype = storage[Serialization.ObjectTypeField]
             if dtype ~= nil then
-                storage[SerializationInfo.ObjectTypeField] = nil
+                storage[Serialization.ObjectTypeField] = nil
 
                 dtype   = getnamespace(dtype)
 

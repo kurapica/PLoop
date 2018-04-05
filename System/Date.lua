@@ -15,6 +15,8 @@
 PLoop(function(_ENV)
     namespace "System"
 
+    import "System.Serialization"
+
     export { strfind = string.find, strgmatch = string.gmatch }
 
     ALLOW_TIMEFORMAT = { a = true, A = true, b = true, B = true, c = true, C = true, d = true, D = true, e = true, F = true, g = true, G = true, h = true, H = true, I = true, j = true, m = true, M = true, n = true, p = true, r = true, R = true, S = true, t = true, T = true, u = true, U = true, V = true, w = true, W = true, x = true, X = true, y = true, Y = true, z = true, Z = true }
@@ -42,9 +44,9 @@ PLoop(function(_ENV)
     if not _G.os then return end
 
     --- Represents the date object
-    __Final__() __Sealed__()
+    __Final__() __Sealed__() __Serializable__()
     class "Date" (function (_ENV)
-        extend "ICloneable"
+        extend "ICloneable" "ISerializable"
 
         export {
             date        = os.date,
@@ -103,6 +105,11 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        --- Serialize the date
+        function Serialize(self, info)
+            info:SetValue("time", self.Time)
+        end
+
         --- Return the diff second for the two Date object
         __Arguments__{ Date }
         function Diff(self, obj) return diff(self.time, obj.time) end
@@ -164,17 +171,24 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{ SerializationInfo }
+        function __new(_, info)
+            local self = { time = info:GetValue("time") or 0 }
+            r4Time(self)
+            return self, true
+        end
+
+        __Arguments__{ RawTable }
         function __new(_, time)
-            if type(time) == "table" and getmetatable(time) == nil then
-                -- No more check
-                return time, true
-            end
+            -- No more check
+            return time, true
         end
 
         __Arguments__{ Variable("time", Integer, true) }
-        function Date(self, tm)
-            self.time = tm or time()
-            return r4Time(self)
+        function __new(_, tm)
+            local self = { time = tm or time() }
+            r4Time(self)
+            return self, true
         end
 
         __Arguments__{
@@ -186,16 +200,20 @@ PLoop(function(_ENV)
             Variable("sec",   Integer, true, 0),
             Variable("utc",   Boolean, true, false)
         }
-        function Date(self, year, month, day, hour, min, sec, utc)
-            self.year = year
-            self.month = month
-            self.day = day
-            self.hour = hour
-            self.min = min
-            self.sec = utc and (sec + offset) or sec
+        function __new(_, year, month, day, hour, min, sec, utc)
+            local self  = {
+                year    = year,
+                month   = month,
+                day     = day,
+                hour    = hour,
+                min     = min,
+                sec     = utc and (sec + offset) or sec,
+            }
 
             r2Time(self)
             r4Time(self)
+
+            return self, true
         end
 
         ------------------------------------
