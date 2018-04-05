@@ -41,17 +41,15 @@ PLoop(function(_ENV)
         end
     }
 
-    if not _G.os then return end
-
     --- Represents the date object
     __Final__() __Sealed__() __Serializable__()
     class "Date" (function (_ENV)
         extend "ICloneable" "ISerializable"
 
         export {
-            date        = os.date,
-            time        = os.time,
-            diff        = os.difftime,
+            date        = _G.os and os.date or _G.date,
+            time        = _G.os and os.time or _G.time,
+            diff        = _G.os and os.difftime or _G.difftime,
             pairs       = pairs,
             type        = type,
             getmetatable= getmetatable,
