@@ -215,10 +215,10 @@ PLoop(function(_ENV)
                     context[ILockManager][key] = nil
                 end
 
-                local ok, err = manager:Release(obj)
+                local ok, err = manager:Release(obj, key)
 
                 if not ok then
-                    return error("Usage: ILockManager:Release(key) - Release key failed:" .. tostring(err))
+                    return error("Usage: ILockManager:Release(lockobj, key) - Release key failed:" .. tostring(err))
                 end
 
                 return ...
@@ -306,9 +306,10 @@ PLoop(function(_ENV)
 
             --- Release the lock object
             -- @param   object              the lock object
+            -- @param   key                 the lock key
             -- @return  bool                true if released
             -- @return  message             the error message if failed
-            __Abstract__() function Release(self, obj)
+            __Abstract__() function Release(self, obj, key)
                 return true
             end
 
