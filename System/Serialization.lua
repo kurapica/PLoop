@@ -502,6 +502,8 @@ PLoop(function(_ENV)
     regSerializableType(NEString)
     regSerializableType(Integer)
     regSerializableType(NaturalNumber)
+    regSerializableType(NegativeInteger)
+    regSerializableType(Guid)
 
     export { Serialization, Serialization.SerializationInfo, Serialization.ISerializable }
 end)
