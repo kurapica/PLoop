@@ -627,10 +627,11 @@ do
             if type(target) == "string" then
                 local path  = target
                 local full  = path:find("[^%P_]+")
-                target      = namespace.GetNamespace(full and ROOT_NAMESPACE or environment.GetNamespace(visitor or env), path)
+                local root  = full and ROOT_NAMESPACE or namespace.GetNamespaceForNext() or environment.GetNamespace(visitor or env)
+                target      = namespace.GetNamespace(root, path)
                 if not target then
                     target  = prototype.NewProxy(ptype)
-                    namespace.SaveNamespace(full and ROOT_NAMESPACE or namespace.GetNamespaceForNext() or environment.GetNamespace(visitor or env), path, target, stack + 2)
+                    namespace.SaveNamespace(root, path, target, stack + 2)
                 end
 
                 if not nType.Validate(target) then
