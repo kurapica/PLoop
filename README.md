@@ -24,15 +24,15 @@ to load the **PLoop**. If you need to load files by yourself, you could check th
 
 The common use of collections is **List** and **Dictionary** classes, here is a sample of **List**:
 
-        ```lua
-        require "PLoop"
+```lua
+require "PLoop"
 
-        PLoop(function(_ENV)
+PLoop(function(_ENV)
 
-            List(10):Each(print)
+    List(10):Each(print)
 
-        end)
-        ```
+end)
+```
 
 The example will create a list with 1-10 numbers and then print each of them.
 
