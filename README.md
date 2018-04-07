@@ -284,198 +284,197 @@ The structures are types for basic and complex organized datas and also the data
 
 i. **Custom**  The basic data types like number, string and more advanced types like nature number. Take the *Number* as an example:
 
-```lua
-PLoop(function(_ENV)
-    struct "Number" (function(_ENV)
-        function Number(value)
-            return type(value) ~= "number" and "the %s must be number, got " .. type(value)
+    ```lua
+    PLoop(function(_ENV)
+        struct "Number" (function(_ENV)
+            function Number(value)
+                return type(value) ~= "number" and "the %s must be number, got " .. type(value)
+            end
+        end)
+
+        v = Number(true)  -- Error : the value must be number, got boolean
+    end)
+    ```
+
+    Unlike the enumeration, the structure's definition is a little complex, the definition body is a function with `_ENV` as its first parameter, the pattern is designed to make sure the **PLoop** works with Lua 5.1 and all above versions. The code in the body function will be processed in a private context used to define the struct.
+
+    The function with the struct's name is the validator, also you can use `__valid` instead of the struct's name(there are anonymous structs). The validator would be called with the target value, if the return value is non-false, that means the target value can't pass the validation, normally the return value should be an error message, the `%s` in the message'll be replaced by words based on where it's used, if the return value is true, the system would generte the error message for it.
+
+    If the struct has only the validator, it's an immutable struct that won't modify the validated value. We also need mutable struct like AnyBool :
+
+    ```lua
+    struct "AnyBool" (function(_ENV)
+        function __init(value)
+            return value and true or fale
         end
     end)
 
-    v = Number(true)  -- Error : the value must be number, got boolean
-end)
-```
+    print(AnyBool(1))  -- true
+    ```
 
-Unlike the enumeration, the structure's definition is a little complex, the definition body is a function with `_ENV` as its first parameter, the pattern is designed to make sure the **PLoop** works with Lua 5.1 and all above versions. The code in the body function will be processed in a private context used to define the struct.
+    The function named `__init` is the initializer, it's used to modify the target value, if the return value is non-nil, it'll be used as the new value.
 
-The function with the struct's name is the validator, also you can use `__valid` instead of the struct's name(there are anonymous structs). The validator would be called with the target value, if the return value is non-false, that means the target value can't pass the validation, normally the return value should be an error message, the `%s` in the message'll be replaced by words based on where it's used, if the return value is true, the system would generte the error message for it.
+    The struct can have one base struct so it will inherit the base struct's validator and initializer, the base struct's validator and initializer should be called before the struct's own:
 
-If the struct has only the validator, it's an immutable struct that won't modify the validated value. We also need mutable struct like AnyBool :
+    ```lua
+    struct "Integer" (function(_ENV)
+        __base = Number
 
-```lua
-struct "AnyBool" (function(_ENV)
-    function __init(value)
-        return value and true or fale
-    end
-end)
+        local floor = math.floor
 
-print(AnyBool(1))  -- true
-```
+        function Integer(value)
+            return floor(value) ~= value and "the %s must be integer"
+        end
+    end)
 
-The function named `__init` is the initializer, it's used to modify the target value, if the return value is non-nil, it'll be used as the new value.
+    v = Integer(true)  -- Error : the value must be number, got boolean
+    v = Integer(1.23)  -- Error : the value must be integer
+    ```
 
-The struct can have one base struct so it will inherit the base struct's validator and initializer, the base struct's validator and initializer should be called before the struct's own:
+    There system have provide many fundamental custom struct types like :
 
-```lua
-struct "Integer" (function(_ENV)
-    __base = Number
-
-    local floor = math.floor
-
-    function Integer(value)
-        return floor(value) ~= value and "the %s must be integer"
-    end
-end)
-
-v = Integer(true)  -- Error : the value must be number, got boolean
-v = Integer(1.23)  -- Error : the value must be integer
-```
-
-There system have provide many fundamental custom struct types like :
-
-:-|:-
-**System.Any**                |represents any value
-**System.Boolean**            |represents boolean value
-**System.String**             |represents string value
-**System.Number**             |represents number value
-**System.Function**           |represents function value
-**System.Table**              |represents table value
-**System.Userdata**           |represents userdata value
-**System.Thread**             |represents thread value
-**System.AnyBool**            |represents anybool value
-**System.NEString**           |represents nestring value
-**System.RawTable**           |represents rawtable value
-**System.Integer**            |represents integer value
-**System.NaturalNumber**      |represents natural number value
-**System.NegativeInteger**    |represents negative interger value
-**System.NamespaceType**      |represents namespace type
-**System.EnumType**           |represents enum type
-**System.StructType**         |represents struct type
-**System.InterfaceType**      |represents interface type
-**System.ClassType**          |represents class type
-**System.AnyType**            |represents any validation type
-**System.Lambda**             |represents lambda value
-**System.Callable**           |represents callable value, like function, callable objecct, lambda
-**System.Variable**           |represents variable
-**System.Variables**          |represents variables
+    :-----------------------------|:-----------------------------
+    **System.Any**                |represents any value
+    **System.Boolean**            |represents boolean value
+    **System.String**             |represents string value
+    **System.Number**             |represents number value
+    **System.Function**           |represents function value
+    **System.Table**              |represents table value
+    **System.Userdata**           |represents userdata value
+    **System.Thread**             |represents thread value
+    **System.AnyBool**            |represents anybool value
+    **System.NEString**           |represents nestring value
+    **System.RawTable**           |represents rawtable value
+    **System.Integer**            |represents integer value
+    **System.NaturalNumber**      |represents natural number value
+    **System.NegativeInteger**    |represents negative interger value
+    **System.NamespaceType**      |represents namespace type
+    **System.EnumType**           |represents enum type
+    **System.StructType**         |represents struct type
+    **System.InterfaceType**      |represents interface type
+    **System.ClassType**          |represents class type
+    **System.AnyType**            |represents any validation type
+    **System.Lambda**             |represents lambda value
+    **System.Callable**           |represents callable value, like function, callable objecct, lambda
+    **System.Variable**           |represents variable
+    **System.Variables**          |represents variables
 
 
 ii. **Member**  The member structure represent tables with fixed fields of certain types. Take an example to start:
 
-```lua
-struct "Location" (function(_ENV)
-    x = Number
-    y = Number
-end)
+    ```lua
+    struct "Location" (function(_ENV)
+        x = Number
+        y = Number
+    end)
 
-loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
-loc = Location(100, 20)
-print(loc.x, loc.y)          -- 100  20
-```
+    loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
+    loc = Location(100, 20)
+    print(loc.x, loc.y)          -- 100  20
+    ```
 
-The member sturt can also be used as value constructor(and only the member struct can be used as constructor), the argument order is the same order as the declaration of it members.
+    The member sturt can also be used as value constructor(and only the member struct can be used as constructor), the argument order is the same order as the declaration of it members.
 
-The `x = Number` is the simplest way to declare a member to the struct, but there are other details to be filled in, here is the formal version:
+    The `x = Number` is the simplest way to declare a member to the struct, but there are other details to be filled in, here is the formal version:
 
-```lua
-struct "Location" (function(_ENV)
-    member "x" { type = Number, require = true }
-    member "y" { type = Number, default = 0    }
-end)
+    ```lua
+    struct "Location" (function(_ENV)
+        member "x" { type = Number, require = true }
+        member "y" { type = Number, default = 0    }
+    end)
 
-loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
-loc = Location(100)
-print(loc.x, loc.y)         -- 100  0
-```
+    loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
+    loc = Location(100)
+    print(loc.x, loc.y)         -- 100  0
+    ```
 
-The member is a keyword can only be used in the definition body of a struct, it need a member name and a table contains several settings(the field is case ignored) for the member:
+    The member is a keyword can only be used in the definition body of a struct, it need a member name and a table contains several settings(the field is case ignored) for the member:
 
-:-|:-
-**type**      |The member's type, it could be any enum, struct, class or interface, also could be 3rd party types that follow rules.
-**require**   |Whether the member can't be nil.
-**default**   |The default value of the member.
+    * **type**      - The member's type, it could be any enum, struct, class or interface, also could be 3rd party types that follow rules.
+    * **require**   - Whether the member can't be nil.
+    * **default**   - The default value of the member.
 
-The member struct also support the validator and initializer :
+    The member struct also support the validator and initializer :
 
-```lua
-struct "MinMax" (function(_ENV)
-    member "min" { Type = Number, Require = true }
-    member "max" { Type = Number, Require = true }
+    ```lua
+    struct "MinMax" (function(_ENV)
+        member "min" { Type = Number, Require = true }
+        member "max" { Type = Number, Require = true }
 
-    function MinMax(val)
-        return val.min > val.max and "%s.min can't be greater than %s.max"
-    end
-end)
+        function MinMax(val)
+            return val.min > val.max and "%s.min can't be greater than %s.max"
+        end
+    end)
 
-v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
-```
+    v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
+    ```
 
-Since the member struct's value are tables, we also can define struct methods that would be saved to those values:
+    Since the member struct's value are tables, we also can define struct methods that would be saved to those values:
 
-```lua
-struct "Location" (function(_ENV)
-    member "x" { Type = Number, Require = true }
-    member "y" { Type = Number, Default = 0    }
+    ```lua
+    struct "Location" (function(_ENV)
+        member "x" { Type = Number, Require = true }
+        member "y" { Type = Number, Default = 0    }
 
-    function GetRange(val)
-        return math.sqrt(val.x^2 + val.y^2)
-    end
-end)
+        function GetRange(val)
+            return math.sqrt(val.x^2 + val.y^2)
+        end
+    end)
 
-print(Location(3, 4):GetRange()) -- 5
-```
+    print(Location(3, 4):GetRange()) -- 5
+    ```
 
-We can also declare static methods that can only be used by the struct itself(also for the custom struct):
+    We can also declare static methods that can only be used by the struct itself(also for the custom struct):
 
-```lua
-struct "Location" (function(_ENV)
-    member "x" { Type = Number, Require = true }
-    member "y" { Type = Number, Default = 0    }
+    ```lua
+    struct "Location" (function(_ENV)
+        member "x" { Type = Number, Require = true }
+        member "y" { Type = Number, Default = 0    }
 
-    __Static__()
-    function GetRange(val)
-        return math.sqrt(val.x^2 + val.y^2)
-    end
-end)
+        __Static__()
+        function GetRange(val)
+            return math.sqrt(val.x^2 + val.y^2)
+        end
+    end)
 
-print(Location.GetRange{x = 3, y = 4}) -- 5
-```
+    print(Location.GetRange{x = 3, y = 4}) -- 5
+    ```
 
-The `__Static__` is an attribute, it's used here to declare the next defined method is a static one.
+    The `__Static__` is an attribute, it's used here to declare the next defined method is a static one.
 
-In the example, we declare the default value of the member in the member's definition, but we also can provide the default value in the custom struct like :
+    In the example, we declare the default value of the member in the member's definition, but we also can provide the default value in the custom struct like :
 
-```lua
-struct "Number" (function(_ENV)
-    __default = 0
+    ```lua
+    struct "Number" (function(_ENV)
+        __default = 0
 
-    function Number(value)
-        return type(value) ~= "number" and "the %s must be number"
-    end
-end)
+        function Number(value)
+            return type(value) ~= "number" and "the %s must be number"
+        end
+    end)
 
-struct "Location" (function(_ENV)
-    x = Number
-    y = Number
-end)
+    struct "Location" (function(_ENV)
+        x = Number
+        y = Number
+    end)
 
-loc = Location()
-print(loc.x, loc.y)         -- 0    0
-```
+    loc = Location()
+    print(loc.x, loc.y)         -- 0    0
+    ```
 
-The member struct can also have base struct, it will inherit members, non-static methods, validator and initializer, but it's not recommended.
+    The member struct can also have base struct, it will inherit members, non-static methods, validator and initializer, but it's not recommended.
 
 iii. **Array**  The array structure represent tables that contains a list of same type items. Here is an example to declare an array:
 
-```lua
-struct "Locations" (function(_ENV)
-    __array = Location
-end)
+    ```lua
+    struct "Locations" (function(_ENV)
+        __array = Location
+    end)
 
-v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
-```
+    v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
+    ```
 
-The array structure also support methods, static methods, base struct, validator and initializer.
+    The array structure also support methods, static methods, base struct, validator and initializer.
 
 
 To simplify the definition of the struct, table can be used instead of the function as the definition body.
@@ -554,261 +553,261 @@ A class can be defined within several parts:
 
 i. **Method**   The methods are functions that be used by the classes and their objects. Take an example :
 
-```lua
-class "Person" (function(_ENV)
-    function SetName(self, name)
-        self.name = name
-    end
+    ```lua
+    class "Person" (function(_ENV)
+        function SetName(self, name)
+            self.name = name
+        end
 
-    function GetName(self, name)
-        return self.name
-    end
-end)
+        function GetName(self, name)
+            return self.name
+        end
+    end)
 
-Ann = Person()
-Ann:SetName("Ann")
-print("Hello " .. Ann:GetName()) -- Hello Ann
-```
+    Ann = Person()
+    Ann:SetName("Ann")
+    print("Hello " .. Ann:GetName()) -- Hello Ann
+    ```
 
-Like the struct, the definition body of the class _Person_ also should be a function with `_ENV` as its first parameter. In the definition, the global delcared functions will be registered as the class's method. Those functions should use _self_ as the first parameter to receive the objects.
+    Like the struct, the definition body of the class _Person_ also should be a function with `_ENV` as its first parameter. In the definition, the global delcared functions will be registered as the class's method. Those functions should use _self_ as the first parameter to receive the objects.
 
-When the definition is done, the class object's meta-table is auto-generated based on the class's definition layout. For the _Person_ class, it should be
+    When the definition is done, the class object's meta-table is auto-generated based on the class's definition layout. For the _Person_ class, it should be
 
-```lua
-{
-    __index = { SetName = function, GetName = function },
-    __metatable = Person,
-}
-```
+    ```lua
+    {
+        __index = { SetName = function, GetName = function },
+        __metatable = Person,
+    }
+    ```
 
-The class can access the object method directly, and also could have their own method - static method:
+    The class can access the object method directly, and also could have their own method - static method:
 
-```lua
-class "Color" (function(_ENV)
-    __Static__()
-    function FromRGB(r, g, b)
-        -- The object construct will be talked later
-        return Color {r = r, g = g, b = b}
-    end
-end)
+    ```lua
+    class "Color" (function(_ENV)
+        __Static__()
+        function FromRGB(r, g, b)
+            -- The object construct will be talked later
+            return Color {r = r, g = g, b = b}
+        end
+    end)
 
-c = Color.FromRGB(1, 0, 1)
-print(c.r, c.g, c.b)
-```
+    c = Color.FromRGB(1, 0, 1)
+    print(c.r, c.g, c.b)
+    ```
 
-The static method don't use _self_ as the first parameter since it's used by the class itself not its objects.
+    The static method don't use _self_ as the first parameter since it's used by the class itself not its objects.
 
 ii. **Meta-data**    The meta-data is a superset of the Lua's meta-method:
 
-:-|:-
-`__add`        |the addition operation:             a + b  -- a is the object, also for the below operations
-`__sub`        |the subtraction operation:          a - b
-`__mul`        |the multiplication operation:       a * b
-`__div`        |the division operation:             a / b
-`__mod`        |the modulo operation:               a % b
-`__pow`        |the exponentiation operation:       a ^ b
-`__unm`        |the negation operation:             - a
-`__idiv`       |the floor division operation:       a // b
-`__band`       |the bitwise AND operation:          a & b
-`__bor`        |the bitwise OR operation:           a | b
-`__bxor`       |the bitwise exclusive OR operation: a~b
-`__bnot`       |the bitwise NOToperation:           ~a
-`__shl`        |the bitwise left shift operation:   a<<b
-`__shr`        |the bitwise right shift operation:  a>>b
-`__concat`     |the concatenation operation:        a..b
-`__len`        |the length operation:               #a
-`__eq`         |the equal operation:                a == b
-`__lt`         |the less than operation:            a < b
-`__le`         |the less equal operation:           a <= b
-`__index`      |the indexing access:                return a[k]
-`__newindex`   |the indexing assignment:            a[k] = v
-`__call`       |the call operation:                 a(...)
-`__gc`         |the garbage-collection
-`__tostring`   |the convert to string operation:    tostring(a)
-`__ipairs`     |the ipairs iterator:                ipairs(a)
-`__pairs`      |the pairs iterator:                 pairs(a)
-`__exist`      |the object existence checker
-`__field`      |the init object fields, must be a table
-`__new`        |the function used to generate the table that'd be converted to an object
-`__ctor`       |the object constructor
-`__dtor`       |the object destructor
+    :--------------|:--------------------
+    `__add`        |the addition operation:             a + b  -- a is the object, also for the below operations
+    `__sub`        |the subtraction operation:          a - b
+    `__mul`        |the multiplication operation:       a * b
+    `__div`        |the division operation:             a / b
+    `__mod`        |the modulo operation:               a % b
+    `__pow`        |the exponentiation operation:       a ^ b
+    `__unm`        |the negation operation:             - a
+    `__idiv`       |the floor division operation:       a // b
+    `__band`       |the bitwise AND operation:          a & b
+    `__bor`        |the bitwise OR operation:           a | b
+    `__bxor`       |the bitwise exclusive OR operation: a~b
+    `__bnot`       |the bitwise NOToperation:           ~a
+    `__shl`        |the bitwise left shift operation:   a<<b
+    `__shr`        |the bitwise right shift operation:  a>>b
+    `__concat`     |the concatenation operation:        a..b
+    `__len`        |the length operation:               #a
+    `__eq`         |the equal operation:                a == b
+    `__lt`         |the less than operation:            a < b
+    `__le`         |the less equal operation:           a <= b
+    `__index`      |the indexing access:                return a[k]
+    `__newindex`   |the indexing assignment:            a[k] = v
+    `__call`       |the call operation:                 a(...)
+    `__gc`         |the garbage-collection
+    `__tostring`   |the convert to string operation:    tostring(a)
+    `__ipairs`     |the ipairs iterator:                ipairs(a)
+    `__pairs`      |the pairs iterator:                 pairs(a)
+    `__exist`      |the object existence checker
+    `__field`      |the init object fields, must be a table
+    `__new`        |the function used to generate the table that'd be converted to an object
+    `__ctor`       |the object constructor
+    `__dtor`       |the object destructor
 
- There are several PLoop special meta-data, here are examples :
+     There are several PLoop special meta-data, here are examples :
 
-```lua
-class "Person" (function(_ENV)
-    __ExistPerson = {}
+    ```lua
+    class "Person" (function(_ENV)
+        __ExistPerson = {}
 
-    -- The Constructor
-    function __ctor(self, name)
-        print("Call the Person's constructor with " .. name)
-        __ExistPerson[name] = self
-        self.name = name
-    end
-
-    -- The existence checker
-    function __exist(cls, name)
-        if __ExistPerson[name] then
-            print("An object existed with " .. name)
-            return __ExistPerson[name]
+        -- The Constructor
+        function __ctor(self, name)
+            print("Call the Person's constructor with " .. name)
+            __ExistPerson[name] = self
+            self.name = name
         end
-    end
 
-    -- The destructor
-    function __dtor(self)
-        print("Dispose the object " .. self.name)
-        __ExistPerson[self.name] = nil
-    end
-end)
+        -- The existence checker
+        function __exist(cls, name)
+            if __ExistPerson[name] then
+                print("An object existed with " .. name)
+                return __ExistPerson[name]
+            end
+        end
 
-o = Person("Ann")           -- Call the Person's constructor with Ann
+        -- The destructor
+        function __dtor(self)
+            print("Dispose the object " .. self.name)
+            __ExistPerson[self.name] = nil
+        end
+    end)
 
--- true
-print(o == Person("Ann"))   -- An object existed with Ann
+    o = Person("Ann")           -- Call the Person's constructor with Ann
 
-o:Dispose()                 -- Dispose the object Ann
+    -- true
+    print(o == Person("Ann"))   -- An object existed with Ann
 
--- false
-print(o == Person("Ann")) -- Call the Person's constructor with Ann
-```
+    o:Dispose()                 -- Dispose the object Ann
 
-Here is the constructor, the destructor and an existence checker. We also can find a non-declared method **Dispose**, all objects that generated by classes who have destructor settings will have the **Dispose** method, used to call it's class, super class and the class's extended interface's destructor with order to destruct the object, normally the destructor is used to release the reference of the object, so the Lua can collect them.
+    -- false
+    print(o == Person("Ann")) -- Call the Person's constructor with Ann
+    ```
 
-The constructor receive the object and all the parameters, the existence checker receive the class and all the parameters, and if it return a non-false value, the value will be used as the object and return it directly. The destructor only receive the object.
+    Here is the constructor, the destructor and an existence checker. We also can find a non-declared method **Dispose**, all objects that generated by classes who have destructor settings will have the **Dispose** method, used to call it's class, super class and the class's extended interface's destructor with order to destruct the object, normally the destructor is used to release the reference of the object, so the Lua can collect them.
 
-The `__new` meta is used to generate table that will be used as the object. You can use it to return tables generated by other systems or you can return a well inited table so the object's construction speed will be greatly increased like :
+    The constructor receive the object and all the parameters, the existence checker receive the class and all the parameters, and if it return a non-false value, the value will be used as the object and return it directly. The destructor only receive the object.
 
-```lua
-class "List" (function(_ENV)
-    function __new(cls, ...)
-        return { ... }, true
-    end
-end)
+    The `__new` meta is used to generate table that will be used as the object. You can use it to return tables generated by other systems or you can return a well inited table so the object's construction speed will be greatly increased like :
 
-v = List(1, 2, 3, 4, 5, 6)
-```
+    ```lua
+    class "List" (function(_ENV)
+        function __new(cls, ...)
+            return { ... }, true
+        end
+    end)
 
-The `__new` would recieve the class and all parameters and return a table and a boolean value, if the value is true, all parameters will be discarded so won't pass to the constructor. So for the List class, the `__new` meta will eliminate the rehash cost of the object's initialization.
+    v = List(1, 2, 3, 4, 5, 6)
+    ```
 
-The `__field` meta is a table, contains several key-value paris to be saved in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the **OBJECT_NO_NIL_ACCESS** options, so authors can only use existing fields to to the jobs, and spell errors can be easily spotted.
+    The `__new` would recieve the class and all parameters and return a table and a boolean value, if the value is true, all parameters will be discarded so won't pass to the constructor. So for the List class, the `__new` meta will eliminate the rehash cost of the object's initialization.
 
-```lua
-PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
+    The `__field` meta is a table, contains several key-value paris to be saved in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the **OBJECT_NO_NIL_ACCESS** options, so authors can only use existing fields to to the jobs, and spell errors can be easily spotted.
 
-require "PLoop"
+    ```lua
+    PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
 
-class "Person" (function(_ENV)
-    __field     = {
-        name    = "noname",
-    }
+    require "PLoop"
 
-    -- Also you can use *field* keyword since `__field` could be error spelled
-    field {
-        age     = 0,
-    }
-end)
+    class "Person" (function(_ENV)
+        __field     = {
+            name    = "noname",
+        }
 
-o = Person()
-o.name = "Ann"
-o.age  = 12
+        -- Also you can use *field* keyword since `__field` could be error spelled
+        field {
+            age     = 0,
+        }
+    end)
 
-o.nme = "King"  -- Error : The object can't accept field that named "nme"
-print(o.gae)    -- Error : The object don't have any field that named "gae"
-```
+    o = Person()
+    o.name = "Ann"
+    o.age  = 12
 
-For the constructor and destructor, there are other formal names: the class name will be used as constructor, and the **Dispose** will be used as the destructor:
+    o.nme = "King"  -- Error : The object can't accept field that named "nme"
+    print(o.gae)    -- Error : The object don't have any field that named "gae"
+    ```
 
-```lua
-class "Person" (function(_ENV)
-    -- The Constructor
-    function Person(self, name)
-        self.name = name
-    end
+    For the constructor and destructor, there are other formal names: the class name will be used as constructor, and the **Dispose** will be used as the destructor:
 
-    -- The destructor
-    function Dispose(self)
-    end
-end)
-```
+    ```lua
+    class "Person" (function(_ENV)
+        -- The Constructor
+        function Person(self, name)
+            self.name = name
+        end
+
+        -- The destructor
+        function Dispose(self)
+        end
+    end)
+    ```
 
 iii. **Super class** the class can and only can have one super class, the class will inherit the super class's object method, meta-datas and other features(event, property and etc). If the class has override the super's object method, meta-data or other features, the class can use **super** keyword to access the super class's method, meta-data or feature.
 
-```lua
-class "A" (function(_ENV)
-    -- Object method
-    function Test(self)
-        print("Call A's method")
-    end
+    ```lua
+    class "A" (function(_ENV)
+        -- Object method
+        function Test(self)
+            print("Call A's method")
+        end
 
-    -- Constructor
-    function A(self)
-        print("Call A's ctor")
-    end
+        -- Constructor
+        function A(self)
+            print("Call A's ctor")
+        end
 
-    -- Destructor
-    function Dispose(self)
-        print("Dispose A")
-    end
+        -- Destructor
+        function Dispose(self)
+            print("Dispose A")
+        end
 
-    -- Meta-method
-    function __call(self)
-        print("Call A Object")
-    end
-end)
+        -- Meta-method
+        function __call(self)
+            print("Call A Object")
+        end
+    end)
 
-class "B" (function(_ENV)
-    inherit "A"  -- also can use inherit(A)
+    class "B" (function(_ENV)
+        inherit "A"  -- also can use inherit(A)
 
-    function Test(self)
-        print("Call super's method ==>")
-        super[self]:Test()
-        super.Test(self)
-        print("Call super's method ==<")
-    end
+        function Test(self)
+            print("Call super's method ==>")
+            super[self]:Test()
+            super.Test(self)
+            print("Call super's method ==<")
+        end
 
-    function B(self)
-        super(self)
-        print("Call B's ctor")
-    end
+        function B(self)
+            super(self)
+            print("Call B's ctor")
+        end
 
-    function Dispose(self)
-        print("Dispose B")
-    end
+        function Dispose(self)
+            print("Dispose B")
+        end
 
-    function __call(self)
-        print("Call B Object")
-        super[self]:__call()
-        super.__call(self)
-    end
-end)
+        function __call(self)
+            print("Call B Object")
+            super[self]:__call()
+            super.__call(self)
+        end
+    end)
 
--- Call A's ctor
--- Call B's ctor
-o = B()
+    -- Call A's ctor
+    -- Call B's ctor
+    o = B()
 
--- Call super's method ==>
--- Call A's method
--- Call A's method
--- Call super's method ==<
-o:Test()
+    -- Call super's method ==>
+    -- Call A's method
+    -- Call A's method
+    -- Call super's method ==<
+    o:Test()
 
--- Call B Object
--- Call A Object
--- Call A Object
-o()
+    -- Call B Object
+    -- Call A Object
+    -- Call A Object
+    o()
 
--- Dispose B
--- Dispose A
-o:Dispose()
-```
+    -- Dispose B
+    -- Dispose A
+    o:Dispose()
+    ```
 
-From the example, here are some details:
+    From the example, here are some details:
 
-* The destructor don't need call super's destructor, they are well controlled by the system, so the class only need to consider itself.
+    * The destructor don't need call super's destructor, they are well controlled by the system, so the class only need to consider itself.
 
-* The constructor need call super's constructor manually, we'll learned more about it within the overload system.
+    * The constructor need call super's constructor manually, we'll learned more about it within the overload system.
 
-* For the object method and meta-method, we have two style to call its super, `super.Test(self)` is a simple version, but if the class has multi versions, we must keep using the `super[self]:Test()` code style, because the super can know the object's class version before it fetch the *Test* method. We'll see more about the super call style in the event and property system.
+    * For the object method and meta-method, we have two style to call its super, `super.Test(self)` is a simple version, but if the class has multi versions, we must keep using the `super[self]:Test()` code style, because the super can know the object's class version before it fetch the *Test* method. We'll see more about the super call style in the event and property system.
 
 
 ## Interface
@@ -1563,85 +1562,54 @@ There are three type attributes:
 
 i.  modify the target's definitions, normally used on functions or enums:
 
-```lua
-PLoop(function(_ENV)
-    class "__SafeCall__" (function(_ENV)
-        extend "IInitAttribute"
+    ```lua
+    PLoop(function(_ENV)
+        class "__SafeCall__" (function(_ENV)
+            extend "IInitAttribute"
 
-        local function checkret(ok, ...)
-            if ok then return ... end
-        end
-
-        --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            return function(...)
-                return checkret(pcall(definition, ...))
+            local function checkret(ok, ...)
+                if ok then return ... end
             end
+
+            --- modify the target's definition
+            -- @param   target                      the target
+            -- @param   targettype                  the target type
+            -- @param   definition                  the target's definition
+            -- @param   owner                       the target's owner
+            -- @param   name                        the target's name in the owner
+            -- @param   stack                       the stack level
+            -- @return  definition                  the new definition
+            function InitDefinition(self, target, targettype, definition, owner, name, stack)
+                return function(...)
+                    return checkret(pcall(definition, ...))
+                end
+            end
+
+            property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
+        end)
+
+        __SafeCall__()
+        function test1()
+            return 1, 2, 3
         end
 
-        property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
+        __SafeCall__()
+        function test2(i, j)
+            return i/j
+        end
+
+        print(test1()) -- 1, 2, 3
+        print(test2()) -- nothing
     end)
+    ```
 
-    __SafeCall__()
-    function test1()
-        return 1, 2, 3
-    end
-
-    __SafeCall__()
-    function test2(i, j)
-        return i/j
-    end
-
-    print(test1()) -- 1, 2, 3
-    print(test2()) -- nothing
-end)
-```
-
-the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attribtues are called before the define process of the target.
+    the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attribtues are called before the define process of the target.
 
 ii. Apply changes on the target, normally this is only used by the system attributes, take the `__Sealed__` as an example:
 
-```lua
-class "__Sealed__" (function(_ENV)
-    extend "IApplyAttribute"
-
-    --- apply changes on the target
-    -- @param   target                      the target
-    -- @param   targettype                  the target type
-    -- @param   owner                       the target's owner
-    -- @param   name                        the target's name in the owner
-    -- @param   stack                       the stack level
-    function ApplyAttribute(self, target, targettype, owner, name, stack)
-        if targettype == AttributeTargets.Enum then
-            Enum.SetSealed(target)
-        elseif targettype == AttributeTargets.Struct then
-            Struct.SetSealed(target)
-        elseif targettype == AttributeTargets.Interface then
-            Interface.SetSealed(target)
-        elseif targettype == AttributeTargets.Class then
-            Class.SetSealed(target)
-        end
-    end
-
-    property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
-end)
-```
-
-the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attribtues are applied during the define process of the target.
-
-iii. Attach attribtue datas on the target, also can be used to register the final result to other systems.
-
-```lua
-PLoop(function(_ENV)
-    class "__DataTable__" (function(_ENV)
-        extend "IAttachAttribute"
+    ```lua
+    class "__Sealed__" (function(_ENV)
+        extend "IApplyAttribute"
 
         --- apply changes on the target
         -- @param   target                      the target
@@ -1649,21 +1617,52 @@ PLoop(function(_ENV)
         -- @param   owner                       the target's owner
         -- @param   name                        the target's name in the owner
         -- @param   stack                       the stack level
-        function AttachAttribute(self, target, targettype, owner, name, stack)
-            return self.DataTable
+        function ApplyAttribute(self, target, targettype, owner, name, stack)
+            if targettype == AttributeTargets.Enum then
+                Enum.SetSealed(target)
+            elseif targettype == AttributeTargets.Struct then
+                Struct.SetSealed(target)
+            elseif targettype == AttributeTargets.Interface then
+                Interface.SetSealed(target)
+            elseif targettype == AttributeTargets.Class then
+                Class.SetSealed(target)
+            end
         end
 
-        property "AttributeTarget" { default = AttributeTargets.Class }
-
-        property "DataTable" { type = String }
+        property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
     end)
+    ```
 
-    __DataTable__{ DataTable = "Persons" }
-    class "Person" {}
+    the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attribtues are applied during the define process of the target.
 
-    -- Persons
-    print(IAttribute.GetAttachedData(__DataTable__, Person))
-end)
-```
+iii. Attach attribtue datas on the target, also can be used to register the final result to other systems.
 
-the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
+    ```lua
+    PLoop(function(_ENV)
+        class "__DataTable__" (function(_ENV)
+            extend "IAttachAttribute"
+
+            --- apply changes on the target
+            -- @param   target                      the target
+            -- @param   targettype                  the target type
+            -- @param   owner                       the target's owner
+            -- @param   name                        the target's name in the owner
+            -- @param   stack                       the stack level
+            function AttachAttribute(self, target, targettype, owner, name, stack)
+                return self.DataTable
+            end
+
+            property "AttributeTarget" { default = AttributeTargets.Class }
+
+            property "DataTable" { type = String }
+        end)
+
+        __DataTable__{ DataTable = "Persons" }
+        class "Person" {}
+
+        -- Persons
+        print(IAttribute.GetAttachedData(__DataTable__, Person))
+    end)
+    ```
+
+    the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
