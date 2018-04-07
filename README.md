@@ -1,5 +1,7 @@
 # Prototype Lua Object-Oriented Program System
 
+中文版请阅读README-zh.md
+
 **PLoop** is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also include the luajit. It's also designed to be used on multi-os thread platforms like the **OpenResty**.
 
 It also provide common useful classes like thread pool, collection, serialization and etc.
@@ -22,6 +24,7 @@ to load the **PLoop**. If you need to load files by yourself, you could check th
 
 The common use of collections is **List** and **Dictionary** classes, here is a sample of **List**:
 
+        ```lua
         require "PLoop"
 
         PLoop(function(_ENV)
@@ -29,6 +32,7 @@ The common use of collections is **List** and **Dictionary** classes, here is a 
             List(10):Each(print)
 
         end)
+        ```
 
 The example will create a list with 1-10 numbers and then print each of them.
 
