@@ -52,18 +52,18 @@ Let's have an examples:
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- List(table)
-    o = {1, 2, 3}
-    print(o == List(o))  -- true
+	-- List(table)
+	o = {1, 2, 3}
+	print(o == List(o))  -- true
 
-    -- List(count)
-    v = List(10)         -- {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	-- List(count)
+	v = List(10)         -- {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-    -- List(count, func)
-    v = List(10, function(i) return math.random(100) end) -- {46, 41, 85, 80, 62, 37, 29, 91, 62, 37}
+	-- List(count, func)
+	v = List(10, function(i) return math.random(100) end) -- {46, 41, 85, 80, 62, 37, 29, 91, 62, 37}
 
-    -- List(...)
-    v = List(1, 5, 4)    -- {1, 5, 4}
+	-- List(...)
+	v = List(1, 5, 4)    -- {1, 5, 4}
 end)
 
 print(v) -- nil
@@ -78,47 +78,47 @@ This is our first **PLoop** example. **PLoop** has a lot of different design fro
 
 First of all, we use `PLoop(function(_ENV) end)` to encapsulate and call the processing code. This is designed to solve several problems of Lua development(you can skip the following discussion about the environment if you can't understand, you can continue the reading without problem):
 
-    * Lua's each file can be considered as a function to be executed, and each Lua function has an environment associated with it. The environment is Lua's ordinary table. The global variables accessed by the function are the fields in the environment. By default, the environment is `_G`.
+* Lua's each file can be considered as a function to be executed, and each Lua function has an environment associated with it. The environment is Lua's ordinary table. The global variables accessed by the function are the fields in the environment. By default, the environment is `_G`.
 
-        In collaborative development, global variables accessed by all files are stored in `_G`. This can easily cause conflicts. In order to avoid the double-name conflicts, we must keep using local variables, it's not good for free coding and will create too many closures.
+	In collaborative development, global variables accessed by all files are stored in `_G`. This can easily cause conflicts. In order to avoid the double-name conflicts, we must keep using local variables, it's not good for free coding and will create too many closures.
 
-    * As shown in the **System.Collections.List**, to avoid the using of the same name type, we normally use a **namespace** system to manage various types. In order to use the **List** in `_G`, as we can see in the last few lines of the above example, we need to use `import "System.Collections"`, then wen can use **List** in the `_G`.
+* As shown in the **System.Collections.List**, to avoid the using of the same name type, we normally use a **namespace** system to manage various types. In order to use the **List** in `_G`, as we can see in the last few lines of the above example, we need to use `import "System.Collections"`, then wen can use **List** in the `_G`.
 
-        If we have an ui library that provides type **System.Form.List**, this is an ui class. If it is also imported into `_G`, then the two types will cause errors due to duplicate names.
+	If we have an ui library that provides type **System.Form.List**, this is an ui class. If it is also imported into `_G`, then the two types will cause errors due to duplicate names.
 
-    The main problem is that the default environment of all processing codes is the `_G`. If we can keep each codes processed in its own private environment, we can completely avoid the problem of duplicate names, and we also don't need to strictly use local to declare function or share Datas.
+The main problem is that the default environment of all processing codes is the `_G`. If we can keep each codes processed in its own private environment, we can completely avoid the problem of duplicate names, and we also don't need to strictly use local to declare function or share Datas.
 
-    In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.
+In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.
 
-    We'll learn more benefites of this calling style in the other examples, and for the previous example:
+We'll learn more benefites of this calling style in the other examples, and for the previous example:
 
-    * The global variable belongs to this private environment. In the `_G`, the variable v cannot be accessed.
+* The global variable belongs to this private environment. In the `_G`, the variable v cannot be accessed.
 
-    * Feel free to use public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
+* Feel free to use public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
 
-    * You can directly access the **List** class, **PLoop** has public namespaces, the public namespaces can be accessed by all **PLoop** environments without **import**, the default public namespaces are **System**, **System.Collections** and **System.Threading**, we'll learn more about the them at later.
+* You can directly access the **List** class, **PLoop** has public namespaces, the public namespaces can be accessed by all **PLoop** environments without **import**, the default public namespaces are **System**, **System.Collections** and **System.Threading**, we'll learn more about the them at later.
 
-        The public namespaces accessing priority is lower than the imported namespaces, so if you use the `import "System.Form"`, then the **List** is pointed to the **System.Form.List**.
+	The public namespaces accessing priority is lower than the imported namespaces, so if you use the `import "System.Form"`, then the **List** is pointed to the **System.Form.List**.
 
-    * We can use the keyword **import** to import namespaces to the private environments or the `_G`, then we can use the types stored in those namespaces. The difference is importing to the `_G` is a *saving all to `_G`* action, and the private environment will only records the namespaces it imported, only access the types in them when needed(also will be auto cached).
+* We can use the keyword **import** to import namespaces to the private environments or the `_G`, then we can use the types stored in those namespaces. The difference is importing to the `_G` is a *saving all to `_G`* action, and the private environment will only records the namespaces it imported, only access the types in them when needed(also will be auto cached).
 
-    * **PLoop**'s private environment will look for a global variable when it not existed(not auto-cached or declared, so the `__index` will be triggered), the order is:
+* **PLoop**'s private environment will look for a global variable when it not existed(not auto-cached or declared, so the `__index` will be triggered), the order is:
 
-        * Find in the namespace that the environment belongs (use `namespace "MyNamesapce`" in it, so types generated in the private environment will be saved in the namespace)
+	* Find in the namespace that the environment belongs (use `namespace "MyNamesapce`" in it, so types generated in the private environment will be saved in the namespace)
 
-        * Find in the namespace of this environment **import**ed
+	* Find in the namespace of this environment **import**ed
 
-        * Find in public namespaces
+	* Find in public namespaces
 
-        * Find in the root namespaces, if you access data like "**System**"
+	* Find in the root namespaces, if you access data like "**System**"
 
-        * Find in the base environment, the private environment can set a base environment, default is the `_G`
+	* Find in the base environment, the private environment can set a base environment, default is the `_G`
 
-    The rules for finding variable names in the namespace are:
-    
-    * Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
+The rules for finding variable names in the namespace are:
 
-    * Try get value by `thenamespace[variable name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
+* Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
+
+* Try get value by `thenamespace[variable name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
 
 Back to the creation of the **List** objects, the **List** type can be used as a object generator, it'll create the list objects based on the input arguments.
 
@@ -143,9 +143,9 @@ RemoveByIndex(self[, index])             |Remove and item by index or from the t
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    print(obj:Remove()) -- 10
+	print(obj:Remove()) -- 10
 end)
 ```
 
@@ -157,9 +157,9 @@ The **List** and **Dictionary** all extended the **System.Collections.Iterable**
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    for _, v in obj:GetIterator() do print(v) end
+	for _, v in obj:GetIterator() do print(v) end
 end)
 ```
 
@@ -169,25 +169,25 @@ For the **List** class, since it represents the array table, the **GetIterator**
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    -- print each elements
-    obj:Each(print)
+	-- print each elements
+	obj:Each(print)
 
-    -- print all even numbers
-    obj:Filter(function(x) return x%2 == 0 end):Each(print)
+	-- print all even numbers
+	obj:Filter(function(x) return x%2 == 0 end):Each(print)
 
-    -- print the final three numbers
-    obj:Range(-3, -1):Each(print)
+	-- print the final three numbers
+	obj:Range(-3, -1):Each(print)
 
-    -- print all odd numbers
-    obj:Range(1, -1, 2):Each(print)
+	-- print all odd numbers
+	obj:Range(1, -1, 2):Each(print)
 
-    -- print 2^n of those numbers
-    obj:Map(function(x) return 2^x end):Each(print)
+	-- print 2^n of those numbers
+	obj:Map(function(x) return 2^x end):Each(print)
 
-    -- print the sum of the numbers
-    print(obj:Reduce(function(x,y) return x+y end))
+	-- print the sum of the numbers
+	print(obj:Reduce(function(x,y) return x+y end))
 end)
 ```
 
@@ -199,19 +199,19 @@ The queue method is used to queue operations with options, and when the final me
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    -- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
-    -- get a stream worker for next operations
-    local worker = obj:Range(1, -1, 2)
+	-- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
+	-- get a stream worker for next operations
+	local worker = obj:Range(1, -1, 2)
 
-    -- the same worker
-    worker = worker:Map(function(x) return 2^x end)
+	-- the same worker
+	worker = worker:Map(function(x) return 2^x end)
 
-    -- the final method
-    for _, v in worker:GetIterator() do
-        print(v)
-    end
+	-- the final method
+	for _, v in worker:GetIterator() do
+		print(v)
+	end
 end)
 
 ```
@@ -269,31 +269,31 @@ So here is a test code:
 require "PLoop"
 
 PLoop(function(_ENV)
-    local random = math.random
-    local function val() return random(500000) end
+	local random = math.random
+	local function val() return random(500000) end
 
-    function test(cnt, sortMethod)
-        collectgarbage()
+	function test(cnt, sortMethod)
+		collectgarbage()
 
-        local st = os.clock()
+		local st = os.clock()
 
-        for i = 1, cnt do
-            local lst = List(1000, val)
-            lst[sortMethod](lst)
-        end
+		for i = 1, cnt do
+			local lst = List(1000, val)
+			lst[sortMethod](lst)
+		end
 
-        print(sortMethod, "Cost", os.clock() - st)
-    end
+		print(sortMethod, "Cost", os.clock() - st)
+	end
 
-    test(100, "BubbleSort")
-    test(100, "CombSort")
-    test(100, "HeapSort")
-    test(100, "InsertionSort")
-    test(100, "MergeSort")
-    test(100, "QuickSort")
-    test(100, "SelectionSort")
-    test(100, "Sort")
-    test(100, "TimSort")
+	test(100, "BubbleSort")
+	test(100, "CombSort")
+	test(100, "HeapSort")
+	test(100, "InsertionSort")
+	test(100, "MergeSort")
+	test(100, "QuickSort")
+	test(100, "SelectionSort")
+	test(100, "Sort")
+	test(100, "TimSort")
 end)
 ```
 
@@ -347,11 +347,11 @@ Here is some examples:
 require "PLoop"
 
 PLoop(function(_ENV)
-    Dictionary(_G) -- Convert the _G to a dictionary
+	Dictionary(_G) -- Convert the _G to a dictionary
 
-    -- key map to key^2
-    lst = List(10)
-    Dictionary(lst, lst:Map(function(x)return x^2 end))
+	-- key map to key^2
+	lst = List(10)
+	Dictionary(lst, lst:Map(function(x)return x^2 end))
 end)
 ```
 
@@ -395,11 +395,11 @@ Here are some examples:
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- print all keys in the _G with order
-    Dictionary(_G).Keys:ToList():Sort():Each(print)
+	-- print all keys in the _G with order
+	Dictionary(_G).Keys:ToList():Sort():Each(print)
 
-    -- Calculate the sum of the values
-    print(Dictionary{ A = 1, B = 2, C = 3}:Reduce(function(k, v, init) return init + v end, 0))
+	-- Calculate the sum of the values
+	print(Dictionary{ A = 1, B = 2, C = 3}:Reduce(function(k, v, init) return init + v end, 0))
 end)
 
 ```
@@ -413,17 +413,17 @@ We have see how to use classes in the previous example, for the second example, 
 
 ```lua
 PLoop(function(_ENV)
-    __Iterator__()
-    function iter(i, j)
-        for k = i, j do
-            coroutine.yield(k)
-        end
-    end
+	__Iterator__()
+	function iter(i, j)
+		for k = i, j do
+			coroutine.yield(k)
+		end
+	end
 
-    -- print 1-10 for each line
-    for i in iter(1, 10) do
-        print(i)
-    end
+	-- print 1-10 for each line
+	for i in iter(1, 10) do
+		print(i)
+	end
 end)
 ```
 
@@ -437,30 +437,30 @@ The `__Iterator__` is used to wrap the target function, so it'll be used as an i
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- Calculate the Fibonacci sequence
-    __Iterator__()
-    function Fibonacci(maxn)
-        local n0, n1 = 1, 1
+	-- Calculate the Fibonacci sequence
+	__Iterator__()
+	function Fibonacci(maxn)
+		local n0, n1 = 1, 1
 
-        coroutine.yield(0, n0)
-        coroutine.yield(1, n1)
+		coroutine.yield(0, n0)
+		coroutine.yield(1, n1)
 
-        local n = 2
+		local n = 2
 
-        while n <= maxn  do
-            n0, n1 = n1, n0 + n1
-            coroutine.yield(n, n1)
-            n = n + 1
-        end
-    end
+		while n <= maxn  do
+			n0, n1 = n1, n0 + n1
+			coroutine.yield(n, n1)
+			n = n + 1
+		end
+	end
 
-    -- 1, 1, 2, 3, 5, 8
-    for i, v in Fibonacci(5) do print(v) end
+	-- 1, 1, 2, 3, 5, 8
+	for i, v in Fibonacci(5) do print(v) end
 
-    -- you also can pass the argument later
-    -- the iterator will combine all arguments
-    -- 1, 1, 2, 3, 5, 8
-    for i, v in Fibonacci(), 5 do print(v) end
+	-- you also can pass the argument later
+	-- the iterator will combine all arguments
+	-- 1, 1, 2, 3, 5, 8
+	for i, v in Fibonacci(), 5 do print(v) end
 end)
 ```
 
@@ -470,15 +470,15 @@ Also you can use *coroutine.wrap* to do the same job, but the different is, the 
 
 ```lua
 PLoop(function(_ENV)
-    __Async__()
-    function printco(i, j)
-        print(coroutine.running())
-    end
+	__Async__()
+	function printco(i, j)
+		print(coroutine.running())
+	end
 
-    -- you'll get the same thread
-    for i = 1, 10 do
-        printco()
-    end
+	-- you'll get the same thread
+	for i = 1, 10 do
+		printco()
+	end
 end)
 ```
 
@@ -499,11 +499,11 @@ PLOOP_PLATFORM_SETTINGS = { ENV_ALLOW_GLOBAL_VAR_BE_NIL = false }
 require "PLoop"
 
 PLoop(function(_ENV)
-    local a = ture  -- Error: The global variable "ture" can't be nil.
+	local a = ture  -- Error: The global variable "ture" can't be nil.
 
-    if a then
-        print("ok")
-    end
+	if a then
+		print("ok")
+	end
 end)
 ```
 
@@ -517,19 +517,19 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- Define a class with Name and Age property
-    class "Person" (function(_ENV)
-        property "Name" { type = String }
-        property "Age"  { type = Number }
-    end)
+	-- Define a class with Name and Age property
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
 
-    o = Person()
+	o = Person()
 
-    o.Name = "King" -- Ok
+	o.Name = "King" -- Ok
 
-    o.name = "Ann"  -- Error: The object can't accept field that named "name"
+	o.name = "Ann"  -- Error: The object can't accept field that named "name"
 
-    print(o.name)   -- Error: The object don't have any field that named "name"
+	print(o.name)   -- Error: The object don't have any field that named "name"
 end)
 ```
 
@@ -546,12 +546,12 @@ Within the **PLoop**, it'll be a small problem:
 
 ```lua
 PLoop(function(_ENV)
-    __Arguments__{ String, Number }
-    function SetInfo(name, age)
-    end
+	__Arguments__{ String, Number }
+	function SetInfo(name, age)
+	end
 
-    -- Error: Usage: SetInfo(System.String, System.Number) - the 2nd argument must be number, got boolean
-    SetInfo("Ann", true)
+	-- Error: Usage: SetInfo(System.String, System.Number) - the 2nd argument must be number, got boolean
+	SetInfo("Ann", true)
 end)
 ```
 
@@ -567,12 +567,12 @@ PLOOP_PLATFORM_SETTINGS = { TYPE_VALIDATION_DISABLED = true }
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Arguments__{ String, Number }
-    function SetInfo(name, age)
-    end
+	__Arguments__{ String, Number }
+	function SetInfo(name, age)
+	end
 
-    -- No error now
-    SetInfo("Ann", true)
+	-- No error now
+	SetInfo("Ann", true)
 end)
 ```
 
@@ -601,21 +601,21 @@ Here is an example :
 require "PLoop"
 
 PLoop(function(_ENV)
-    namespace "TestNS"
+	namespace "TestNS"
 
-    enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
+	enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
 
-    print(Direction.South) -- 3
-    print(Direction.NoDir) -- nil
-    print(Direction(3))    -- South
+	print(Direction.South) -- 3
+	print(Direction.NoDir) -- nil
+	print(Direction(3))    -- South
 
-    print(East)            -- 2
+	print(East)            -- 2
 end)
 
 PLoop(function(_ENV)
-    import "TestNS.Direction"
+	import "TestNS.Direction"
 
-    print(South)           -- 3
+	print(South)           -- 3
 end)
 ```
 
@@ -625,16 +625,16 @@ Since the element value is indexed, we also can define it like
 require "PLoop"
 
 PLoop(function(_ENV)
-    __AutoIndex__{ North = 1, South = 5 }
-    enum "Direction" {
-        "North",
-        "East",
-        "South",
-        "West",
-    }
+	__AutoIndex__{ North = 1, South = 5 }
+	enum "Direction" {
+		"North",
+		"East",
+		"South",
+		"West",
+	}
 
-    print(East) -- 2
-    print(West) -- 6
+	print(East) -- 2
+	print(West) -- 6
 end)
 ```
 
@@ -646,28 +646,28 @@ Another special enum is the flags enumeration type, the element value should be 
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Flags__()
-    enum "Days" {
-        "SUNDAY",
-        "MONDAY",
-        "TUESDAY",
-        "WEDNESDAY",
-        "THURSDAY",
-        "FRIDAY",
-        "SATURDAY",
-    }
+	__Flags__()
+	enum "Days" {
+		"SUNDAY",
+		"MONDAY",
+		"TUESDAY",
+		"WEDNESDAY",
+		"THURSDAY",
+		"FRIDAY",
+		"SATURDAY",
+	}
 
-    v = SUNDAY + MONDAY + FRIDAY
+	v = SUNDAY + MONDAY + FRIDAY
 
-    -- SUNDAY  1
-    -- MONDAY  2
-    -- FRIDAY  32
-    for name, val in Days(v) do
-        print(name, val)
-    end
+	-- SUNDAY  1
+	-- MONDAY  2
+	-- FRIDAY  32
+	for name, val in Days(v) do
+		print(name, val)
+	end
 
-    print(Enum.ValidateFlags(MONDAY, v)) -- true
-    print(Enum.ValidateFlags(SATURDAY, v)) -- false
+	print(Enum.ValidateFlags(MONDAY, v)) -- true
+	print(Enum.ValidateFlags(SATURDAY, v)) -- false
 end)
 ```
 
@@ -693,31 +693,31 @@ So, there are two unknow APIs in the list : the **GetDefault** and the **IsSeale
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Default__("North") __AutoIndex__()
-    enum "Direction" {
-        "North",
-        "East",
-        "South",
-        "West",
-    }
+	__Default__("North") __AutoIndex__()
+	enum "Direction" {
+		"North",
+		"East",
+		"South",
+		"West",
+	}
 
-    print(Enum.GetDefault(Direction)) -- 1
+	print(Enum.GetDefault(Direction)) -- 1
 
-    --if not sealed, the new definition will override all
-    __Sealed__()
-    enum "Direction" { North = "N", East = "E", South = "S", West = "W" }
+	--if not sealed, the new definition will override all
+	__Sealed__()
+	enum "Direction" { North = "N", East = "E", South = "S", West = "W" }
 
-    print(Enum.GetDefault(Direction)) -- nil
+	print(Enum.GetDefault(Direction)) -- nil
 
-    -- We still can add more key-value pairs into it
-    enum "Direction" { Center = "C" }
+	-- We still can add more key-value pairs into it
+	enum "Direction" { Center = "C" }
 
-    -- We can't override existed key or values
-    -- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed
-    enum "Direction" { North = 1 }
+	-- We can't override existed key or values
+	-- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed
+	enum "Direction" { North = 1 }
 
-    -- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed
-    enum "Direction" { C = "N" }
+	-- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed
+	enum "Direction" { C = "N" }
 end)
 ```
 
@@ -738,15 +738,15 @@ The basic data types like number, string and more advanced types like nature num
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- Env A
-    struct "Number" (function(_ENV)
-        -- Env B
-        function Number(value)
-            return type(value) ~= "number" and "the %s must be number, got " .. type(value)
-        end
-    end)
+	-- Env A
+	struct "Number" (function(_ENV)
+		-- Env B
+		function Number(value)
+			return type(value) ~= "number" and "the %s must be number, got " .. type(value)
+		end
+	end)
 
-    v = Number(true)  -- Error : the value must be number, got boolean
+	v = Number(true)  -- Error : the value must be number, got boolean
 end)
 ```
 
@@ -768,12 +768,12 @@ In some case, we may need to change the input value to another one, that's done 
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
-    print(AnyBool(1))  -- true
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
+	print(AnyBool(1))  -- true
 end)
 ```
 
@@ -785,13 +785,13 @@ We'll see a more usable example for it:
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Arguments__{ Callable, Number, Number }
-    function Calc(func, a, b)
-        print(func(a, b))
-    end
+	__Arguments__{ Callable, Number, Number }
+	function Calc(func, a, b)
+		print(func(a, b))
+	end
 
-    Calc("x,y=>x+y", 1, 11) -- 12
-    Calc("x,y=>x*y", 2, 11) -- 22
+	Calc("x,y=>x+y", 1, 11) -- 12
+	Calc("x,y=>x*y", 2, 11) -- 22
 end)
 ```
 
@@ -803,7 +803,7 @@ The **List** and **Dictionary**'s method(queue, final, sort and etc) also use th
 require "PLoop"
 
 PLoop(function(_ENV)
-    List(10):Map("x=>x^2"):Each(print)
+	List(10):Map("x=>x^2"):Each(print)
 end)
 ```
 
@@ -815,18 +815,18 @@ The struct type can have one base struct so it will inherit the base struct's va
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Integer" (function(_ENV)
-        __base = Number
+	struct "Integer" (function(_ENV)
+		__base = Number
 
-        local floor = math.floor
+		local floor = math.floor
 
-        function Integer(value)
-            return floor(value) ~= value and "the %s must be integer"
-        end
-    end)
+		function Integer(value)
+			return floor(value) ~= value and "the %s must be integer"
+		end
+	end)
 
-    v = Integer(true)  -- Error : the value must be number, got boolean
-    v = Integer(1.23)  -- Error : the value must be integer
+	v = Integer(true)  -- Error : the value must be number, got boolean
+	v = Integer(1.23)  -- Error : the value must be integer
 end)
 ```
 
@@ -836,19 +836,19 @@ Like the enum, we also can provide a default value to the custom struct since th
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Default__(0)
-    struct "Integer" (function(_ENV)
-        __base = Number
-        __default = 0 -- also can use this instead of the __Default__
+	__Default__(0)
+	struct "Integer" (function(_ENV)
+		__base = Number
+		__default = 0 -- also can use this instead of the __Default__
 
-        local floor = math.floor
+		local floor = math.floor
 
-        function Integer(value)
-            return floor(value) ~= value and "the %s must be integer"
-        end
-    end)
+		function Integer(value)
+			return floor(value) ~= value and "the %s must be integer"
+		end
+	end)
 
-    print(Struct.GetDefault(Integer)) -- 0
+	print(Struct.GetDefault(Integer)) -- 0
 end)
 ```
 
@@ -858,19 +858,19 @@ Also we can use the `__Sealed__` attribute to seal the struct, so it won't be re
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Sealed__(0)
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
+	__Sealed__(0)
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
 
-    -- Error: Usage: struct.BeginDefinition(structure[, stack]) - The AnyBool is sealed, can't be re-defined
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
+	-- Error: Usage: struct.BeginDefinition(structure[, stack]) - The AnyBool is sealed, can't be re-defined
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
 end)
 ```
 
@@ -911,14 +911,14 @@ The member structure represent tables with fixed fields of certain types. Take a
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
-    loc = Location(100, 20)
-    print(loc.x, loc.y)          -- 100  20
+	loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
+	loc = Location(100, 20)
+	print(loc.x, loc.y)          -- 100  20
 end)
 ```
 
@@ -932,14 +932,14 @@ The `x = Number` is the simplest way to declare a member to the struct, but ther
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { type = Number, require = true }
-        member "y" { type = Number, default = 0    }
-    end)
+	struct "Location" (function(_ENV)
+		member "x" { type = Number, require = true }
+		member "y" { type = Number, default = 0    }
+	end)
 
-    loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
-    loc = Location(100)
-    print(loc.x, loc.y)         -- 100  0
+	loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
+	loc = Location(100)
+	print(loc.x, loc.y)         -- 100  0
 end)
 ```
 
@@ -957,16 +957,16 @@ The member struct also support the validator and initializer :
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "MinMax" (function(_ENV)
-        member "min" { Type = Number, Require = true }
-        member "max" { Type = Number, Require = true }
+	struct "MinMax" (function(_ENV)
+		member "min" { Type = Number, Require = true }
+		member "max" { Type = Number, Require = true }
 
-        function MinMax(val)
-            return val.min > val.max and "%s.min can't be greater than %s.max"
-        end
-    end)
+		function MinMax(val)
+			return val.min > val.max and "%s.min can't be greater than %s.max"
+		end
+	end)
 
-    v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
+	v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
 end)
 ```
 
@@ -976,16 +976,16 @@ Since the member struct's value are tables, we also can define struct methods th
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { Type = Number, Require = true }
-        member "y" { Type = Number, Default = 0    }
+	struct "Location" (function(_ENV)
+		member "x" { Type = Number, Require = true }
+		member "y" { Type = Number, Default = 0    }
 
-        function GetRange(val)
-            return math.sqrt(val.x^2 + val.y^2)
-        end
-    end)
+		function GetRange(val)
+			return math.sqrt(val.x^2 + val.y^2)
+		end
+	end)
 
-    print(Location(3, 4):GetRange()) -- 5
+	print(Location(3, 4):GetRange()) -- 5
 end
 ```
 
@@ -995,17 +995,17 @@ We can also declare static methods that can only be used by the struct itself(al
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { Type = Number, Require = true }
-        member "y" { Type = Number, Default = 0    }
+	struct "Location" (function(_ENV)
+		member "x" { Type = Number, Require = true }
+		member "y" { Type = Number, Default = 0    }
 
-        __Static__()
-        function GetRange(val)
-            return math.sqrt(val.x^2 + val.y^2)
-        end
-    end)
+		__Static__()
+		function GetRange(val)
+			return math.sqrt(val.x^2 + val.y^2)
+		end
+	end)
 
-    print(Location.GetRange{x = 3, y = 4}) -- 5
+	print(Location.GetRange{x = 3, y = 4}) -- 5
 end)
 ```
 
@@ -1017,21 +1017,21 @@ In the previous example, we can give the custom struct a default value, now we'l
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Number" (function(_ENV)
-        __default = 0
+	struct "Number" (function(_ENV)
+		__default = 0
 
-        function Number(value)
-            return type(value) ~= "number" and "the %s must be number"
-        end
-    end)
+		function Number(value)
+			return type(value) ~= "number" and "the %s must be number"
+		end
+	end)
 
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    loc = Location()
-    print(loc.x, loc.y)         -- 0    0
+	loc = Location()
+	print(loc.x, loc.y)         -- 0    0
 end)
 ```
 
@@ -1053,16 +1053,16 @@ The array structure represent tables that contains a list of same type items. He
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    struct "Locations" (function(_ENV)
-        __array = Location
-    end)
+	struct "Locations" (function(_ENV)
+		__array = Location
+	end)
 
-    v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
+	v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
 end)
 ```
 
@@ -1085,35 +1085,35 @@ To simplify the definition of the struct, table can be used instead of the funct
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- Custom struct
-    __Sealed__()
-    struct "Number" {
-        __default = 0,  -- The default value
+	-- Custom struct
+	__Sealed__()
+	struct "Number" {
+		__default = 0,  -- The default value
 
-        -- the function with number index would be used as validator
-        function (val) return type(val) ~= "number" end,
+		-- the function with number index would be used as validator
+		function (val) return type(val) ~= "number" end,
 
-        -- Or you can clearly declare it
-        __valid = function (val) return type(val) ~= "number" end,
-    }
+		-- Or you can clearly declare it
+		__valid = function (val) return type(val) ~= "number" end,
+	}
 
-    struct "AnyBool" {
-        __init = function(val) return val and true or false end,
-    }
+	struct "AnyBool" {
+		__init = function(val) return val and true or false end,
+	}
 
-    -- Member struct
-    struct "Location" {
-        -- Like use the member keyword, just with a name field
-        { name = "x", type = Number, require = true },
-        { name = "y", type = Number, require = true },
+	-- Member struct
+	struct "Location" {
+		-- Like use the member keyword, just with a name field
+		{ name = "x", type = Number, require = true },
+		{ name = "y", type = Number, require = true },
 
-        -- Define methods
-        GetRange = function(val) return math.sqrt(val.x^2 + val.y^2) end,
-    }
+		-- Define methods
+		GetRange = function(val) return math.sqrt(val.x^2 + val.y^2) end,
+	}
 
-    -- Array struct
-    -- A valid type with number index, also can use the __array as the key
-    struct "Locations" { Location }
+	-- Array struct
+	-- A valid type with number index, also can use the __array as the key
+	struct "Locations" { Location }
 end)
 ```
 
@@ -1127,15 +1127,15 @@ The validator can receive 2nd parameter which indicated whether the system only 
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Number" (function(_ENV)
-        function Number(value, onlyvalid)
-            if type(value) ~= "number" then return onlyvalid or "the %s must be number, got " .. type(value) end
-        end
-    end)
+	struct "Number" (function(_ENV)
+		function Number(value, onlyvalid)
+			if type(value) ~= "number" then return onlyvalid or "the %s must be number, got " .. type(value) end
+		end
+	end)
 
-    -- The API to validate value with types (type, value, onlyvald)
-    print(Struct.ValidateValue(Number, "test", true))   -- nil, true
-    print(Struct.ValidateValue(Number, "test", false))  -- nil, the %s must be number, got string
+	-- The API to validate value with types (type, value, onlyvald)
+	print(Struct.ValidateValue(Number, "test", true))   -- nil, true
+	print(Struct.ValidateValue(Number, "test", false))  -- nil, the %s must be number, got string
 end)
 ```
 
@@ -1150,8 +1150,8 @@ If your value could be two or more types, you can combine those types like :
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- nil, the %s must be value of System.Number | System.String
-    print(Struct.ValidateValue(Number + String, {}, false))
+	-- nil, the %s must be value of System.Number | System.String
+	print(Struct.ValidateValue(Number + String, {}, false))
 end)
 ```
 
@@ -1166,8 +1166,8 @@ If you need the value to be a struct who is a sub type of another struct, (a str
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Integer" { __base = Number, function(val) return math.floor(val) ~= val end }
-    print(Struct.ValidateValue( - Number, Integer, false))  -- Integer
+	struct "Integer" { __base = Number, function(val) return math.floor(val) ~= val end }
+	print(Struct.ValidateValue( - Number, Integer, false))  -- Integer
 end)
 ```
 
@@ -1213,14 +1213,14 @@ As an example:
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    for index, member in Struct.GetMembers(Location) do
-        print(member.GetName(member), Member.GetType(member))
-    end
+	for index, member in Struct.GetMembers(Location) do
+		print(member.GetName(member), Member.GetType(member))
+	end
 end)
 ```
 
@@ -1241,19 +1241,19 @@ The methods are functions that be used by the classes and their objects. Take an
 require "PLoop"
 
 PLoop(function(_ENV)
-    class "Person" (function(_ENV)
-        function SetName(self, name)
-            self.name = name
-        end
+	class "Person" (function(_ENV)
+		function SetName(self, name)
+			self.name = name
+		end
 
-        function GetName(self, name)
-            return self.name
-        end
-    end)
+		function GetName(self, name)
+			return self.name
+		end
+	end)
 
-    Ann = Person()
-    Ann:SetName("Ann")
-    print("Hello " .. Ann:GetName()) -- Hello Ann
+	Ann = Person()
+	Ann:SetName("Ann")
+	print("Hello " .. Ann:GetName()) -- Hello Ann
 end)
 ```
 
@@ -1263,8 +1263,8 @@ When the definition is done, the class object's meta-table is auto-generated bas
 
 ```lua
 {
-    __index = { SetName = function, GetName = function },
-    __metatable = Person,
+	__index = { SetName = function, GetName = function },
+	__metatable = Person,
 }
 ```
 
@@ -1272,11 +1272,11 @@ The class can access the object method directly, and also could have their own m
 
 ```lua
 class "Color" (function(_ENV)
-    __Static__()
-    function FromRGB(r, g, b)
-        -- The object construct will be talked later
-        return Color {r = r, g = g, b = b}
-    end
+	__Static__()
+	function FromRGB(r, g, b)
+		-- The object construct will be talked later
+		return Color {r = r, g = g, b = b}
+	end
 end)
 
 c = Color.FromRGB(1, 0, 1)
@@ -1327,28 +1327,28 @@ There are several PLoop special meta-data, here are examples :
 
 ```lua
 class "Person" (function(_ENV)
-    __ExistPerson = {}
+	__ExistPerson = {}
 
-    -- The Constructor
-    function __ctor(self, name)
-        print("Call the Person's constructor with " .. name)
-        __ExistPerson[name] = self
-        self.name = name
-    end
+	-- The Constructor
+	function __ctor(self, name)
+		print("Call the Person's constructor with " .. name)
+		__ExistPerson[name] = self
+		self.name = name
+	end
 
-    -- The existence checker
-    function __exist(cls, name)
-        if __ExistPerson[name] then
-            print("An object existed with " .. name)
-            return __ExistPerson[name]
-        end
-    end
+	-- The existence checker
+	function __exist(cls, name)
+		if __ExistPerson[name] then
+			print("An object existed with " .. name)
+			return __ExistPerson[name]
+		end
+	end
 
-    -- The destructor
-    function __dtor(self)
-        print("Dispose the object " .. self.name)
-        __ExistPerson[self.name] = nil
-    end
+	-- The destructor
+	function __dtor(self)
+		print("Dispose the object " .. self.name)
+		__ExistPerson[self.name] = nil
+	end
 end)
 
 o = Person("Ann")           -- Call the Person's constructor with Ann
@@ -1370,9 +1370,9 @@ The `__new` meta is used to generate table that will be used as the object. You 
 
 ```lua
 class "List" (function(_ENV)
-    function __new(cls, ...)
-        return { ... }, true
-    end
+	function __new(cls, ...)
+		return { ... }, true
+	end
 end)
 
 v = List(1, 2, 3, 4, 5, 6)
@@ -1388,14 +1388,14 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= tr
 require "PLoop"
 
 class "Person" (function(_ENV)
-    __field     = {
-        name    = "noname",
-    }
+	__field     = {
+		name    = "noname",
+	}
 
-    -- Also you can use *field* keyword since `__field` could be error spelled
-    field {
-        age     = 0,
-    }
+	-- Also you can use *field* keyword since `__field` could be error spelled
+	field {
+		age     = 0,
+	}
 end)
 
 o = Person()
@@ -1410,14 +1410,14 @@ For the constructor and destructor, there are other formal names: the class name
 
 ```lua
 class "Person" (function(_ENV)
-    -- The Constructor
-    function Person(self, name)
-        self.name = name
-    end
+	-- The Constructor
+	function Person(self, name)
+		self.name = name
+	end
 
-    -- The destructor
-    function Dispose(self)
-    end
+	-- The destructor
+	function Dispose(self)
+	end
 end)
 ```
 
@@ -1427,51 +1427,51 @@ the class can and only can have one super class, the class will inherit the supe
 
 ```lua
 class "A" (function(_ENV)
-    -- Object method
-    function Test(self)
-        print("Call A's method")
-    end
+	-- Object method
+	function Test(self)
+		print("Call A's method")
+	end
 
-    -- Constructor
-    function A(self)
-        print("Call A's ctor")
-    end
+	-- Constructor
+	function A(self)
+		print("Call A's ctor")
+	end
 
-    -- Destructor
-    function Dispose(self)
-        print("Dispose A")
-    end
+	-- Destructor
+	function Dispose(self)
+		print("Dispose A")
+	end
 
-    -- Meta-method
-    function __call(self)
-        print("Call A Object")
-    end
+	-- Meta-method
+	function __call(self)
+		print("Call A Object")
+	end
 end)
 
 class "B" (function(_ENV)
-    inherit "A"  -- also can use inherit(A)
+	inherit "A"  -- also can use inherit(A)
 
-    function Test(self)
-        print("Call super's method ==>")
-        super[self]:Test()
-        super.Test(self)
-        print("Call super's method ==<")
-    end
+	function Test(self)
+		print("Call super's method ==>")
+		super[self]:Test()
+		super.Test(self)
+		print("Call super's method ==<")
+	end
 
-    function B(self)
-        super(self)
-        print("Call B's ctor")
-    end
+	function B(self)
+		super(self)
+		print("Call B's ctor")
+	end
 
-    function Dispose(self)
-        print("Dispose B")
-    end
+	function Dispose(self)
+		print("Dispose B")
+	end
 
-    function __call(self)
-        print("Call B Object")
-        super[self]:__call()
-        super.__call(self)
-    end
+	function __call(self)
+		print("Call B Object")
+		super[self]:__call()
+		super.__call(self)
+	end
 end)
 
 -- Call A's ctor
@@ -1517,44 +1517,44 @@ Let's take an example :
 
 ```lua
 interface "IName" (function(self)
-    __Abstract__()
-    function SetName(self) end
+	__Abstract__()
+	function SetName(self) end
 
-    __Abstract__()
-    function GetName(self) end
+	__Abstract__()
+	function GetName(self) end
 
-    -- initializer
-    function IName(self) print("IName Init") end
+	-- initializer
+	function IName(self) print("IName Init") end
 
-    -- destructor
-    function Dispose(self) print("IName Dispose") end
+	-- destructor
+	function Dispose(self) print("IName Dispose") end
 end)
 
 interface "IAge" (function(self)
-    __Abstract__()
-    function SetAge(self) end
+	__Abstract__()
+	function SetAge(self) end
 
-    __Abstract__()
-    function GetAge(self) end
+	__Abstract__()
+	function GetAge(self) end
 
-    -- initializer
-    function IAge(self) print("IAge Init") end
+	-- initializer
+	function IAge(self) print("IAge Init") end
 
-    -- destructor
-    function Dispose(self) print("IAge Dispose") end
+	-- destructor
+	function Dispose(self) print("IAge Dispose") end
 end)
 
 class "Person" (function(_ENV)
-    extend "IName" "IAge"   -- also can use `extend(IName)(IAge)`
+	extend "IName" "IAge"   -- also can use `extend(IName)(IAge)`
 
-    -- Error: attempt to index global 'super' (a nil value)
-    -- Since there is no super method(the IName.SetName is abstract),
-    -- there is no super keyword can be use
-    function SetName(self, name) super[self]:SetName(name) end
+	-- Error: attempt to index global 'super' (a nil value)
+	-- Since there is no super method(the IName.SetName is abstract),
+	-- there is no super keyword can be use
+	function SetName(self, name) super[self]:SetName(name) end
 
-    function Person(self) print("Person Init") end
+	function Person(self) print("Person Init") end
 
-    function Dispose(self) print("Person Dispose") end
+	function Dispose(self) print("Person Dispose") end
 end)
 
 -- Person Init
@@ -1577,24 +1577,24 @@ The events are used to notify the outside that the state of class object has cha
 
 ```lua
 class "Person" (function(_ENV)
-    event "OnNameChanged"
+	event "OnNameChanged"
 
-    field { name = "anonymous" }
+	field { name = "anonymous" }
 
-    function SetName(self, name)
-        if name ~= self.name then
-            -- Notify the outside
-            OnNameChanged(self, name, self.name)
-            self.name = name
-        end
-    end
+	function SetName(self, name)
+		if name ~= self.name then
+			-- Notify the outside
+			OnNameChanged(self, name, self.name)
+			self.name = name
+		end
+	end
 end)
 
 o = Person()
 
 -- Bind a function as handler to the event
 function o:OnNameChanged(new, old)
-    print(("Renamed from %q to %q"):format(old, new))
+	print(("Renamed from %q to %q"):format(old, new))
 end
 
 -- Renamed from "anonymous" to "Ann"
@@ -1609,22 +1609,22 @@ The event is a feature type of the class and interface, there are two types of t
 
 ```lua
 class "Student" (function(_ENV)
-    inherit "Person"
+	inherit "Person"
 
-    local function onNameChanged(self, name, old)
-        print(("Student %s renamed to %s"):format(old, name))
-    end
+	local function onNameChanged(self, name, old)
+		print(("Student %s renamed to %s"):format(old, name))
+	end
 
-    function Student(self, name)
-        self:SetName(name)
-        self.OnNameChanged = self.OnNameChanged + onNameChanged
-    end
+	function Student(self, name)
+		self:SetName(name)
+		self.OnNameChanged = self.OnNameChanged + onNameChanged
+	end
 end)
 
 o = Student("Ann")
 
 function o:OnNameChanged(name)
-    print("My new name is " .. name)
+	print("My new name is " .. name)
 end
 
 -- Student Ann renamed to Ammy
@@ -1664,23 +1664,23 @@ Take the *Frame* widget from the *World of Warcraft* as an example, ignore the o
 
 ```lua
 class "Frame" (function(_ENV)
-    __EventChangeHandler__(function(delegate, owner, eventname)
-        -- owner is the frame object
-        -- eventname is the OnEnter for this case
-        if delegate:IsEmpty() then
-            -- No event handler, so un-register the frame's script event
-            owner:SetScript(eventname, nil)
-        else
-            -- Has event handler, so we must regiser the frame's script event
-            if owner:GetScript(eventname) == nil then
-                owner:SetScript(eventname, function(self, ...)
-                    -- Call the delegate directly
-                    delegate(owner, ...)
-                end)
-            end
-        end
-    end)
-    event "OnEnter"
+	__EventChangeHandler__(function(delegate, owner, eventname)
+		-- owner is the frame object
+		-- eventname is the OnEnter for this case
+		if delegate:IsEmpty() then
+			-- No event handler, so un-register the frame's script event
+			owner:SetScript(eventname, nil)
+		else
+			-- Has event handler, so we must regiser the frame's script event
+			if owner:GetScript(eventname) == nil then
+				owner:SetScript(eventname, function(self, ...)
+					-- Call the delegate directly
+					delegate(owner, ...)
+				end)
+			end
+		end
+	end)
+	event "OnEnter"
 end)
 ```
 
@@ -1689,30 +1689,30 @@ With the `__EventChangeHandler__` attribute, we can bind a function to the targe
 ```lua
 -- A help class so it can be saved in namespaces
 class "__WidgetEvent__" (function(_ENV)
-    local function handler (delegate, owner, eventname)
-        if delegate:IsEmpty() then
-            owner:SetScript(eventname, nil)
-        else
-            if owner:GetScript(eventname) == nil then
-                owner:SetScript(eventname, function(self, ...)
-                    -- Call the delegate directly
-                    delegate(owner, ...)
-                end)
-            end
-        end
-    end
+	local function handler (delegate, owner, eventname)
+		if delegate:IsEmpty() then
+			owner:SetScript(eventname, nil)
+		else
+			if owner:GetScript(eventname) == nil then
+				owner:SetScript(eventname, function(self, ...)
+					-- Call the delegate directly
+					delegate(owner, ...)
+				end)
+			end
+		end
+	end
 
-    function __WidgetEvent__(self)
-        __EventChangeHandler__(handler)
-    end
+	function __WidgetEvent__(self)
+		__EventChangeHandler__(handler)
+	end
 end)
 
 class "Frame" (function(_ENV)
-    __WidgetEvent__()
-    event "OnEnter"
+	__WidgetEvent__()
+	event "OnEnter"
 
-    __WidgetEvent__()
-    event "OnLeave"
+	__WidgetEvent__()
+	event "OnLeave"
 end)
 ```
 
@@ -1720,16 +1720,16 @@ The event can also be marked as static, so it can be used and only be used by th
 
 ```lua
 class "Person" (function(_ENV)
-    __Static__()
-    event "OnPersonCreated"
+	__Static__()
+	event "OnPersonCreated"
 
-    function Person(self, name)
-        OnPersonCreated(name)
-    end
+	function Person(self, name)
+		OnPersonCreated(name)
+	end
 end)
 
 function Person.OnPersonCreated(name)
-    print("Person created " .. name)
+	print("Person created " .. name)
 end
 
 -- Person created Ann
@@ -1740,30 +1740,30 @@ When the class or interface has overridden the event, and they need register han
 
 ```lua
 class "Person" (function(_ENV)
-    property "Name" { event = "OnNameChanged" }
+	property "Name" { event = "OnNameChanged" }
 end)
 
 class "Student" (function(_ENV)
-    inherit "Person"
+	inherit "Person"
 
-    event "OnNameChanged"
+	event "OnNameChanged"
 
-    local function raiseEvent(self, ...)
-        OnNameChanged(self, ...)
-    end
+	local function raiseEvent(self, ...)
+		OnNameChanged(self, ...)
+	end
 
-    function Student(self)
-        super(self)
+	function Student(self)
+		super(self)
 
-        -- Use the super object access style
-        super[self].OnNameChanged = raiseEvent
-    end
+		-- Use the super object access style
+		super[self].OnNameChanged = raiseEvent
+	end
 end)
 
 o = Student()
 
 function o:OnNameChanged(name)
-    print("New name is " .. name)
+	print("New name is " .. name)
 end
 
 -- New name is Test
@@ -1778,8 +1778,8 @@ Like the event, the property is also a feature type of the interface and class. 
 
 ```lua
 class "Person" (function(_ENV)
-    property "Name" { type = String }
-    property "Age"  { type = Number }
+	property "Name" { type = String }
+	property "Age"  { type = Number }
 end)
 
 -- If the class has no constructor, we can use the class to create the object based on a table
@@ -1813,28 +1813,28 @@ Like the **member** of the **struct**, we use table to give the property's defin
 * event         the event used to handle the property value changes, if it's value is string, an event will be created:
 
 ```lua
-    class "Person" (function(_ENV)
-        property "Name" { type = String, event = "OnNameChanged" }
-    end)
+	class "Person" (function(_ENV)
+		property "Name" { type = String, event = "OnNameChanged" }
+	end)
 
-    o = Person { Name = "Ann" }
+	o = Person { Name = "Ann" }
 
-    function o:OnNameChanged(new, old, prop)
-        print(("[%s] %s -> %s"):format(prop, old, new))
-    end
+	function o:OnNameChanged(new, old, prop)
+		print(("[%s] %s -> %s"):format(prop, old, new))
+	end
 
-    -- [Name] Ann -> Ammy
-    o.Name = "Ammy"
+	-- [Name] Ann -> Ammy
+	o.Name = "Ammy"
 ```
 
 * handler       the function used to handle the property value changes, unlike the event, the handler is used to notify the class or interface itself, normally this is used combine with **field** (or auto-gen field), so the class or interface only need to act based on the value changes :
 
 ```lua
 class "Person" (function(_ENV)
-    property "Name" {
-        type = String, default = "anonymous",
-        handler = function(self, new, old, prop) print(("[%s] %s -> %s"):format(prop, old, new)) end
-    }
+	property "Name" {
+		type = String, default = "anonymous",
+		handler = function(self, new, old, prop) print(("[%s] %s -> %s"):format(prop, old, new)) end
+	}
 end)
 
 --[Name] anonymous -> Ann
@@ -1852,11 +1852,11 @@ If the **auto** auto-binding mechanism is using and the definition don't provide
 
 ```lua
 class "Person" (function(_ENV)
-    function SetName(self, name)
-        print("SetName", name)
-    end
+	function SetName(self, name)
+		print("SetName", name)
+	end
 
-    property "Name" { type = String }
+	property "Name" { type = String }
 end)
 
 -- SetName  Ann
@@ -1872,22 +1872,22 @@ When the class or interface has overridden the property, they still can use the 
 
 ```lua
 class "Person" (function(_ENV)
-    property "Name" { event = "OnNameChanged" }
+	property "Name" { event = "OnNameChanged" }
 end)
 
 class "Student" (function(_ENV)
-    inherit "Person"
+	inherit "Person"
 
-    property "Name" {
-        Set = function(self, name)
-            -- Use super property to save
-            super[self].Name = name
-        end,
-        Get = function(self)
-            -- Use super property to fetch
-            return super[self].Name
-        end,
-    }
+	property "Name" {
+		Set = function(self, name)
+			-- Use super property to save
+			super[self].Name = name
+		end,
+		Get = function(self)
+			-- Use super property to fetch
+			return super[self].Name
+		end,
+	}
 end)
 
 o = Student()
@@ -1899,16 +1899,16 @@ You also can build indexer properties like :
 
 ```lua
 class "A" (function( _ENV )
-    __Indexer__()
-    property "Items" {
-        set = function(self, idx, value)
-            self[idx] = value
-        end,
-        get = function(self, idx)
-            return self[idx]
-        end,
-        type = String,
-    }
+	__Indexer__()
+	property "Items" {
+		set = function(self, idx, value)
+			self[idx] = value
+		end,
+		get = function(self, idx)
+			return self[idx]
+		end,
+		type = String,
+	}
 end)
 
 o = A()
@@ -1927,21 +1927,21 @@ We have see examples about the function argument validation, the real usage of t
 
 ```lua
 class "Person" (function(_ENV)
-    __Arguments__{ String }
-    function SetInfo(self, name)
-        print("The name is " .. name)
-    end
+	__Arguments__{ String }
+	function SetInfo(self, name)
+		print("The name is " .. name)
+	end
 
-    __Arguments__{ NaturalNumber }
-    function SetInfo(self, age)
-        print("The age is " .. age)
-    end
+	__Arguments__{ NaturalNumber }
+	function SetInfo(self, age)
+		print("The age is " .. age)
+	end
 
-    __Arguments__{ String, NaturalNumber }
-    function SetInfo(self, name, age)
-        self:SetInfo(name)
-        self:SetInfo(age)
-    end
+	__Arguments__{ String, NaturalNumber }
+	function SetInfo(self, name, age)
+		self:SetInfo(name)
+		self:SetInfo(age)
+	end
 end)
 
 o = Person()
@@ -1955,21 +1955,21 @@ With the `__Arguments__`, we can bind several functions as one class(interface, 
 
 ```lua
 class "Person" (function(_ENV)
-    __Arguments__{ String }
-    function Person(self, name)
-        self.name = name
-    end
+	__Arguments__{ String }
+	function Person(self, name)
+		self.name = name
+	end
 
-    __Arguments__{ NaturalNumber }
-    function Person(self, age)
-        self.age = age
-    end
+	__Arguments__{ NaturalNumber }
+	function Person(self, age)
+		self.age = age
+	end
 
-    __Arguments__{ String, NaturalNumber }
-    function Person(self, name, age)
-        this(self, name)
-        this(self, age)
-    end
+	__Arguments__{ String, NaturalNumber }
+	function Person(self, name, age)
+		this(self, name)
+		this(self, age)
+	end
 end)
 
 o = Person("Ann", 24)
@@ -1981,18 +1981,18 @@ For the constructor, we can use **this** keyword to call the constructor with ot
 
 ```lua
 class "Student" (function(_ENV)
-    inherit "Person"
+	inherit "Person"
 
-    __Arguments__{ String, NaturalNumber, Number }
-    function Student(self, name, age, score)
-        this(self, name, age)
-        self.score = score
-    end
+	__Arguments__{ String, NaturalNumber, Number }
+	function Student(self, name, age, score)
+		this(self, name, age)
+		self.score = score
+	end
 
-    __Arguments__.Rest()  -- this means catch all other arguments, leave it to super class
-    function Student(self, ...)
-        super(self, ...)
-    end
+	__Arguments__.Rest()  -- this means catch all other arguments, leave it to super class
+	function Student(self, ...)
+		super(self, ...)
+	end
 end)
 ```
 
@@ -2000,17 +2000,17 @@ The previous examples only show require arguments, to describe optional and vara
 
 ```lua
 struct "Variable" (function(_ENV)
-    name    = NEString
-    type    = AnyType
-    nilable = Boolean
-    default = Any
-    islist  = Boolean
+	name    = NEString
+	type    = AnyType
+	nilable = Boolean
+	default = Any
+	islist  = Boolean
 
-    -- generate a varargs with type
-    Rest    = function(type, atleastone) end
+	-- generate a varargs with type
+	Rest    = function(type, atleastone) end
 
-    -- generate an optional variable
-    Optional= function(type, default) end
+	-- generate an optional variable
+	Optional= function(type, default) end
 end)
 ```
 
@@ -2032,13 +2032,13 @@ There are more checks than the argument check, if we need notify the outside som
 
 ```lua
 class "A" (function(_ENV)
-    local function check(self)
-        throw("something wrong")
-    end
+	local function check(self)
+		throw("something wrong")
+	end
 
-    function A(self)
-        check(self)
-    end
+	function A(self)
+		check(self)
+	end
 end)
 
 o = A() -- something wrong
@@ -2048,12 +2048,12 @@ The object creation is controlled by the system, so the system can covert the Ex
 
 ```lua
 PLoop(function(_ENV)
-    __Arguments__{ String }:Throwable()
-    function test(name)
-        throw("we have throwable exception here")
-    end
+	__Arguments__{ String }:Throwable()
+	function test(name)
+		throw("we have throwable exception here")
+	end
 
-    test("HI") -- we have throwable exception here
+	test("HI") -- we have throwable exception here
 end)
 ```
 
@@ -2067,16 +2067,16 @@ We may create several classes with the same behaviors but for different types, s
 ```lua
 PLoop(function(_ENV)
 
-    __Template__ { Any }
-    class "Array" (function(_ENV, eletype)
-        __Arguments__{ Variable.Rest(eletype) }
-        function __new(cls, ...)
-            return { ... }, true
-        end
-    end)
+	__Template__ { Any }
+	class "Array" (function(_ENV, eletype)
+		__Arguments__{ Variable.Rest(eletype) }
+		function __new(cls, ...)
+			return { ... }, true
+		end
+	end)
 
-    --Error: Usage: Anonymous([... as System.Integer]) - the 4th argument must be System.Integer
-    o = Array[Integer](1, 2, 3, "hi", 5)
+	--Error: Usage: Anonymous([... as System.Integer]) - the 4th argument must be System.Integer
+	o = Array[Integer](1, 2, 3, "hi", 5)
 end)
 ```
 
@@ -2091,18 +2091,18 @@ You also can create multi-types template, just like :
 ```lua
 PLoop(function(_ENV)
 
-    __Template__ { Any, Any }
-    class "Dict" (function(_ENV, ktype, vtype)
-        __Arguments__{ ktype, vtype }
-        function Add(self, key, value)
-            self[key] = value
-        end
-    end)
+	__Template__ { Any, Any }
+	class "Dict" (function(_ENV, ktype, vtype)
+		__Arguments__{ ktype, vtype }
+		function Add(self, key, value)
+			self[key] = value
+		end
+	end)
 
-    o = Dict[{Integer, String}]()
+	o = Dict[{Integer, String}]()
 
-    -- Error: Usage: Anonymous:Add(System.Integer, System.String) - the 2nd argument must be System.String
-    o:Add(1, true)
+	-- Error: Usage: Anonymous:Add(System.Integer, System.String) - the 2nd argument must be System.String
+	o:Add(1, true)
 end)
 ```
 
@@ -2127,11 +2127,11 @@ The environment(include the `_G`) can have a root namespace so all features defi
 
 ```lua
 PLoop(function(_ENV)
-    namespace "MyNs"
+	namespace "MyNs"
 
-    class "A" {}
+	class "A" {}
 
-    print(A) -- MyNs.A
+	print(A) -- MyNs.A
 end)
 ```
 
@@ -2139,11 +2139,11 @@ Also it can import several other namespaces, features that defined in them can b
 
 ```lua
 PLoop(function(_ENV)
-    print(A) -- nil
+	print(A) -- nil
 
-    import "MyNs"
+	import "MyNs"
 
-    print(A) -- MyNs.A
+	print(A) -- MyNs.A
 end)
 ```
 
@@ -2151,11 +2151,11 @@ The namespace's path is from the root namespace to the sub namepsace, and to the
 
 ```lua
 PLoop(function(_ENV)
-    namespace "MyNs"
+	namespace "MyNs"
 
-    class "System.TestNS.A" {}
+	class "System.TestNS.A" {}
 
-    print(A) -- System.TestNS.A
+	print(A) -- System.TestNS.A
 end)
 ```
 
@@ -2173,7 +2173,7 @@ _ENV = Module "TestMDL" "1.0.0"
 
 __Async__()
 function dotask()
-    print(coroutine.running())
+	print(coroutine.running())
 end
 ```
 
@@ -2204,16 +2204,16 @@ If you only need to decorate some functions, you can simply use the `__Delegate_
 
 ```lua
 PLoop(function(_ENV)
-    function decorate(func, ...)
-        print("Call", func, ...)
-        return func(...)
-    end
+	function decorate(func, ...)
+		print("Call", func, ...)
+		return func(...)
+	end
 
-    __Delegate__(decorate)
-    function test() end
+	__Delegate__(decorate)
+	function test() end
 
-    -- Call function: 02E7B1C8  1   2   3
-    test(1, 2, 3)
+	-- Call function: 02E7B1C8  1   2   3
+	test(1, 2, 3)
 end)
 ```
 
@@ -2226,28 +2226,28 @@ To define an attribute class, we should extend the **System.IAttribute** interfa
 It's also require several properties if you don't want use the default value:
 
 * AttributeTarget   - the attribute targets, can be combined
-    * System.AttributeTargets.All  (Default)
-    * System.AttributeTargets.Function  - for common lua functions
-    * System.AttributeTargets.Namespace - for namespaces
-    * System.AttributeTargets.Enum      - for enumerations
-    * System.AttributeTargets.Struct    - for structures
-    * System.AttributeTargets.Member    - for sturct's member
-    * System.AttributeTargets.Method    - for struct, interface or class methods
-    * System.AttributeTargets.Interface - for interfaces
-    * System.AttributeTargets.Class     - for classes
-    * System.AttributeTargets.Event     - for events
-    * System.AttributeTargets.Property  - for properies
+	* System.AttributeTargets.All  (Default)
+	* System.AttributeTargets.Function  - for common lua functions
+	* System.AttributeTargets.Namespace - for namespaces
+	* System.AttributeTargets.Enum      - for enumerations
+	* System.AttributeTargets.Struct    - for structures
+	* System.AttributeTargets.Member    - for sturct's member
+	* System.AttributeTargets.Method    - for struct, interface or class methods
+	* System.AttributeTargets.Interface - for interfaces
+	* System.AttributeTargets.Class     - for classes
+	* System.AttributeTargets.Event     - for events
+	* System.AttributeTargets.Property  - for properies
 
 * Inheritable       - whether the attribtue is inheritable, default false
 
 * Overridable       - Whether the attribute's attach data is overridable, default true
 
 * Priority          - the attribute's priority, the higher the first be applied
-    * System.AttributePriority.Highest
-    * System.AttributePriority.Higher
-    * System.AttributePriority.Normal  (Default)
-    * System.AttributePriority.Lower
-    * System.AttributePriority.Lowest
+	* System.AttributePriority.Highest
+	* System.AttributePriority.Higher
+	* System.AttributePriority.Normal  (Default)
+	* System.AttributePriority.Lower
+	* System.AttributePriority.Lowest
 
 * SubLevel          - the attribute priority's sublevel, if two attribute have the same priority, the bigger sublevel will be first applied, default 0
 
@@ -2259,42 +2259,42 @@ Those attributes are used to modify the target's definitions, normally used on f
 
 ```lua
 PLoop(function(_ENV)
-    class "__SafeCall__" (function(_ENV)
-        extend "IInitAttribute"
+	class "__SafeCall__" (function(_ENV)
+		extend "IInitAttribute"
 
-        local function checkret(ok, ...)
-            if ok then return ... end
-        end
+		local function checkret(ok, ...)
+			if ok then return ... end
+		end
 
-        --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            return function(...)
-                return checkret(pcall(definition, ...))
-            end
-        end
+		--- modify the target's definition
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param   definition                  the target's definition
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		-- @return  definition                  the new definition
+		function InitDefinition(self, target, targettype, definition, owner, name, stack)
+			return function(...)
+				return checkret(pcall(definition, ...))
+			end
+		end
 
-        property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
-    end)
+		property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
+	end)
 
-    __SafeCall__()
-    function test1()
-        return 1, 2, 3
-    end
+	__SafeCall__()
+	function test1()
+		return 1, 2, 3
+	end
 
-    __SafeCall__()
-    function test2(i, j)
-        return i/j
-    end
+	__SafeCall__()
+	function test2(i, j)
+		return i/j
+	end
 
-    print(test1()) -- 1, 2, 3
-    print(test2()) -- nothing
+	print(test1()) -- 1, 2, 3
+	print(test2()) -- nothing
 end)
 ```
 
@@ -2306,27 +2306,27 @@ Those attributes are used to apply changes on the target, normally this is only 
 
 ```lua
 class "__Sealed__" (function(_ENV)
-    extend "IApplyAttribute"
+	extend "IApplyAttribute"
 
-    --- apply changes on the target
-    -- @param   target                      the target
-    -- @param   targettype                  the target type
-    -- @param   owner                       the target's owner
-    -- @param   name                        the target's name in the owner
-    -- @param   stack                       the stack level
-    function ApplyAttribute(self, target, targettype, owner, name, stack)
-        if targettype == AttributeTargets.Enum then
-            Enum.SetSealed(target)
-        elseif targettype == AttributeTargets.Struct then
-            Struct.SetSealed(target)
-        elseif targettype == AttributeTargets.Interface then
-            Interface.SetSealed(target)
-        elseif targettype == AttributeTargets.Class then
-            Class.SetSealed(target)
-        end
-    end
+	--- apply changes on the target
+	-- @param   target                      the target
+	-- @param   targettype                  the target type
+	-- @param   owner                       the target's owner
+	-- @param   name                        the target's name in the owner
+	-- @param   stack                       the stack level
+	function ApplyAttribute(self, target, targettype, owner, name, stack)
+		if targettype == AttributeTargets.Enum then
+			Enum.SetSealed(target)
+		elseif targettype == AttributeTargets.Struct then
+			Struct.SetSealed(target)
+		elseif targettype == AttributeTargets.Interface then
+			Interface.SetSealed(target)
+		elseif targettype == AttributeTargets.Class then
+			Class.SetSealed(target)
+		end
+	end
 
-    property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
+	property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
 end)
 ```
 
@@ -2338,29 +2338,29 @@ Those attributes are used to attach attribtue datas on the target, also can be u
 
 ```lua
 PLoop(function(_ENV)
-    class "__DataTable__" (function(_ENV)
-        extend "IAttachAttribute"
+	class "__DataTable__" (function(_ENV)
+		extend "IAttachAttribute"
 
-        --- apply changes on the target
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        function AttachAttribute(self, target, targettype, owner, name, stack)
-            return self.DataTable
-        end
+		--- apply changes on the target
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		function AttachAttribute(self, target, targettype, owner, name, stack)
+			return self.DataTable
+		end
 
-        property "AttributeTarget" { default = AttributeTargets.Class }
+		property "AttributeTarget" { default = AttributeTargets.Class }
 
-        property "DataTable" { type = String }
-    end)
+		property "DataTable" { type = String }
+	end)
 
-    __DataTable__{ DataTable = "Persons" }
-    class "Person" {}
+	__DataTable__{ DataTable = "Persons" }
+	class "Person" {}
 
-    -- Persons
-    print(IAttribute.GetAttachedData(__DataTable__, Person))
+	-- Persons
+	print(IAttribute.GetAttachedData(__DataTable__, Person))
 end)
 ```
 

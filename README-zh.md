@@ -50,18 +50,18 @@ List(...)                        |使用输入的元素构建一个列表，不�
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- List(table)
-    o = {1, 2, 3}
-    print(o == List(o))  -- true
+	-- List(table)
+	o = {1, 2, 3}
+	print(o == List(o))  -- true
 
-    -- List(count)
-    v = List(10)         -- {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	-- List(count)
+	v = List(10)         -- {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-    -- List(count, func)
-    v = List(10, function(i) return math.random(100) end) -- {46, 41, 85, 80, 62, 37, 29, 91, 62, 37}
+	-- List(count, func)
+	v = List(10, function(i) return math.random(100) end) -- {46, 41, 85, 80, 62, 37, 29, 91, 62, 37}
 
-    -- List(...)
-    v = List(1, 5, 4)    -- {1, 5, 4}
+	-- List(...)
+	v = List(1, 5, 4)    -- {1, 5, 4}
 end)
 
 print(v) -- nil
@@ -74,47 +74,47 @@ print(List) -- System.Collections.List
 
 这是我们的第一个PLoop用例，**PLoop**有很多和通常Lua开发不同的设计，首先这里使用了 `PLoop(function(_ENV) end)`来封装和调用处理代码，这种设计是为了解决Lua开发的常见难点(以下关于环境的讨论，如果无法理解可以先行跳过，不影响阅读）:
 
-    * Lua的每个文件都可以视为一个函数被执行，而Lua的每个函数都有一个环境与之关联，环境就是Lua的普通table，这个函数中访问的全局变量就是这个环境中的字段。而默认情况下，这个环境就是`_G`。
+	* Lua的每个文件都可以视为一个函数被执行，而Lua的每个函数都有一个环境与之关联，环境就是Lua的普通table，这个函数中访问的全局变量就是这个环境中的字段。而默认情况下，这个环境就是`_G`。
 
-        协作开发时，所有程序创建和读取的全局变量都会保存在`_G`中，这很容易引起冲突，为了避免重名冲突，一般需要强制使用local变量，这种开发方式并不自由，也过多的创建了闭包。
+		协作开发时，所有程序创建和读取的全局变量都会保存在`_G`中，这很容易引起冲突，为了避免重名冲突，一般需要强制使用local变量，这种开发方式并不自由，也过多的创建了闭包。
 
-    * 如**System.Collections.List**所示，通常为了避免同名类型冲突，一般使用命名空间来管理各种类型，为了在`_G`中使用**List**，我们需要使用`import "System.Collections"`来将这个命名空间的类型导入`_G`中，这点在上面的例子中最后几行可以看到。
+	* 如**System.Collections.List**所示，通常为了避免同名类型冲突，一般使用命名空间来管理各种类型，为了在`_G`中使用**List**，我们需要使用`import "System.Collections"`来将这个命名空间的类型导入`_G`中，这点在上面的例子中最后几行可以看到。
 
-        如果，我们有一个界面库提供**System.Form.List**类型，这是一个界面类，如果也同样被导入到`_G`中，这两个类型就会因为重名导致程序出错。
+		如果，我们有一个界面库提供**System.Form.List**类型，这是一个界面类，如果也同样被导入到`_G`中，这两个类型就会因为重名导致程序出错。
 
-    究其根源就在于，所有代码的默认执行环境都是`_G`，那么只要每个处理代码运行在各自的私有环境中，就可以完全避免重名问题，也无需特意使用local来申明函数和共用数据（函数内该用local的自然该用local，效率不同）。
+	究其根源就在于，所有代码的默认执行环境都是`_G`，那么只要每个处理代码运行在各自的私有环境中，就可以完全避免重名问题，也无需特意使用local来申明函数和共用数据（函数内该用local的自然该用local，效率不同）。
 
-    在之前的例子中，封装代码的函数被传给**PLoop**后，将被绑定一个私有且特殊的**PLoop**环境，然后被执行。至于为什么采用这种形式，原因在于Lua的环境控制在5.1到5.2两个版本间有重大的变化，为了通用性，**PLoop**使用`PLoop(function(_ENV) end)`的形式来封装和调用代码，之后也会看到其他类似的处理，比如定义类`class "A" (function(_ENV) end)`。
+	在之前的例子中，封装代码的函数被传给**PLoop**后，将被绑定一个私有且特殊的**PLoop**环境，然后被执行。至于为什么采用这种形式，原因在于Lua的环境控制在5.1到5.2两个版本间有重大的变化，为了通用性，**PLoop**使用`PLoop(function(_ENV) end)`的形式来封装和调用代码，之后也会看到其他类似的处理，比如定义类`class "A" (function(_ENV) end)`。
 
-    这么处理的好处我们将在以后的例子中逐步了解，这个例子中使用到的点是:
+	这么处理的好处我们将在以后的例子中逐步了解，这个例子中使用到的点是:
 
-    * 全局变量属于该私有环境，在_G中无法访问到被创建的变量v等。
+	* 全局变量属于该私有环境，在_G中无法访问到被创建的变量v等。
 
-    * 可以随意使用例如math.random这样的保存在`_G`中的公共库或者变量，这样不会造成性能问题，私有环境会在第一次访问后自动缓存这些变量。
+	* 可以随意使用例如math.random这样的保存在`_G`中的公共库或者变量，这样不会造成性能问题，私有环境会在第一次访问后自动缓存这些变量。
 
-    * 可以直接访问**List**类，**PLoop**中有公共命名空间这个概念，公共命名空间不需要被**import**即可被所有的**PLoop**环境访问，默认的公共命名空间是**System**, **System.Collections**和**System.Threading**，后面都会接触到。
+	* 可以直接访问**List**类，**PLoop**中有公共命名空间这个概念，公共命名空间不需要被**import**即可被所有的**PLoop**环境访问，默认的公共命名空间是**System**, **System.Collections**和**System.Threading**，后面都会接触到。
 
-    公共命名空间的访问优先级低于被import的命名空间，所以，如果使用了`import "System.Form"`，那么访问List访问到的是**System.Form.List**。
+	公共命名空间的访问优先级低于被import的命名空间，所以，如果使用了`import "System.Form"`，那么访问List访问到的是**System.Form.List**。
 
-    * 我们可以使用关键字**import**为私有环境或者`_G`引入命名空间，之后可以使用里面保存的类型。不同点在于，向`_G`中导入，是全部拷贝到`_G`中，而私有环境仅记录下自己导入的命名空间，当需要时，才取出要用的类型。
+	* 我们可以使用关键字**import**为私有环境或者`_G`引入命名空间，之后可以使用里面保存的类型。不同点在于，向`_G`中导入，是全部拷贝到`_G`中，而私有环境仅记录下自己导入的命名空间，当需要时，才取出要用的类型。
 
-    * **PLoop**的私有环境，会在第一次读取某个全局变量时进行查找（查找到同样会自动缓存），顺序是:
+	* **PLoop**的私有环境，会在第一次读取某个全局变量时进行查找（查找到同样会自动缓存），顺序是:
 
-    * 查找这个环境所属的命名空间（使用`namespace "MyNamesapce`"申明，之后在这个环境中定义的类型都会保存在这个命名空间中)
+	* 查找这个环境所属的命名空间（使用`namespace "MyNamesapce`"申明，之后在这个环境中定义的类型都会保存在这个命名空间中)
 
-        * 查找这个环境**import**的命名空间
+		* 查找这个环境**import**的命名空间
 
-        * 查找公共命名空间
+		* 查找公共命名空间
 
-        * 查找根命名空间，比如直接访问**System**
+		* 查找根命名空间，比如直接访问**System**
 
-        * 查找基础环境，私有环境可以设置自己的基础环境，通常是`_G`
+		* 查找基础环境，私有环境可以设置自己的基础环境，通常是`_G`
 
-    在命名空间中查找变量名的规则是:
+	在命名空间中查找变量名的规则是:
 
-    * 对比命名空间的名字（路径最后部分，比如**System.Form**的名字是**Form**)，一致就返回该命名空间
+	* 对比命名空间的名字（路径最后部分，比如**System.Form**的名字是**Form**)，一致就返回该命名空间
 
-    * 直接使用`命名空间[变量名]`获取，通常结果会是子命名空间比如`System["Form"]`得到**System.Form**，也可能是类型，比如`System.Collections["List"]`，也可能是类型本身提供的资源，比如类的静态方法，枚举类型的枚举值等，后面会看到具体的例子。
+	* 直接使用`命名空间[变量名]`获取，通常结果会是子命名空间比如`System["Form"]`得到**System.Form**，也可能是类型，比如`System.Collections["List"]`，也可能是类型本身提供的资源，比如类的静态方法，枚举类型的枚举值等，后面会看到具体的例子。
 
 回到List对象的创建，我们可以使用List这个类作为对象构建器，它会根据输入的参数来生成对象。
 
@@ -139,9 +139,9 @@ RemoveByIndex(self[, index])             |按索引移除元素，即table.remov
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    print(obj:Remove()) -- 10
+	print(obj:Remove()) -- 10
 end)
 ```
 
@@ -152,9 +152,9 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    for _, v in obj:GetIterator() do print(v) end
+	for _, v in obj:GetIterator() do print(v) end
 end)
 ```
 
@@ -164,25 +164,25 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    -- 按顺序打印list中的每个元素
-    obj:Each(print)
+	-- 按顺序打印list中的每个元素
+	obj:Each(print)
 
-    -- 按顺序打印所有的偶数
-    obj:Filter(function(x) return x%2 == 0 end):Each(print)
+	-- 按顺序打印所有的偶数
+	obj:Filter(function(x) return x%2 == 0 end):Each(print)
 
-    -- 按顺序打印最后三个数字
-    obj:Range(-3, -1):Each(print)
+	-- 按顺序打印最后三个数字
+	obj:Range(-3, -1):Each(print)
 
-    -- 打印所有的奇数
-    obj:Range(1, -1, 2):Each(print)
+	-- 打印所有的奇数
+	obj:Range(1, -1, 2):Each(print)
 
-    -- 按顺序打印所有数字的2^x
-    obj:Map(function(x) return 2^x end):Each(print)
+	-- 按顺序打印所有数字的2^x
+	obj:Map(function(x) return 2^x end):Each(print)
 
-    -- 计算合计
-    print(obj:Reduce(function(x,y) return x+y end))
+	-- 计算合计
+	print(obj:Reduce(function(x,y) return x+y end))
 end)
 ```
 
@@ -194,21 +194,21 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    obj = List(10)
+	obj = List(10)
 
-    -- 我们将解析下面的操作
-    -- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
+	-- 我们将解析下面的操作
+	-- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
 
-    -- 队列操作会返回一个流处理工作对象
-    local worker = obj:Range(1, -1, 2)
+	-- 队列操作会返回一个流处理工作对象
+	local worker = obj:Range(1, -1, 2)
 
-    -- 虽然使用了赋值，但实际继续队列操作，依然是同一个
-    worker = worker:Map(function(x) return 2^x end)
+	-- 虽然使用了赋值，但实际继续队列操作，依然是同一个
+	worker = worker:Map(function(x) return 2^x end)
 
-    -- 调用Each终止方法的实际处理
-    for _, v in worker:GetIterator() do
-        print(v)
-    end
+	-- 调用Each终止方法的实际处理
+	for _, v in worker:GetIterator() do
+		print(v)
+	end
 end)
 
 ```
@@ -266,31 +266,31 @@ TimSort(self, [compare[, start[, stop]]])       |使用timsort排序
 require "PLoop"
 
 PLoop(function(_ENV)
-    local random = math.random
-    local function val() return random(500000) end
+	local random = math.random
+	local function val() return random(500000) end
 
-    function test(cnt, sortMethod)
-        collectgarbage()
+	function test(cnt, sortMethod)
+		collectgarbage()
 
-        local st = os.clock()
+		local st = os.clock()
 
-        for i = 1, cnt do
-            local lst = List(1000, val)
-            lst[sortMethod](lst)
-        end
+		for i = 1, cnt do
+			local lst = List(1000, val)
+			lst[sortMethod](lst)
+		end
 
-        print(sortMethod, "Cost", os.clock() - st)
-    end
+		print(sortMethod, "Cost", os.clock() - st)
+	end
 
-    test(100, "BubbleSort")
-    test(100, "CombSort")
-    test(100, "HeapSort")
-    test(100, "InsertionSort")
-    test(100, "MergeSort")
-    test(100, "QuickSort")
-    test(100, "SelectionSort")
-    test(100, "Sort")
-    test(100, "TimSort")
+	test(100, "BubbleSort")
+	test(100, "CombSort")
+	test(100, "HeapSort")
+	test(100, "InsertionSort")
+	test(100, "MergeSort")
+	test(100, "QuickSort")
+	test(100, "SelectionSort")
+	test(100, "Sort")
+	test(100, "TimSort")
 end)
 ```
 
@@ -344,11 +344,11 @@ Dictionary(iter, obj, index)     |使用迭代器产生的键值对创建新的d
 require "PLoop"
 
 PLoop(function(_ENV)
-    Dictionary(_G) -- Convert the _G to a dictionary
+	Dictionary(_G) -- Convert the _G to a dictionary
 
-    -- key map to key^2
-    lst = List(10)
-    Dictionary(lst, lst:Map(function(x)return x^2 end))
+	-- key map to key^2
+	lst = List(10)
+	Dictionary(lst, lst:Map(function(x)return x^2 end))
 end)
 ```
 
@@ -394,11 +394,11 @@ Values                                   |返回一个列表的流处理工作�
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- 获取_G的所有键，转换为List后，排序，再打印
-    Dictionary(_G).Keys:ToList():Sort():Each(print)
+	-- 获取_G的所有键，转换为List后，排序，再打印
+	Dictionary(_G).Keys:ToList():Sort():Each(print)
 
-    -- 计算所有值的总和
-    print(Dictionary{ A = 1, B = 2, C = 3}:Reduce(function(k, v, init) return init + v end, 0))
+	-- 计算所有值的总和
+	print(Dictionary{ A = 1, B = 2, C = 3}:Reduce(function(k, v, init) return init + v end, 0))
 end)
 
 ```
@@ -412,17 +412,17 @@ end)
 
 ```lua
 PLoop(function(_ENV)
-    __Iterator__()
-    function iter(i, j)
-        for k = i, j do
-            coroutine.yield(k)
-        end
-    end
+	__Iterator__()
+	function iter(i, j)
+		for k = i, j do
+			coroutine.yield(k)
+		end
+	end
 
-    -- print 1-10 for each line
-    for i in iter(1, 10) do
-        print(i)
-    end
+	-- print 1-10 for each line
+	for i in iter(1, 10) do
+		print(i)
+	end
 end)
 ```
 
@@ -436,30 +436,30 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- 计算斐波那契数列
-    __Iterator__()
-    function Fibonacci(maxn)
-        local n0, n1 = 1, 1
+	-- 计算斐波那契数列
+	__Iterator__()
+	function Fibonacci(maxn)
+		local n0, n1 = 1, 1
 
-        coroutine.yield(0, n0)
-        coroutine.yield(1, n1)
+		coroutine.yield(0, n0)
+		coroutine.yield(1, n1)
 
-        local n = 2
+		local n = 2
 
-        while n <= maxn  do
-            n0, n1 = n1, n0 + n1
-            coroutine.yield(n, n1)
-            n = n + 1
-        end
-    end
+		while n <= maxn  do
+			n0, n1 = n1, n0 + n1
+			coroutine.yield(n, n1)
+			n = n + 1
+		end
+	end
 
-    -- 1, 1, 2, 3, 5, 8
-    for i, v in Fibonacci(5) do print(v) end
+	-- 1, 1, 2, 3, 5, 8
+	for i, v in Fibonacci(5) do print(v) end
 
-    -- 我们也可以依照迭代器的习惯，将参数在之后传入
-    -- 这个迭代器会自动合并所有参数
-    -- 1, 1, 2, 3, 5, 8
-    for i, v in Fibonacci(), 5 do print(v) end
+	-- 我们也可以依照迭代器的习惯，将参数在之后传入
+	-- 这个迭代器会自动合并所有参数
+	-- 1, 1, 2, 3, 5, 8
+	for i, v in Fibonacci(), 5 do print(v) end
 end)
 ```
 
@@ -473,16 +473,16 @@ end)
 
 ```lua
 PLoop(function(_ENV)
-    -- 以协程运行函数
-    __Async__()
-    function printco(i, j)
-        print(coroutine.running())
-    end
+	-- 以协程运行函数
+	__Async__()
+	function printco(i, j)
+		print(coroutine.running())
+	end
 
-    -- 运行结果相同，系统会一直复用这些协程
-    for i = 1, 10 do
-        printco()
-    end
+	-- 运行结果相同，系统会一直复用这些协程
+	for i = 1, 10 do
+		printco()
+	end
 end)
 ```
 
@@ -503,11 +503,11 @@ PLOOP_PLATFORM_SETTINGS = { ENV_ALLOW_GLOBAL_VAR_BE_NIL = false }
 require "PLoop"
 
 PLoop(function(_ENV)
-    local a = ture  -- Error: The global variable "ture" can't be nil.
+	local a = ture  -- Error: The global variable "ture" can't be nil.
 
-    if a then
-        print("ok")
-    end
+	if a then
+		print("ok")
+	end
 end)
 ```
 
@@ -521,19 +521,19 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- 定义一个具有Name和Age属性的类
-    class "Person" (function(_ENV)
-        property "Name" { type = String }
-        property "Age"  { type = Number }
-    end)
+	-- 定义一个具有Name和Age属性的类
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
 
-    o = Person()
+	o = Person()
 
-    o.Name = "King" -- Ok
+	o.Name = "King" -- Ok
 
-    o.name = "Ann"  -- Error: The object can't accept field that named "name"
+	o.name = "Ann"  -- Error: The object can't accept field that named "name"
 
-    print(o.name)   -- Error: The object don't have any field that named "name"
+	print(o.name)   -- Error: The object don't have any field that named "name"
 end)
 ```
 
@@ -550,12 +550,12 @@ end)
 
 ```lua
 PLoop(function(_ENV)
-    __Arguments__{ String, Number }
-    function SetInfo(name, age)
-    end
+	__Arguments__{ String, Number }
+	function SetInfo(name, age)
+	end
 
-    -- Error: Usage: SetInfo(System.String, System.Number) - the 2nd argument must be number, got boolean
-    SetInfo("Ann", true)
+	-- Error: Usage: SetInfo(System.String, System.Number) - the 2nd argument must be number, got boolean
+	SetInfo("Ann", true)
 end)
 ```
 
@@ -571,12 +571,12 @@ PLOOP_PLATFORM_SETTINGS = { TYPE_VALIDATION_DISABLED = true }
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Arguments__{ String, Number }
-    function SetInfo(name, age)
-    end
+	__Arguments__{ String, Number }
+	function SetInfo(name, age)
+	end
 
-    -- No error now
-    SetInfo("Ann", true)
+	-- No error now
+	SetInfo("Ann", true)
 end)
 ```
 
@@ -604,21 +604,21 @@ enum "name" { -- key-value pairs }
 require "PLoop"
 
 PLoop(function(_ENV)
-    namespace "TestNS"
+	namespace "TestNS"
 
-    enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
+	enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
 
-    print(Direction.South) -- 3
-    print(Direction.NoDir) -- nil
-    print(Direction(3))    -- South
+	print(Direction.South) -- 3
+	print(Direction.NoDir) -- nil
+	print(Direction(3))    -- South
 
-    print(East)            -- 2
+	print(East)            -- 2
 end)
 
 PLoop(function(_ENV)
-    import "TestNS.Direction"
+	import "TestNS.Direction"
 
-    print(South)           -- 3
+	print(South)           -- 3
 end)
 ```
 
@@ -628,16 +628,16 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    __AutoIndex__{ North = 1, South = 5 }
-    enum "Direction" {
-        "North",
-        "East",
-        "South",
-        "West",
-    }
+	__AutoIndex__{ North = 1, South = 5 }
+	enum "Direction" {
+		"North",
+		"East",
+		"South",
+		"West",
+	}
 
-    print(East) -- 2
-    print(West) -- 6
+	print(East) -- 2
+	print(West) -- 6
 end)
 ```
 
@@ -650,33 +650,33 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Flags__()
-    enum "Days" {
-        "SUNDAY",
-        "MONDAY",
-        "TUESDAY",
-        "WEDNESDAY",
-        "THURSDAY",
-        "FRIDAY",
-        "SATURDAY",
-    }
+	__Flags__()
+	enum "Days" {
+		"SUNDAY",
+		"MONDAY",
+		"TUESDAY",
+		"WEDNESDAY",
+		"THURSDAY",
+		"FRIDAY",
+		"SATURDAY",
+	}
 
-    v = SUNDAY + MONDAY + FRIDAY
+	v = SUNDAY + MONDAY + FRIDAY
 
-    -- 和普通枚举类型不同，使用值返回枚举名得到的是一个迭代器
-    -- SUNDAY  1
-    -- MONDAY  2
-    -- FRIDAY  32
-    for name, val in Days(v) do
-        print(name, val)
-    end
+	-- 和普通枚举类型不同，使用值返回枚举名得到的是一个迭代器
+	-- SUNDAY  1
+	-- MONDAY  2
+	-- FRIDAY  32
+	for name, val in Days(v) do
+		print(name, val)
+	end
 
-    -- 或者也可以传入一个table来缓存结果
-    local result = Days(v, {})
-    for name, val in pairs(result) do print(name, val) end
+	-- 或者也可以传入一个table来缓存结果
+	local result = Days(v, {})
+	for name, val in pairs(result) do print(name, val) end
 
-    print(Enum.ValidateFlags(MONDAY, v)) -- true
-    print(Enum.ValidateFlags(SATURDAY, v)) -- false
+	print(Enum.ValidateFlags(MONDAY, v)) -- true
+	print(Enum.ValidateFlags(SATURDAY, v)) -- false
 end)
 ```
 
@@ -702,31 +702,31 @@ Validate(target)                |如果目标是枚举类型，返回true，否�
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Default__("North") __AutoIndex__()
-    enum "Direction" {
-        "North",
-        "East",
-        "South",
-        "West",
-    }
+	__Default__("North") __AutoIndex__()
+	enum "Direction" {
+		"North",
+		"East",
+		"South",
+		"West",
+	}
 
-    print(Enum.GetDefault(Direction)) -- 1
+	print(Enum.GetDefault(Direction)) -- 1
 
-    --如果没有封闭，新定义会覆盖原本的定义
-    __Sealed__()
-    enum "Direction" { North = "N", East = "E", South = "S", West = "W" }
+	--如果没有封闭，新定义会覆盖原本的定义
+	__Sealed__()
+	enum "Direction" { North = "N", East = "E", South = "S", West = "W" }
 
-    print(Enum.GetDefault(Direction)) -- nil
+	print(Enum.GetDefault(Direction)) -- nil
 
-    -- 封闭后，我们可以添加键值对
-    enum "Direction" { Center = "C" }
+	-- 封闭后，我们可以添加键值对
+	enum "Direction" { Center = "C" }
 
-    -- 但我们不能覆盖存在的键或者值
-    -- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed
-    enum "Direction" { North = 1 }
+	-- 但我们不能覆盖存在的键或者值
+	-- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed
+	enum "Direction" { North = 1 }
 
-    -- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed
-    enum "Direction" { C = "N" }
+	-- Error: Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed
+	enum "Direction" { C = "N" }
 end)
 ```
 
@@ -750,15 +750,15 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- 环境 A
-    struct "Number" (function(_ENV)
-        -- 环境 B
-        function Number(value)
-            return type(value) ~= "number" and "the %s must be number, got " .. type(value)
-        end
-    end)
+	-- 环境 A
+	struct "Number" (function(_ENV)
+		-- 环境 B
+		function Number(value)
+			return type(value) ~= "number" and "the %s must be number, got " .. type(value)
+		end
+	end)
 
-    v = Number(true)  -- Error : the value must be number, got boolean
+	v = Number(true)  -- Error : the value must be number, got boolean
 end)
 end)
 ```
@@ -781,12 +781,12 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
-    print(AnyBool(1))  -- true
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
+	print(AnyBool(1))  -- true
 end)
 ```
 
@@ -798,13 +798,13 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Arguments__{ Callable, Number, Number }
-    function Calc(func, a, b)
-        print(func(a, b))
-    end
+	__Arguments__{ Callable, Number, Number }
+	function Calc(func, a, b)
+		print(func(a, b))
+	end
 
-    Calc("x,y=>x+y", 1, 11) -- 12
-    Calc("x,y=>x*y", 2, 11) -- 22
+	Calc("x,y=>x+y", 1, 11) -- 12
+	Calc("x,y=>x*y", 2, 11) -- 22
 end)
 ```
 
@@ -816,7 +816,7 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    List(10):Map("x=>x^2"):Each(print)
+	List(10):Map("x=>x^2"):Each(print)
 end)
 ```
 
@@ -828,19 +828,19 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Integer" (function(_ENV)
-        -- 指定Number为基础结构体
-        __base = Number
+	struct "Integer" (function(_ENV)
+		-- 指定Number为基础结构体
+		__base = Number
 
-        local floor = math.floor
+		local floor = math.floor
 
-        function Integer(value)
-            return floor(value) ~= value and "the %s must be integer"
-        end
-    end)
+		function Integer(value)
+			return floor(value) ~= value and "the %s must be integer"
+		end
+	end)
 
-    v = Integer(true)  -- Error : the value must be number, got boolean
-    v = Integer(1.23)  -- Error : the value must be integer
+	v = Integer(true)  -- Error : the value must be number, got boolean
+	v = Integer(1.23)  -- Error : the value must be integer
 end)
 ```
 
@@ -850,19 +850,19 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Default__(0)
-    struct "Integer" (function(_ENV)
-        __base = Number
-        __default = 0 -- 也可以向__default赋值替代__Default__特性
+	__Default__(0)
+	struct "Integer" (function(_ENV)
+		__base = Number
+		__default = 0 -- 也可以向__default赋值替代__Default__特性
 
-        local floor = math.floor
+		local floor = math.floor
 
-        function Integer(value)
-            return floor(value) ~= value and "the %s must be integer"
-        end
-    end)
+		function Integer(value)
+			return floor(value) ~= value and "the %s must be integer"
+		end
+	end)
 
-    print(Struct.GetDefault(Integer)) -- 0
+	print(Struct.GetDefault(Integer)) -- 0
 end)
 ```
 
@@ -872,19 +872,19 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    __Sealed__(0)
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
+	__Sealed__(0)
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
 
-    -- Error: Usage: struct.BeginDefinition(structure[, stack]) - The AnyBool is sealed, can't be re-defined
-    struct "AnyBool" (function(_ENV)
-        function __init(value)
-            return value and true or fale
-        end
-    end)
+	-- Error: Usage: struct.BeginDefinition(structure[, stack]) - The AnyBool is sealed, can't be re-defined
+	struct "AnyBool" (function(_ENV)
+		function __init(value)
+			return value and true or fale
+		end
+	end)
 end)
 ```
 
@@ -926,14 +926,14 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
-    loc = Location(100, 20)
-    print(loc.x, loc.y)          -- 100  20
+	loc = Location{ x = "x" }    -- Error: Usage: Location(x, y) - x must be number
+	loc = Location(100, 20)
+	print(loc.x, loc.y)          -- 100  20
 end)
 ```
 
@@ -947,14 +947,14 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { type = Number, require = true }
-        member "y" { type = Number, default = 0    }
-    end)
+	struct "Location" (function(_ENV)
+		member "x" { type = Number, require = true }
+		member "y" { type = Number, default = 0    }
+	end)
 
-    loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
-    loc = Location(100)
-    print(loc.x, loc.y)         -- 100  0
+	loc = Location{}            -- Error: Usage: Location(x, y) - x can't be nil
+	loc = Location(100)
+	print(loc.x, loc.y)         -- 100  0
 end)
 ```
 
@@ -972,16 +972,16 @@ default           |成员的默认值
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "MinMax" (function(_ENV)
-        member "min" { Type = Number, Require = true }
-        member "max" { Type = Number, Require = true }
+	struct "MinMax" (function(_ENV)
+		member "min" { Type = Number, Require = true }
+		member "max" { Type = Number, Require = true }
 
-        function MinMax(val)
-            return val.min > val.max and "%s.min can't be greater than %s.max"
-        end
-    end)
+		function MinMax(val)
+			return val.min > val.max and "%s.min can't be greater than %s.max"
+		end
+	end)
 
-    v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
+	v = MinMax(100, 20) -- Error: Usage: MinMax(min, max) - min can't be greater than max
 end)
 ```
 
@@ -991,16 +991,16 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { Type = Number, Require = true }
-        member "y" { Type = Number, Default = 0    }
+	struct "Location" (function(_ENV)
+		member "x" { Type = Number, Require = true }
+		member "y" { Type = Number, Default = 0    }
 
-        function GetRange(val)
-            return math.sqrt(val.x^2 + val.y^2)
-        end
-    end)
+		function GetRange(val)
+			return math.sqrt(val.x^2 + val.y^2)
+		end
+	end)
 
-    print(Location(3, 4):GetRange()) -- 5
+	print(Location(3, 4):GetRange()) -- 5
 end
 ```
 
@@ -1010,17 +1010,17 @@ end
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        member "x" { Type = Number, Require = true }
-        member "y" { Type = Number, Default = 0    }
+	struct "Location" (function(_ENV)
+		member "x" { Type = Number, Require = true }
+		member "y" { Type = Number, Default = 0    }
 
-        __Static__()
-        function GetRange(val)
-            return math.sqrt(val.x^2 + val.y^2)
-        end
-    end)
+		__Static__()
+		function GetRange(val)
+			return math.sqrt(val.x^2 + val.y^2)
+		end
+	end)
 
-    print(Location.GetRange{x = 3, y = 4}) -- 5
+	print(Location.GetRange{x = 3, y = 4}) -- 5
 end)
 ```
 
@@ -1032,21 +1032,21 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Number" (function(_ENV)
-        __default = 0
+	struct "Number" (function(_ENV)
+		__default = 0
 
-        function Number(value)
-            return type(value) ~= "number" and "the %s must be number"
-        end
-    end)
+		function Number(value)
+			return type(value) ~= "number" and "the %s must be number"
+		end
+	end)
 
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    loc = Location()
-    print(loc.x, loc.y)         -- 0    0
+	loc = Location()
+	print(loc.x, loc.y)         -- 0    0
 end)
 ```
 
@@ -1069,16 +1069,16 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    struct "Locations" (function(_ENV)
-        __array = Location
-    end)
+	struct "Locations" (function(_ENV)
+		__array = Location
+	end)
 
-    v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
+	v = Locations{ {x = true} } -- Usage: Locations(...) - the [1].x must be number
 end)
 ```
 
@@ -1102,36 +1102,36 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- 自定义结构体
-    __Sealed__()
-    struct "Number" {
-        __default = 0,  -- 指定默认值
+	-- 自定义结构体
+	__Sealed__()
+	struct "Number" {
+		__default = 0,  -- 指定默认值
 
-        -- 数字索引的函数就是验证器
-        function (val) return type(val) ~= "number" end,
+		-- 数字索引的函数就是验证器
+		function (val) return type(val) ~= "number" end,
 
-        -- 也可以用特殊的键指定
-        __valid = function (val) return type(val) ~= "number" end,
-    }
+		-- 也可以用特殊的键指定
+		__valid = function (val) return type(val) ~= "number" end,
+	}
 
-    struct "AnyBool" {
-        -- 定义初始化方法
-        __init = function(val) return val and true or false end,
-    }
+	struct "AnyBool" {
+		-- 定义初始化方法
+		__init = function(val) return val and true or false end,
+	}
 
-    -- 成员结构体
-    struct "Location" {
-        -- 最好不用x = { type = Number }这类形式，因为无法确认成员定义的顺序
-        { name = "x", type = Number, require = true },
-        { name = "y", type = Number, require = true },
+	-- 成员结构体
+	struct "Location" {
+		-- 最好不用x = { type = Number }这类形式，因为无法确认成员定义的顺序
+		{ name = "x", type = Number, require = true },
+		{ name = "y", type = Number, require = true },
 
-        -- 定义方法，不过无法定义静态方法
-        GetRange = function(val) return math.sqrt(val.x^2 + val.y^2) end,
-    }
+		-- 定义方法，不过无法定义静态方法
+		GetRange = function(val) return math.sqrt(val.x^2 + val.y^2) end,
+	}
 
-    -- 数组结构体
-    -- 数字索引的任意类型，会作为数组元素类型使用，也可以使用__array指定
-    struct "Locations" { Location }
+	-- 数组结构体
+	-- 数字索引的任意类型，会作为数组元素类型使用，也可以使用__array指定
+	struct "Locations" { Location }
 end)
 ```
 
@@ -1145,15 +1145,15 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Number" (function(_ENV)
-        function Number(value, onlyvalid)
-            if type(value) ~= "number" then return onlyvalid or "the %s must be number, got " .. type(value) end
-        end
-    end)
+	struct "Number" (function(_ENV)
+		function Number(value, onlyvalid)
+			if type(value) ~= "number" then return onlyvalid or "the %s must be number, got " .. type(value) end
+		end
+	end)
 
-    -- The API to validate value with types (type, value, onlyvald)
-    print(Struct.ValidateValue(Number, "test", true))   -- nil, true
-    print(Struct.ValidateValue(Number, "test", false))  -- nil, the %s must be number, got string
+	-- The API to validate value with types (type, value, onlyvald)
+	print(Struct.ValidateValue(Number, "test", true))   -- nil, true
+	print(Struct.ValidateValue(Number, "test", false))  -- nil, the %s must be number, got string
 end)
 ```
 
@@ -1168,8 +1168,8 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    -- nil, the %s must be value of System.Number | System.String
-    print(Struct.ValidateValue(Number + String, {}, false))
+	-- nil, the %s must be value of System.Number | System.String
+	print(Struct.ValidateValue(Number + String, {}, false))
 end)
 ```
 
@@ -1184,8 +1184,8 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Integer" { __base = Number, function(val) return math.floor(val) ~= val end }
-    print(Struct.ValidateValue( - Number, Integer, false))  -- Integer
+	struct "Integer" { __base = Number, function(val) return math.floor(val) ~= val end }
+	print(Struct.ValidateValue( - Number, Integer, false))  -- Integer
 end)
 ```
 
@@ -1228,14 +1228,14 @@ GetDefault(member)                      |获得成员的默认值
 require "PLoop"
 
 PLoop(function(_ENV)
-    struct "Location" (function(_ENV)
-        x = Number
-        y = Number
-    end)
+	struct "Location" (function(_ENV)
+		x = Number
+		y = Number
+	end)
 
-    for index, member in Struct.GetMembers(Location) do
-        print(member.GetName(member), Member.GetType(member))
-    end
+	for index, member in Struct.GetMembers(Location) do
+		print(member.GetName(member), Member.GetType(member))
+	end
 end)
 ```
 
