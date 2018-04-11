@@ -78,47 +78,47 @@ This is our first **PLoop** example. **PLoop** has a lot of different design fro
 
 First of all, we use `PLoop(function(_ENV) end)` to encapsulate and call the processing code. This is designed to solve several problems of Lua development(you can skip the following discussion about the environment if you can't understand, you can continue the reading without problem):
 
-    * Lua's each file can be considered as a function to be executed, and each Lua function has an environment associated with it. The environment is Lua's ordinary table. The global variables accessed by the function are the fields in the environment. By default, the environment is `_G`.
+* Lua's each file can be considered as a function to be executed, and each Lua function has an environment associated with it. The environment is Lua's ordinary table. The global variables accessed by the function are the fields in the environment. By default, the environment is `_G`.
 
-        In collaborative development, global variables accessed by all files are stored in `_G`. This can easily cause conflicts. In order to avoid the double-name conflicts, we must keep using local variables, it's not good for free coding and will create too many closures.
+    In collaborative development, global variables accessed by all files are stored in `_G`. This can easily cause conflicts. In order to avoid the double-name conflicts, we must keep using local variables, it's not good for free coding and will create too many closures.
 
-    * As shown in the **System.Collections.List**, to avoid the using of the same name type, we normally use a **namespace** system to manage various types. In order to use the **List** in `_G`, as we can see in the last few lines of the above example, we need to use `import "System.Collections"`, then wen can use **List** in the `_G`.
+* As shown in the **System.Collections.List**, to avoid the using of the same name type, we normally use a **namespace** system to manage various types. In order to use the **List** in `_G`, as we can see in the last few lines of the above example, we need to use `import "System.Collections"`, then wen can use **List** in the `_G`.
 
-        If we have an ui library that provides type **System.Form.List**, this is an ui class. If it is also imported into `_G`, then the two types will cause errors due to duplicate names.
+    If we have an ui library that provides type **System.Form.List**, this is an ui class. If it is also imported into `_G`, then the two types will cause errors due to duplicate names.
 
-    The main problem is that the default environment of all processing codes is the `_G`. If we can keep each codes processed in its own private environment, we can completely avoid the problem of duplicate names, and we also don't need to strictly use local to declare function or share Datas.
+The main problem is that the default environment of all processing codes is the `_G`. If we can keep each codes processed in its own private environment, we can completely avoid the problem of duplicate names, and we also don't need to strictly use local to declare function or share Datas.
 
-    In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.
+In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.
 
-    We'll learn more benefites of this calling style in the other examples, and for the previous example:
+We'll learn more benefites of this calling style in the other examples, and for the previous example:
 
-    * The global variable belongs to this private environment. In the `_G`, the variable v cannot be accessed.
+* The global variable belongs to this private environment. In the `_G`, the variable v cannot be accessed.
 
-    * Feel free to use public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
+* Feel free to use public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
 
-    * You can directly access the **List** class, **PLoop** has public namespaces, the public namespaces can be accessed by all **PLoop** environments without **import**, the default public namespaces are **System**, **System.Collections** and **System.Threading**, we'll learn more about the them at later.
+* You can directly access the **List** class, **PLoop** has public namespaces, the public namespaces can be accessed by all **PLoop** environments without **import**, the default public namespaces are **System**, **System.Collections** and **System.Threading**, we'll learn more about the them at later.
 
-        The public namespaces accessing priority is lower than the imported namespaces, so if you use the `import "System.Form"`, then the **List** is pointed to the **System.Form.List**.
+    The public namespaces accessing priority is lower than the imported namespaces, so if you use the `import "System.Form"`, then the **List** is pointed to the **System.Form.List**.
 
-    * We can use the keyword **import** to import namespaces to the private environments or the `_G`, then we can use the types stored in those namespaces. The difference is importing to the `_G` is a *saving all to `_G`* action, and the private environment will only records the namespaces it imported, only access the types in them when needed(also will be auto cached).
+* We can use the keyword **import** to import namespaces to the private environments or the `_G`, then we can use the types stored in those namespaces. The difference is importing to the `_G` is a *saving all to `_G`* action, and the private environment will only records the namespaces it imported, only access the types in them when needed(also will be auto cached).
 
-    * **PLoop**'s private environment will look for a global variable when it not existed(not auto-cached or declared, so the `__index` will be triggered), the order is:
+* **PLoop**'s private environment will look for a global variable when it not existed(not auto-cached or declared, so the `__index` will be triggered), the order is:
 
-        * Find in the namespace that the environment belongs (use `namespace "MyNamesapce`" in it, so types generated in the private environment will be saved in the namespace)
+    * Find in the namespace that the environment belongs (use `namespace "MyNamesapce`" in it, so types generated in the private environment will be saved in the namespace)
 
-        * Find in the namespace of this environment **import**ed
+    * Find in the namespace of this environment **import**ed
 
-        * Find in public namespaces
+    * Find in public namespaces
 
-        * Find in the root namespaces, if you access data like "**System**"
+    * Find in the root namespaces, if you access data like "**System**"
 
-        * Find in the base environment, the private environment can set a base environment, default is the `_G`
+    * Find in the base environment, the private environment can set a base environment, default is the `_G`
 
-    * The rules for finding variable names in the namespace are:
-        
-        * Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
+* The rules for finding variable names in the namespace are:
+    
+    * Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
 
-        * Try get value by `thenamespace[variable name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
+    * Try get value by `thenamespace[variable name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
 
 Back to the creation of the **List** objects, the **List** type can be used as a object generator, it'll create the list objects based on the input arguments.
 
@@ -353,7 +353,7 @@ PLoop(function(_ENV)
     lst = List(10)
     Dictionary(lst, lst:Map(function(x)return x^2 end))
 end)
-
+```
 
 ### The method of the Dictionary
 
