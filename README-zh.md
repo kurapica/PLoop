@@ -100,7 +100,7 @@ print(List) -- System.Collections.List
 
 * **PLoop**的私有环境，会在第一次读取某个全局变量时进行查找（查找到同样会自动缓存），顺序是:
 
-* 查找这个环境所属的命名空间（使用`namespace "MyNamesapce`"申明，之后在这个环境中定义的类型都会保存在这个命名空间中)
+	* 查找这个环境所属的命名空间（使用`namespace "MyNamesapce`"申明，之后在这个环境中定义的类型都会保存在这个命名空间中)
 
 	* 查找这个环境**import**的命名空间
 
@@ -386,7 +386,7 @@ Reduce(self, func, init)                 |合并所有键值对，详见后面�
 Keys                                     |返回一个列表的流处理工作对象，代表所有键
 Values                                   |返回一个列表的流处理工作对象，代表所有值
 
-通过这两个终止属性，我们可以将dictionaryd操作转换成list操作。
+通过这两个终止属性，我们可以将dictionary操作转换成list操作。
 
 下面是一些例子:
 
@@ -403,7 +403,7 @@ end)
 
 ```
 
-**List**和**Dictionary**的队列和终止，以及排序方法并非定义在它们内部，而是由接口提供鼓的，等了解类和接口后，我们可以创建新的集合类型扩展这些接口，然后直接享受这些方法带来的便利。
+**List**和**Dictionary**的队列和终止，以及排序方法并非定义在它们内部，而是由接口提供，等了解类和接口后，我们可以创建新的集合类型扩展这些接口，然后直接享受这些方法带来的便利。
 
 
 ## 特性(Attribtue)和协程池(Thread Pool)
@@ -411,6 +411,8 @@ end)
 **List**和**Dictionary**展示了对象的构建和使用，接下来，我们可以来看关于**PLoop**私有环境的一些特殊用法。首先是特性和协程的合用：
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	__Iterator__()
 	function iter(i, j)
@@ -472,6 +474,8 @@ end)
 `__Iterator__`仅用于创建迭代器，我们看一个协程更普遍的用法:
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	-- 以协程运行函数
 	__Async__()
@@ -549,6 +553,8 @@ end)
 在**PLoop**中，这将不成为问题:
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	__Arguments__{ String, Number }
 	function SetInfo(name, age)
@@ -759,7 +765,7 @@ PLoop(function(_ENV)
 	end)
 
 	v = Number(true)  -- Error : the value must be number, got boolean
-end)
+	end)
 end)
 ```
 
@@ -1024,7 +1030,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-`System.__Static__`用于指明下一个而定义的方法是静态方法。
+`System.__Static__`用于指明下一个定义的方法是静态方法。
 
 之前自定义结构体我们可以指定默认值，那么现在可以看看默认值的用法:
 
@@ -1084,7 +1090,7 @@ end)
 
 同样，数组结构体也支持结构体方法，静态方法，基础结构体，验证器和初始化方法，不过通常没有这类需求。
 
-例外的，使用**PLoop**的序列化机制序列化一个数组结构体数据时，因为系统明确知道它是数组类型，所以，不需要进行验证就可以按照数组的方式序列化它。
+题外话，使用**PLoop**的序列化机制序列化一个数组结构体数据时，因为系统明确知道它是数组类型，所以，不需要进行验证就可以按照数组的方式序列化它，这对一些数据量比较大的场合非常有效。
 
 系统默认只提供一个数组结构体:
 
@@ -1240,12 +1246,1139 @@ end)
 ```
 
 
-枚举类型和结构体类型都是值类型，通常用于类型验证。而接口和类系统就是用来为生产提供各种资源。
+枚举类型和结构体类型都是值类型，通常用于类型验证。而接口和类系统将为我们提供完整的面向对象系统。
 
 
 ## Class 类
 
-类是从一组行为，属性类似的对象中抽象出来的，类为对象提供方法和属性等的实现。
+类是从一组行为，特征类似的对象中抽象出来的，类为对象提供了具体的实现，通过接口和继承等机制也确保了代码的高复用性和扩展性。
+
+Lua中的对象就是带有特定元表的table。
 
 **PLoop**中，类定义主要由几部分组成:
 
+### 类方法和对象方法
+
+方法是供类或者其对象使用的函数，首先来看对象方法，对象方法是被对象使用的，它的第一个参数固定是self，代表对象本身:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		function SetName(self, name)
+			self.name = name
+		end
+
+		function GetName(self, name)
+			return self.name
+		end
+	end)
+
+	Ann = Person()
+	Ann:SetName("Ann")
+	print("Hello " .. Ann:GetName()) -- Hello Ann
+end)
+```
+
+和结构体的定义方式一样，我们使用函数作为类的定义体，在里面作为全局定义的函数会被注册为类的对象方法。之后，我们就可以构造对象，并调用这些方法。
+
+类似*Person*这样的类，它的对象的元表将被实现成
+
+```lua
+{
+	__index = { SetName = function, GetName = function },
+	__metatable = Person,
+}
+```
+
+**PLoop**的类会根据定义情况自行优化元表。
+
+*Person*类可以直接访问它的对象访问`Person.SetName(Ann, "Ann")` 和 `Ann:SetName("Ann")`是一致的。
+
+类也可以有只能自己访问的静态方法，和结构体的静态方法一样，需要使用`System.__Static__`特性:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Color" (function(_ENV)
+		__Static__()
+		function FromRGB(r, g, b)
+			-- 对象的构建会在之后探讨
+			return Color {r = r, g = g, b = b}
+		end
+	end)
+
+	c = Color.FromRGB(1, 0, 1)
+	print(c.r, c.g, c.b)
+end)
+```
+
+静态方法通常是辅助方法，所以，不需要第一个参数是self，因为它不一定是处理类对象的方法。
+
+
+### 元数据和对象构造
+
+**元数据**算是Lua元表方法的一个超集，除了通常的对象使用的元表方法外，还有些供类本身使用的元数据：
+
+
+Key            |Description
+:--------------|:--------------
+`__add`        |类对象的相加运算: a + b  -- a是类对象，下同
+`__sub`        |类对象的相减运算: a - b
+`__mul`        |类对象的相乘运算: a * b
+`__div`        |类对象的除法运算: a / b
+`__mod`        |类对象的取模运算: a % b
+`__pow`        |类对象的幂运算:   a ^ b
+`__unm`        |类对象的取负运算: - a
+`__idiv`       |类对象的整除运算: a // b
+`__band`       |类对象的与运算:   a & b
+`__bor`        |类对象的或运算:   a | b
+`__bxor`       |类对象的异或运算: a ~ b
+`__bnot`       |类对象的非运算:   ~a
+`__shl`        |类对象的左移运算: a << b
+`__shr`        |类对象的右移运算: a >> b
+`__concat`     |类对象的连接运算: a .. b
+`__len`        |类对象的长度计算: #a
+`__eq`         |类对象的相等判定: a == b
+`__lt`         |类对象的小于判定: a < b
+`__le`         |类对象不大于判定: a <= b
+`__index`      |类对象的域查询:   return a[k]
+`__newindex`   |类对象的新值处理: a[k] = v
+`__call`       |类对象的调用:     a(...)
+`__gc`         |类对象的GC处理，暂时没什么用途
+`__tostring`   |类对象字符串转换: tostring(a)
+`__ipairs`     |占位，非可用，请用集合处理替代
+`__pairs`      |占位，非可用，请用集合处理替代
+`__exist`      |类构建对象时根据参数检查是否复用存在的对象
+`__field`      |对象的初始化字段和值
+`__new`        |类构建对象时，生成将被封装成对象的table的方法
+`__ctor`       |类对象构造体方法
+`__dtor`       |类对象析构方法
+
+Lua自带的元表方法都很常用，下面具体看**PLoop**特殊的元数据处理:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__ExistPerson = {}
+
+		-- 对象存在检查，如果存在就无需创建新的了
+		-- 它会接收到所有用于构建对象的参数
+		-- 它的第一个参数是类本身，这样设计是为了处理子类的情况
+		function __exist(cls, name)
+			if __ExistPerson[name] then
+				print("对象已经存在:" .. name)
+				return __ExistPerson[name]
+			end
+		end
+
+		-- 构造体函数，使用传入的参数初始化对象
+		-- 第一个参数就是新创建的对象
+		function __ctor(self, name)
+			print("调用类的构造方法初始化:" .. name)
+			__ExistPerson[name] = self
+			self.name = name
+		end
+
+		-- 析构方法，通常用于解除引用，之后交给GC即可
+		-- 第一个参数是将被销毁的对象
+		function __dtor(self)
+			print("销毁对象" .. self.name)
+			__ExistPerson[self.name] = nil
+		end
+	end)
+
+	o = Person("Ann")           -- 调用类的构造方法初始化:Ann
+
+	-- true
+	print(o == Person("Ann"))   -- 对象已经存在:Ann
+
+	o:Dispose()                 -- 销毁对象Ann
+
+	-- false
+	print(o == Person("Ann"))   -- 调用类的构造方法初始化:Ann
+end)
+```
+
+在上面例子中，我们用到了构造体方法，析构方法和存在检查方法。我们也会发现一个没有没定义的方法**Dispose**，这是一个**PLoop**保留的方法名，所有有析构方法的对象，都需要使用**Dispose**来销毁自身。
+
+我们也可以直接使用**Dispose**替代`__dtor`来定义析构方法，使用类名替代`__ctor`来定义构造体方法。
+
+`__new`元方法用于创建将被封装为对象的table，它可以用于返回其他系统创建的table，也可以用于更快速的创建对象，例如List的一个实现:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "List" (function(_ENV)
+		function __new(cls, ...)
+			return { ... }, true
+		end
+	end)
+
+	v = List(1, 2, 3, 4, 5, 6)
+end)
+```
+
+`__new`的调用方式和`__exist`一致，它会接收到class和所有的参数，系统会从它的结果读取两个值，第一个值如果是table，那么就将作为对象被封装，否则系统会自行创建一个新table作为对象。如果第二个值是true，那么，所有的参数将被抛弃，构造体方法只会接收到这个新对象。对于上面的List来说，因为一次性将数据都保存在对象中，就无需再依靠循环保存数据了。
+
+`__field`元数据的值需要是table，它内部保存的键值对将在对象被创建时复制到对象中，如果配合**OBJECT_NO_RAWSEST**，**OBJECT_NO_NIL_ACCESS**两个平台选项，对象将只能使用这些被初始化的字段，同时因为操作这些字段不会触发`__index`和`__newindex`元表方法，访问速度也是最快的。
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__field     = {
+			name    = "noname",
+		}
+
+		-- 也可以使用*field*关键字，因为`__field`可能拼写错误
+		field {
+			age     = 0,
+		}
+	end)
+
+	o = Person()
+	o.name = "Ann"
+	o.age  = 12
+
+	o.nme = "King"  -- Error : The object can't accept field that named "nme"
+	print(o.gae)    -- Error : The object don't have any field that named "gae"
+end)
+```
+
+作为总结，下面是一段模拟对象构建的处理:
+
+```lua
+-- 检查对象是否存在，存在就返回该对象
+local object = __exist(cls, ...)
+if object then return object end
+
+-- 获得一个将被封装为对象的table
+object = __new(cls, ...) or {}
+
+-- 复制字段
+field:Copyto(object)
+
+-- 封装table为对象
+setmetatable(object, objMeta)
+
+-- 调用构造体方法
+__ctor(object, ...)
+
+-- 返回对象
+return object
+```
+
+### 超类和继承
+
+一个类可以也仅可以有一个超类，它将从超类中继承对象方法（静态方法不会被继承），元数据和其他资源（之后的属性和事件部分会详谈）。
+
+类可以覆写超类的对象方法，元方法等，如果需要，可以使用**super**关键字来访问超类的对应方法:
+
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		-- 对象方法
+		function Test(self)
+			print("Call A's method")
+		end
+
+		-- 构造体
+		function A(self)
+			print("Call A's ctor")
+		end
+
+		-- 析构方法
+		function Dispose(self)
+			print("Dispose A")
+		end
+
+		-- 元方法
+		function __call(self)
+			print("Call A Object")
+		end
+	end)
+
+	class "B" (function(_ENV)
+		inherit "A"  -- 也可以使用inherit(A)
+
+		function Test(self)
+			print("Call super's method ==>")
+			super[self]:Test()
+			super.Test(self)
+			print("Call super's method ==<")
+		end
+
+		function B(self)
+			super(self)
+			print("Call B's ctor")
+		end
+
+		function Dispose(self)
+			print("Dispose B")
+		end
+
+		function __call(self)
+			print("Call B Object")
+			super[self]:__call()
+			super.__call(self)
+		end
+	end)
+
+	-- Call A's ctor
+	-- Call B's ctor
+	o = B()
+
+	-- Call super's method ==>
+	-- Call A's method
+	-- Call A's method
+	-- Call super's method ==<
+	o:Test()
+
+	-- Call B Object
+	-- Call A Object
+	-- Call A Object
+	o()
+
+	-- Dispose B
+	-- Dispose A
+	o:Dispose()
+end)
+```
+
+下面是一些细节解释:
+
+* `inherit "A"`是`inherit(A)`的语法糖。
+
+* 析构方法是由系统管理的，所以，类不需要自己调用超类的析构方法。
+
+* 构造体方法需要主动调用`super(self, ...)`来调用超类的构造体方法，因为只有子类知道需要使用那些参数去调用超类构造体。
+
+* 对于对象方法和元表方法（包含`__new`和`__exist`），存在两种调用超类对应方法的方式:
+
+	* `super.Test(self, ...)` 是一种简单方式，仅用于调用对象方法或者元方法
+
+	* `super[self]:Test(...)`这是正规方式，因为super在访问Test之前先拿到self对象，它就可以获取到对象的类的版本，从而正确的调用超类方法。这一般用于多版本类（默认情况下，重定义类会形成两个版本，甚至多个），也用于访问对象资源，比如属性，事件等（后面会有详细的说明）。
+
+
+### System.Class
+
+**System.Class**是一个反射类型，用于提供关于class的内部信息:
+
+Static Method                               |Description
+:-------------------------------------------|:-----------------------------
+GetExtends(target[, cache])                 |如果cache存在，将扩展的接口保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetFeature(target, name[, isobject])        |从目标中获取一个指定名字的类型特征（属性或事件等）。如果*isobject*不存在或为false，只获取在目标中定义的类型特征（包括静态）否则只获取对象特征（含继承获得。下同
+GetFeatures(target, [cache[, isobject]])    |如果cache存在，将类型特征保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetMethod(target, name[, isobject])         |从目标中获取一个指定名字的方法
+GetMethods(target[, cache[, isobject]])     |如果cache存在，将类型方法保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetMetaMethod(target, name[, isobject])     |从目标中获取一个指定名字的元方法
+GetMetaMethods(target[, cache[, isobject]]) |如果cache存在，将元方法保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetObjectClass(object)                      |获取对象的类型
+GetSuperClass(target)                       |获取目标的超类
+GetSuperMethod(target, name)                |获取目标的超类方法
+GetSuperMetaMethod(target, name)            |获取目标的超类元方法
+GetSuperFeature(target, name)               |获取目标的超类特征
+IsAbstract(target[, name])                  |检查目标是否是虚类，或者目标的指定名字的方法，元方法或特征是虚方法，虚元方法或虚特征
+IsFinal(target[, name])                     |检查目标是否最终类，最终类无法被继承，或者目标的指定名字的方法，元方法或特征是最终定义，无法被子类覆盖
+IsImmutable(target)                         |永远返回true，用类去验证对象，不会改变对象
+IsSealed(target)                            |检查目标是否封闭，无法被重定义
+IsStaticMethod(target, name)                |检查目标指定名字的方法是静态方法
+IsSubType(target, super)                    |检查目标是否是指定类或接口的子类型
+ValidateValue(target, object)               |检查对象的类型是指定类型，或者是指定类型的子类型
+Validate(target)                            |检查目标是否是一个类
+
+
+## Interface 接口
+
+接口是功能的抽象类型，对于class来说，它也是多继承的补充机制。和class一样，也可以在它里面定义对象方法，静态方法和元数据。
+
+类和接口都可以扩展任意数量的接口，使用**super**关键字时，它会根据继承的情况和优先级自行选择对应的方法（不限于超类的，也可以是接口提供的）。
+
+接口使用`__init`替代`__ctor`（接口名也是同样），对应函数将作为接口的初始化方法，接口的初始化方法只接收self也就是对象这一个参数，并且接口的初始化是在类对象构建完成后，由系统自动调用，无法使用**super**或者其他机制来主动调用。
+
+接口可以定义含有处理的方法，但也可以定义需要被扩展它的接口或者类实现的对象方法或元方法，或者其他资源（属性，事件等），只需要使用`System.__Abstract__`特性标记即可。特别的，被标记为`__Abstract__`的对象方法和元方法无法被**super**访问，因为它们应该是空处理方法，没有调用的价值。
+
+来看一个具体的例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "IName" (function(self)
+		__Abstract__()
+		function SetName(self) end
+
+		__Abstract__()
+		function GetName(self) end
+
+		-- 初始化方法
+		function IName(self) print("IName Init") end
+
+		-- 析构方法
+		function Dispose(self) print("IName Dispose") end
+	end)
+
+	interface "IAge" (function(self)
+		__Abstract__()
+		function SetAge(self) end
+
+		__Abstract__()
+		function GetAge(self) end
+
+		-- 初始化方法
+		function IAge(self) print("IAge Init") end
+
+		-- 析构方法
+		function Dispose(self) print("IAge Dispose") end
+	end)
+
+	class "Person" (function(_ENV)
+		extend "IName" "IAge"   -- 也可以使用`extend(IName)(IAge)`
+
+		-- Error: attempt to index global 'super' (a nil value)
+		-- 因为IName.SetName是abstract的，所以Person并没有超类方法可以调用
+		-- 系统也不会创建super供Person类使用
+		function SetName(self, name) super[self]:SetName(name) end
+
+		function Person(self) print("Person Init") end
+
+		function Dispose(self) print("Person Dispose") end
+	end)
+
+	-- Person Init
+	-- IName Init
+	-- IAge Init
+	o = Person()
+
+	-- IAge Dispose
+	-- IName Dispose
+	-- Person Dispose
+	o:Dispose()
+end)
+```
+
+如前所述，接口的初始化方法是在对象被创建后再被调用的，一般可以用于注册，进行预处理等。销毁对象的调用步骤和构造时的初始化步骤是正好相反的。这些由系统管理，所以定义时不需要在意。
+
+### System.Interface
+
+**System.Interface** 是一个反射类型，用于获取接口的内部信息，它和Class的API基本一致:
+
+Static Method                               |Description
+:-------------------------------------------|:-----------------------------
+GetExtends(target[, cache])                 |如果cache存在，将扩展的接口保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetFeature(target, name[, isobject])        |从目标中获取一个指定名字的类型特征（属性或事件等）。如果*isobject*不存在或为false，只获取在目标中定义的类型特征（包括静态）否则只获取对象特征（含继承获得。下同
+GetFeatures(target, [cache[, isobject]])    |如果cache存在，将类型特征保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetMethod(target, name[, isobject])         |从目标中获取一个指定名字的方法
+GetMethods(target[, cache[, isobject]])     |如果cache存在，将类型方法保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetMetaMethod(target, name[, isobject])     |从目标中获取一个指定名字的元方法
+GetMetaMethods(target[, cache[, isobject]]) |如果cache存在，将元方法保存在cache中并返回，否则返回一个迭代器供for循环遍历
+GetSuperMethod(target, name)                |获取目标的超类方法
+GetSuperMetaMethod(target, name)            |获取目标的超类元方法
+GetSuperFeature(target, name)               |获取目标的超类特征
+IsAbstract(target[, name])                  |检查目标的指定名字的方法，元方法或特征是虚方法，虚元方法或虚特征
+IsFinal(target[, name])                     |检查目标是否最终接口，最终接口无法被继承，通常用作函数库，或者目标的指定名字的方法，元方法或特征是最终定义，无法被子类型覆盖
+IsImmutable(target)                         |永远返回true
+IsSealed(target)                            |检查目标是否封闭，无法被重定义
+IsStaticMethod(target, name)                |检查目标指定名字的方法是静态方法
+IsSubType(target, super)                    |检查目标是否是指定接口的子类型
+ValidateValue(target, object)               |检查对象的类型是否是指定类型的子类型
+Validate(target)                            |检查目标是否是一个接口
+
+
+## Event 事件
+
+**event**是类型特征的一种，用于通知外界对象的某些状态改变了：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- 为Person类申明一个事件
+		event "OnNameChanged"
+
+		field { name = "anonymous" }
+
+		function SetName(self, name)
+			if name ~= self.name then
+				-- 发起事件通知外界
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
+		end
+	end)
+
+	o = Person()
+
+	-- 绑定一个事件处理方法给对象
+	function o:OnNameChanged(new, old)
+		print(("%q -> %q"):format(old, new))
+	end
+
+	-- "anonymous" -> "Ann"
+	o:SetName("Ann")
+end)
+```
+
+事件处理方法有两种类型:
+
+* 最终处理方法 - 之前例子中的用法就是最终处理方法，最终处理方法同时只能设定一个。
+* 叠加处理方法 - 叠加处理方法通常使用在类的构造体方法或者接口的初始化方法中，用于绑定内部事件处理方法:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- 为Person类申明一个事件
+		event "OnNameChanged"
+
+		field { name = "anonymous" }
+
+		function SetName(self, name)
+			if name ~= self.name then
+				-- 发起事件通知外界
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
+		end
+	end)
+
+	-- 定义子类
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		local function onNameChanged(self, name, old)
+			print(("Student %s renamed to %s"):format(old, name))
+		end
+
+		function Student(self, name)
+			self:SetName(name)
+			self.OnNameChanged = self.OnNameChanged + onNameChanged
+		end
+	end)
+
+	o = Student("Ann")
+
+	function o:OnNameChanged(name)
+		print("My new name is " .. name)
+	end
+
+	-- Student Ann renamed to Ammy
+	-- My new name is Ammy
+	o:SetName("Ammy")
+end)
+```
+
+使用对象访问事件名例如`self.OnNameChanged`，会得到一个创建自**System.Delegate**的对象，实际最终处理方法和叠加处理方法这两个机能就源于这个Delegate对象。
+
+我们可以使用下面的方法叠加处理方法
+
+```lua
+self.OnNameChanged = self.OnNameChanged + onNameChanged
+```
+
+也可以用下面的方式移除叠加的处理方法
+
+```lua
+self.OnNameChanged = self.OnNameChanged - onNameChanged
+```
+
+当事件发生时，如果这个对象有相应的Delegate对象（这个对象仅当被访问时被创建），那么这个Delegate对象会被调用来处理事件。
+
+叠加的处理方法是按顺序添加的，所以，最先被加入的处理方法会最先被使用，然后依次调用下去，直到最后调用最终处理方法。这个过程中，如果某个处理方法返回true，整个调用链终止。
+
+在某些场景中，我们需要禁止对象的事件处理，这可以利用Delegate的初始处理方法:
+
+```lua
+self.OnNameChanged:SetInitFunction(function() return true end)
+```
+
+初始方法如果存在，会最先被调用，只要它返回true就可以终止对象的事件处理了。
+
+
+### 事件处理方法变更的处理
+
+通常如果使用**PLoop**封装来自其他系统的对象，我们需要双向处理事件绑定:
+
+* 如果对象的Delegate中绑定的处理方法变更，比如清空了，增加了等情况，我们需要通知其他系统，比如增加事件监听，或者移除事件监听等。
+
+* 当其他系统的事件发生时，我们要触发对象的事件处理。
+
+使用魔兽世界中的*Frame*控件来做介绍，无视掉其他细节，我们来看看如何做双向事件绑定处理:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Frame" (function(_ENV)
+		__EventChangeHandler__(function(delegate, owner, eventname)
+			-- delegate是绑定的处理方法发生改变的delegate对象
+			-- owner是对象，也就是delegate对象的主人
+			-- eventname是事件名字，这里就是OnEnter
+			if delegate:IsEmpty() then
+				-- 没有处理方法，无需监视，这里解除了注册
+				owner:SetScript(eventname, nil)
+			else
+				-- 存在处理方法，需要注册到游戏引擎中
+				if owner:GetScript(eventname) == nil then
+					owner:SetScript(eventname, function(self, ...)
+						-- 我们可以直接调用delegate对象，无需走event系统
+						delegate(owner, ...)
+					end)
+				end
+			end
+		end)
+		event "OnEnter"
+	end)
+end)
+```
+
+`System.__EventChangeHandler__`特性专为事件绑定变更处理方法，这样所有这个类的对象相应事件的delegate变更时，这个变更处理函数就会被调用，我们可以统一的进行处理。更进一步，我们可以用一个函数处理所有的事件:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	local function changehandler (delegate, owner, eventname)
+		if delegate:IsEmpty() then
+			owner:SetScript(eventname, nil)
+		else
+			if owner:GetScript(eventname) == nil then
+				owner:SetScript(eventname, function(self, ...)
+					-- Call the delegate directly
+					delegate(owner, ...)
+				end)
+			end
+		end
+	end
+
+	function __WidgetEvent__(self)
+		__EventChangeHandler__(changehandler)
+	end
+
+	class "Frame" (function(_ENV)
+		__WidgetEvent__()
+		event "OnEnter"
+
+		__WidgetEvent__()
+		event "OnLeave"
+	end)
+end)
+```
+
+### 静态事件
+
+我们可以使用`__Static__`特性来标记某些事件为静态，这样它仅能被类或者接口使用:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		event "OnPersonCreated"
+
+		function Person(self, name)
+			OnPersonCreated(name)
+		end
+	end)
+
+	function Person.OnPersonCreated(name)
+		print("Person created " .. name)
+	end
+
+	-- Person created Ann
+	o = Person("Ann")
+end)
+```
+
+### 超类事件
+
+如果超类或者接口的事件被覆写了，但我们有需要监听超类事件，我们可以使用**super[object].event**的方式来使用超类事件:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- declare an event for the class
+		event "OnNameChanged"
+
+		field { name = "anonymous" }
+
+		function SetName(self, name)
+			if name ~= self.name then
+				-- Notify the outside
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
+		end
+	end)
+
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		event "OnNameChanged"
+
+		local function raiseEvent(self, ...)
+			OnNameChanged(self, ...)
+		end
+
+		function Student(self)
+			super(self)
+
+			-- Use the super object access style
+			super[self].OnNameChanged = raiseEvent
+		end
+	end)
+
+	o = Student()
+
+	function o:OnNameChanged(name)
+		print("New name is " .. name)
+	end
+
+	-- New name is Test
+	o:SetName("Test")
+end)
+```
+
+如例子所示，子类可以监听超类的事件，并使用自己的事件传递下去。
+
+### System.Event
+
+**System.Event**是一个反射类型，可以用来获取事件的内部信息:
+
+静态方法                                    |描述
+:-------------------------------------------|:-----------------------------
+Get(target, object[, nocreation])           |从对象中获取事件的处理delegate对象，如果nocreation不为true，那么会创建这个delegate对象如果不存在
+GetEventChangeHandler(target)               |获取使用`__EventChangeHandler__`注册的函数
+IsStatic(target)                            |事件是否是静态
+Validate(target)                            |目标是否是一个事件
+
+一个简单的例子:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		event "OnPersonCreated"
+	end)
+
+	for name, feature in Class.GetFeatures(Person) do
+		if Event.Validate(feature) then
+			print("event", name)
+		end
+	end
+end)
+```
+
+## Property 属性
+
+属性是对象的状态特征，我们也可以使用**field**指定的字段作为对象状态特征，但字段缺乏类型验证，我们也无法知道何时这些字段值被修改了。
+
+属性系统提供了很多机制，诸如get/set，值的类型验证，值修改的处理方法，值修改的处理事件，默认值，默认值工厂等。
+
+从一个简单的例子开始:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
+
+	-- 如果类没有定义__ctor，我们可以使用这种初始化表机制
+	-- 表中的所有键值会被赋给对象
+	o = Person{ Name = "Ann", Age = 10 }
+
+	print(o.Name)-- Ann
+	o.Name = 123 -- Error : the Name must be string, got number
+end)
+```
+
+类似于结构体的**member**关键字，**property**接收一个字符串作为属性名，一个table作为属性定义。table定义中的键是大小写无视的，下面是完整的设定清单:
+
+字段            |用途
+:---------------|:-------------
+auto            |是否使用自动绑定机制，详见下面的例子
+get             |用于获取对象属性值的方法，调用方式类似`return get(obj)`，也可以设置为**false**，表示该属性不可读
+set             |用于设置对象属性值的方法，调用方式类似`set(obj, value)`，也可以设置为**false**，表示该属性不可写
+getmethod       |获取属性值的对象方法名，调用方式类似`return obj[getmethod](obj)`
+setmethod       |设置属性值的对象方法名，调用方式类似`obj[setmethod](obj, value)`
+field           |实际保存属性值的字段，如果get/set或者getmethod/setmethod设置就无效。如果定义中没有设置field，set/get, getmethod/setmethod，那么系统会自动指定一个field，比如上面例子中的用法，这也是推荐做法。
+type            |属性值的类型，如果这个类型是immutable的，当平台设定里面关闭类型验证时，属性值也会停止验证
+default         |属性的默认值
+event           |属性值变更时自动发起的事件，如果是字符串，会尝试用该字符串创建事件，仅用于使用field的属性
+handler         |属性值变更时触发的处理方法，这是类或者接口内部自行处理对象属性变更的方法，仅用于使用field的属性
+static          |true，如果希望定义为静态属性
+
+我们依次来看一些使用例子:
+
+### get/set
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		property "Name" {
+			get = function(self) return self.__name end,
+			set = function(self, name)  self.__name = name end,
+		}
+	end)
+
+	print(Person().Name)
+end)
+```
+
+### getmethod/setmethod
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		function SetName(self, name)
+			self.__name = name
+		end
+
+		function GetName(self)
+			return self.__name
+		end
+
+		property "Name" {
+			get = "GetName", -- or getmethod = "GetName"
+			set = "SetName", -- or setmethod = "SetName"
+		}
+	end)
+
+	print(Person().Name)
+end)
+```
+
+### field & default
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { field = "__name", default = "anonymous" }
+	end)
+
+	obj = Person()
+	print(obj.Name, obj.__name) -- anonymous   nil
+
+	obj.Name = "Ann"
+	print(obj.Name, obj.__name) -- Ann         Ann
+end)
+```
+
+### default factory
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Age" { field = "__age", default = function(self) return math.random(100) end }
+	end)
+
+	obj = Person()
+	print(obj.Age, obj.__age) -- 81   81
+	obj.Age = nil   -- 下次访问时，值会被重新产生
+	print(obj.Age, obj.__age) -- 88   88
+end)
+```
+
+### property-event
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String, event = "OnNameChanged" }
+	end)
+
+	o = Person { Name = "Ann" }
+
+	function o:OnNameChanged(new, old, prop)
+		print(("[%s] %s -> %s"):format(prop, old, new))
+	end
+
+	-- [Name] Ann -> Ammy
+	o.Name = "Ammy"
+end)
+```
+
+### property-handler
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" {
+			type = String, default = "anonymous",
+
+			handler = function(self, new, old, prop)
+				print(("[%s] %s -> %s"):format(prop, old, new))
+			end
+		}
+	end)
+
+	--[Name] anonymous -> Ann
+	o = Person { Name = "Ann" }
+
+	--[Name] Ann -> Ammy
+	o.Name = "Ammy"
+end)
+```
+
+### static property
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		property "DefaultName" { type = String }
+
+		property "Name" {
+			type = String, default = function() return Person.DefaultName end,
+		}
+	end)
+
+	Person.DefaultName = "noname"
+
+	print(Person().Name) -- noname
+end)
+```
+
+### 自动绑定
+
+如果设置了*auto*启用自动绑定模式，并且属性本身没有定义get/set,getmethod/setmethod和field这些字段，那么系统会检查属性所属类型或者接口的方法（如果是静态属性查静态方法，非静态属性查对象方法（含继承）），以一个而名为"name"的属性为例:
+
+* *setname*, *Setname*, *SetName*, *setName*将会被扫描，如果存在，这个方法会被保存到set字段中，被属性使用
+
+* *getname*, *Getname*, *Isname*, *isname*, *getName*, *GetName*, *IsName*, *isname*将会被扫描，如果存在，这个方法会被保存到get字段中，被属性使用
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		function SetName(self, name)
+			print("SetName", name)
+		end
+
+		property "Name" { type = String, auto = true }
+	end)
+
+	-- SetName  Ann
+	o = Person { Name = "Ann"}
+
+	-- SetName  Ammy
+	o.Name = "Ammy"
+end)
+```
+
+### 超类属性
+
+如果类或者接口覆盖了继承的属性，类似event我们可以使用**super**关键子来访问超类属性处理:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+	end)
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		property "Name" {
+			Set = function(self, name)
+				-- 保存到超类属性中
+				super[self].Name = name
+			end,
+			Get = function(self)
+				-- 读取超类属性值
+				return super[self].Name
+			end,
+		}
+	end)
+
+	o = Student()
+	o.Name = "Test"
+	print(o.Name)   -- Test
+end)
+```
+
+### 索引属性
+
+我们还可以定义一种特殊的索引属性:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function( _ENV )
+		__Indexer__()
+		property "Items" {
+			set = function(self, idx, value)
+				self[idx] = value
+			end,
+			get = function(self, idx)
+				return self[idx]
+			end,
+			type = String,
+		}
+	end)
+
+	o = A()
+
+	o.Items[1] = "Hello"
+
+	print(o.Items[1])   -- Hello
+end)
+```
+
+索引属性的定义table仅接受set, get, getmethod, setmethod, type and static这些设定。
+
+### Get/Set行为修饰
+
+除了上述定义外，我们还可以对属性的访问行为进行调整。
+
+对于属性的值设置，我们使用**System.PropertySet**来描述保存值时的处理:
+
+```lua
+__Flags__() __Default__(0)
+enum "System.PropertySet" {
+	Assign      = 0,  -- 直接保存
+	Clone       = 1,  -- 保存值的拷贝
+	DeepClone   = 2,  -- 保存值的深层拷贝
+	Retain      = 4,  -- 旧值需要被Dispose处理
+	Weak        = 8,  -- 值使用弱引用保存，可被回收
+}
+```
+
+对于属性的值读取，我们使用**System.PropertyGet**来描述读取值时的处理:
+
+```lua
+__Flags__() __Default__(0)
+PropertyGet = enum "System.PropertyGet" {
+	Origin      = 0,  -- 直接返回值
+	Clone       = 1,  -- 返回值的拷贝
+	DeepClone   = 2,  -- 返回值的深层拷贝
+}
+```
+
+为了给属性指定这些行为，我们需要使用`System.__Set__`和`System.__Get__`这两个特性:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Data" (function(_ENV)
+		extend "ICloneable"  -- 可复制类必须扩展这个接口
+
+		local _Cnt = 0
+
+		-- 实现Clone方法
+		function Clone(self)
+ 	        return Data() -- for test, just return a new one
+		end
+
+		function Dispose(self)
+			print("Dispose Data " .. self.Index)
+		end
+
+		function __ctor(self)
+            _Cnt = _Cnt + 1
+            self.Index = _Cnt
+		end
+	end)
+
+	class "A" (function(_ENV)
+		__Set__(PropertySet.Clone + PropertySet.Retain)
+		__Get__(PropertySet.Clone)
+		property "Data" { type = Data }
+	end)
+
+	o = A()
+
+	dt = Data()
+
+	o.Data = dt
+	print(dt.Index, o.Data.Index)  -- 1  3
+	o.Data = nil   -- Dispose Data 2
+end)
+```
+
+### System.Property
+
+**System.Property**是一个反射类型，用于提供property的信息：
+
+Static Method                |Description
+:----------------------------|:-----------------------------
+IsGetClone(target)           |该属性返回值的拷贝
+IsGetDeepClone(target)       |该属性返回值的深层拷贝
+IsIndexer(target)            |该属性是否是索引属性
+IsReadable(target)   		 |该属性是否可读
+IsSetClone(target)           |该属性是否保存输入值的拷贝
+IsSetDeepClone(target)       |该属性是否保存输入值的深层拷贝
+IsRetainObject(target)       |该属性是否会Dispose旧的值（对象）
+IsStatic(target)             |该属性是否是静态属性
+IsWeak(target)               |该属性是否将值作为弱引用保存
+IsWritable(target)           |该属性是否可写
+GetDefault(target)           |获取属性的默认值
+GetType(target)              |获取属性的类型
+Validate(target)             |目标是否是一个属性
+
+下面是一个简单例子:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
+
+	for name, feature in Class.GetFeatures(Person) do
+		if Property.Validate(feature) then
+			print(name, Property.GetType(feature))
+		end
+	end
+end)
+```
+
+## 重载

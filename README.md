@@ -1295,7 +1295,7 @@ end)
 
 The static method don't use _self_ as the first parameter since it's used by the class itself not its objects.
 
-### Meta-data
+### Meta-data and object construction
 
 The meta-data is a superset of the Lua's meta-method:
 
@@ -1430,107 +1430,148 @@ PLoop(function(_ENV)
 end)
 ```
 
-So, here is a summarize for the object's construction:
+So, here is a fake code for the object's construction:
 
-```flow
-newobj=>start:     class(...)
-exist=>condition:  object = __exist(cls, ...)
-new=>operation:    object = __new(cls, ...)
-chkobj=>condition: object ~= nil
-newtbl=>operation: object = {}
-field=>operation:  copy field into object
-wrap=>operation:   setmetatable(object, classmeta)
-ctor=>operation:   __ctor(object, ...)
-end=>end:          return object
+```lua
+-- Check whether existed
+local object = __exist(cls, ...)
+if object then return object end
 
-newobj->exist
-exist(yes,right)->end
-exist(no)->new->chkobj
-chkobj(no,right)->newtbl->field
-chkobj(yes)->field
-field->wrap->ctor->end
+-- Get a table as the new object
+object = __new(cls, ...) or {}
+
+-- Clone the field
+field:Copyto(object)
+
+-- Wrap to the object
+setmetatable(object, objMeta)
+
+-- Call the constructor
+__ctor(object, ...)
+
+return object
 ```
 
 ### Super class and Inheritance
 
-the class can and only can have one super class, the class will inherit the super class's object method, meta-datas and other features(event, property and etc). If the class has override the super's object method, meta-data or other features, the class can use **super** keyword to access the super class's method, meta-data or feature.
+the class can and only can have one super class, the class will inherit the super class's object method, meta-datas and other features(event, property and etc).
+
+If the class has override the super's object method, meta-data or other features, the class can use **super** keyword to access the super class's method, meta-data or feature.
 
 ```lua
-class "A" (function(_ENV)
-	-- Object method
-	function Test(self)
-		print("Call A's method")
-	end
+require "PLoop"
 
-	-- Constructor
-	function A(self)
-		print("Call A's ctor")
-	end
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		-- Object method
+		function Test(self)
+			print("Call A's method")
+		end
 
-	-- Destructor
-	function Dispose(self)
-		print("Dispose A")
-	end
+		-- Constructor
+		function A(self)
+			print("Call A's ctor")
+		end
 
-	-- Meta-method
-	function __call(self)
-		print("Call A Object")
-	end
+		-- Destructor
+		function Dispose(self)
+			print("Dispose A")
+		end
+
+		-- Meta-method
+		function __call(self)
+			print("Call A Object")
+		end
+	end)
+
+	class "B" (function(_ENV)
+		inherit "A"  -- also can use inherit(A)
+
+		function Test(self)
+			print("Call super's method ==>")
+			super[self]:Test()
+			super.Test(self)
+			print("Call super's method ==<")
+		end
+
+		function B(self)
+			super(self)
+			print("Call B's ctor")
+		end
+
+		function Dispose(self)
+			print("Dispose B")
+		end
+
+		function __call(self)
+			print("Call B Object")
+			super[self]:__call()
+			super.__call(self)
+		end
+	end)
+
+	-- Call A's ctor
+	-- Call B's ctor
+	o = B()
+
+	-- Call super's method ==>
+	-- Call A's method
+	-- Call A's method
+	-- Call super's method ==<
+	o:Test()
+
+	-- Call B Object
+	-- Call A Object
+	-- Call A Object
+	o()
+
+	-- Dispose B
+	-- Dispose A
+	o:Dispose()
 end)
-
-class "B" (function(_ENV)
-	inherit "A"  -- also can use inherit(A)
-
-	function Test(self)
-		print("Call super's method ==>")
-		super[self]:Test()
-		super.Test(self)
-		print("Call super's method ==<")
-	end
-
-	function B(self)
-		super(self)
-		print("Call B's ctor")
-	end
-
-	function Dispose(self)
-		print("Dispose B")
-	end
-
-	function __call(self)
-		print("Call B Object")
-		super[self]:__call()
-		super.__call(self)
-	end
-end)
-
--- Call A's ctor
--- Call B's ctor
-o = B()
-
--- Call super's method ==>
--- Call A's method
--- Call A's method
--- Call super's method ==<
-o:Test()
-
--- Call B Object
--- Call A Object
--- Call A Object
-o()
-
--- Dispose B
--- Dispose A
-o:Dispose()
 ```
 
 From the example, here are some details:
 
+* The `inherit "A"` is a syntax sugar, is the same like `inherit(A)`.
+
 * The destructor don't need call super's destructor, they are well controlled by the system, so the class only need to consider itself.
 
-* The constructor need call super's constructor manually, we'll learned more about it within the overload system.
+* The constructor need call super's constructor manually, since only the class know use what arguments to call the super class's constructor.
 
-* For the object method and meta-method, we have two style to call its super, `super.Test(self)` is a simple version, but if the class has multi versions, we must keep using the `super[self]:Test()` code style, because the super can know the object's class version before it fetch the *Test* method. We'll see more about the super call style in the event and property system.
+* For the object method and meta-method(include the `__new` and `__exist`, we have two style to call its super:
+
+	* `super.Test(self)` is a simple version, it can only be used to call method or meta-method.
+
+	* `super[self]:Test()` is formal version, since the self is passed to super before access the Test method, the super'd know the class version of the object and used the correct version methods. This is used for multi-version classes(by default, re-define a class would create two different version), also for features like properties and events(we'll see them later).
+
+
+### System.Class
+
+**System.Class** is a reflection type to provide informations about the classes:
+
+Static Method                               |Description
+:-------------------------------------------|:-----------------------------
+GetExtends(target[, cache])                 |if cache existed, save extend interfaces into the cache and return it, otherwise return an iterator used in generic for to fetch the extend interfaces
+GetFeature(target, name[, isobject])        |Get a type feature from the target with the name. If *isobject* is false, only type feature(include static) defined in the target will be returned, otherwise only object feature(include inherited) will be returned, same as below
+GetFeatures(target, [cache[, isobject]])    |If cache existed, save all type features into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetMethod(target, name[, isobject])         |Get a method from the target with the name
+GetMethods(target[, cache[, isobject]])     |If cache existed, save all method into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetMetaMethod(target, name[, isobject])     |Get a meta-method from the target with the name
+GetMetaMethods(target[, cache[, isobject]]) |If cache existed, save all meta-method into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetObjectClass(object)                      |Get the object's class
+GetSuperClass(target)                       |Get the target's super class
+GetSuperMethod(target, name)                |Get the target's super method with name
+GetSuperMetaMethod(target, name)            |Get the target's super meta-method with the name
+GetSuperFeature(target, name)               |Get the target's super type feature with the name
+IsAbstract(target[, name])                  |Whether the class's method, meta-method or feature is abstract
+IsFinal(target[, name])                     |Whether the class or its method, meta-method, feature is final
+IsImmutable(target)                         |Always return true
+IsSealed(target)                            |Whether the target is sealed
+IsStaticMethod(target, name)                |Whether the class's given name method is static
+IsSubType(target, super)                    |Whether the target class is a sub-type of another interface or class
+ValidateValue(target, object)               |Whether the value is an object whose class is or inherit the target class
+Validate(target)                            |Whether the target is a class
 
 
 ## Interface
@@ -1546,89 +1587,123 @@ If you only want defined methods and features that should be implemented by chil
 Let's take an example :
 
 ```lua
-interface "IName" (function(self)
-	__Abstract__()
-	function SetName(self) end
+require "PLoop"
 
-	__Abstract__()
-	function GetName(self) end
+PLoop(function(_ENV)
+	interface "IName" (function(self)
+		__Abstract__()
+		function SetName(self) end
 
-	-- initializer
-	function IName(self) print("IName Init") end
+		__Abstract__()
+		function GetName(self) end
 
-	-- destructor
-	function Dispose(self) print("IName Dispose") end
+		-- initializer
+		function IName(self) print("IName Init") end
+
+		-- destructor
+		function Dispose(self) print("IName Dispose") end
+	end)
+
+	interface "IAge" (function(self)
+		__Abstract__()
+		function SetAge(self) end
+
+		__Abstract__()
+		function GetAge(self) end
+
+		-- initializer
+		function IAge(self) print("IAge Init") end
+
+		-- destructor
+		function Dispose(self) print("IAge Dispose") end
+	end)
+
+	class "Person" (function(_ENV)
+		extend "IName" "IAge"   -- also can use `extend(IName)(IAge)`
+
+		-- Error: attempt to index global 'super' (a nil value)
+		-- Since there is no super method(the IName.SetName is abstract),
+		-- there is no super keyword can be use
+		function SetName(self, name) super[self]:SetName(name) end
+
+		function Person(self) print("Person Init") end
+
+		function Dispose(self) print("Person Dispose") end
+	end)
+
+	-- Person Init
+	-- IName Init
+	-- IAge Init
+	o = Person()
+
+	-- IAge Dispose
+	-- IName Dispose
+	-- Person Dispose
+	o:Dispose()
 end)
-
-interface "IAge" (function(self)
-	__Abstract__()
-	function SetAge(self) end
-
-	__Abstract__()
-	function GetAge(self) end
-
-	-- initializer
-	function IAge(self) print("IAge Init") end
-
-	-- destructor
-	function Dispose(self) print("IAge Dispose") end
-end)
-
-class "Person" (function(_ENV)
-	extend "IName" "IAge"   -- also can use `extend(IName)(IAge)`
-
-	-- Error: attempt to index global 'super' (a nil value)
-	-- Since there is no super method(the IName.SetName is abstract),
-	-- there is no super keyword can be use
-	function SetName(self, name) super[self]:SetName(name) end
-
-	function Person(self) print("Person Init") end
-
-	function Dispose(self) print("Person Dispose") end
-end)
-
--- Person Init
--- IName Init
--- IAge Init
-o = Person()
-
--- IAge Dispose
--- IName Dispose
--- Person Dispose
-o:Dispose()
 ```
 
 From the example, we can see the initializers are called when object is created and already passed the class's constructor. The dispose order is the reverse order of the object creation. So, the class and interface should only care themselves.
 
+### System.Interface
+
+**System.Interface** is a reflection type to provide informations about the interfaces:
+
+Static Method                               |Description
+:-------------------------------------------|:-----------------------------
+GetExtends(target[, cache])                 |if cache existed, save extend interfaces into the cache and return it, otherwise return an iterator used in generic for to fetch the extend interfaces
+GetFeature(target, name[, isobject])        |Get a type feature from the target with the name. If *isobject* is false, only type feature(include static) defined in the target will be returned, otherwise only object feature(include inherited) will be returned, same as below
+GetFeatures(target, [cache[, isobject]])    |If cache existed, save all type features into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetMethod(target, name[, isobject])         |Get a method from the target with the name
+GetMethods(target[, cache[, isobject]])     |If cache existed, save all method into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetMetaMethod(target, name[, isobject])     |Get a meta-method from the target with the name
+GetMetaMethods(target[, cache[, isobject]]) |If cache existed, save all meta-method into the cache and return it, otherwise return an iterator used in generic for to fetch them
+GetSuperMethod(target, name)                |Get the target's super method with name
+GetSuperMetaMethod(target, name)            |Get the target's super meta-method with the name
+GetSuperFeature(target, name)               |Get the target's super type feature with the name
+IsAbstract(target[, name])                  |Whether the interface's method, meta-method or feature is abstract
+IsFinal(target[, name])                     |Whether the interface or its method, meta-method, feature is final
+IsImmutable(target)                         |Always return true
+IsSealed(target)                            |Whether the target is sealed
+IsStaticMethod(target, name)                |Whether the target's given name method is static
+IsSubType(target, super)                    |Whether the target is a sub-type of another interface
+ValidateValue(target, object)               |Whether the value is an object whose class is extend the target interface
+Validate(target)                            |Whether the target is an interface
+
 
 ## Event
 
-The events are used to notify the outside that the state of class object has changed. Let's take an example to start :
+The events are type features used to notify the outside that the state of class object has changed. Let's take an example to start :
 
 ```lua
-class "Person" (function(_ENV)
-	event "OnNameChanged"
+require "PLoop"
 
-	field { name = "anonymous" }
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- declare an event for the class
+		event "OnNameChanged"
 
-	function SetName(self, name)
-		if name ~= self.name then
-			-- Notify the outside
-			OnNameChanged(self, name, self.name)
-			self.name = name
+		field { name = "anonymous" }
+
+		function SetName(self, name)
+			if name ~= self.name then
+				-- Notify the outside
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
 		end
+	end)
+
+	o = Person()
+
+	-- Bind a function as handler to the event
+	function o:OnNameChanged(new, old)
+		print(("Renamed from %q to %q"):format(old, new))
 	end
+
+	-- Renamed from "anonymous" to "Ann"
+	o:SetName("Ann")
 end)
-
-o = Person()
-
--- Bind a function as handler to the event
-function o:OnNameChanged(new, old)
-	print(("Renamed from %q to %q"):format(old, new))
-end
-
--- Renamed from "anonymous" to "Ann"
-o:SetName("Ann")
 ```
 
 The event is a feature type of the class and interface, there are two types of the event handler :
@@ -1638,28 +1713,47 @@ The event is a feature type of the class and interface, there are two types of t
 * the stackable handler - The stackable handler are normally used in the class's constructor or interface's initializer:
 
 ```lua
-class "Student" (function(_ENV)
-	inherit "Person"
+require "PLoop"
 
-	local function onNameChanged(self, name, old)
-		print(("Student %s renamed to %s"):format(old, name))
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- declare an event for the class
+		event "OnNameChanged"
+
+		field { name = "anonymous" }
+
+		function SetName(self, name)
+			if name ~= self.name then
+				-- Notify the outside
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
+		end
+	end)
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		local function onNameChanged(self, name, old)
+			print(("Student %s renamed to %s"):format(old, name))
+		end
+
+		function Student(self, name)
+			self:SetName(name)
+			self.OnNameChanged = self.OnNameChanged + onNameChanged
+		end
+	end)
+
+	o = Student("Ann")
+
+	function o:OnNameChanged(name)
+		print("My new name is " .. name)
 	end
 
-	function Student(self, name)
-		self:SetName(name)
-		self.OnNameChanged = self.OnNameChanged + onNameChanged
-	end
+	-- Student Ann renamed to Ammy
+	-- My new name is Ammy
+	o:SetName("Ammy")
 end)
-
-o = Student("Ann")
-
-function o:OnNameChanged(name)
-	print("My new name is " .. name)
-end
-
--- Student Ann renamed to Ammy
--- My new name is Ammy
-o:SetName("Ammy")
 ```
 
 The `self.OnNameChanged` is an object generated by **System.Delegate** who has `__add` and `__sub` meta-methods so it can works with the style like
@@ -1684,6 +1778,9 @@ self.OnNameChanged:SetInitFunction(function() return true end)
 
 To block the object's *OnNameChanged* event.
 
+
+### The event of the event handler's changes
+
 When using PLoop to wrap objects generated from other system, we may need to bind the PLoop event to other system's event, there is two parts in it :
 
 * When the PLoop object's event handlers are changed, we need know when and whether there is any handler for that event, so we can register or un-register in the other system.
@@ -1693,33 +1790,39 @@ When using PLoop to wrap objects generated from other system, we may need to bin
 Take the *Frame* widget from the *World of Warcraft* as an example, ignore the other details, let's focus on the event two-way binding :
 
 ```lua
-class "Frame" (function(_ENV)
-	__EventChangeHandler__(function(delegate, owner, eventname)
-		-- owner is the frame object
-		-- eventname is the OnEnter for this case
-		if delegate:IsEmpty() then
-			-- No event handler, so un-register the frame's script event
-			owner:SetScript(eventname, nil)
-		else
-			-- Has event handler, so we must regiser the frame's script event
-			if owner:GetScript(eventname) == nil then
-				owner:SetScript(eventname, function(self, ...)
-					-- Call the delegate directly
-					delegate(owner, ...)
-				end)
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Frame" (function(_ENV)
+		__EventChangeHandler__(function(delegate, owner, eventname)
+			-- delegate is the object whose handlers are changed
+			-- owner is the frame object, also the owner of the delegate
+			-- eventname is the OnEnter for this case
+			if delegate:IsEmpty() then
+				-- No event handler, so un-register the frame's script event
+				owner:SetScript(eventname, nil)
+			else
+				-- Has event handler, so we must regiser the frame's script event
+				if owner:GetScript(eventname) == nil then
+					owner:SetScript(eventname, function(self, ...)
+						-- Call the delegate directly
+						delegate(owner, ...)
+					end)
+				end
 			end
-		end
+		end)
+		event "OnEnter"
 	end)
-	event "OnEnter"
 end)
 ```
 
 With the `__EventChangeHandler__` attribute, we can bind a function to the target event, so all changes of the event handlers can be checked in the function. Since the event change handler has nothing special with the target event, we can use it on all script events in one system like :
 
 ```lua
--- A help class so it can be saved in namespaces
-class "__WidgetEvent__" (function(_ENV)
-	local function handler (delegate, owner, eventname)
+require "PLoop"
+
+PLoop(function(_ENV)
+	local function changehandler (delegate, owner, eventname)
 		if delegate:IsEmpty() then
 			owner:SetScript(eventname, nil)
 		else
@@ -1733,72 +1836,129 @@ class "__WidgetEvent__" (function(_ENV)
 	end
 
 	function __WidgetEvent__(self)
-		__EventChangeHandler__(handler)
+		__EventChangeHandler__(changehandler)
 	end
-end)
 
-class "Frame" (function(_ENV)
-	__WidgetEvent__()
-	event "OnEnter"
+	class "Frame" (function(_ENV)
+		__WidgetEvent__()
+		event "OnEnter"
 
-	__WidgetEvent__()
-	event "OnLeave"
+		__WidgetEvent__()
+		event "OnLeave"
+	end)
 end)
 ```
+
+### Static event
 
 The event can also be marked as static, so it can be used and only be used by the class or interface :
 
 ```lua
-class "Person" (function(_ENV)
-	__Static__()
-	event "OnPersonCreated"
+require "PLoop"
 
-	function Person(self, name)
-		OnPersonCreated(name)
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		event "OnPersonCreated"
+
+		function Person(self, name)
+			OnPersonCreated(name)
+		end
+	end)
+
+	function Person.OnPersonCreated(name)
+		print("Person created " .. name)
 	end
+
+	-- Person created Ann
+	o = Person("Ann")
 end)
-
-function Person.OnPersonCreated(name)
-	print("Person created " .. name)
-end
-
--- Person created Ann
-o = Person("Ann")
 ```
+
+### super event
 
 When the class or interface has overridden the event, and they need register handler to super event, we can use the super object access style :
 
 ```lua
-class "Person" (function(_ENV)
-	property "Name" { event = "OnNameChanged" }
-end)
+require "PLoop"
 
-class "Student" (function(_ENV)
-	inherit "Person"
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		-- declare an event for the class
+		event "OnNameChanged"
 
-	event "OnNameChanged"
+		field { name = "anonymous" }
 
-	local function raiseEvent(self, ...)
-		OnNameChanged(self, ...)
+		function SetName(self, name)
+			if name ~= self.name then
+				-- Notify the outside
+				OnNameChanged(self, name, self.name)
+				self.name = name
+			end
+		end
+	end)
+
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		event "OnNameChanged"
+
+		local function raiseEvent(self, ...)
+			OnNameChanged(self, ...)
+		end
+
+		function Student(self)
+			super(self)
+
+			-- Use the super object access style
+			super[self].OnNameChanged = raiseEvent
+		end
+	end)
+
+	o = Student()
+
+	function o:OnNameChanged(name)
+		print("New name is " .. name)
 	end
 
-	function Student(self)
-		super(self)
-
-		-- Use the super object access style
-		super[self].OnNameChanged = raiseEvent
-	end
+	-- New name is Test
+	o:SetName("Test")
 end)
-
-o = Student()
-
-function o:OnNameChanged(name)
-	print("New name is " .. name)
-end
-
--- New name is Test
-o.Name = "Test"
 ```
+
+As we can see, the child class can listen the super's event and then raise its own event.
+
+### System.Event
+
+**System.Event** is a reflection type to be used to get informations about the event:
+
+Static Method                               |Description
+:-------------------------------------------|:-----------------------------
+Get(target, object[, nocreation])           |Get the event delegate from the object, if nocreation is non-true, the delegate will be created if not existed
+GetEventChangeHandler(target)               |Get the handler registered by `__EventChangeHandler__`
+IsStatic(target)                            |Whether the event is static
+Validate(target)                          	|Whether the target is an event
+
+A simple example:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		event "OnPersonCreated"
+	end)
+
+	for name, feature in Class.GetFeatures(Person) do
+		if Event.Validate(feature) then
+			print("event", name)
+		end
+	end
+end)
+```
+
 
 ## Property
 
@@ -1807,42 +1967,129 @@ The properties are object states, we can use the table fields to act as the obje
 Like the event, the property is also a feature type of the interface and class. The property system provide many mechanisms like get/set, value type validation, value changed handler, value changed event, default value and default value factory. Let's start with a simple example :
 
 ```lua
-class "Person" (function(_ENV)
-	property "Name" { type = String }
-	property "Age"  { type = Number }
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
+
+	-- If the class has no constructor, we can use the class to create the object based on a table
+	-- the table is called the init-table
+	o = Person{ Name = "Ann", Age = 10 }
+
+	print(o.Name)-- Ann
+	o.Name = 123 -- Error : the Name must be string, got number
 end)
-
--- If the class has no constructor, we can use the class to create the object based on a table
--- the table is called the init-table
-o = Person{ Name = "Ann", Age = 10 }
-
-print(o.Name)-- Ann
-o.Name = 123 -- Error : the Name must be [String]
 ```
 
 The **Person** class has two properties: *Name* and *Age*, the table after `property "Name"` is the definition of the *Name* property, it contains a *type* field that contains the property value's type, so when we assign a number value to the *Name*, the operation is failed.
 
 Like the **member** of the **struct**, we use table to give the property's definition, the key is case ignored, here is a full list:
 
-* auto          whether use the auto-binding mechanism for the property see blow example for details.
+Field           |Usage
+:---------------|:-------------
+auto            |whether use the auto-binding mechanism for the property see blow example for details.
+get             |the function used to get the property value from the object like `get(obj)`, also you can set **false** to it, so the property can't be read
+set             |the function used to set the property value of the object like `set(obj, value)`, also you can set **false** to it, so the property can't be written
+getmethod       |the string name used to specified the object method to get the value like `obj[getmethod](obj)`
+setmethod       |the string name used to specified the object method to set the value like `obj[setmethod](obj, value)`
+field           |the table field to save the property value, no use if get/set specified, like the *Name* of the **Person**, since there is no get/set or field specified, the system will auto generate a field for it, it's recommended.
+type            |the value's type, if the value is immutable, the type validation can be turn off for release version, just turn on **TYPE_VALIDATION_DISABLED** in the **PLOOP_PLATFORM_SETTINGS**
+default         |the default value
+event           |the event used to handle the property value changes, if it's value is string, an event will be created:
+handler         |the function used to handle the property value changes, unlike the event, the handler is used to notify the class or interface itself, normally this is used combine with **field** (or auto-gen field), so the class or interface only need to act based on the value changes :
+static          |true if the property is a static property
 
-* get           the function used to get the property value from the object like `get(obj)`, also you can set **false** to it, so the property can't be read
+We'll see examples for each case:
 
-* set           the function used to set the property value of the object like `set(obj, value)`, also you can set **false** to it, so the property can't be written
-
-* getmethod     the string name used to specified the object method to get the value like `obj[getmethod](obj)`
-
-* setmethod     the string name used to specified the object method to set the value like `obj[setmethod](obj, value)`
-
-* field         the table field to save the property value, no use if get/set specified, like the *Name* of the **Person**, since there is no get/set or field specified, the system will auto generate a field for it, it's recommended.
-
-* type          the value's type, if the value is immutable, the type validation can be turn off for release version, just turn on **TYPE_VALIDATION_DISABLED** in the **PLOOP_PLATFORM_SETTINGS**
-
-* default       the default value
-
-* event         the event used to handle the property value changes, if it's value is string, an event will be created:
+### get/set
 
 ```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		property "Name" {
+			get = function(self) return self.__name end,
+			set = function(self, name) self.__name = name end,
+		}
+	end)
+
+	print(Person().Name)
+end)
+```
+
+### getmethod/setmethod
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		function SetName(self, name)
+			self.__name = name
+		end
+
+		function GetName(self)
+			return self.__name
+		end
+
+		property "Name" {
+			get = "GetName", -- or getmethod = "GetName"
+			set = "SetName", -- or setmethod = "SetName"
+		}
+	end)
+
+	print(Person().Name)
+end)
+```
+
+### field & default
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { field = "__name", default = "anonymous" }
+	end)
+
+	obj = Person()
+	print(obj.Name, obj.__name) -- anonymous   nil
+	obj.Name = "Ann"
+	print(obj.Name, obj.__name) -- Ann         Ann
+end)
+```
+
+### default factory
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Age" { field = "__age", default = function(self) return math.random(100) end }
+	end)
+
+	obj = Person()
+	print(obj.Age, obj.__age) -- 81   81
+	obj.Age = nil   -- so the factory will works again
+	print(obj.Age, obj.__age) -- 88   88
+end)
+```
+
+### property-event
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
 	class "Person" (function(_ENV)
 		property "Name" { type = String, event = "OnNameChanged" }
 	end)
@@ -1855,100 +2102,254 @@ Like the **member** of the **struct**, we use table to give the property's defin
 
 	-- [Name] Ann -> Ammy
 	o.Name = "Ammy"
+end)
 ```
 
-* handler       the function used to handle the property value changes, unlike the event, the handler is used to notify the class or interface itself, normally this is used combine with **field** (or auto-gen field), so the class or interface only need to act based on the value changes :
+### property-handler
 
 ```lua
-class "Person" (function(_ENV)
-	property "Name" {
-		type = String, default = "anonymous",
-		handler = function(self, new, old, prop) print(("[%s] %s -> %s"):format(prop, old, new)) end
-	}
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" {
+			type = String, default = "anonymous",
+
+			handler = function(self, new, old, prop)
+				print(("[%s] %s -> %s"):format(prop, old, new))
+			end
+		}
+	end)
+
+	--[Name] anonymous -> Ann
+	o = Person { Name = "Ann" }
+
+	--[Name] Ann -> Ammy
+	o.Name = "Ammy"
 end)
-
---[Name] anonymous -> Ann
-o = Person { Name = "Ann" }
-
---[Name] Ann -> Ammy
-o.Name = "Ammy"
 ```
 
-* static        true if the property is a static property
+### static property
 
-If the **auto** auto-binding mechanism is using and the definition don't provide get/set, getmethod/setmethod and field, the system will check the property owner's method(object method if non-static, static method if it is static), if the property name is **name**:
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		__Static__()
+		property "DefaultName" { type = String }
+
+		property "Name" {
+			type = String, default = function() return Person.DefaultName end,
+		}
+	end)
+
+	Person.DefaultName = "noname"
+
+	print(Person().Name) -- noname
+end)
+```
+
+### Auto-binding
+
+If using the auto-binding mechanism and the definition don't provide get/set, getmethod/setmethod and field, the system will check the property owner's method(object method if non-static, static method if it is static), take an example if our property name is "name":
 
 * The *setname*, *Setname*, *SetName*, *setName* will be scanned, if it existed, the method will be used as the **set** setting
 
+* The *getname*, *Getname*, *Isname*, *isname*, *getName*, *GetName*, *IsName*, *isname* will be scanned, if it exsited, the method will be used as the **get** setting
+
 ```lua
-class "Person" (function(_ENV)
-	function SetName(self, name)
-		print("SetName", name)
-	end
+require "PLoop"
 
-	property "Name" { type = String }
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		function SetName(self, name)
+			print("SetName", name)
+		end
+
+		property "Name" { type = String, auto = true }
+	end)
+
+	-- SetName  Ann
+	o = Person { Name = "Ann"}
+
+	-- SetName  Ammy
+	o.Name = "Ammy"
 end)
-
--- SetName  Ann
-o = Person { Name = "Ann"}
-
--- SetName  Ammy
-o.Name = "Ammy"
 ```
 
-* The *getname*, *Getname*, *Isname*, *isname*, *getName*, *GetName*, *IsName*, *isname* will be scanned, if it exsited, the method will be used as the **get** setting
+### super property
 
 When the class or interface has overridden the property, they still can use the super object access style to use the super's property :
 
 ```lua
-class "Person" (function(_ENV)
-	property "Name" { event = "OnNameChanged" }
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+	end)
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		property "Name" {
+			Set = function(self, name)
+				-- Use super property to save
+				super[self].Name = name
+			end,
+			Get = function(self)
+				-- Use super property to fetch
+				return super[self].Name
+			end,
+		}
+	end)
+
+	o = Student()
+	o.Name = "Test"
+	print(o.Name)   -- Test
 end)
-
-class "Student" (function(_ENV)
-	inherit "Person"
-
-	property "Name" {
-		Set = function(self, name)
-			-- Use super property to save
-			super[self].Name = name
-		end,
-		Get = function(self)
-			-- Use super property to fetch
-			return super[self].Name
-		end,
-	}
-end)
-
-o = Student()
-o.Name = "Test"
-print(o.Name)   -- Test
 ```
 
-You also can build indexer properties like :
+### indexer property
+
+We also can build indexer properties like :
 
 ```lua
-class "A" (function( _ENV )
-	__Indexer__()
-	property "Items" {
-		set = function(self, idx, value)
-			self[idx] = value
-		end,
-		get = function(self, idx)
-			return self[idx]
-		end,
-		type = String,
-	}
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function( _ENV )
+		__Indexer__()
+		property "Items" {
+			set = function(self, idx, value)
+				self[idx] = value
+			end,
+			get = function(self, idx)
+				return self[idx]
+			end,
+			type = String,
+		}
+	end)
+
+	o = A()
+
+	o.Items[1] = "Hello"
+
+	print(o.Items[1])   -- Hello
 end)
-
-o = A()
-
-o.Items[1] = "Hello"
-
-print(o.Items[1])   -- Hello
 ```
 
 The indexer property can only accept set, get, getmethod, setmethod, type and static definitions.
+
+### Get/Set Modifier
+
+Beside those settings, we still can provide some behavior modifiers on the properties.
+
+For property set, we have **System.PropertySet** to describe the value set behavior:
+
+```lua
+__Flags__() __Default__(0)
+enum "System.PropertySet" {
+	Assign      = 0,  -- assign directly
+	Clone       = 1,  -- save the clone of the value
+	DeepClone   = 2,  -- save the deep clone of the value
+	Retain      = 4,  -- should dispose the old value
+	Weak        = 8,  -- save the value as weak mode
+}
+```
+
+For property get, we have **System.PropertyGet** to describe the value get behavior:
+
+```lua
+__Flags__() __Default__(0)
+PropertyGet = enum "System.PropertyGet" {
+	Origin      = 0,  -- return the value directly
+	Clone       = 1,  -- return a clone of the value
+	DeepClone   = 2,  -- return a deep clone of the value
+}
+```
+
+To apply them on the property, we need `System.__Set__` and `System.__Get__` attributes:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Data" (function(_ENV)
+		extend "ICloneable"  -- cloneable class must extend this interface
+
+		local _Cnt = 0
+
+		-- Implement the Clone method
+		function Clone(self)
+ 	        return Data() -- for test, just return a new one
+		end
+
+		function Dispose(self)
+			print("Dispose Data " .. self.Index)
+		end
+
+		function __ctor(self)
+            _Cnt = _Cnt + 1
+            self.Index = _Cnt
+		end
+	end)
+
+	class "A" (function(_ENV)
+		__Set__(PropertySet.Clone + PropertySet.Retain)
+		__Get__(PropertySet.Clone)
+		property "Data" { type = Data }
+	end)
+
+	o = A()
+
+	dt = Data()
+
+	o.Data = dt
+	print(dt.Index, o.Data.Index)  -- 1  3
+	o.Data = nil   -- Dispose Data 2
+end)
+```
+
+### System.Property
+
+**System.Property** is a reflection type used to provide informations about the properties.
+
+Static Method                |Description
+:----------------------------|:-----------------------------
+IsGetClone(target)           |Whether the property should return a clone copy of the value
+IsGetDeepClone(target)       |Whether the property should return a deep clone copy of the value
+IsIndexer(target)            |Whether the property is an indexer property, used like `obj.prop[xxx] = xxx`
+IsReadable(target)   		 |Whether the property is readable
+IsSetClone(target)           |Whether the property should save a clone copy to the value
+IsSetDeepClone(target)       |Whether the property should save a deep clone copy to the value
+IsRetainObject(target)       |Whether the property should dispose the old value
+IsStatic(target)             |Whether the property is static
+IsWeak(target)               |Whether the property value should kept in a weak table
+IsWritable(target)           |Whether the property is writable
+GetDefault(target)           |Get the property default value
+GetType(target)              |Get the property type
+Validate(target)             |Wether the target is a property
+
+Here is an example:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		property "Name" { type = String }
+		property "Age"  { type = Number }
+	end)
+
+	for name, feature in Class.GetFeatures(Person) do
+		if Property.Validate(feature) then
+			print(name, Property.GetType(feature))
+		end
+	end
+end)
+```
 
 
 ## Overload
