@@ -2263,7 +2263,7 @@ For property get, we have **System.PropertyGet** to describe the value get behav
 
 ```lua
 __Flags__() __Default__(0)
-PropertyGet = enum "System.PropertyGet" {
+enum "System.PropertyGet" {
 	Origin      = 0,  -- return the value directly
 	Clone       = 1,  -- return a clone of the value
 	DeepClone   = 2,  -- return a deep clone of the value
@@ -2283,7 +2283,7 @@ PLoop(function(_ENV)
 
 		-- Implement the Clone method
 		function Clone(self)
- 	        return Data() -- for test, just return a new one
+			return Data() -- for test, just return a new one
 		end
 
 		function Dispose(self)
@@ -2291,8 +2291,8 @@ PLoop(function(_ENV)
 		end
 
 		function __ctor(self)
-            _Cnt = _Cnt + 1
-            self.Index = _Cnt
+			_Cnt = _Cnt + 1
+			self.Index = _Cnt
 		end
 	end)
 

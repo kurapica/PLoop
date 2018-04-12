@@ -2210,7 +2210,7 @@ end)
 
 ### 超类属性
 
-如果类或者接口覆盖了继承的属性，类似event我们可以使用**super**关键子来访问超类属性处理:
+如果类或者接口覆盖了继承的属性，类似event我们可以使用**super**关键字来访问超类属性处理:
 
 ```lua
 require "PLoop"
@@ -2293,7 +2293,7 @@ enum "System.PropertySet" {
 
 ```lua
 __Flags__() __Default__(0)
-PropertyGet = enum "System.PropertyGet" {
+enum "System.PropertyGet" {
 	Origin      = 0,  -- 直接返回值
 	Clone       = 1,  -- 返回值的拷贝
 	DeepClone   = 2,  -- 返回值的深层拷贝
@@ -2313,7 +2313,7 @@ PLoop(function(_ENV)
 
 		-- 实现Clone方法
 		function Clone(self)
- 	        return Data() -- for test, just return a new one
+			return Data() -- for test, just return a new one
 		end
 
 		function Dispose(self)
@@ -2321,8 +2321,8 @@ PLoop(function(_ENV)
 		end
 
 		function __ctor(self)
-            _Cnt = _Cnt + 1
-            self.Index = _Cnt
+			_Cnt = _Cnt + 1
+			self.Index = _Cnt
 		end
 	end)
 
