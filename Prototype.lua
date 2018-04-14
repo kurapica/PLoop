@@ -296,7 +296,7 @@ do
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     disposeObj                  = function (obj) obj:Dispose() end
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
-    parseIndex                  = function(idx) if idx == 1 then return "1st" end if idx == 2 then return "2nd" end if idx == 3 then return "3rd" end return idx .. "th" end
+    parseIndex                  = (function() local map = { "1st", "2nd", "3rd" } return function(idx) return map[idx] or (idx .. "th") end end)()
 
     --- new type events
     newenum                     = fakefunc
@@ -6437,9 +6437,10 @@ do
             genCacheOnPriority(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, true, nil, nil, stack)
         end
 
-        -- __new, __exist
-        if info[FLD_IC_EXIST]  and supext then super[IC_META_EXIST] = supext end
-        if info[FLD_IC_NEWOBJ] and supnew then super[IC_META_NEW]   = supnew end
+        -- __new, __exist, __ctor
+        if info[FLD_IC_CTOR]   and supctor then super[IC_META_CTOR]  = supctor end
+        if info[FLD_IC_EXIST]  and supext  then super[IC_META_EXIST] = supext  end
+        if info[FLD_IC_NEWOBJ] and supnew  then super[IC_META_NEW]   = supnew  end
 
         if next(super) then info[FLD_IC_SUPMTD] = super else _Cache(super) end
 
@@ -8671,12 +8672,12 @@ do
         __call                  = function(self, obj, ...)
             local cls           = _SuperMap[self]
             if obj and class.IsSubType(getmetatable(obj), cls) then
-                local spcls     = _ICInfo[cls][FLD_IC_SUPCLS]
-                if spcls then
-                    local ctor  = _ICInfo[spcls][FLD_IC_CLINIT]
-                    if ctor then return ctor(obj, ...) end
+                rawset(obj, OBJ_SUPER_ACCESS, cls)
+                local ctor      = safeget(obj, IC_META_CTOR)
+                if ctor then
+                    return ctor(obj, ...)
                 else
-                    error(strformat("Usage: super(object, ..) - the %s has no super class", tostring(cls)), 2)
+                    error(strformat("Usage: super(object, ..) - the %s has no super class constructor", tostring(cls)), 2)
                 end
             else
                 error("Usage: super(object, ..) - the object is not valid", 2)
@@ -12272,10 +12273,6 @@ do
         FLD_VAR_VARVLD          = -6
         FLD_VAR_THRABL          = -7
 
-        FLD_OVD_FUNCTN          =  0
-        FLD_OVD_OWNER           = -1
-        FLD_OVD_NAME            = -2
-
         TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
 
         THORW_METHOD            = {
@@ -12298,12 +12295,11 @@ do
         FLG_OVD_THROW           = newflags()        -- use throw
         FLG_OVD_ONECNT          = newflags()        -- only one variable list
 
-        ORDINAL_NUMBER          = { "1st", "2nd", "3rd" }
-
         -----------------------------------------------------------
         --                        helpers                        --
         -----------------------------------------------------------
         export {
+            tblclone            = tblclone,
             validate            = Struct.ValidateValue,
             geterrmsg           = Struct.GetErrorMessage,
             savestorage         = savestorage,
@@ -12321,15 +12317,12 @@ do
             _Cache              = _Cache,
             turnonflags         = turnonflags,
             validateflags       = validateflags,
-            parseOrdinalNumber  = function (i) return ORDINAL_NUMBER[i] or (i .. "th") end,
+            parseIndex          = parseIndex,
             unpack              = unpack,
             error               = error,
             select              = select,
             errorstack          = (LUA_VERSION == 5.1 and not _G.jit) and 3 or 2,
-            chkandret           = function (ok, msg, ...)
-                if ok then return msg, ... end
-                error(tostring(msg), errorstack)
-            end,
+            chkandret           = function (ok, msg, ...) if ok then return msg, ... end error(tostring(msg), errorstack) end,
             pcall               = pcall,
         }
 
@@ -12535,7 +12528,7 @@ do
                                 if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
                                 _ai_ = ret
                             end
-                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseOrdinalNumber(i))))
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseIndex(i))))
                     else
                         tinsert(body, (([[
                             if _ai_ == nil then
@@ -12546,7 +12539,7 @@ do
                                 if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 2) end
                                 _ai_ = ret
                             end
-                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseOrdinalNumber(i))))
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseIndex(i))))
                     end
                 end
 
@@ -12569,7 +12562,7 @@ do
                                     ]])
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
-                                    uinsert(apis, "parseOrdinalNumber")
+                                    uinsert(apis, "parseIndex")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
@@ -12579,7 +12572,7 @@ do
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                             end
                                         end
                                     ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
@@ -12594,7 +12587,7 @@ do
                             end
                         else
                             uinsert(apis, "select")
-                            uinsert(apis, "parseOrdinalNumber")
+                            uinsert(apis, "parseIndex")
                             tinsert(body, [[
                                 local vlen = select("#", ...)
                             ]])
@@ -12615,7 +12608,7 @@ do
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                             end
                                         end
                                         return
@@ -12627,7 +12620,7 @@ do
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                                 vlst[i] = ret
                                             end
                                         end
@@ -12652,7 +12645,7 @@ do
                                     ]])
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
-                                    uinsert(apis, "parseOrdinalNumber")
+                                    uinsert(apis, "parseIndex")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
@@ -12662,7 +12655,7 @@ do
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival)
-                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
                                             end
                                         end
                                     ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
@@ -12676,7 +12669,7 @@ do
                             end
                         else
                             uinsert(apis, "select")
-                            uinsert(apis, "parseOrdinalNumber")
+                            uinsert(apis, "parseIndex")
                             tinsert(body, [[
                                 local vlen = select("#", ...)
                             ]])
@@ -12696,7 +12689,7 @@ do
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseOrdinalNumber(i + _i_) .. " argument") or ("the " .. parseOrdinalNumber(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
                                             vlst[i] = ret
                                         end
                                     end
@@ -12741,14 +12734,14 @@ do
             end
         end
 
-        local function genOverload(overload, hasself)
+        local function genOverload(overload, owner, name, hasself)
             local token         = 0
 
             if hasself then
                 token           = turnonflags(FLG_OVD_SELFIN, token)
             end
 
-            if THORW_METHOD[overload[FLD_OVD_NAME]] then
+            if THORW_METHOD[name] then
                 token           = turnonflags(FLG_OVD_THROW, token)
             end
 
@@ -12883,7 +12876,7 @@ do
                 _Cache(apis)
             end
 
-            overload[FLD_OVD_FUNCTN] = _OverloadMap[token](overload, #overload, usages)
+            return _OverloadMap[token](overload, #overload, usages)
         end
 
         -----------------------------------------------------------
@@ -12976,16 +12969,14 @@ do
                         overload= savestorage(overload, #overload + 1, vars)
                     end
                 else
-                    overload    = { vars, [FLD_OVD_OWNER] = owner, [FLD_OVD_NAME] = name }
+                    overload    = { vars }
                 end
-
-                genOverload(overload, hasself)
 
                 _OverloadMap    = savestorage(_OverloadMap, owner, savestorage(_OverloadMap[owner] or {}, name, overload))
 
                 if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
-                return overload[FLD_OVD_FUNCTN]
+                return genOverload(tblclone(overload, {}), owner, name, hasself)
             else
                 if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
