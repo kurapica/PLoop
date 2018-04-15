@@ -12448,7 +12448,7 @@ do
                 if var.optional or (var.varargs and var.mincount == 0) then tinsert(usage, "[") end
 
                 if var.name or var.varargs then
-                    tinsert(usage, var.varargs and "..." or var.name)
+                    tinsert(usage, var.varargs and ("..." .. (var.mincount > 1 and (" [*" .. var.mincount .. "]") or "")) or var.name)
                     if var.type then
                         tinsert(usage, " as ")
                     end
