@@ -11480,7 +11480,7 @@ do
     --
     -- @attribute   System.__Indexer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Indexer__",         prototype {
+    namespace.SaveNamespace("System.__Indexer__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
                 property.SetIndexer(target, parsestack(stack) + 1)
@@ -11495,7 +11495,7 @@ do
     --
     -- @attribute   System.__Namespace__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Namespace__",     prototype {
+    namespace.SaveNamespace("System.__Namespace__",             prototype {
         __call = function(self, value)
             namespace.SetNamespaceForNext(value)
         end,
@@ -11841,7 +11841,7 @@ do
     __Sealed__() struct "System.Callable"           { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
 
     --- Represents the variable types for arguments or return values
-    __Sealed__() Variable = struct "System.Variable"(function(_ENV)
+    __Sealed__() Variable = struct (_PLoopEnv, "System.Variable") (function(_ENV)
         export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue }
 
         --- the variable's name
@@ -12142,14 +12142,14 @@ do
         -----------------------------------------------------------
         --                      initializer                      --
         -----------------------------------------------------------
-        __init                  = environment.Initialize
+        __init                  = Environment.Initialize
 
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
-        __Abstract__() __index = environment.GetValue
-        __Abstract__() __newindex = environment.SaveValue
-        __Abstract__() __call  = environment.Apply
+        __Abstract__() __index  = Environment.GetValue
+        __Abstract__() __newindex = Environment.SaveValue
+        __Abstract__() __call   = Environment.Apply
         __Abstract__() __tostring = function(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
@@ -13074,7 +13074,7 @@ do
 
     -- set the target struct, class or interface as template
     __Sealed__() __Final__()
-    class "System.__Template__" (function(_ENV)
+    class (_PLoopEnv, "System.__Template__") (function(_ENV)
         extend "IInitAttribute"
 
         export { parsestack = parsestack, type = type, error = error }
