@@ -88,13 +88,13 @@ First of all, we use `PLoop(function(_ENV) end)` to encapsulate and call the pro
 
 The main problem is that the default environment of all processing codes is the `_G`. If we can keep each codes processed in its own private environment, we can completely avoid the problem of duplicate names, and we also don't need to strictly use local to declare function or share Datas.
 
-In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.
+In the previous example, the function that encapsulates the code is passed as argument to **PLoop**, it will be bound to a private and special **PLoop** environment and then be executed. Because the Lua's environmental control has significant changes from version 5.1 to version 5.2. **PLoop** used this calling style for compatibility, you will see other similar codes, such as defining a class like `class "A" (function(_ENV) end)`.(If you don't understand the `_ENV`, you should check the Lua 5.2 updates)
 
 We'll learn more benefites of this calling style in the other examples, and for the previous example:
 
-* The global variable belongs to this private environment. In the `_G`, the variable v cannot be accessed.
+* The global variable declared belongs to this private environment. In the `_G`, the variable v cannot be accessed.
 
-* Feel free to use public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
+* Free to use the public libraries or variables such as math.random stored in `_G`, there is no performance issues since the private environment will auto-cache those variables when it is accessed.
 
 * You can directly access the **List** class, **PLoop** has public namespaces, the public namespaces can be accessed by all **PLoop** environments without **import**, the default public namespaces are **System**, **System.Collections** and **System.Threading**, we'll learn more about the them at later.
 
@@ -102,27 +102,9 @@ We'll learn more benefites of this calling style in the other examples, and for 
 
 * We can use the keyword **import** to import namespaces to the private environments or the `_G`, then we can use the types stored in those namespaces. The difference is importing to the `_G` is a *saving all to `_G`* action, and the private environment will only records the namespaces it imported, only access the types in them when needed(also will be auto cached).
 
-* **PLoop**'s private environment will look for a global variable when it not existed(not auto-cached or declared, so the `__index` will be triggered), the order is:
+Back to the creation of the **List** objects, the **List** type can be used as an object generator, it'll create the list objects based on the input arguments.
 
-	* Find in the namespace that the environment belongs (use `namespace "MyNamesapce`" in it, so types generated in the private environment will be saved in the namespace)
-
-	* Find in the namespace of this environment **import**ed
-
-	* Find in public namespaces
-
-	* Find in the root namespaces, if you access data like "**System**"
-
-	* Find in the base environment, the private environment can set a base environment, default is the `_G`
-
-The rules for finding variable names in the namespace are:
-
-* Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
-
-* Try get value by `thenamespace[variable name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
-
-Back to the creation of the **List** objects, the **List** type can be used as a object generator, it'll create the list objects based on the input arguments.
-
-Normally to say, those List objects are normal Lua tables with meta-table settings, we still can use **ipairs** to traverse it or use `obj[1]` to accessed its elements. We also can enjoy the powerful methods provided by the **List** classes.
+Those List objects are normal Lua tables with meta-table settings, we still can use **ipairs** to traverse it or use `obj[1]` to accessed its elements. We also can enjoy the powerful methods provided by the **List** classes.
 
 
 ### The method of the List
@@ -760,9 +742,7 @@ Like using **PLoop** to run codes in private environment, we also use this calli
 
 The environment *Env B* for the type's defintion is special designed:
 
-* the namespace of the definition environment is the type itself, so create any others types in it will save those types as sub-namespaces of the owner type.
-
-* since the struct is defined in the *Env A*, so the *Env B*'s base environment is the *Env A*, so it can access anything defined or imported in the *Env A*.
+* since the struct is defined in the *Env A*, so the *Env B*'s base environment is the *Env A*,  it can access anything defined or imported in the *Env A*.
 
 * the *Env B* is special designed for struct's defintion, so it'll pass special assignments as the type's definition, the function with the same name of the type should be used as the struct's **validator**, also you could use the `__valid` as the validator's name(for anonymous struct like `struct (function(_ENV) function __valid(val) end end)`).
 
@@ -2351,83 +2331,434 @@ PLoop(function(_ENV)
 end)
 ```
 
+We have see all feature types provided by the **PLoop**, but there are still many details should be discussed.
+
+
+## Namespace and Anonymous types
+
+The namespaces are used to manage types, we can save types into the namespaces so each type will have an unique access path like **System.Collections.List**. We can use the **import** keyword to import namespaces into private environment, so those types can be shared by anywhere.
+
+Types are saved to namespaces when they are defined, here is an example to show all scenarios:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	-- we can use the namespace keyword to declare
+	-- a namespace for current environment
+	-- all types generated in the environment will
+	-- be saved to the namespace with its name
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		-- the namespace of the type's definition body
+		-- is the type itself, so any types defined here
+		-- will be a sub-namespace of the type(the class A)
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+
+	-- If we define a type with a full access path
+	-- the type won't save to the environment's namespace
+	-- it'll be saved to the path
+	class "Another.B" (function(_ENV)
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+
+	print(A)      -- Test.A
+	print(A.Type) -- Test.A.Type
+
+	print(B)      -- Another.B
+	print(B.Type) -- Another.B.Type
+end)
+```
+
+We also can define anonymous types that we don't want to share with others, just remove the type name from the definition:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		Type = enum { Data = 1, Object = 2 }
+
+		print(Data)      -- 1
+		print(Type.Data) -- 1
+	end)
+
+	-- we have no way to get the A.Type
+	print(A.Type)        -- nil
+end)
+```
+
+### System.Namespace
+
+We also have a reflection type **System.Namespace** to provide informations about the namespaces(also include those types):
+
+Static Method                        |Description
+:------------------------------------|:-----------------------------
+ExportNamespace(env, ns[, override]) |Export a namespace and its children to an environment
+GetNamespace([root,] path)           |Get the namespace by path
+GetNamespaceName(ns, onlyname)       |Get the namespace's path or name
+IsAnonymousNamespace(target)         |Whether the target is an anonymous namespace
+Validate(target)                     |Whether the target is a namespace
+
+
+## The Environment
+
+The private environment is the basic element for the **PLoop**.
+
+### Code Isolated
+
+The codes are isolated by those environments, so we don't need to take care the usage of the global variables.
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function Test()
+	end
+end)
+
+print(Test) -- nil
+
+PLoop(function(_ENV)
+	print(Test)  -- nil
+end)
+```
+
+We should share those features by types.
+
+### Share types
+
+The environments allow us to import namespaces so we can share types between them easily.
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+end)
+
+PLoop(function(_ENV)
+	print(A)      -- nil
+
+	-- Root namespace can be accessed directly
+	print(Test.A) -- Test.A
+
+	-- Use import keyword to import namespaces
+	import "Test"
+
+	-- Now we can access Test.A directly
+	print(A)      -- Test.A
+
+	print(Data)   -- nil
+
+	import "Test.A.Type"
+
+	-- The environment check the imported namespace like
+	-- ns[name], if the result is not nil, it'll be used
+	-- the environment don't care whether the return value
+	-- is another namespace or type
+	print(Data)   -- 1
+end)
+```
+
+### Attribute for global functions
+
+Any global functions defined in it can have attributes, so we easily modify those functions or register them for other usages. Take an example from the [PLoop_Web](https://github.com/kurapica/PLoop_Web):
+
+```lua
+require "PLoop_Web"
+
+Application "WebApplication"(function(_ENV)
+	-- This is used to bind a http request handler to an url like
+	-- /nginx?var=request_uri
+	-- The __Route__ is used bind the function to the url
+	-- The __text__ is used to mark the function's output should
+	-- be send to the client as "text/plain"
+ 	__Route__ "/nginx"
+ 	__Text__()
+	function GetVars(context)
+		return ngx.var[context.Request.QueryString["var"] or "nginx_version"]
+	end
+end)
+```
+
+### Namespace as caller
+
+So, what's the **PLoop**, we used it for each examples, it's the root of the namesapces, all root namespaces like **System** is saved as the **PLoop**'s sub-namespace:
+
+```lua
+require "PLoop"
+
+print(PLoop.System.Collections.List) -- System.Collections.List
+```
+
+So, it's also a namespace but we can't access by paths. We can use other namespaces(the real namespace created by **namespace** keyword, not types) to replace the **PLoop** like:
+
+```lua
+require "PLoop"
+
+namespace "Test" (function(_ENV)
+	enum "A" {}
+
+	print(A)  -- Test.A
+end)
+```
+
+So if we use a namespace as the caller, the funtion environment's namespace is the caller.
+
+But this isn't recommend, because **PLoop** will only make sure the **PLoop** in the `_G` is from the **PLoop** lib, the keyword like **class**, **namespace** may come from other systems, this is also why **PLoop** need codes to be processed in those private environments, to make sure The **PLoop** won't conflict with other Lua libs.
+
+
+### The global variable access
+
+When a global variable not existed in the private environment and the codes has accessed it, the private environment should check it with orders:
+
+* Find in the namespace that the environment belongs
+
+* Find in the namespace of this environment **import**ed
+
+* Find in public namespaces
+
+* Try match the root namespaces, like "**System**"
+
+* Find in the base environment, the private environment can set a base environment, default is the `_G`
+
+The rules for finding variable names in the namespace are:
+
+* Compare to the name of the namespace (the last part of the path, so for the **System.Form**, its name is **Form**), if match return the namespace directly
+
+* Try get value by `ns[name]`, usually the result will be a sub-namespace such as `System["Form"]` which gets **System.Form**, or a type such as `System.Collections[" List "]`, also could be a resource provided by the type, like a static method of the class, enumeration value of a enum type and etc.
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	namespace "Test"
+
+	enum "A" {}
+	enum "Test2.B" {}
+
+	namespace "Another"
+end)
+
+PLoop (function(_ENV)
+	namespace "Test"
+
+	-- Access the type in the same namespace of Test
+	print(A)     -- Test.A
+
+	import "Test2"
+
+	-- Access the type in the imported namespace
+	print(B)     -- Test2.B
+
+	-- Access the public namespaces
+	print(List)  -- System.Collections.List
+
+	-- Access the root namespace
+	print(Another) -- Another
+
+	-- Access the base environment
+	print(math)    -- table:xxxxxxx
+end)
+```
+
+### Auto-cache
+
+To improve the performance, when the private environment access a global variable not existed in itself, it'll try to cache the value in it during runtime, but won't do the auto-cache job during the definition phase.
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- System.Collections.List  nil
+	print(List, rawget(_ENV, "List"))
+
+	_G.Dojob = function()
+		print(List, rawget(_ENV, "List"))
+	end
+end)
+
+-- System.Collections.List  System.Collections.List
+Dojob()
+```
+
+When the function called by the **PLoop** processing, the codes are running in definition phase, and those codes only will be executed for once, there is no need to cache those global variables since they only will be accessed for one shot.
+
+When we call the `Dojob()`, the codes is processed in runtime phase, we may call the function again and again, so it's time to save those global variables in the private environment.
+
+Those are controlled by the system, so you don't need to take care about it.
+
 
 ## Overload
 
-We have see examples about the function argument validation, the real usage of the `__Arguments__` is for the overload methods.
+We have see examples about the function argument validation, but the design goal of the `System.__Arguments__` is for the overload methods.
+
+As we see in the creation of the List objects, we have plenty ways to create the object with different arguments styles, it's very hard for us to write the codes manually to diff those arguments styles, and we also need do the same job for other constructors and methods.
+
+With the `__Arguments__`, we can leave the choice to the system:
 
 ```lua
-class "Person" (function(_ENV)
-	__Arguments__{ String }
-	function SetInfo(self, name)
-		print("The name is " .. name)
-	end
+require "PLoop"
 
-	__Arguments__{ NaturalNumber }
-	function SetInfo(self, age)
-		print("The age is " .. age)
-	end
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String }
+		function SetInfo(self, name)
+			print("The name is " .. name)
+		end
 
-	__Arguments__{ String, NaturalNumber }
-	function SetInfo(self, name, age)
-		self:SetInfo(name)
-		self:SetInfo(age)
-	end
-end)
+		__Arguments__{ NaturalNumber }
+		function SetInfo(self, age)
+			print("The age is " .. age)
+		end
 
-o = Person()
+		__Arguments__{ String, NaturalNumber }
+		function SetInfo(self, name, age)
+			self:SetInfo(name)
+			self:SetInfo(age)
+		end
+	end)
 
--- The name is Ann
--- The age is 24
-o:SetInfo("Ann", 24)
-```
+	o = Person()
 
-With the `__Arguments__`, we can bind several functions as one class(interface, struct) method, constructor or meta-method.
-
-```lua
-class "Person" (function(_ENV)
-	__Arguments__{ String }
-	function Person(self, name)
-		self.name = name
-	end
-
-	__Arguments__{ NaturalNumber }
-	function Person(self, age)
-		self.age = age
-	end
-
-	__Arguments__{ String, NaturalNumber }
-	function Person(self, name, age)
-		this(self, name)
-		this(self, age)
-	end
-end)
-
-o = Person("Ann", 24)
-
-print(o.name, o.age)  -- Ann    24
-```
-
-For the constructor, we can use **this** keyword to call the constructor with other arguments. If a child class has overridden the parent's method or constructor, it can use **super** keyword to do the job :
-
-```lua
-class "Student" (function(_ENV)
-	inherit "Person"
-
-	__Arguments__{ String, NaturalNumber, Number }
-	function Student(self, name, age, score)
-		this(self, name, age)
-		self.score = score
-	end
-
-	__Arguments__.Rest()  -- this means catch all other arguments, leave it to super class
-	function Student(self, ...)
-		super(self, ...)
-	end
+	-- The name is Ann
+	-- The age is 24
+	o:SetInfo("Ann", 24)
 end)
 ```
 
-The previous examples only show require arguments, to describe optional and varargs we need know more about the `__Arguments__`, the `__Arguments__` only accpet one argument, it's type is **System.Variables**, which is a array struct, its element is **System.Variable**, a simple version of the struct is :
+So we can bind several functions as one method, constructor or meta-method.
+
+If we need to call the other overload functions of the same name, we'd keep using the `obj:method(xxx)` format with different arguments styles.
+
+
+### this For object constructor
+
+It's a little different to call the overload functions for the object constructor : `__exist`, `__new`, `__ctor`. Since we can't call them by using the object-method styles.
+
+The overload system provide a keyword **this**(not provided by the class system, the class know nothing about it), we only need use `this(...)` in those overload functions to call itself:
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String }
+		function __exist(self, name)
+			print("[exist]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function __exist(self, age)
+			print("[exist]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function __exist(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+
+		__Arguments__{ String }
+		function __new(self, name)
+			print("[new]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function __new(self, age)
+			print("[new]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function __new(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+
+		__Arguments__{ String }
+		function Person(self, name)
+			print("[ctor]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function Person(self, age)
+			print("[ctor]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function Person(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+	end)
+
+	-- [exist]The name is Ann
+	-- [exist]The age is 12
+	-- [new]The name is Ann
+	-- [new]The age is 12
+	-- [ctor]The name is Ann
+	-- [ctor]The age is 12
+	o = Person("Ann", 12)
+end)
+```
+
+You shouldn't use the **this** in other overload functions.
+
+
+### Call super method with unhandled arguments styles
+
+When we override the super's method or constructor, and we still need the super's method to handle the arguments styles that we don't want to handle.
+
+We can create a functions with `__Arguments__.Rest()` attribute, pass all unhandled arguments styles to the super's method:
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String, NaturalNumber }
+		function Person(self, name, age)
+			print("The name is " .. name)
+			print("The age is " .. age)
+		end
+	end)
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		__Arguments__{ String, NaturalNumber, Number }
+		function Student(self, name, age, score)
+			this(self, name, age)
+			self.score = score
+			print("The score is " .. score)
+		end
+
+		-- this means catch all other arguments, leave it to super class
+		__Arguments__.Rest()
+		function Student(self, ...)
+			super(self, ...)
+		end
+	end)
+
+	-- The name is Ann
+	-- The age is 12
+	-- The score is 80
+	o = Student("Ann", 12, 80)
+end)
+```
+
+### System.Variable
+
+The previous examples only show require arguments, to describe optional and varargs we need know more about the `__Arguments__`, the `__Arguments__` only accpet one argument, it's type is **System.Variables**, which is an array struct, its element is **System.Variable**, a simple version of the struct is :
 
 ```lua
 struct "Variable" (function(_ENV)
@@ -2448,13 +2779,64 @@ end)
 So, we can create optional variable like
 
 ```lua
-Variable.Optional(Number, 0)
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ Variable.Optional(Number, 0) }
+		function SetInfo(self, age)
+			print("The age is " .. age)
+		end
+	end)
+
+	o = Person()
+
+	-- The age is 0
+	o:SetInfo()
+end)
 ```
 
 And create a varargs like
 
 ```lua
-Variable.Rest(Number)
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ Variable.Rest(String) }
+		function AddChild(self, ...)
+		end
+	end)
+
+	o = Person()
+
+	-- Usage: Person:AddChild([... as System.String]) - the 2nd argument must be System.String
+	o:AddChild("Ann", 1)
+end)
+```
+
+Also we could apply more details like :
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{
+			Variable("name", String, true, "anonymous"),
+			Variable("age", NaturalNumber, true, 0)
+		}
+		function SetInfo(self, name, age)
+			self:SetInfo(name)
+			self:SetInfo(age)
+		end
+	end)
+
+	o = Person()
+
+	-- Usage: Person:SetInfo([name as System.String = "anonymous"], [age as System.NaturalNumber = 0]) - the 1st argument must be System.String
+	o:SetInfo(true)
+end)
 ```
 
 ## Throw Exception

@@ -84,37 +84,19 @@ print(List) -- System.Collections.List
 
 究其根源就在于，所有代码的默认执行环境都是`_G`，那么只要每个处理代码运行在各自的私有环境中，就可以完全避免重名问题，也无需特意使用local来申明函数和共用数据（函数内该用local的自然该用local，效率不同）。
 
-在之前的例子中，封装代码的函数被传给**PLoop**后，将被绑定一个私有且特殊的**PLoop**环境，然后被执行。至于为什么采用这种形式，原因在于Lua的环境控制在5.1到5.2两个版本间有重大的变化，为了通用性，**PLoop**使用`PLoop(function(_ENV) end)`的形式来封装和调用代码，之后也会看到其他类似的处理，比如定义类`class "A" (function(_ENV) end)`。
+在之前的例子中，封装代码的函数被传给**PLoop**后，将被绑定一个私有且特殊的**PLoop**环境，然后被执行。至于为什么采用这种形式，原因在于Lua的环境控制在5.1到5.2两个版本间有重大的变化，为了通用性，**PLoop**使用`PLoop(function(_ENV) end)`的形式来封装和调用代码，之后也会看到其他类似的处理，比如定义类`class "A" (function(_ENV) end)`。（如果你不了解`_ENV`，可以参考Lua5.2的更新说明）
 
 这么处理的好处我们将在以后的例子中逐步了解，这个例子中使用到的点是:
 
-* 全局变量属于该私有环境，在_G中无法访问到被创建的变量v等。
+* 申明的全局变量属于该私有环境，在`_G`中无法访问到被创建的变量v等。
 
 * 可以随意使用例如math.random这样的保存在`_G`中的公共库或者变量，这样不会造成性能问题，私有环境会在第一次访问后自动缓存这些变量。
 
 * 可以直接访问**List**类，**PLoop**中有公共命名空间这个概念，公共命名空间不需要被**import**即可被所有的**PLoop**环境访问，默认的公共命名空间是**System**, **System.Collections**和**System.Threading**，后面都会接触到。
 
-公共命名空间的访问优先级低于被import的命名空间，所以，如果使用了`import "System.Form"`，那么访问List访问到的是**System.Form.List**。
+	公共命名空间的访问优先级低于被import的命名空间，所以，如果使用了`import "System.Form"`，那么访问List访问到的是**System.Form.List**。
 
-* 我们可以使用关键字**import**为私有环境或者`_G`引入命名空间，之后可以使用里面保存的类型。不同点在于，向`_G`中导入，是全部拷贝到`_G`中，而私有环境仅记录下自己导入的命名空间，当需要时，才取出要用的类型。
-
-* **PLoop**的私有环境，会在第一次读取某个全局变量时进行查找（查找到同样会自动缓存），顺序是:
-
-	* 查找这个环境所属的命名空间（使用`namespace "MyNamesapce`"申明，之后在这个环境中定义的类型都会保存在这个命名空间中)
-
-	* 查找这个环境**import**的命名空间
-
-	* 查找公共命名空间
-
-	* 查找根命名空间，比如直接访问**System**
-
-	* 查找基础环境，私有环境可以设置自己的基础环境，通常是`_G`
-
-在命名空间中查找变量名的规则是:
-
-* 对比命名空间的名字（路径最后部分，比如**System.Form**的名字是**Form**)，一致就返回该命名空间
-
-* 直接使用`命名空间[变量名]`获取，通常结果会是子命名空间比如`System["Form"]`得到**System.Form**，也可能是类型，比如`System.Collections["List"]`，也可能是类型本身提供的资源，比如类的静态方法，枚举类型的枚举值等，后面会看到具体的例子。
+* 我们可以使用关键字**import**为私有环境或者`_G`引入命名空间，之后可以使用里面保存的类型。不同点在于，向`_G`中导入，是全部拷贝到`_G`中，而私有环境仅记录下自己导入的命名空间，当需要时，才取出要用的类型（同样会被自动缓存）。
 
 回到List对象的创建，我们可以使用List这个类作为对象构建器，它会根据输入的参数来生成对象。
 
@@ -772,8 +754,6 @@ end)
 类似于使用**PLoop**启用私有环境运行代码，在**PLoop**定义结构体同样使用这种调用方式，里面被调用函数体就是Number这个结构体的定义。
 
 这里的环境B是为了定义类型特殊设计的：
-
-* 环境B的所属命名空间就是Number这个结构体类型，也就是说，在环境B中定义的其他类型都是Number的子命名空间。
 
 * 环境B嵌套在环境A中，所以，环境A就是环境B的基础环境，环境B可以访问任何定义在或者被import在环境A中的变量。
 
@@ -2381,4 +2361,431 @@ PLoop(function(_ENV)
 end)
 ```
 
+上面已经完整介绍了**PLoop**提供的所有类型，不过我们还有很多细节需要补充。
+
+
+## 命名空间和匿名类型
+
+**PLoop**使用命名空间来管理类型，我们可以将类型保存在树状的命名空间中，这样每种类型都有唯一的访问路径，比如**System.Collections.List**。我们也可以使用**import**关键字在私有环境中引入这些命名空间，这样这些类型可以在任何地方被使用。
+
+通常类型在它们被定义时保存到命名空间中，下面的例子将为我们展示命名空间保存相关的所有场景：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	-- 我们可以使用**namespace**关键字来为当前环境
+	-- 申明一个命名空间，之后这个环境中创建的类型
+	-- 都会保存在这个命名空间
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		-- 类型的定义体的的环境的所属命名空间就是这个
+		-- 类型本身，这里就是class A，任何定义在这个
+		-- 环境的类型，都将成为A的子命名空间。
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+
+	-- 如果我们定义类型时，名字使用了全路径，那么
+	-- 这个类型会按照路径保存，和当前环境所属的
+	-- 命名空间无关
+	class "Another.B" (function(_ENV)
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+
+	print(A)      -- Test.A
+	print(A.Type) -- Test.A.Type
+
+	print(B)      -- Another.B
+	print(B.Type) -- Another.B.Type
+end)
+```
+
+我们也可以将不希望分享给它人的类型定义为匿名类型，只需要在定义时不指定名字即可：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		Type = enum { Data = 1, Object = 2 }
+
+		print(Data)      -- 1
+		print(Type.Data) -- 1
+	end)
+
+	-- 没有任何方式访问到A.Type
+	print(A.Type)        -- nil
+end)
+```
+
+### System.Namespace
+
+**PLoop**同样提供一个反射类型**System.Namespace**用于获取namespace相关的信息:
+
+静态方法                             |描述
+:------------------------------------|:-----------------------------
+ExportNamespace(env, ns[, override]) |将指定ns及其子命名空间保存到env环境中
+GetNamespace([root,] path)           |使用路径获取对应的命名空间实体
+GetNamespaceName(ns, onlyname)       |获取命名空间实体的路径或者名字
+IsAnonymousNamespace(target)         |目标是否是一个匿名类型
+Validate(target)                     |目标是否是一个命名空间实体
+
+
+## 环境
+
+私有环境是**PLoop**的基础元素。
+
+### 隔离代码
+
+**PLoop**中代码都需要在各个私有环境下被执行，这样我们不会因为使用全局变量等情况造成冲突。
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function Test()
+	end
+end)
+
+print(Test) -- nil
+
+PLoop(function(_ENV)
+	print(Test)  -- nil
+end)
+```
+
+如果需要共享资源的话，我们应当将它们保存在类型中进行分享。
+
+### 分享类型
+
+我们可以为私有环境使用**import**关键字来导入其他命名空间，这样我们就可以在各个私有环境之间分享类型。
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	class "A" (function(_ENV)
+		enum "Type" { Data = 1, Object = 2 }
+	end)
+end)
+
+PLoop(function(_ENV)
+	print(A)      -- nil
+
+	-- 我们可以直接访问根命名空间实体
+	print(Test.A) -- Test.A
+
+	-- 使用import来导入命名空间
+	import "Test"
+
+	-- 现在我们可以直接访问A
+	print(A)      -- Test.A
+
+	print(Data)   -- nil
+
+	import "Test.A.Type"
+
+	-- 对于被导入的命名空间，环境将之间使用ns[name]的方法
+	-- 获取结果，而不关心它具体是什么
+	print(Data)   -- 1
+end)
+```
+
+### 特性和全局函数
+
+在私有环境中定义全局函数时，我们可以使用各种特性来封装这些函数或者将这些函数注册到其他系统以备他用。
+
+使用来自[PLoop_Web](https://github.com/kurapica/PLoop_Web)的一个例子：
+
+```lua
+require "PLoop_Web"
+
+Application "WebApplication"(function(_ENV)
+	-- 这个例子是将函数绑定到类似下面的http请求地址
+	-- /nginx?var=request_uri
+	-- __Route__特性用于将请求处理方法绑定到url地址
+	-- __text__特性用于标记这个函数的返回结果将作为
+	-- "text/plain"类型发送给浏览器
+ 	__Route__ "/nginx"
+ 	__Text__()
+	function GetVars(context)
+		return ngx.var[context.Request.QueryString["var"] or "nginx_version"]
+	end
+end)
+```
+
+### 使用命名空间作为调用者
+
+我们在上面的例子中大量使用了**PLoop**，那么它对于系统来说，具体是什么呢？
+
+它实际也是一个命名空间实体，所有的根命名空间都保存在它里面，不过它本身是匿名的，所以，无法通过路径访问它。
+
+```lua
+require "PLoop"
+
+print(PLoop.System.Collections.List) -- System.Collections.List
+```
+
+类似于**PLoop**，我们可以将其他命名空间实体作为调用者来调用函数。
+
+```lua
+require "PLoop"
+
+namespace "Test" (function(_ENV)
+	enum "A" {}
+
+	print(A)  -- Test.A
+end)
+```
+
+如例子所见，如果我们用Test作为函数的调用者，那么这个函数的环境所属的命名空间就是调用者本身。
+
+不过这种方式并不推荐，因为**PLoop**库仅确保`_G`中的**PLoop**是来自自身，类似**class**, **namespace**等关键字可能会来自其他的Lua库。为了确保不会和其他Lua库冲突，使用**PLoop**作为调用者是最简单的方式。（当然如果你确保了没有冲突的可能，这种写法也没有任何问题）
+
+
+### 全局变量的读取
+
+当私有环境访问自身不存在的全局变量时，私有环境会根据自身配置按照顺序进行查找：
+
+* 查找这个环境所属的命名空间
+
+* 查找这个环境**import**的命名空间
+
+* 查找公共命名空间
+
+* 尝试匹配根命名空间，比如访问**System**
+
+* 查找基础环境，私有环境可以设置自己的基础环境，通常是`_G`
+
+在命名空间中查找变量名的规则是:
+
+* 对比命名空间的名字（路径最后部分，比如**System.Form**的名字是**Form**)，一致就返回该命名空间
+
+* 直接使用`命名空间[变量名]`获取，通常结果会是子命名空间比如`System["Form"]`得到**System.Form**，也可能是类型，比如`System.Collections["List"]`，也可能是类型本身提供的资源，比如类的静态方法，枚举类型的枚举值等。
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	namespace "Test"
+
+	enum "A" {}
+	enum "Test2.B" {}
+
+	namespace "Another"
+end)
+
+PLoop (function(_ENV)
+	namespace "Test"
+
+	-- 访问同命名空间中的类型
+	print(A)     -- Test.A
+
+	import "Test2"
+
+	-- 访问import的命名空间中的类型
+	print(B)     -- Test2.B
+
+	-- 访问公共命名空间中的类型
+	print(List)  -- System.Collections.List
+
+	-- 访问根命名空间
+	print(Another) -- Another
+
+	-- 访问基础环境
+	print(math)    -- table:xxxxxxx
+end)
+```
+
+### 自动缓存机制
+
+为了运行效率，私有环境访问到不存在自身的全局变量时，并且处于运行阶段时，私有环境会自动缓存这个值，不过在定义阶段时，环境不会自动缓存。
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- System.Collections.List  nil
+	print(List, rawget(_ENV, "List"))
+
+	_G.Dojob = function()
+		print(List, rawget(_ENV, "List"))
+	end
+end)
+
+-- System.Collections.List  System.Collections.List
+Dojob()
+```
+
+当使用**PLoop**调用函数体时，里面的代码处于定义期，定义期的代码只会运行一次，而被访问到的全局变量等几乎只会被访问这一次，所以，此时缓存是没有意义的。
+
+当我们调用`Dojob()`时，它的代码是运行阶段，我们可以反复的调用这个函数，那么这时我们需要缓存访问的变量，之后就不会再进行查询了。
+
+这个过程完全由系统自行控制，通常不需要在意这个细节。它也不会造成问题。（多OS-thread平台下有些区别，以后有专门文档讨论）
+
+
 ## 重载
+
+在之前的例子中我们演示了函数参数的类型验证，不过`System.__Arguments__`的设计目的是为了实现方法重载。
+
+在List对象的创建中，我们有多种参数组合来进行构建，如果完全依赖手写判定来区分这些组合，将会非常困难，同时我们也经常需要处理同一个方法，不同输入的情况，每次都自行实现既难以维护，也不方便扩展。
+
+而借助`__Arguments__`，我们可以将选择权交给系统：
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String }
+		function SetInfo(self, name)
+			print("The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function SetInfo(self, age)
+			print("The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function SetInfo(self, name, age)
+			self:SetInfo(name)
+			self:SetInfo(age)
+		end
+	end)
+
+	o = Person()
+
+	-- The name is Ann
+	-- The age is 24
+	o:SetInfo("Ann", 24)
+end)
+```
+
+可见，我们可以将一组函数绑定成一个方法，也可以做成构造体函数，元方法等。
+
+如果我们需要调用同名的其他重载方法，我们只需要使用`obj:method(xxx)`的方式使用不同参数调用即可。
+
+
+## this和构造体方法
+
+调用对象构造体(`__exist`, `__new`, `__ctor`)有些特别，因为不存在类似`obj:method(xxx)`这样的方式直接使用。
+
+重载系统为此提供了**this**关键字（注意它并非class系统提供的，class系统本身没有重载功能），我们仅需要使用`this(...)`将所需参数传入即可:
+
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String }
+		function __exist(self, name)
+			print("[exist]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function __exist(self, age)
+			print("[exist]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function __exist(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+
+		__Arguments__{ String }
+		function __new(self, name)
+			print("[new]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function __new(self, age)
+			print("[new]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function __new(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+
+		__Arguments__{ String }
+		function Person(self, name)
+			print("[ctor]The name is " .. name)
+		end
+
+		__Arguments__{ NaturalNumber }
+		function Person(self, age)
+			print("[ctor]The age is " .. age)
+		end
+
+		__Arguments__{ String, NaturalNumber }
+		function Person(self, name, age)
+			this(self, name)
+			this(self, age)
+		end
+	end)
+
+	-- [exist]The name is Ann
+	-- [exist]The age is 12
+	-- [new]The name is Ann
+	-- [new]The age is 12
+	-- [ctor]The name is Ann
+	-- [ctor]The age is 12
+	o = Person("Ann", 12)
+end)
+```
+
+请不要再其他重载方法中使用**this**关键字，它仅用于这三种构造体方法。
+
+
+### 使用超类方法处理未处理的参数样式
+
+当我们重写了超类的方法或者构造体等，但我们有需要使用超类的方法来处理我们不希望自己处理的参数样式时，我们可以使用`__Arguments__.Rest()`特性修饰函数来传递给超类方法:
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ String, NaturalNumber }
+		function Person(self, name, age)
+			print("The name is " .. name)
+			print("The age is " .. age)
+		end
+	end)
+
+	class "Student" (function(_ENV)
+		inherit "Person"
+
+		__Arguments__{ String, NaturalNumber, Number }
+		function Student(self, name, age, score)
+			this(self, name, age)
+			self.score = score
+			print("The score is " .. score)
+		end
+
+		-- Rest表示捕捉其他任何参数组合
+		__Arguments__.Rest()
+		function Student(self, ...)
+			super(self, ...)
+		end
+	end)
+
+	-- The name is Ann
+	-- The age is 12
+	-- The score is 80
+	o = Student("Ann", 12, 80)
+end)
+```
+
+### System.Variable
+
+之前的例子中使用的参数都是指定类型，这些都是必须参数，如果需要定义可选参数，可变参数时，就无法这么处理了（毕竟Lua不支持String?这样的写法）
