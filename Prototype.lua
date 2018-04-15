@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/03/30                                               --
--- Version      :   1.0.0-beta006                                           --
+-- Update Date  :   2018/04/15                                               --
+-- Version      :   1.0.0-beta007                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5534,12 +5534,11 @@ do
     local FLD_IC_INHRTP         =-10                -- FIELD INHERITANCE PRIORITY
     local FLD_IC_REQCLS         =-11                -- FIELD REQUIR CLASS FOR INTERFACE
     local FLD_IC_SUPER          =-12                -- FIELD SUPER
-    local FLD_IC_THIS           =-13                -- FIELD THIS
-    local FLD_IC_ANYMSCL        =-14                -- FIELD ANONYMOUS CLASS FOR INTERFACE
-    local FLD_IC_DEBUGSR        =-15                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
-    local FLD_IC_TEMPPRM        =-16                -- FIELD TEMPLATE ARGUMENTS
-    local FLD_IC_TEMPDEF        =-17                -- FIELD TEMPlATE DEFINITION
-    local FLD_IC_TEMPIMP        =-18                -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
+    local FLD_IC_ANYMSCL        =-13                -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FLD_IC_DEBUGSR        =-14                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
+    local FLD_IC_TEMPPRM        =-15                -- FIELD TEMPLATE ARGUMENTS
+    local FLD_IC_TEMPDEF        =-16                -- FIELD TEMPlATE DEFINITION
+    local FLD_IC_TEMPIMP        =-17                -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
 
     -- CACHE FIELDS
     local FLD_IC_STAFTR         =-20                -- FIELD STATIC TYPE FEATURES
@@ -5598,7 +5597,6 @@ do
 
     -- Super & This
     local IC_KEYWORD_SUPER      = "super"
-    local IC_KEYWORD_THIS       = "this"
     local OBJ_SUPER_ACCESS      = "__PLOOP_SUPER_ACCESS"
 
     -- Type Builder
@@ -5654,9 +5652,6 @@ do
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_META) or nil end})
                                     or  newstorage(WEAK_KEY)
 
-    local _ThisMap              = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_TYPE) or nil end})
-                                    or  newstorage(WEAK_ALL)
     local _SuperMap             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, c) return type(c) == "table" and rawget(c, FLD_IC_TYPE) or nil end})
                                     or  newstorage(WEAK_ALL)
@@ -5680,10 +5675,6 @@ do
     local saveICInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_IC_META, info) end
                                     or  function(target, info) _ICInfo = savestorage(_ICInfo, target, info) end
-
-    local saveThisMap           = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
-                                    and function(this, target) rawset(this, FLD_IC_TYPE, target) end
-                                    or  function(this, target) _ThisMap = savestorage(_ThisMap, this, target) end
 
     local saveSuperMap          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
                                     and function(super, target) rawset(super, FLD_IC_TYPE, target) end
@@ -5865,7 +5856,6 @@ do
             [FLD_IC_INHRTP]     = info and info[FLD_IC_INHRTP] and tblclone(info[FLD_IC_INHRTP], {}),
             [FLD_IC_REQCLS]     = info and info[FLD_IC_REQCLS],
             [FLD_IC_SUPER]      = info and info[FLD_IC_SUPER],
-            [FLD_IC_THIS]       = info and info[FLD_IC_THIS],
             [FLD_IC_ANYMSCL]    = info and info[FLD_IC_ANYMSCL] or isclass and nil,
             [FLD_IC_DEBUGSR]    = info and info[FLD_IC_DEBUGSR] or isclass and INI_FLD_DEBUGSR or nil,
 
@@ -6520,11 +6510,6 @@ do
                 info[FLD_IC_ANYMSCL] = aycls
             end
         else
-            if not info[FLD_IC_THIS] and info[FLD_IC_CTOR] then
-                info[FLD_IC_THIS] = prototype.NewProxy(tthisclass)
-                saveThisMap(info[FLD_IC_THIS], target)
-            end
-
             if not realCls then
                 _Cache(objpri)
                 _Cache(objmeta)
@@ -8044,17 +8029,6 @@ do
             -- @return  ...                         the paramter list
             ["GetTemplateParameters"] = interface.GetTemplateParameters;
 
-            --- Get the this refer of the target class
-            -- @static
-            -- @method  GetThisRefer
-            -- @owner   class
-            -- @param   target                      the target class
-            -- @return  this                        the this refer
-            ["GetThisRefer"]    = function(target)
-                local info      = getICTargetInfo(target)
-                return info and info[FLD_IC_THIS]
-            end;
-
             --- Whether the class's method, meta-method or feature is abstract
             -- @static
             -- @method  IsAbstract
@@ -8686,20 +8660,6 @@ do
         __metatable             = class,
     })
 
-    tthisclass                  = prototype {
-        __tostring              = function(self) return tostring(_ThisMap[self]) end,
-        __call                  = function(self, obj, ...)
-            local cls           = _ThisMap[self]
-            if obj and class.IsSubType(getmetatable(obj), cls) then
-                local ctor      = _ICInfo[cls][FLD_IC_CTOR]
-                if ctor then return ctor(obj, ...) end
-            else
-                error("Usage: this(object, ..) - the object is not valid", 2)
-            end
-        end,
-        __metatable             = class,
-    }
-
     interfacebuilder            = prototype {
         __tostring              = function(self)
             local owner         = environment.GetNamespace(self)
@@ -8795,10 +8755,6 @@ do
             -- Save super refer
             local super = class.GetSuperRefer(owner)
             if super then rawset(self, IC_KEYWORD_SUPER, super) end
-
-            -- Save this refer
-            local this  = class.GetThisRefer(owner)
-            if this then rawset(self, IC_KEYWORD_THIS, this) end
 
             if getfenv(stack) == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
@@ -8952,10 +8908,6 @@ do
         -- Save super refer
         local super = class.GetSuperRefer(owner)
         if super then rawset(visitor, IC_KEYWORD_SUPER, super) end
-
-        -- Save this refer
-        local this  = class.GetThisRefer(owner)
-        if this then rawset(visitor, IC_KEYWORD_THIS, this) end
 
         local baseEnv       = environment.GetParent(visitor) or _G
 
@@ -12275,11 +12227,13 @@ do
 
         TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
 
-        THORW_METHOD            = {
+        THIS_METHOD             = {
             __exist             = true,
             __new               = true,
             __ctor              = true,
         }
+
+        PLOOP_THIS_LOCAL        = "_PLoop_Overload_This"
 
         FLG_VAR_METHOD          = newflags(true)    -- is method
         FLG_VAR_SELFIN          = newflags()        -- has self
@@ -12292,19 +12246,21 @@ do
         FLG_VAR_LENGTH          = newflags()        -- the multiply factor of length
 
         FLG_OVD_SELFIN          = newflags(true)    -- has self
-        FLG_OVD_THROW           = newflags()        -- use throw
+        FLG_OVD_THIS            = newflags()        -- the constructor, use throw and this keyword
         FLG_OVD_ONECNT          = newflags()        -- only one variable list
 
         -----------------------------------------------------------
         --                        helpers                        --
         -----------------------------------------------------------
         export {
+            getlocal            = getlocal,
             tblclone            = tblclone,
             validate            = Struct.ValidateValue,
             geterrmsg           = Struct.GetErrorMessage,
             savestorage         = savestorage,
             ipairs              = ipairs,
             tinsert             = tinsert,
+            tremove             = tremove,
             uinsert             = uinsert,
             tblconcat           = tblconcat,
             strformat           = strformat,
@@ -12327,6 +12283,55 @@ do
         }
 
         export { Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
+
+        -- Helpers for this keyword
+        if not getlocal then
+            -- Should only be used in single os thread platforms
+            -- May cause problems when abuse, but we won't get a better solution
+            -- since we have no debug.getlocal api
+            export{
+                wipe            = wipe,
+
+                overloadstack   = {},
+
+                releaseAndRet   = function(overload, ok, msg, ...)
+                    local rover         = tremove(overloadstack)
+                    if rover ~= overload then
+                        wipe(overloadstack)
+                        throw("the overload system's call stack is unavailable")
+                    end
+                    if ok then return msg, ... end
+                    error(msg, 0)
+                end,
+
+                addCurrent      = function(overload)
+                    tinsert(overloadstack, overload)
+                    return overload
+                end,
+            }
+        end
+
+        local getCurrentOverload= getlocal and function(stack)
+            local index         = 1
+            local n, v          = getlocal(stack, index)
+
+            while stack < 7 do
+                while n do
+                    if n == PLOOP_THIS_LOCAL then
+                        return v
+                    end
+
+                    index       = index + 1
+                    n, v        = getlocal(stack, index)
+                end
+
+                stack           = stack + 1
+                index           = 1
+                n, v            = getlocal(stack, index)
+            end
+        end or function()
+            return overloadstack[#overloadstack]
+        end
 
         local function serializeData(data)
             local dtype         = type(data)
@@ -12369,7 +12374,7 @@ do
             local usage         = {}
 
             if ismethod then
-                if THORW_METHOD[name] then
+                if THIS_METHOD[name] then
                     tinsert(usage, strformat("Usage: %s(", tostring(owner)))
                 elseif getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
@@ -12741,8 +12746,8 @@ do
                 token           = turnonflags(FLG_OVD_SELFIN, token)
             end
 
-            if THORW_METHOD[name] then
-                token           = turnonflags(FLG_OVD_THROW, token)
+            if THIS_METHOD[name] then
+                token           = turnonflags(FLG_OVD_THIS, token)
             end
 
             if #overload == 1 then
@@ -12757,19 +12762,41 @@ do
             if not _OverloadMap[token] then
                 local body      = _Cache()
                 local apis      = _Cache()
+                local needthis  = THIS_METHOD[name] and #overload > 1
 
                 uinsert(apis, "select")
                 uinsert(apis, "chkandret")
                 uinsert(apis, "pcall")
+                if needthis and not getlocal then
+                    uinsert(apis, "addCurrent")
+                    uinsert(apis, "releaseAndRet")
+                end
 
                 tinsert(body, "")                       -- remain for shareable variables
 
                 tinsert(body, "return function(overload, count, usages)")
 
-                if hasself then
-                    tinsert(body, [[return function(self, ...)]])
+                if needthis then
+                    if hasself then
+                        tinsert(body, [[
+                            local overloadFunc
+                            overloadFunc = function(self, ...)
+                        ]])
+                    else
+                        tinsert(body, [[
+                            local overloadFunc
+                            overloadFunc = function(...)
+                        ]])
+                    end
+                    if getlocal then
+                        tinsert(body, ([[local %s = overloadFunc]]):format(PLOOP_THIS_LOCAL))
+                    end
                 else
-                    tinsert(body, [[return function(...)]])
+                    if hasself then
+                        tinsert(body, [[return function(self, ...)]])
+                    else
+                        tinsert(body, [[return function(...)]])
+                    end
                 end
 
                 if #overload == 1 then
@@ -12783,7 +12810,7 @@ do
                             msg  = valid(false, ]] .. (hasself and "self, " or "") .. [[...)
                         end
                     ]])
-                    if validateflags(FLG_OVD_THROW, token) then
+                    if validateflags(FLG_OVD_THIS, token) then
                         tinsert(body, [[
                             if msg then throw(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg) end
                         ]])
@@ -12818,10 +12845,10 @@ do
                                         if vars[]] .. FLD_VAR_THRABL .. [[] then
                                             return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
                                         else
-                                            return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                            return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                         end
                                     else
-                                        return vars[]] .. FLD_VAR_VARVLD .. [[](nil, ]] .. (hasself and "self, " or "") .. [[...)
+                                        return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_VARVLD .. (needthis and not getlocal and [[], nil, ]] or [[](nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                     end
                                 end
                             end
@@ -12836,10 +12863,10 @@ do
                                             if vars[]] .. FLD_VAR_THRABL .. [[] then
                                                 return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
                                             else
-                                                return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
+                                                return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                             end
                                         else
-                                            return valid(nil, ]] .. (hasself and "self, " or "") .. [[...)
+                                            return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. (needthis and not getlocal and [[ valid, nil, ]] or [[ valid(nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                         end
                                     end
                                 end
@@ -12847,7 +12874,7 @@ do
                         end
                         -- Raise the usages
                     ]])
-                    if validateflags(FLG_OVD_THROW, token) then
+                    if validateflags(FLG_OVD_THIS, token) then
                         tinsert(body, [[
                             throw(usages)
                         ]])
@@ -12859,9 +12886,17 @@ do
                     end
                 end
 
+                tinsert(body, [[
+                    end
+                ]])
+
+                if needthis then
+                    tinsert(body, [[
+                        return overloadFunc
+                    ]])
+                end
 
                 tinsert(body, [[
-                        end
                     end
                 ]])
 
@@ -12914,7 +12949,7 @@ do
                 [FLD_VAR_IMMTBL]= true,
                 [FLD_VAR_USGMSG]= "",
                 [FLD_VAR_VARVLD]= false,
-                [FLD_VAR_THRABL]= self.IsThrowable,
+                [FLD_VAR_THRABL]= self.IsThrowable and not THIS_METHOD[name],
             }
 
             local minargs
@@ -13021,6 +13056,20 @@ do
                 return {}
             end
         end
+
+        -----------------------------------------------------------
+        --                     keyword: this                     --
+        -----------------------------------------------------------
+        Environment.RegisterContextKeyword(Class.GetDefinitionContext(), {
+            this = function(...)
+                local ok, ret       = pcall(getCurrentOverload, 5)
+                if ok and ret then
+                    return ret(...)
+                else
+                    error("the keyword \"this\" can't be used here", 2)
+                end
+            end
+        })
     end)
 
     -- set the target struct, class or interface as template
