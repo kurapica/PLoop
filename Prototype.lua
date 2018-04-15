@@ -177,16 +177,6 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_NO_MULTI_VERSION_CLASS        = false,
 
-        --- Whether all interfaces & classes only use the classic format
-        -- `super.Method(obj, ...)` to call super's features, don't use new
-        -- style like :
-        --      super[obj].Name = "Ann"
-        --      super[obj].OnNameChanged = super[obj].OnNameChanged + print
-        --      super[obj]:Greet("King")
-        -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
-        CLASS_NO_SUPER_OBJECT_STYLE         = false,
-
         --- Whether all interfaces has anonymous class, so it can be used
         -- to generate object
         -- Default false
@@ -5511,7 +5501,6 @@ do
     local MOD_ANYMOUS_CLS       = newflags()        -- HAS ANONYMOUS CLASS
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
-                                  (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_RAWSEST             and MOD_NORAWSET_OBJ  or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_NIL_ACCESS          and MOD_NONILVAL_OBJ  or 0)
 
