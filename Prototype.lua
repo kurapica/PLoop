@@ -2470,6 +2470,37 @@ do
 
             return _UnmSubTypeMap[self]
         end,
+        __div                   = function(self, default)
+            local valid     = getprototypemethod(self, "ValidateValue")
+
+            if not valid then
+                error(("The %s is not a validation type"):format(tostring(self)), 2)
+            end
+
+            if default ~= nil then
+                local ret, msg  = valid(self, default)
+                if not msg then
+                    default     = ret
+                else
+                    error(struct.GetErrorMessage(msg, ("default in (%s/default)"):format(namespace.GetNamespaceName(self, true))), 2)
+                end
+            end
+
+            return Variable.Optional(self, default)
+        end,
+        __mul                   = function(self, mincount)
+            local valid     = getprototypemethod(self, "ValidateValue")
+
+            if not valid then
+                error(("The %s is not a validation type"):format(tostring(self)), 2)
+            end
+
+            if mincount ~= nil and (type(mincount) ~= "number" or mincount < 0) then
+                error(("The mincount in (%s * mincount) must a nature number"):format(namespace.GetNamespaceName(self, true)), 2)
+            end
+
+            return Variable.Rest(self, mincount)
+        end,
     }
 
     -----------------------------------------------------------------------
@@ -11873,14 +11904,17 @@ do
         --- the variable's type
         member "type"       { type = AnyType  }
 
-        --- whether the vairable is nilable
-        member "nilable"    { type = Boolean  }
+        --- whether the vairable is optional
+        member "optional"   { type = Boolean  }
 
         --- the variable's default value
         member "default"    {}
 
-        --- whether the variable is a list variable
-        member "islist"     { type = Boolean  }
+        --- whether the variable is a varargs
+        member "varargs"    { type = Boolean  }
+
+        --- the minimum count of the varargs
+        member "mincount"   { type = NaturalNumber, default = 0 }
 
         --- the validate function auto fetched from the type
         member "validate"   { type = Function }  -- auto generated
@@ -11891,24 +11925,24 @@ do
         -----------------------------------------------------------
         --                     static method                     --
         -----------------------------------------------------------
-        --- Return a list variable
-        -- @format  ([type][, atleastone])
+        --- Return a varargs
+        -- @format  ([type][, mincount])
         -- @param   type                            the element's type
-        -- @param   atleastone                      whether there must be at least one element
+        -- @param   mincount                        the minimum count of the varargs
         -- @return  the list variable
         __Static__()
-        function Rest(type, atleastone)
-            return { type = type, nilable = not atleastone or nil, islist = true }
+        function Rest(type, mincount)
+            return { type = type, mincount = mincount or 0, varargs = true }
         end
 
-        --- Return a optional variable
+        --- Return an optional variable
         -- @format  ([type][, default])
         -- @parma   type                            the variable's type
         -- @param   default                         the default value
         -- @return  the optional variable
         __Static__()
         function Optional(type, default)
-            return { type = type, default = default, nilable = true }
+            return { type = type, default = default, optional = true }
         end
 
         -----------------------------------------------------------
@@ -11916,8 +11950,8 @@ do
         -----------------------------------------------------------
         function Variable(var, onlyvalid)
             if var.default ~= nil then
-                if var.islist then return onlyvalid or "the %s is a list, can't have default value" end
-                if not var.nilable then return onlyvalid or "the %s is not nilable, can't have default value" end
+                if var.varargs then return onlyvalid or "the %s is a varargs, can't have default value" end
+                if not var.optional then return onlyvalid or "the %s is not optional, can't have default value" end
                 if var.type then
                     local ret, msg  = getprototypemethod(var.type, "ValidateValue")(var.type, var.default, true)
                     if msg then return onlyvalid or "the %s.default don't match its type" end
@@ -11941,7 +11975,7 @@ do
                 var.immutable= true
             end
 
-            if var.nilable and var.default ~= nil then
+            if var.optional and var.default ~= nil then
                 var.immutable= false
             end
         end
@@ -11956,9 +11990,9 @@ do
             for i, var in ipairs, vars, 0 do
                 if lst then return onlyvalid or "the %s's list variable must be the last one" end
                 if getmetatable(var) == nil then
-                    if var.islist then
+                    if var.varargs then
                         lst = true
-                    elseif var.nilable then
+                    elseif var.optional then
                         opt = true
                     elseif opt then
                         return onlyvalid or "the %s's non-optional variables must exist before the optional variables"
@@ -12263,7 +12297,7 @@ do
         FLG_VAR_IMMTBL          = newflags()        -- all immutable
         FLG_VAR_ISLIST          = newflags()        -- the last variable is list
         FLG_VAR_IMMLST          = newflags()        -- the list variable is immutable
-        FLG_VAR_LSTNIL          = newflags()        -- the list variable is nilable
+        FLG_VAR_LSTNIL          = newflags()        -- the list variable is optional
         FLG_VAR_LSTVLD          = newflags()        -- the list variable has type
         FLG_VAR_THRABL          = newflags()        -- the target may throw exception
         FLG_VAR_LENGTH          = newflags()        -- the multiply factor of length
@@ -12411,10 +12445,10 @@ do
             for i, var in ipairs, vars, 0 do
                 if i > 1 then tinsert(usage, ", ") end
 
-                if var.nilable then tinsert(usage, "[") end
+                if var.optional or (var.varargs and var.mincount == 0) then tinsert(usage, "[") end
 
-                if var.name or var.islist then
-                    tinsert(usage, var.islist and "..." or var.name)
+                if var.name or var.varargs then
+                    tinsert(usage, var.varargs and "..." or var.name)
                     if var.type then
                         tinsert(usage, " as ")
                     end
@@ -12433,7 +12467,7 @@ do
                     tinsert(usage, serialize(var.default, var.type))
                 end
 
-                if var.nilable then tinsert(usage, "]") end
+                if var.optional or (var.varargs and var.mincount == 0) then tinsert(usage, "]") end
             end
 
             tinsert(usage, ")")
@@ -12469,7 +12503,7 @@ do
                 if vars[len].type then
                     token = turnonflags(FLG_VAR_LSTVLD, token)
                 end
-                if vars[len].nilable then
+                if (vars[len].mincount or 0) == 0 then
                     token = turnonflags(FLG_VAR_LSTNIL, token)
                 end
             end
@@ -12549,7 +12583,7 @@ do
                     if ismethod then
                         tinsert(body, (([[
                             if _ai_ == nil then
-                                if not _vi_.nilable then return onlyvalid or "the _i_ argument can't be nil" end
+                                if not _vi_.optional then return onlyvalid or "the _i_ argument can't be nil" end
                                 _ai_ = _vi_.default
                             elseif _vi_.type then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_, nochange)
@@ -12560,7 +12594,7 @@ do
                     else
                         tinsert(body, (([[
                             if _ai_ == nil then
-                                if not _vi_.nilable then error(usage .. " - the _i_ argument can't be nil", 2) end
+                                if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", 2) end
                                 _ai_ = _vi_.default
                             elseif _vi_.type then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_)
@@ -12581,30 +12615,46 @@ do
                         if validateflags(FLG_VAR_IMMLST, token) then
                             if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
+                                uinsert(apis, "parseIndex")
                                 tinsert(body, [[
-                                    local vlen = select("#", ...)
+                                        local vlen = select("#", ...)
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
-                                    tinsert(body, [[
-                                        if vlen == 0 or select(1, ...) == nil or select(1, ...) == nil then return onlyvalid or "the ... must contains at least one argument" end
-                                    ]])
+                                    tinsert(body, (([[
+                                        local minct = _vi_.mincount or 0
+                                        if vlen < minct then return onlyvalid or "the ... must contains at least " .. minct .. " arguments" end
+                                    ]]):gsub("_vi_", "v" .. len)))
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
-                                    uinsert(apis, "parseIndex")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                tinsert(body, [[
                                         for i = 1, vlen do
                                             local ival = select(i, ...)
                                             if ival == nil then
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
+                                    ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
                                                 break
+                                ]])
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
                                                 if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                   ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
                                             end
                                         end
-                                    ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
-                                end
+                                ]])
                             end
 
                             tinsert(body, [[if nochange then return end]])
@@ -12616,15 +12666,10 @@ do
                         else
                             uinsert(apis, "select")
                             uinsert(apis, "parseIndex")
-                            tinsert(body, [[
-                                local vlen = select("#", ...)
-                            ]])
-                            if not validateflags(FLG_VAR_LSTNIL, token) then
-                                tinsert(body, [[
-                                    if vlen == 0 or select(1, ...) == nil then return onlyvalid or "the ... must contains at least one argument" end
-                                ]])
-                            end
                             tinsert(body, (([[
+                                local vlen  = select("#", ...)
+                                local minct = _vi_.mincount or 0
+                                if vlen < minct then return onlyvalid or "the ... must contains at least " .. minct .. " arguments" end
                                 if vlen > 0 then
                                     local vtype = _vi_.type
                                     local valid = _vi_.validate
@@ -12633,6 +12678,7 @@ do
                                         for i = 1, vlen do
                                             local ival = select(i, ...)
                                             if ival == nil then
+                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
@@ -12645,6 +12691,7 @@ do
                                         for i = 1, vlen do
                                             local ival = vlst[i]
                                             if ival == nil then
+                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
@@ -12658,36 +12705,52 @@ do
                                     if nochange then return end
                                     return func(_arg_)
                                 end
-                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_i_", tostring(len - 1))))
                         end
                     else
                         if validateflags(FLG_VAR_IMMLST, token) then
                             if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
+                                uinsert(apis, "parseIndex")
                                 tinsert(body, [[
                                     local vlen = select("#", ...)
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
-                                    tinsert(body, [[
-                                        if vlen == 0 or select(1, ...) == nil then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
-                                    ]])
+                                    tinsert(body, (([[
+                                        local minct = _vi_.mincount or 0
+                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 2) end
+                                    ]]):gsub("_vi_", "v" .. len)))
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
-                                    uinsert(apis, "parseIndex")
                                     tinsert(body, (([[
                                         local vtype = _vi_.type
                                         local valid = _vi_.validate
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                tinsert(body, [[
                                         for i = 1, vlen do
                                             local ival = select(i, ...)
                                             if ival == nil then
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                                if i <= minct then error(usage .. " - " .. ("the " .. parseIndex(i + _i_) .. " argument can't be nil"), 2) end
+                                    ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
                                                 break
+                                ]])
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
                                             else
-                                                ret, msg= valid(vtype, ival)
+                                                ret, msg= valid(vtype, ival, nochange)
                                                 if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                   ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
                                             end
                                         end
-                                    ]]):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
-                                end
+                                ]])
                             end
 
                             if alen == 0 then
@@ -12698,15 +12761,10 @@ do
                         else
                             uinsert(apis, "select")
                             uinsert(apis, "parseIndex")
-                            tinsert(body, [[
-                                local vlen = select("#", ...)
-                            ]])
-                            if not validateflags(FLG_VAR_LSTNIL, token) then
-                                tinsert(body, [[
-                                    if vlen == 0 or select(1, ...) == nil then error(usage .. " - " .. "the ... must contains at least one argument", 2) end
-                                ]])
-                            end
                             tinsert(body, (([[
+                                local vlen  = select("#", ...)
+                                local minct = _vi_.mincount or 0
+                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 2) end
                                 if vlen > 0 then
                                     local vtype = _vi_.type
                                     local valid = _vi_.validate
@@ -12714,6 +12772,7 @@ do
                                     for i = 1, vlen do
                                         local ival = vlst[i]
                                         if ival == nil then
+                                            if i <= minct then error(usage .. " - " .. ("the " .. parseIndex(i + _i_) .. " argument can't be nil"), 2) end
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
@@ -12942,7 +13001,7 @@ do
         -----------------------------------------------------------
         --- Generate an overload method to handle all rest argument groups
         __Static__() function Rest()
-            return Class.AttachObjectSource(__Arguments__{ { islist = true, nilable = true} }, 2)
+            return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
         --- Mark the target function as throwable
@@ -12981,13 +13040,20 @@ do
             for i = 1, len do
                 local var       = self[i]
                 vars[i]         = var
-                if var.islist then
-                    vars[FLD_VAR_ISLIST]    = true
-                    vars[FLD_VAR_MAXARG]    = 255
+
+                if var.optional then
+                    minargs     = minargs or i - 1
                 end
 
-                if var.nilable then
-                    minargs     = minargs or i - 1
+                if var.varargs then
+                    vars[FLD_VAR_ISLIST]    = true
+                    vars[FLD_VAR_MAXARG]    = 255
+
+                    if not var.mincount or var.mincount == 0 then
+                        minargs = minargs or i - 1
+                    else
+                        minargs = i + var.mincount - 1
+                    end
                 end
 
                 if not var.immutable then
