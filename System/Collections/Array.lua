@@ -32,7 +32,7 @@ PLoop(function(_ENV)
     --      function ar:OnNameChanged(new, old)
     --          print( ("%s -> %s"):format(old, new)  )
     --      end
-    __ObjFuncAttr__() __Template__( Any ) __NoSuperObject__()
+    __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false)
     class "Array" (function(_ENV, eletype)
         inherit "List"
 

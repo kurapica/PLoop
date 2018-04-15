@@ -142,7 +142,7 @@ PLoop(function(_ENV)
 
     --- the list stream worker, used to provide stream filter, map and etc
     -- operations on a list without creating any temp caches
-    __Final__() __Sealed__() __NoSuperObject__()
+    __Final__() __Sealed__() __SuperObject__(false)
     class "ListStreamWorker" (function (_ENV)
         extend "IList"
 

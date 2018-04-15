@@ -44,7 +44,7 @@ All notable changes to this project will be documented in this file.
 - [attribute]  `System.__Indexer__` added, used to set a property as indexer property that would be used as `obj.Items[index] = value`
 - [attribute]  `System.__NoNilValue__` added, used to mark a class's objects, so access non-existent value from them is denied
 - [attribute]  `System.__NoRawSet__` added, used to mark a class's objects, so set value to their non-existent fields is denied
-- [attribute]  `System.__NoSuperObject__` added, used to mark a class or interface, so they don't use super class style like `super[self]:xxx()`
+- [attribute]  `System.__SuperObject__` added, used to mark a class or interface, so whether they use super object style like `super[self]:xxx()`
 - [attribute]  `System.__ObjFuncAttr__` added, used to mark a class's objects, so functions that be assigned on them will be modified by the attribute system
 - [attribute]  `System.__ObjectSource__` added, with it the class ojbect will save the source where it's created
 - [attribute]  `System.__Require__` added, used to mark an interface's require class

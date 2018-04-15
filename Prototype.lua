@@ -6841,6 +6841,17 @@ do
         info[FLD_IC_MOD]        = turnonflags(flag, info[FLD_IC_MOD])
     end
 
+    local setSuperObjectStyle   = function (target, on, stack)
+        local info, _, stack, msg  = preDefineCheck(target, nil, stack)
+        if not info then return msg, stack end
+
+        if on then
+            info[FLD_IC_MOD]        = turnoffflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD])
+        else
+            info[FLD_IC_MOD]        = turnonflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD])
+        end
+    end
+
     local setStaticMethod       = function (target, name, stack)
         local info, name, stack, msg, def = preDefineCheck(target, name, stack, true)
 
@@ -6900,9 +6911,7 @@ do
         if class.IsNilValueBlocked(source) then
             class.SetNilValueBlocked(target)
         end
-        if class.IsNoSuperObjectStyle(source) then
-            class.SetNoSuperObjectStyle(target)
-        end
+        class.SetSuperObjectStyle(target, class.GetSuperObjectStyle(source))
     end
 
     -- Buidler helpers
@@ -7771,7 +7780,7 @@ do
             -- @param   name                        the meta name
             -- @param   data:(function|table)       the meta data
             -- @param   stack                       the stack level
-            ["AddMetaData"]   = function(target, name, data, stack)
+            ["AddMetaData"]     = function(target, name, data, stack)
                 local msg, stack= addMetaData(target, name, data, stack)
                 if msg then error("Usage: class.AddMetaData(target, name, data[, stack]) - " .. msg, stack + 1) end
             end;
@@ -7945,7 +7954,7 @@ do
             -- @param   fromobject:boolean          get the object meta-methods
             -- @rformat (cache)                     the cache that contains the method list
             -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            ["GetMetaMethods"]      = interface.GetMetaMethods;
+            ["GetMetaMethods"]  = interface.GetMetaMethods;
 
             --- Get the object class of the object
             -- @static
@@ -7953,7 +7962,7 @@ do
             -- @owner   class
             -- @param   object                      the object
             -- @return  class                       the object class
-            ["GetObjectClass"]      = function(object)
+            ["GetObjectClass"]  = function(object)
                 return class.Validate(getmetatable(object))
             end;
 
@@ -7963,7 +7972,7 @@ do
             -- @owner   class
             -- @param   object                      the object
             -- @return  source                      where the object is created
-            ["GetObjectSource"]     = function(object)
+            ["GetObjectSource"] = function(object)
                 return type(object) == "table" and rawget(object, FLD_OBJ_SOURCE) or nil
             end;
 
@@ -8087,20 +8096,20 @@ do
             -- @owner   class
             -- @param   target                      the target class
             -- @return  boolean                     true if the class object don't receive any value assignment excpet existed fields
-            ["IsNilValueBlocked"] = function(target)
+            ["IsNilValueBlocked"]   = function(target)
                 local info      = getICTargetInfo(target)
                 return info and validateflags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) or false
             end;
 
-            --- Whether the class don't use super object access style like `Super[obj].Name = "Ann"`
+            --- Whether the class use super object access style like `super[obj].Name = "Ann"`
             -- @static
-            -- @method  IsNoSuperObjectStyle
+            -- @method  GetSuperObjectStyle
             -- @owner   class
             -- @param   target                      the target class
             -- @return  boolean                     true if the class don't use super object access style
-            ["IsNoSuperObjectStyle"] = function(target)
+            ["GetSuperObjectStyle"] = function(target)
                 local info      = getICTargetInfo(target)
-                return info and validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
+                return info and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class object don't receive any value assignment excpet existed fields
@@ -8325,15 +8334,17 @@ do
                 setModifiedFlag(class, target, MOD_NONILVAL_OBJ, "SetNilValueBlocked", stack)
             end;
 
-            --- Make the class don't use super object access style like `Super[obj].Name = "Ann"`
+            --- Make the class whether use super object access style like `super[obj].Name = "Ann"`
             -- @static
-            -- @method  SetNoSuperObjectStyle
+            -- @method  SetSuperObjectStyle
             -- @owner   class
-            -- @format  (target[, stack])
+            -- @format  (target, on[, stack])
             -- @param   target                      the target class
+            -- @param   on                          true if using the super object access style
             -- @param   stack                       the stack level
-            ["SetNoSuperObjectStyle"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_NOSUPER_OBJ, "SetNoSuperObjectStyle", stack)
+            ["SetSuperObjectStyle"] = function(target, on, stack)
+                local msg, stack    = setSuperObjectStyle(target, on, stack)
+                if msg then error("Usage: class.SetSuperObjectStyle(target, on, [, stack])  - " .. msg, stack + 1) end
             end;
 
             --- Set the class object'll to save its source when created
@@ -8645,9 +8656,18 @@ do
     tsuperclass                 = prototype (tsuperinterface, {
         __call                  = function(self, obj, ...)
             local cls           = _SuperMap[self]
-            if obj and class.IsSubType(getmetatable(obj), cls) then
-                rawset(obj, OBJ_SUPER_ACCESS, cls)
-                local ctor      = safeget(obj, IC_META_CTOR)
+            local ocls          = obj and getmetatable(obj)
+            if ocls and class.IsSubType(ocls, cls) then
+                local ctor
+                if class.GetSuperObjectStyle(ocls) then
+                    -- Only this style can work for multi-version classes
+                    rawset(obj, OBJ_SUPER_ACCESS, cls)
+                    ctor        = safeget(obj, IC_META_CTOR)
+                else
+                    local info  = _ICInfo[cls][FLD_IC_SUPMTD]
+                    ctor        = info and info[IC_META_CTOR]
+                end
+
                 if ctor then
                     return ctor(obj, ...)
                 else
@@ -11535,19 +11555,22 @@ do
     })
 
     -----------------------------------------------------------------------
-    -- Set the class's objects so they don't use the super object access
-    -- style like `super[self]:Method()`, `super[self].Name = xxx`
+    -- Whether the class's objects use the super object access style like
+    -- `super[self]:Method()`, `super[self].Name = xxx`
     --
-    -- @attribute   System.__NoSuperObject__
+    -- @attribute   System.__SuperObject__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoSuperObject__",         prototype {
+    namespace.SaveNamespace("System.__SuperObject__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetNoSuperObjectStyle(target, parsestack(stack) + 1)
+                class.SetSuperObjectStyle(target, self[1] and true or false, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = function(self, value)
+            attribute.Register(prototype.NewObject(self, { value }))
+        end,
+        __newindex = readOnly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
