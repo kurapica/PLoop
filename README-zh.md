@@ -4,6 +4,7 @@
 
 **PLoop**本身也提供了类似协程池，集合，序列化等通用功能。除了提供类型定义和通用类型外，**PLoop**也针对项目开发提供了诸如代码管理，类型验证等常用功能。
 
+[TOC]（内容目录）
 
 ## 安装
 
@@ -481,6 +482,8 @@ Lua调试上有很多麻烦，如果出错的情况还比较好处理，但会�
 
 我们来看如何在**PLoop**中解决它。
 
+### 读取不存在的全局变量
+
 在使用require加载**PLoop**之前，我们可以定义一个名为**PLOOP_PLATFORM_SETTINGS**的table，用来调整**PLoop**的内部设定:
 
 ```lua
@@ -499,7 +502,95 @@ end)
 
 关闭**ENV_ALLOW_GLOBAL_VAR_BE_NIL**后，**PLoop**的所有私有环境会使用强制模式，禁止访问任何不存在的变量(未定义也无法从命名空间和基础环境中获取到的)，这样就可以快速的定位这类错误。
 
-另一种错误检测对应于对象的字段:
+### 写非法全局变量
+
+如果我们漏写了`local`，会导致原本的局部变量被保存成全局，不过系统本身无法区分期望的全局变量和不期望的全局变量，所以，系统需要在平台设置里面指定一个过滤函数：
+
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value)
+		-- 不允许首字母是小写并且值是非函数的全局变量
+		if type(key) == "string" and key:match("^%l") and type(value) ~= "function" then
+			return true
+		end
+	end,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- error: There is an illegal assignment for "ch"
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+当过滤函数返回true时，这个赋值会引发error，代码将停止运行，如果期望只得到警告，但不终止代码的话，可以添加一个设置：
+
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value)
+		-- Don't allow the lowercase key with non-function value
+		if type(key) == "string" and key:match("^%l") and type(value) ~= "function" then
+			return true
+		end
+	end,
+	GLOBAL_VARIABLE_FILTER_USE_WARN = true,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- [PLoop: Warn]There is an illegal assignment for "ch"@path_to_file\file.lua:18
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+可以看到，如果可能，系统会提供出赋值的调用位置。如果需要，也可以将这个过滤函数作为记录器使用，只需要增加一个设置，调用位置就会作为第三个参数传入：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value, path)
+		print("Assign '" .. key .. "'" .. path )
+	end,
+	GLOBAL_VARIABLE_FILTER_GET_CALLLINE = true,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1  -- Assign 'Test'@path_to_file\file.lua:11
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- Assign 'ch'@path_to_file\file.lua:15
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+如果要获取调用位置，`debug.getinfo`函数必须存在。
+
+### 访问不存在的对象字段
+
+我们也可以禁止访问不存在的对象字段：
 
 ```lua
 PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
@@ -1580,9 +1671,127 @@ ValidateValue(target, object)               |检查对象的类型是指定类�
 Validate(target)                            |检查目标是否是一个类
 
 
+### 类的多重版本
+
+如果我们不使用`__Sealed__`封装这些类，我们可以再次定义它们，和结构体不同，重定义类不会清空以前的定义，而是覆盖上去。
+
+首先看一个例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hi
+	A():test() -- hello
+end)
+```
+
+这里旧对象不会使用新定义的方法，所以同时我们有这个类的多个版本存在，这样的设计是为了避免新定义破坏了旧对象的执行（使用字段不同等，特别对于web请求来说，后台文件修改时，不应该影响正在返回数据的处理对象）。
+
+如果我们需要某个类的对象保持更新，我们可以使用`System.__SingleVer__`特性来标记：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__SingleVer__()
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hello
+	A():test() -- hello
+end)
+```
+
+这样旧对象也会使用新方法，我们只会有一个版本类实现。如果希望这个是类的默认行为的话，可以修改平台设定：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { CLASS_NO_MULTI_VERSION_CLASS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hello
+	A():test() -- hello
+end)
+```
+
+注意，这个设定对于多os-thread平台无效。
+
+### 扩展方法
+
+如果只是想追加处理的话，我们不需要进行完全的重定义：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Sealed__()
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	function A:test2()
+		print("hello")
+	end
+
+	o:test2()   -- hello
+end)
+```
+
+我们只需要将函数赋给类就可以为它扩展新的对象方法或者静态方法。旧的对象也会获得新定义的方法。
+
+这也可以用于扩展已经封闭了的类。也可以用于之后的接口。
+
+我们不能对结构体类型使用这方式，因为结构体方式是被拷贝到数据table中的，如果我们给一个不含方法的结构体添加新方法，那么这个结构体会由不可变类型变成可变类型，这对系统影响太大，是不允许的。
+
+
 ## Interface 接口
 
-接口是功能的抽象类型，对于class来说，它也是多继承的补充机制。和class一样，也可以在它里面定义对象方法，静态方法和元数据。
+接口是对功能的抽象，对于class来说，它也是多继承的补充机制。和class一样，也可以在它里面定义对象方法，静态方法和元数据。
 
 类和接口都可以扩展任意数量的接口，使用**super**关键字时，它会根据继承的情况和优先级自行选择对应的方法（不限于超类的，也可以是接口提供的）。
 
@@ -1675,6 +1884,64 @@ IsStaticMethod(target, name)                |检查目标指定名字的方法�
 IsSubType(target, super)                    |检查目标是否是指定接口的子类型
 ValidateValue(target, object)               |检查对象的类型是否是指定类型的子类型
 Validate(target)                            |检查目标是否是一个接口
+
+
+### Interface的匿名类
+
+如果我们使用`System.__AnonymousClass__`特性在某个接口上，这个接口会自动创建一个扩展自己的匿名类，这个匿名类无法直接被访问，但我们可以使用接口来构建对象：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__AnonymousClass__()
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask{ Process = function() print("Hello") end }
+
+	o:Process()
+end)
+```
+
+接口只能接受一个table做为初始化表来创建这个对象，通常要提供虚方法的实现。
+
+但对于只有一个虚方法（含继承）的接口，我们可以使用更简单的形式：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__AnonymousClass__()
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask(function() print("Hello") end)
+	o:Process()
+end)
+```
+
+我们可以直接提供虚方法的实现来构建对象。如果你希望所有接口都提供这样的行为，那么也可以修改平台设定（不推荐）：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { INTERFACE_ALL_ANONYMOUS_CLASS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask(function() print("Hello") end)
+	o:Process()
+end)
+```
 
 
 ## Event 事件
@@ -2364,6 +2631,59 @@ end)
 上面已经完整介绍了**PLoop**提供的所有类型，不过我们还有很多细节需要补充。
 
 
+## 继承和优先级
+
+一个类可以扩展多个接口，可以继承一个超类，超类也会继承其他超类和扩展其他的接口。
+
+如果这些超类和接口中有同名的类型资源（方法，元方法，属性或者事件），那么系统在继承时，会选择最接近的：
+
+* 检查超类，如果没有，检查超类的超类，依次继续下去。
+
+* 检查接口，最后被扩展的接口会被优先检查。
+
+这些调用都是系统完成，我们并不需要管理它，但我们也可以通过使用`System.__Abstract__`和`System.__Final__`两个特性来影响这个过程：
+
+* 如果一个类型资源（方法，元方法，属性或者事件）被标记为`__Abstract__`，那么它的继承优先级最低。
+
+* 如果一个类型资源被标记为`__Final__`，那么它的继承优先级最高。
+
+下面是一个简单的例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "IA" (function(_ENV)
+		__Final__()
+		function Test(self)
+			print("Hello IA")
+		end
+
+		__Abstract__()
+		function Test2(self)
+			print("Hello2 IA")
+		end
+	end)
+
+	class "A" (function(_ENV)
+		extend "IA"
+
+		function Test(self)
+			print("Hello A")
+		end
+
+		function Test2(self)
+			print("Hello2 A")
+		end
+	end)
+
+	o = A()
+	o:Test()  -- Hello IA
+	o:Test2() -- Hello2 A
+end)
+```
+
+
 ## 命名空间和匿名类型
 
 **PLoop**使用命名空间来管理类型，我们可以将类型保存在树状的命名空间中，这样每种类型都有唯一的访问路径，比如**System.Collections.List**。我们也可以使用**import**关键字在私有环境中引入这些命名空间，这样这些类型可以在任何地方被使用。
@@ -2788,4 +3108,489 @@ end)
 
 ### System.Variable
 
-之前的例子中使用的参数都是指定类型，这些都是必须参数，如果需要定义可选参数，可变参数时，就无法这么处理了（毕竟Lua不支持String?这样的写法）
+之前的例子中使用的参数都是指定类型，这些都是必须参数，如果需要定义可选参数，可变参数时，我们就需要提供额外的信息。
+
+`__Arguments__`只接受一个参数，这个参数的类型是**System.Variables**，它是一个数组结构体，它的元素类型是**System.Variable**，下面是它的结构演示:
+
+```lua
+struct "Variable" (function(_ENV)
+	name    = NEString      -- 变量的名字
+	type    = AnyType       -- 变量类型
+	optional= Boolean       -- 是否可选变量
+	default = Any           -- 可选变量的默认值
+	varargs = Boolean       -- 是否可变参数
+	mincount= NaturalNumber -- 可变参数最小数目，默认0
+
+	-- 返回一个指定类型和默认值的可选参数
+	Optional= function(type, default) end
+
+	-- 返回一个指定类型和最小数量的可变参数
+	Rest    = function(type, mincount) end
+end)
+```
+
+这是可选参数的例子：
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ Variable.Optional(Number, 0) }
+		function SetInfo(self, age)
+			print("The age is " .. age)
+		end
+	end)
+
+	o = Person()
+
+	-- The age is 0
+	o:SetInfo()
+end)
+```
+
+下面是可变参数的例子：
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{ Variable.Rest(String) }
+		function AddChild(self, ...)
+		end
+	end)
+
+	o = Person()
+
+	-- Usage: Person:AddChild([... as System.String]) - the 2nd argument must be System.String
+	o:AddChild("Ann", 1)
+end)
+```
+
+我们也可以提供更多的信息，这样产生的错误信息会更明确：
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	class "Person" (function(_ENV)
+		__Arguments__{
+			Variable("name", String, true, "anonymous"),
+			Variable("age", NaturalNumber, true, 0)
+		}
+		function SetInfo(self, name, age)
+			self:SetInfo(name)
+			self:SetInfo(age)
+		end
+	end)
+
+	o = Person()
+
+	-- Usage: Person:SetInfo([name as System.String = "anonymous"], [age as System.NaturalNumber = 0]) - the 1st argument must be System.String
+	o:SetInfo(true)
+end)
+```
+
+### 申明变量申明的简易版本
+
+为了定义可选和可变参数不断的使用**Variable**是比较辛苦的用法，因为过于常用，**PLoop**为此提供了简便的处理方式：
+
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ String/"anonymouse", Number * 0 }
+	function Test(...)
+		print(...)
+	end
+
+	-- anonymouse
+	Test(nil)
+
+	-- Usage: Test([System.String = "anonymouse"], [... as System.Number]) - the 2nd argument must be number, got string
+	Test("hi", "next")
+end)
+```
+
+我们可以使用`type/default`（`type/nil`同样可以使用）来申明可选参数，使用`type * mincount`来申明可变参数。
+
+
+## Throw Exception 异常处理
+
+通常来说，错误有两种，一种是返回给调用者，说明调用错误的，一种是自身发生的。前者我们希望错误位置在调用处，后者我们希望错误就在原处，这样便于我们进行处理。
+
+这里涉及到两个问题，第一是，调用层次不明，例如使用类构造对象时，如果单纯使用`error(msg, 2)`那么，定位在**PLoop**核心文件，而不是实际调用处，加上子类调用超类的问题，函数自身是无法定位自己的调用层级的。
+
+解决第一个问题的方案是在最外层使用pcall捕获异常，然后处理后，将错误定位在调用处，但这就造成了第二个问题，如果是我们函数自身的错误，如果pcall将错误位置定位到调用处了，我们无法知道具体的错误地点。
+
+为了解决这个问题，**PLoop**引入了**throw**关键字和**System.Exception**组成异常处理系统。
+
+Lua有个特别的设计，`error(msg)`只允许抛出字符串作为错误信息，但如果使用`pcall`来调用函数，函数内可以用`error(table)`的方式抛出table作为错误信息，对我们而言就是错误对象。
+
+如果我们抛出错误对象指明调用错误，而自身内部错误发生时，依然时抛出字符串，在pcall调用处根据错误类型，就可以很好的区分开调用错误和自身错误。
+
+下面看构造体调用错误的处理例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		local function check(self)
+			throw("something wrong")
+		end
+
+		function A(self)
+			check(self)
+		end
+	end)
+
+	o = A() -- something wrong
+end)
+```
+
+在构造体方法及被其调用的函数中，我们可以使用**throw**关键字，将错误消息（也可以传入Exception对象，但没有必要自己构建）使用**throw**抛出，可以看到错误发生在对象构建的地方。
+
+另一种情况，是在使用重载系统时，函数自身也很难定位自己的被调用层级（因为还有其他的封装特性），同样可以使用throw来处理：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ String }:Throwable()
+	function test(name)
+		throw("we have throwable exception here")
+	end
+
+	test("HI") -- we have throwable exception here
+end)
+```
+
+注意，需要申明这个重载是`:Throwable()`的，重载方法才会使用pcall来调用实际函数，才能完成这个操作。
+
+注意**throw**在`_G`中是无法使用的，必须在某个**PLoop**的私有环境中（关键字有特殊的设计，它能获取调用自身的环境，但`_G`是无法处理的）。
+
+如果希望自己处理异常处理，那么可以参照下面的例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function safecall(func, ...)
+		local ok, ret = pcall(func, ...)
+
+		if not ok then
+			if type(ret) == "string" then
+				error(ret, 0) -- 保留错误消息的调用层级
+			else
+				error(tostring(ret), 2) -- 异常对象可以直接转换为字符串
+			end
+		end
+	end
+
+	function test()
+		throw("some thing not right")
+	end
+
+	safecall(test) -- 定位在这里: some thing not right
+end)
+```
+
+你也可以将**throw**修改为**error**来看下定位的差别。
+
+
+## 模板类
+
+**PLoop**的类型定义是使用函数来完成的，函数的第一个参数是`_ENV`用于确保能正确运行于Lua 5.2以上版本。同时，我们也有可能使用它传入其他参数，来对定义进行调整，而这个结果就是模板类：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Template__ { Any }
+	class "Array" (function(_ENV, eletype)
+		__Arguments__{ eletype * 0 }
+		function __new(cls, ...)
+			return { ... }, true
+		end
+	end)
+
+	--Error: Usage: Anonymous([... as System.Integer]) - the 4th argument must be System.Integer
+	o = Array[Integer](1, 2, 3, "hi", 5)
+end)
+```
+
+首先我们需要使用`System.__Template__`特性来申明这个**Array**类是一个模板类，它的默认类型是**System.Any**也就是任意的其他类型都可以被使用。
+
+同时，**Array**的定义函数需要增加一个额外参数，用于传递模板类型。
+
+类型定义之后，我们可以使用**Array[Integer]**这种形式传入真实类型，然后使用被创建的新类型。
+
+我们也可以创建多类型的模板类：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Template__ { Any, Any }
+	class "Dict" (function(_ENV, ktype, vtype)
+		__Arguments__{ ktype, vtype }
+		function Add(self, key, value)
+			self[key] = value
+		end
+	end)
+
+	o = Dict[{Integer, String}]()
+
+	-- Error: Usage: Anonymous:Add(System.Integer, System.String) - the 2nd argument must be System.String
+	o:Add(1, true)
+end)
+```
+
+因为定义形式一样，也可以为定义接口模板或者结构体模板类型。另外这是一个试验性质的功能，而且我们也并不需要在动态语言中使用严格的类型系统（毕竟没有类型转换），所以请不要滥用它。
+
+
+## System.Module
+
+**PLoop**使用私有环境来隔离代码，但对于项目来说，我们依然需要它们之间能共享些资源。
+
+为了对项目进行管理，**PLoop**提供了**System.Module**类，它的对象基于**PLoop**的私有环境系统定义的。
+
+以一个例子开始：
+
+```lua
+require "PLoop"
+
+_ENV = Module "TestMDL" "1.0.0"
+
+namespace "Test"
+
+__Async__()
+function dotask()
+	print(coroutine.running())
+end
+```
+
+`Module "TestMDL"`是`Module("TestMLD")`的省略写法，它用来创建了一个Module对象，然后我们调用它，并传入一个版本号字符串（可以为空字符串），之后当前代码（仅限于这个文件）的执行环境会被修改为这个Module对象。使用`_ENV =`是为了确保在任何Lua5.1以上版本中都能使用。
+
+之后，我们就可以随意使用**PLoop**提供的各种功能。
+
+### child-modules 子模组
+
+一个Module对象可以有多个子模组：
+
+```lua
+_ENV = Module "TestMDL.SubMDL" "1.0.0"
+
+enum "A" {}
+
+print(A) -- Test.A
+
+dotask() -- thread: 02E7F75C	false
+
+function dosubtask()
+end
+```
+
+```lua
+_ENV = Module "TestMDL.SubMDL2" "1.0.0"
+
+print(dosubtask) -- nil
+```
+
+一个模组可以用任意多的子模组，但仅能有一个父模组，所以存在一个根模组，它的全局变量将被所有子模组共享。
+
+子模组可以访问父模组的全局变量，而根模组可以访问`_G`中存有的全局变量，同样它们采用访问时缓存的模式来确保运行效率。
+
+子模组被创建时，会使用父模组中申明的命名空间，除非主动使用**namespace**关键字来覆盖它。
+
+子模组无法访问兄弟模组中定义全局变量，不过它们可以通过命名空间共享类型。
+
+你可以无限制的创建子模组类似：
+
+```lua
+Module "TestMDL.SubMDL2.SSubMDL.XXXX"
+```
+
+依照这个模式，整个项目会被保存在一个树状的模组系统中。命名空间用于保存类型，而模组则用来保存代码。
+
+
+## Attribtue 特性系统
+
+在上面的处理中，我们接触到了很多的内置特性，都是用于修改目标的行为。
+
+如果你只需要修饰或者说封装某个函数的话，你可以简单的使用`System.__Delegate__` 特性：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function decorate(func, ...)
+		print("Call", func, ...)
+		return func(...)
+	end
+
+	__Delegate__(decorate)
+	function test() end
+
+	-- Call function: 02E7B1C8  1   2   3
+	test(1, 2, 3)
+end)
+```
+
+但如果你希望了解更多的话，可以具体看下特性系统的定制。
+
+### System.IAttribute
+
+我们需要扩展**System.IAttribute**接口或者它的扩展接口来定义特性类：
+
+* **System.IInitAttribute**     代表用于修改目标的定义的接口
+* **System.IApplyAttribute**    代表用于修改目标的接口，类似__Flags__
+* **System.IAttachAttribute**   代表用于附着数据给目标的接口，也可以用于将目标注册到某些系统等操作
+
+它提供了一些虚属性可被覆盖:
+
+* AttributeTarget   - 特性的目标类型，位标识枚举类型
+	* System.AttributeTargets.All         (默认)
+	* System.AttributeTargets.Function  - 普通Lua函数，非对象方法等
+	* System.AttributeTargets.Namespace - 命名空间
+	* System.AttributeTargets.Enum      - 枚举类型
+	* System.AttributeTargets.Struct    - 结构体
+	* System.AttributeTargets.Member    - 结构体成员
+	* System.AttributeTargets.Method    - 对象方法，元方法等
+	* System.AttributeTargets.Interface - 接口
+	* System.AttributeTargets.Class     - 类
+	* System.AttributeTargets.Event     - 事件
+	* System.AttributeTargets.Property  - 属性
+
+* Inheritable       - 特性是否可继承, 默认 false
+
+* Overridable       - 特性附着的数据是否可覆盖, 默认 true
+
+* Priority          - 特性的优先级，越高越先被使用
+	* System.AttributePriority.Highest
+	* System.AttributePriority.Higher
+	* System.AttributePriority.Normal  (默认)
+	* System.AttributePriority.Lower
+	* System.AttributePriority.Lowest
+
+* SubLevel          - 特性的优先级次级，数字，同样优先级的特性，SubLevel越高越先被使用, 默认 0
+
+共有三种类型的特性，初始化特性在目标定义前使用，应用特性在目标定义时使用，附着特性在目标定义后被使用：
+
+### System.IInitAttribute 初始化特性
+
+初始化特性用于修改目标的定义，通常用于枚举类型或者函数：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "__SafeCall__" (function(_ENV)
+		extend "IInitAttribute"
+
+		local function checkret(ok, ...)
+			if ok then return ... end
+		end
+
+		--- modify the target's definition
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param   definition                  the target's definition
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		-- @return  definition                  the new definition
+		function InitDefinition(self, target, targettype, definition, owner, name, stack)
+			return function(...)
+				return checkret(pcall(definition, ...))
+			end
+		end
+
+		property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
+	end)
+
+	__SafeCall__()
+	function test1()
+		return 1, 2, 3
+	end
+
+	__SafeCall__()
+	function test2(i, j)
+		return i/j
+	end
+
+	print(test1()) -- 1, 2, 3
+	print(test2()) -- nothing
+end)
+```
+
+这种类型必须扩展**System.IInitAttribute**并且覆盖**InitDefinition**虚方法，这个方法中的definition就是目标的定义，对于枚举类型来说，就是含有枚举值的table，对于函数，就是它本身。如果这个方法返回了一个新的值，这个值将被作为新的定义被继续使用。
+
+### System.IApplyAttribute 应用特性
+
+这种特性用来对目标进行调整，通常是系统的内置特性使用，以`__Sealed__`为例:
+
+```lua
+class "__Sealed__" (function(_ENV)
+	extend "IApplyAttribute"
+
+	--- apply changes on the target
+	-- @param   target                      the target
+	-- @param   targettype                  the target type
+	-- @param   owner                       the target's owner
+	-- @param   name                        the target's name in the owner
+	-- @param   stack                       the stack level
+	function ApplyAttribute(self, target, targettype, owner, name, stack)
+		if targettype == AttributeTargets.Enum then
+			Enum.SetSealed(target)
+		elseif targettype == AttributeTargets.Struct then
+			Struct.SetSealed(target)
+		elseif targettype == AttributeTargets.Interface then
+			Interface.SetSealed(target)
+		elseif targettype == AttributeTargets.Class then
+			Class.SetSealed(target)
+		end
+	end
+
+	property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
+end)
+```
+
+这些类型需要扩展**System.IApplyAttribute**，并覆盖**ApplyAttribute**虚方法。这类基本只被系统定义和使用。
+
+### System.IAttachAttribute 附着特性
+
+这种特性在目标的定义完成后，被使用，通常用于附着数据或者将目标注册到其它系统（因为此时所有对它的修改都已经完成）。
+
+```lua
+PLoop(function(_ENV)
+	class "__DataTable__" (function(_ENV)
+		extend "IAttachAttribute"
+
+		--- apply changes on the target
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		function AttachAttribute(self, target, targettype, owner, name, stack)
+			return self.DataTable
+		end
+
+		property "AttributeTarget" { default = AttributeTargets.Class }
+
+		property "DataTable" { type = String }
+	end)
+
+	__DataTable__{ DataTable = "Persons" }
+	class "Person" {}
+
+	-- Persons
+	print(IAttribute.GetAttachedData(__DataTable__, Person))
+end)
+```
+
+这种类型需要扩展**System.IAttachAttribute**接口并覆盖**AttachAttribute**虚方法，这个方法的返回值会被保存，便于之后查询。

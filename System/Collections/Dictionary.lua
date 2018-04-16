@@ -123,7 +123,7 @@ PLoop(function(_ENV)
             end
         else
             -- Keep idle workers for re-usage
-            idleworkers         = {}
+            export { idleworkers= {} }
             getIdleworkers      = function() return tremove(idleworkers) end
             rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
         end
@@ -131,23 +131,24 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                       constant                        --
         -----------------------------------------------------------
-        FLD_STREAM_TARGETDICT   = 0
-        FLD_STREAM_MAPACTITON   = 1
-        FLD_STREAM_FILTERACTN   = 2
-
+        export {
+            FLD_TARGETDICT      = 0,
+            FLD_MAPACTITON      = 1,
+            FLD_FILTERACTN      = 2,
+        }
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         __Iterator__()
         function GetIterator(self)
-            local targetDict= self[FLD_STREAM_TARGETDICT]
-            local map       = self[FLD_STREAM_MAPACTITON]
-            local filter    = self[FLD_STREAM_FILTERACTN]
+            local targetDict    = self[FLD_TARGETDICT]
+            local map           = self[FLD_MAPACTITON]
+            local filter        = self[FLD_FILTERACTN]
 
             -- Clear self and put self into recycle
-            self[FLD_STREAM_TARGETDICT] = nil
-            self[FLD_STREAM_MAPACTITON] = nil
-            self[FLD_STREAM_FILTERACTN] = nil
+            self[FLD_TARGETDICT] = nil
+            self[FLD_MAPACTITON] = nil
+            self[FLD_FILTERACTN] = nil
 
             rycIdleworkers(self)
 
@@ -185,18 +186,18 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Map the items to other type datas
         __Arguments__{ Callable }
-        function Map(self, func) self[FLD_STREAM_MAPACTITON] = func return self end
+        function Map(self, func) self[FLD_MAPACTITON] = func return self end
 
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
-        function Filter(self, func) self[FLD_STREAM_FILTERACTN] = func return self end
+        function Filter(self, func) self[FLD_FILTERACTN] = func return self end
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__{ IDictionary }
         function DictionaryStreamWorker(self, dict)
-            self[FLD_STREAM_TARGETDICT] = dict
+            self[FLD_TARGETDICT] = dict
         end
 
         -----------------------------------------------------------
@@ -205,7 +206,7 @@ PLoop(function(_ENV)
         __Arguments__{ IDictionary }
         function __exist(_, dict)
             local worker = getIdleworkers()
-            if worker then worker[FLD_STREAM_TARGETDICT] = dict end
+            if worker then worker[FLD_TARGETDICT] = dict end
             return worker
         end
     end)

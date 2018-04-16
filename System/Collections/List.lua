@@ -176,7 +176,7 @@ PLoop(function(_ENV)
             end
         else
             -- Keep idle workers for re-usage
-            idleworkers         = {}
+            export { idleworkers= {} }
             getIdleworkers      = function() return tremove(idleworkers) end
             rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
         end
@@ -184,44 +184,46 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                       constant                        --
         -----------------------------------------------------------
-        FLD_STREAM_TARGETLIST   = 0
-        FLD_STREAM_TARGETITER   = 1
-        FLD_STREAM_ITEROBJECT   = 2
-        FLD_STREAM_ITERINDEX    = 3
+        export {
+            FLD_TARGETLIST      = 0,
+            FLD_TARGETITER      = 1,
+            FLD_ITEROBJECT      = 2,
+            FLD_ITERINDEX       = 3,
 
-        FLD_STREAM_MAPACTITON   = 4
-        FLD_STREAM_FILTERACTN   = 5
-        FLD_STREAM_RANGESTART   = 6
-        FLD_STREAM_RANGESTOP    = 7
-        FLD_STREAM_RANGESTEP    = 8
+            FLD_MAPACTITON      = 4,
+            FLD_FILTERACTN      = 5,
+            FLD_RANGESTART      = 6,
+            FLD_RANGESTOP       = 7,
+            FLD_RANGESTEP       = 8,
+        }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         __Iterator__()
         function GetIterator(self)
-            local targetList    = self[FLD_STREAM_TARGETLIST]
-            local targetIter    = self[FLD_STREAM_TARGETITER]
-            local targetObj     = self[FLD_STREAM_ITEROBJECT]
-            local targetIdx     = self[FLD_STREAM_ITERINDEX]
+            local targetList    = self[FLD_TARGETLIST]
+            local targetIter    = self[FLD_TARGETITER]
+            local targetObj     = self[FLD_ITEROBJECT]
+            local targetIdx     = self[FLD_ITERINDEX]
 
-            local map           = self[FLD_STREAM_MAPACTITON]
-            local filter        = self[FLD_STREAM_FILTERACTN]
-            local rangeStart    = self[FLD_STREAM_RANGESTART]
-            local rangeStop     = self[FLD_STREAM_RANGESTOP]
-            local rangeStep     = self[FLD_STREAM_RANGESTEP]
+            local map           = self[FLD_MAPACTITON]
+            local filter        = self[FLD_FILTERACTN]
+            local rangeStart    = self[FLD_RANGESTART]
+            local rangeStop     = self[FLD_RANGESTOP]
+            local rangeStep     = self[FLD_RANGESTEP]
 
             -- Clear self and put self into idleworkers
-            self[FLD_STREAM_TARGETLIST] = nil
-            self[FLD_STREAM_TARGETITER] = nil
-            self[FLD_STREAM_ITEROBJECT] = nil
-            self[FLD_STREAM_ITERINDEX]  = nil
+            self[FLD_TARGETLIST] = nil
+            self[FLD_TARGETITER] = nil
+            self[FLD_ITEROBJECT] = nil
+            self[FLD_ITERINDEX]  = nil
 
-            self[FLD_STREAM_MAPACTITON] = nil
-            self[FLD_STREAM_FILTERACTN] = nil
-            self[FLD_STREAM_RANGESTART] = nil
-            self[FLD_STREAM_RANGESTOP]  = nil
-            self[FLD_STREAM_RANGESTEP]  = nil
+            self[FLD_MAPACTITON] = nil
+            self[FLD_FILTERACTN] = nil
+            self[FLD_RANGESTART] = nil
+            self[FLD_RANGESTOP]  = nil
+            self[FLD_RANGESTEP]  = nil
 
             rycIdleworkers(self)
 
@@ -395,13 +397,13 @@ PLoop(function(_ENV)
         --- Map the items to other datas
         __Arguments__{ Callable }
         function Map(self, func)
-            self[FLD_STREAM_MAPACTITON] = func
+            self[FLD_MAPACTITON] = func
             return self
         end
 
         __Arguments__{ String }
         function Map(self, feature)
-            self[FLD_STREAM_MAPACTITON] = function(item)
+            self[FLD_MAPACTITON] = function(item)
                 if type(item) == "table" then
                     return item[feature]
                 end
@@ -411,14 +413,14 @@ PLoop(function(_ENV)
 
         __Arguments__{ Callable }
         function Filter(self, func)
-            self[FLD_STREAM_FILTERACTN] = func
+            self[FLD_FILTERACTN] = func
             return self
         end
 
         --- Used to filter the items with a check function
         __Arguments__{ String, Variable.Optional() }
         function Filter(self, feature, value)
-            self[FLD_STREAM_FILTERACTN] = value ~= nil and function(item)
+            self[FLD_FILTERACTN] = value ~= nil and function(item)
                 if type(item) == "table" then
                     return item[feature] == value
                 else
@@ -437,7 +439,7 @@ PLoop(function(_ENV)
         --- Used to select items with ranged index
         __Arguments__{ Variable.Optional(Integer, 1), Variable.Optional(Integer, -1), Variable.Optional(Integer, 1) }
         function Range(self, start, stop, step)
-            self[FLD_STREAM_RANGESTART], self[FLD_STREAM_RANGESTOP], self[FLD_STREAM_RANGESTEP] = start, stop, step
+            self[FLD_RANGESTART], self[FLD_RANGESTOP], self[FLD_RANGESTEP] = start, stop, step
             return self
         end
 
@@ -446,14 +448,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IList }
         function ListStreamWorker(self, list)
-            self[FLD_STREAM_TARGETLIST] = list
+            self[FLD_TARGETLIST] = list
         end
 
         __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
         function ListStreamWorker(self, iter, obj, idx)
-            self[FLD_STREAM_TARGETITER] = iter
-            self[FLD_STREAM_ITEROBJECT] = obj
-            self[FLD_STREAM_ITERINDEX] = idx
+            self[FLD_TARGETITER] = iter
+            self[FLD_ITEROBJECT] = obj
+            self[FLD_ITERINDEX] = idx
         end
 
         -----------------------------------------------------------
@@ -462,7 +464,7 @@ PLoop(function(_ENV)
         __Arguments__{ IList }
         function __exist(_, list)
             local worker = getIdleworkers()
-            if worker then worker[FLD_STREAM_TARGETLIST] = list end
+            if worker then worker[FLD_TARGETLIST] = list end
             return worker
         end
 
@@ -470,9 +472,9 @@ PLoop(function(_ENV)
         function __exist(_, iter, obj, idx)
             local worker = getIdleworkers()
             if worker then
-                worker[FLD_STREAM_TARGETITER] = iter
-                worker[FLD_STREAM_ITEROBJECT] = obj
-                worker[FLD_STREAM_ITERINDEX]  = idx
+                worker[FLD_TARGETITER] = iter
+                worker[FLD_ITEROBJECT] = obj
+                worker[FLD_ITERINDEX]  = idx
             end
             return worker
         end

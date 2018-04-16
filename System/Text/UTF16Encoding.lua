@@ -27,6 +27,12 @@ PLoop(function(_ENV)
         LUA_VERSION             = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
         loadsnippet             = Toolset.loadsnippet,
         error                   = error,
+
+        -- Declare here
+        decodeLE                = false,
+        encodeLE                = false,
+        decodeBE                = false,
+        encodeBE                = false,
     }
 
     -- Default
@@ -242,9 +248,11 @@ PLoop(function(_ENV)
 
     -- Lua 5.2 - bit32 lib or luajit bit lib
     if (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
-        band    = _G.bit32 and bit32.band or bit.band
-        lshift  = _G.bit32 and bit32.lshift or bit.lshift
-        rshift  = _G.bit32 and bit32.rshift or bit.rshift
+        export {
+            band    = _G.bit32 and bit32.band or bit.band,
+            lshift  = _G.bit32 and bit32.lshift or bit.lshift,
+            rshift  = _G.bit32 and bit32.rshift or bit.rshift,
+        }
 
         function decodeLE(str, startp)
             if not startp then return nil end

@@ -78,24 +78,24 @@ PLoop(function(_ENV)
             loadsnippet             = Toolset.loadsnippet,
 
             Enum, OperationSystem,
-        }
 
-        _PipeFunc = [[
-            local popen, ftype, definition, command, result = ...
-            return function (%s)
-                local f = popen(%s, "r")
-                if ftype(f) == "file" then
-                    --f:flush()
-                    local ct = f:read("*all")
-                    f:close()
-                    if ct then
-                        return definition(%s)
-                    else
-                        return definition(%s)
+            _PipeFunc = [[
+                local popen, ftype, definition, command, result = ...
+                return function (%s)
+                    local f = popen(%s, "r")
+                    if ftype(f) == "file" then
+                        --f:flush()
+                        local ct = f:read("*all")
+                        f:close()
+                        if ct then
+                            return definition(%s)
+                        else
+                            return definition(%s)
+                        end
                     end
                 end
-            end
-        ]]
+            ]],
+        }
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------

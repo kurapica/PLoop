@@ -17,9 +17,11 @@ PLoop(function(_ENV)
 
     import "System.Serialization"
 
-    export { strfind = string.find, strgmatch = string.gmatch }
-
-    ALLOW_TIMEFORMAT = { a = true, A = true, b = true, B = true, c = true, C = true, d = true, D = true, e = true, F = true, g = true, G = true, h = true, H = true, I = true, j = true, m = true, M = true, n = true, p = true, r = true, R = true, S = true, t = true, T = true, u = true, U = true, V = true, w = true, W = true, x = true, X = true, y = true, Y = true, z = true, Z = true }
+    export {
+        strfind             = string.find,
+        strgmatch           = string.gmatch,
+        ALLOW_TIMEFORMAT    = { a = true, A = true, b = true, B = true, c = true, C = true, d = true, D = true, e = true, F = true, g = true, G = true, h = true, H = true, I = true, j = true, m = true, M = true, n = true, p = true, r = true, R = true, S = true, t = true, T = true, u = true, U = true, V = true, w = true, W = true, x = true, X = true, y = true, Y = true, z = true, Z = true },
+    }
 
     --- Represents the time format can be used in date api
     __Sealed__() __Base__(String)

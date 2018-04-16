@@ -12359,53 +12359,52 @@ do
     class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
         extend "IInitAttribute"
 
-        -----------------------------------------------------------
-        --                        storage                        --
-        -----------------------------------------------------------
-        _OverloadMap            = newstorage(WEAK_KEY)
-        _ArgValdMap             = {}
-        _OverloadMap            = {}
-
-        -----------------------------------------------------------
-        --                        constant                       --
-        -----------------------------------------------------------
-        FLD_VAR_FUNCTN          =  0
-        FLD_VAR_MINARG          = -1
-        FLD_VAR_MAXARG          = -2
-        FLD_VAR_ISLIST          = -3
-        FLD_VAR_IMMTBL          = -4
-        FLD_VAR_USGMSG          = -5
-        FLD_VAR_VARVLD          = -6
-        FLD_VAR_THRABL          = -7
-
-        TYPE_VALD_DISD          = Platform.TYPE_VALIDATION_DISABLED
-
-        THIS_METHOD             = {
-            __exist             = true,
-            __new               = true,
-            __ctor              = true,
-        }
-
-        PLOOP_THIS_LOCAL        = "_PLoop_Overload_This"
-
-        FLG_VAR_METHOD          = newflags(true)    -- is method
-        FLG_VAR_SELFIN          = newflags()        -- has self
-        FLG_VAR_IMMTBL          = newflags()        -- all immutable
-        FLG_VAR_ISLIST          = newflags()        -- the last variable is list
-        FLG_VAR_IMMLST          = newflags()        -- the list variable is immutable
-        FLG_VAR_LSTNIL          = newflags()        -- the list variable is optional
-        FLG_VAR_LSTVLD          = newflags()        -- the list variable has type
-        FLG_VAR_THRABL          = newflags()        -- the target may throw exception
-        FLG_VAR_LENGTH          = newflags()        -- the multiply factor of length
-
-        FLG_OVD_SELFIN          = newflags(true)    -- has self
-        FLG_OVD_THIS            = newflags()        -- the constructor, use throw and this keyword
-        FLG_OVD_ONECNT          = newflags()        -- only one variable list
-
-        -----------------------------------------------------------
-        --                        helpers                        --
-        -----------------------------------------------------------
         export {
+            -----------------------------------------------------------
+            --                        storage                        --
+            -----------------------------------------------------------
+            _OverloadMap        = newstorage(WEAK_KEY),
+            _ArgValdMap         = {},
+
+            -----------------------------------------------------------
+            --                        constant                       --
+            -----------------------------------------------------------
+            FLD_VAR_FUNCTN      =  0,
+            FLD_VAR_MINARG      = -1,
+            FLD_VAR_MAXARG      = -2,
+            FLD_VAR_ISLIST      = -3,
+            FLD_VAR_IMMTBL      = -4,
+            FLD_VAR_USGMSG      = -5,
+            FLD_VAR_VARVLD      = -6,
+            FLD_VAR_THRABL      = -7,
+
+            TYPE_VALD_DISD      = Platform.TYPE_VALIDATION_DISABLED,
+
+            THIS_METHOD         = {
+                __exist         = true,
+                __new           = true,
+                __ctor          = true,
+            },
+
+            PLOOP_THIS_LOCAL    = "_PLoop_Overload_This",
+
+            FLG_VAR_METHOD      = newflags(true),    -- is method
+            FLG_VAR_SELFIN      = newflags(),        -- has self
+            FLG_VAR_IMMTBL      = newflags(),        -- all immutable
+            FLG_VAR_ISLIST      = newflags(),        -- the last variable is list
+            FLG_VAR_IMMLST      = newflags(),        -- the list variable is immutable
+            FLG_VAR_LSTNIL      = newflags(),        -- the list variable is optional
+            FLG_VAR_LSTVLD      = newflags(),        -- the list variable has type
+            FLG_VAR_THRABL      = newflags(),        -- the target may throw exception
+            FLG_VAR_LENGTH      = newflags(),        -- the multiply factor of length
+
+            FLG_OVD_SELFIN      = newflags(true),    -- has self
+            FLG_OVD_THIS        = newflags(),        -- the constructor, use throw and this keyword
+            FLG_OVD_ONECNT      = newflags(),        -- only one variable list
+
+            -----------------------------------------------------------
+            --                        helpers                        --
+            -----------------------------------------------------------
             getlocal            = getlocal,
             tblclone            = tblclone,
             validate            = Struct.ValidateValue,
@@ -13587,12 +13586,14 @@ do
         -----------------------------------------------------------
         --                        constant                       --
         -----------------------------------------------------------
-        FLD_MDL_CHILD           = 0
-        FLD_MDL_NAME            = 1
-        FLD_MDL_FULLNAME        = 2
-        FLD_MDL_VER             = 3
+        export {
+            FLD_MDL_CHILD       = 0,
+            FLD_MDL_NAME        = 1,
+            FLD_MDL_FULLNAME    = 2,
+            FLD_MDL_VER         = 3,
 
-        FLD_MDL_INFO            = "__PLOOP_MODULE_META"
+            FLD_MDL_INFO        = "__PLOOP_MODULE_META",
+        }
 
         -----------------------------------------------------------
         --                        helpers                        --

@@ -32,197 +32,199 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                              prepare                              --
     -----------------------------------------------------------------------
-    function SerializeSimpleData(data)
-        local dtType = type(data)
+    export {
+        SerializeSimpleData     = function (data)
+            local dtType = type(data)
 
-        if dtType == "string" then
-            return strformat("%q", data)
-        elseif dtType == "number" or dtType == "boolean" then
-            return tostring(data)
-        elseif validnamespace(data) and not isanonymous(data) then
-            return strformat("%q", tostring(data))
-        end
-    end
-
-    function SerializeDataWithWriteNoIndent(data, write, objectTypeIgnored)
-        write("{")
-
-        local field = Serialization.ObjectTypeField
-        local val   = data[field]
-        if val then
-            data[field] = nil
-
-            if not objectTypeIgnored and not isanonymous(val) then
-                if next(data) then
-                    write(strformat("%s=%q,", field, tostring(val)))
-                else
-                    write(strformat("%s=%q",  field, tostring(val)))
-                end
+            if dtType == "string" then
+                return strformat("%q", data)
+            elseif dtType == "number" or dtType == "boolean" then
+                return tostring(data)
+            elseif validnamespace(data) and not isanonymous(data) then
+                return strformat("%q", tostring(data))
             end
-        end
+        end,
 
-        local k, v = next(data)
-        local nk, nv
+        SerializeDataWithWriteNoIndent = function (data, write, objectTypeIgnored)
+            write("{")
 
-        while k do
-            nk, nv = next(data, k)
+            local field = Serialization.ObjectTypeField
+            local val   = data[field]
+            if val then
+                data[field] = nil
 
-            if type(k) == "number" then k = strformat("[%s]", k) end
-            if type(v) == "table" then
-                write(strformat("%s=", k))
-                SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
-                if nk then write(",") end
-            else
-                if nk then
-                    write(strformat("%s=%s,", k, SerializeSimpleData(v)))
-                else
-                    write(strformat("%s=%s", k, SerializeSimpleData(v)))
+                if not objectTypeIgnored and not isanonymous(val) then
+                    if next(data) then
+                        write(strformat("%s=%q,", field, tostring(val)))
+                    else
+                        write(strformat("%s=%q",  field, tostring(val)))
+                    end
                 end
             end
 
-            k, v = nk, nv
-        end
+            local k, v = next(data)
+            local nk, nv
 
-        write("}")
-    end
+            while k do
+                nk, nv = next(data, k)
 
-    function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
-        write("{" .. lineBreak)
-
-        local subIndentChar = preIndentChar .. indentChar
-
-        local field = Serialization.ObjectTypeField
-        local val = data[field]
-        if val then
-            data[field] = nil
-
-            if not objectTypeIgnored and not isanonymous(val) then
-                if next(data) then
-                    write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+                if type(k) == "number" then k = strformat("[%s]", k) end
+                if type(v) == "table" then
+                    write(strformat("%s=", k))
+                    SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
+                    if nk then write(",") end
                 else
-                    write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+                    if nk then
+                        write(strformat("%s=%s,", k, SerializeSimpleData(v)))
+                    else
+                        write(strformat("%s=%s", k, SerializeSimpleData(v)))
+                    end
                 end
+
+                k, v = nk, nv
             end
-        end
 
-        local k, v = next(data)
-        local nk, nv
+            write("}")
+        end,
 
-        while k do
-            nk, nv = next(data, k)
+        SerializeDataWithWrite  = function (data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
+            write("{" .. lineBreak)
 
-            if type(k) == "number" then k = strformat("[%s]", k) end
-            if type(v) == "table" then
-                write(strformat("%s%s = ", subIndentChar, k))
-                SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
-                if nk then
-                    write("," .. lineBreak)
-                else
-                    write(lineBreak)
-                end
-            else
-                if nk then
-                    write(strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
-                else
-                    write(strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+            local subIndentChar = preIndentChar .. indentChar
+
+            local field = Serialization.ObjectTypeField
+            local val = data[field]
+            if val then
+                data[field] = nil
+
+                if not objectTypeIgnored and not isanonymous(val) then
+                    if next(data) then
+                        write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+                    else
+                        write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+                    end
                 end
             end
 
-            k, v = nk, nv
-        end
+            local k, v = next(data)
+            local nk, nv
 
-        write(preIndentChar .. "}")
-    end
+            while k do
+                nk, nv = next(data, k)
 
-    function SerializeDataWithWriterNoIndent(data, write, object, objectTypeIgnored)
-        write(object, "{")
-
-        local field = Serialization.ObjectTypeField
-        local val   = data[field]
-        if val then
-            data[field] = nil
-
-            if not objectTypeIgnored and not isanonymous(val) then
-                if next(data) then
-                    write(object, strformat("%s=%q,", field, tostring(val)))
+                if type(k) == "number" then k = strformat("[%s]", k) end
+                if type(v) == "table" then
+                    write(strformat("%s%s = ", subIndentChar, k))
+                    SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if nk then
+                        write("," .. lineBreak)
+                    else
+                        write(lineBreak)
+                    end
                 else
-                    write(object, strformat("%s=%q",  field, tostring(val)))
+                    if nk then
+                        write(strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                    end
                 end
-            end
-        end
 
-        local k, v = next(data)
-        local nk, nv
-
-        while k do
-            nk, nv = next(data, k)
-
-            if type(k) == "number" then k = strformat("[%s]", k) end
-            if type(v) == "table" then
-                write(object, strformat("%s=", k))
-                SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
-                if nk then write(object, ",") end
-            else
-                if nk then
-                    write(object, strformat("%s=%s,", k, SerializeSimpleData(v)))
-                else
-                    write(object, strformat("%s=%s", k, SerializeSimpleData(v)))
-                end
+                k, v = nk, nv
             end
 
-            k, v = nk, nv
-        end
+            write(preIndentChar .. "}")
+        end,
 
-        write(object, "}")
-    end
+        SerializeDataWithWriterNoIndent = function (data, write, object, objectTypeIgnored)
+            write(object, "{")
 
-    function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
-        write(object, "{" .. lineBreak)
+            local field = Serialization.ObjectTypeField
+            local val   = data[field]
+            if val then
+                data[field] = nil
 
-        local subIndentChar = preIndentChar .. indentChar
-
-        local field = Serialization.ObjectTypeField
-        local val   = data[field]
-        if val then
-            data[field] = nil
-
-            if not objectTypeIgnored and not isanonymous(val) then
-                if next(data) then
-                    write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
-                else
-                    write(object, strformat("%s%s = %q%s",  subIndentChar, field, tostring(val), lineBreak))
-                end
-            end
-        end
-
-        local k, v = next(data)
-        local nk, nv
-
-        while k do
-            nk, nv = next(data, k)
-
-            if type(k) == "number" then k = strformat("[%s]", k) end
-            if type(v) == "table" then
-                write(object, strformat("%s%s = ", subIndentChar, k))
-                SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
-                if nk then
-                    write(object, "," .. lineBreak)
-                else
-                    write(object, lineBreak)
-                end
-            else
-                if nk then
-                    write(object, strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
-                else
-                    write(object, strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                if not objectTypeIgnored and not isanonymous(val) then
+                    if next(data) then
+                        write(object, strformat("%s=%q,", field, tostring(val)))
+                    else
+                        write(object, strformat("%s=%q",  field, tostring(val)))
+                    end
                 end
             end
 
-            k, v = nk, nv
-        end
+            local k, v = next(data)
+            local nk, nv
 
-        write(object, preIndentChar .. "}")
-    end
+            while k do
+                nk, nv = next(data, k)
+
+                if type(k) == "number" then k = strformat("[%s]", k) end
+                if type(v) == "table" then
+                    write(object, strformat("%s=", k))
+                    SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
+                    if nk then write(object, ",") end
+                else
+                    if nk then
+                        write(object, strformat("%s=%s,", k, SerializeSimpleData(v)))
+                    else
+                        write(object, strformat("%s=%s", k, SerializeSimpleData(v)))
+                    end
+                end
+
+                k, v = nk, nv
+            end
+
+            write(object, "}")
+        end,
+
+        SerializeDataWithWriter = function (data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
+            write(object, "{" .. lineBreak)
+
+            local subIndentChar = preIndentChar .. indentChar
+
+            local field = Serialization.ObjectTypeField
+            local val   = data[field]
+            if val then
+                data[field] = nil
+
+                if not objectTypeIgnored and not isanonymous(val) then
+                    if next(data) then
+                        write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+                    else
+                        write(object, strformat("%s%s = %q%s",  subIndentChar, field, tostring(val), lineBreak))
+                    end
+                end
+            end
+
+            local k, v = next(data)
+            local nk, nv
+
+            while k do
+                nk, nv = next(data, k)
+
+                if type(k) == "number" then k = strformat("[%s]", k) end
+                if type(v) == "table" then
+                    write(object, strformat("%s%s = ", subIndentChar, k))
+                    SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if nk then
+                        write(object, "," .. lineBreak)
+                    else
+                        write(object, lineBreak)
+                    end
+                else
+                    if nk then
+                        write(object, strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(object, strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                    end
+                end
+
+                k, v = nk, nv
+            end
+
+            write(object, preIndentChar .. "}")
+        end,
+    }
 
     --- Serialization format provider for string
     class "StringFormatProvider" (function(_ENV)

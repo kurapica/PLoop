@@ -8,6 +8,7 @@ It also provide common useful classes like thread pool, collection, serializatio
 
 You also can find useful features for large enterprise development like code organization, type validation and etc.
 
+[TOC]（Table of Content）
 
 ## Install
 
@@ -477,6 +478,8 @@ There are a lots of troubles in the Lua debugging, if the lua error can be trigg
 
 We'll see how to solve it in the **PLoop**.
 
+### Read un-existed global variables
+
 Before rquire the **PLoop**, we can create a **PLOOP_PLATFORM_SETTINGS** table to toggle the **PLoop**'s system settings:
 
 ```lua
@@ -495,7 +498,93 @@ end)
 
 Turn off the **ENV_ALLOW_GLOBAL_VAR_BE_NIL** will apply a strict mode for all **PLoop** private environment, so no nil variables can be accessed, so you can locate those errors.
 
-Another spell error is for object fields:
+### Write to illegal global variables
+
+If we missing the `local`, we may create unwanted global variables. But the system can't diff the wanted and unwanted global variable, we can add filter in the platform settings to do the job, so we can remove the filter when we don't need it:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value)
+		-- Don't allow the lowercase key with non-function value
+		if type(key) == "string" and key:match("^%l") and type(value) ~= "function" then
+			return true
+		end
+	end,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- error: There is an illegal assignment for "ch"
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+If the filter return true, the assignment will trigger an error, so the code'll be stopped, if we only need a warning, we can add a setting like:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value)
+		-- Don't allow the lowercase key with non-function value
+		if type(key) == "string" and key:match("^%l") and type(value) ~= "function" then
+			return true
+		end
+	end,
+	GLOBAL_VARIABLE_FILTER_USE_WARN = true,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- [PLoop: Warn]There is an illegal assignment for "ch"@path_to_file\file.lua:18
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+You also can use the filter as a record, with another setting, the call line'll be passed in as the 3rd argument:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = {
+	GLOBAL_VARIABLE_FILTER = function(key, value, path)
+		print("Assign '" .. key .. "'" .. path )
+	end,
+	GLOBAL_VARIABLE_FILTER_GET_CALLLINE = true,
+}
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	Test = 1  -- Assign 'Test'@path_to_file\file.lua:11
+
+	class "A" (function(_ENV)
+		function Test(self)
+			ch = 2 -- Assign 'ch'@path_to_file\file.lua:15
+		end
+	end)
+
+	A():Test()
+end)
+```
+
+To use the get call line, the `debug.getinfo` must existed.
+
+### Access un-existed object fields
+
+We also can block the accessing of un-existed object fields:
 
 ```lua
 PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
@@ -1554,6 +1643,126 @@ ValidateValue(target, object)               |Whether the value is an object whos
 Validate(target)                            |Whether the target is a class
 
 
+### The multi-version class
+
+If we don't use the `__Sealed__` to seal the classes, we still can re-define it, unlike the struct, redefine a class
+only add or override the previous definition, not wipe them.
+
+Take an example:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hi
+	A():test() -- hello
+end)
+```
+
+The old object won't receive the updating, so we have two version objects of the same class. It's designed to make sure the new definition won't break the old object(use some new fields don't existed in the old object and etc).
+
+If we need a class whose object will receive all updatings, we must use the `System.__SingleVer__` to mark it, so it'll always keep only one versions:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__SingleVer__()
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hello
+	A():test() -- hello
+end)
+```
+
+So the old object will receive all updatings. If you need this to be default behaviors, you can modify the platform settings like :
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { CLASS_NO_MULTI_VERSION_CLASS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	class "A" (function(_ENV)
+		function test(self)
+			print("hello")
+		end
+	end)
+
+	o:test()   -- hello
+	A():test() -- hello
+end)
+```
+
+Beware, the settings is disabled in the multi os thread platform.
+
+
+### Append methods
+
+There is another way to append methods without re-define the classes:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Sealed__()
+	class "A" (function(_ENV)
+		function test(self)
+			print("hi")
+		end
+	end)
+
+	o = A()
+
+	function A:test2()
+		print("hello")
+	end
+
+	o:test2()   -- hello
+end)
+```
+
+We can assign new object or static method to the classes without a full re-definition. So, all object can receive the new method.
+
+It also can be used on the sealed classes. Also we can use it on the interfaces.
+
+We can't use this on the struct type, the method in a struct is copied to the data, if we add a method to a struct with no method, it'll change the struct from immutable to mutable, it's not allowed.
+
+
 ## Interface
 
 The interfaces are abstract types of functionality, it also provided the multi-inheritance mechanism to the class. Like the class, it also support object method, static method and meta-datas.
@@ -1649,6 +1858,65 @@ IsStaticMethod(target, name)                |Whether the target's given name met
 IsSubType(target, super)                    |Whether the target is a sub-type of another interface
 ValidateValue(target, object)               |Whether the value is an object whose class is extend the target interface
 Validate(target)                            |Whether the target is an interface
+
+### Interface's anonymous class
+
+If we use `System.__AnonymousClass__` attribute to mark an interface, the interface will create an anonymous class that extend itself, we can't use the anonymous class directly, but we can use the interface like we use a class:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__AnonymousClass__()
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask{ Process = function() print("Hello") end }
+
+	o:Process()
+end)
+```
+
+The interface can only accept a table as the init-table to generate the object.
+
+But for the interface with only one abstract method, we can use a simple style
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__AnonymousClass__()
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask(function() print("Hello") end)
+	o:Process()
+end)
+```
+
+We can pass a function as the implement of the abstract method to generate the object.
+
+If you want all interface can be use as this, you can modify the platform settings(not recommend):
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { INTERFACE_ALL_ANONYMOUS_CLASS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "ITask" (function(_ENV)
+		__Abstract__() function Process()
+		end
+	end)
+
+	o = ITask(function() print("Hello") end)
+	o:Process()
+end)
+```
 
 
 ## Event
@@ -1757,7 +2025,6 @@ self.OnNameChanged:SetInitFunction(function() return true end)
 ```
 
 To block the object's *OnNameChanged* event.
-
 
 ### The event of the event handler's changes
 
@@ -2334,6 +2601,59 @@ end)
 We have see all feature types provided by the **PLoop**, but there are still many details should be discussed.
 
 
+## Inheritance and Priority
+
+A class can extend many interfaces and inherit one super class who'll have its own extended interfaces and super class.
+
+If those extend interfaces and super classes have the same name feature(method, property, event, meta-method), the system will choose the nearest:
+
+* check the super class, then the super class's super class, repeat until no more super classes.
+
+* check the interfaces, the latest extended interface should be checked first.
+
+Those are done by the system, so we don't need to control it, but we may affect it by give priority to those features with the `System.__Abstract__` and `System.__Final__` attributes:
+
+* If a feature(method, meta-method, property or event) marked with `__Abstract__`, the feature's priority is the lowest.
+
+* If a feature marked with `__Final__`, the feature's priority is the highest.
+
+Here is an example:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "IA" (function(_ENV)
+		__Final__()
+		function Test(self)
+			print("Hello IA")
+		end
+
+		__Abstract__()
+		function Test2(self)
+			print("Hello2 IA")
+		end
+	end)
+
+	class "A" (function(_ENV)
+		extend "IA"
+
+		function Test(self)
+			print("Hello A")
+		end
+
+		function Test2(self)
+			print("Hello2 A")
+		end
+	end)
+
+	o = A()
+	o:Test()  -- Hello IA
+	o:Test2() -- Hello2 A
+end)
+```
+
+
 ## Namespace and Anonymous types
 
 The namespaces are used to manage types, we can save types into the namespaces so each type will have an unique access path like **System.Collections.List**. We can use the **import** keyword to import namespaces into private environment, so those types can be shared by anywhere.
@@ -2640,7 +2960,6 @@ So we can bind several functions as one method, constructor or meta-method.
 
 If we need to call the other overload functions of the same name, we'd keep using the `obj:method(xxx)` format with different arguments styles.
 
-
 ### this For object constructor
 
 It's a little different to call the overload functions for the object constructor : `__exist`, `__new`, `__ctor`. Since we can't call them by using the object-method styles.
@@ -2758,21 +3077,22 @@ end)
 
 ### System.Variable
 
-The previous examples only show require arguments, to describe optional and varargs we need know more about the `__Arguments__`, the `__Arguments__` only accpet one argument, it's type is **System.Variables**, which is an array struct, its element is **System.Variable**, a simple version of the struct is :
+The previous examples only show require arguments, to describe optional and varargs we need know more about the `__Arguments__`, the `__Arguments__` only accpet one argument, it's type is **System.Variables**, which is an array struct whose element is **System.Variable**, a simple version of the struct is :
 
 ```lua
 struct "Variable" (function(_ENV)
-	name    = NEString
-	type    = AnyType
-	nilable = Boolean
-	default = Any
-	islist  = Boolean
+	name    = NEString        -- the variable name
+	type    = AnyType         -- the variable type
+	optional= Boolean         -- whether this is optional
+	default = Any             -- the default value for optional
+	varargs = Boolean         -- whether this is varargs
+	mincount= NaturalNumber   -- the min count of the varargs, default 0
 
-	-- generate a varargs with type
-	Rest    = function(type, atleastone) end
-
-	-- generate an optional variable
+	-- generate an optional variable with type and default
 	Optional= function(type, default) end
+
+	-- generate a varargs with type and min count
+	Rest    = function(type, mincount) end
 end)
 ```
 
@@ -2839,27 +3159,57 @@ PLoop (function(_ENV)
 end)
 ```
 
+### A simple version of the variables
+
+Well, it's a little hard to keep using the **Variables**, the **PLoop** also provide an alternative way to simple it:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ String/"anonymouse", Number * 0 }
+	function Test(...)
+		print(...)
+	end
+
+	-- anonymouse
+	Test(nil)
+
+	-- Usage: Test([System.String = "anonymouse"], [... as System.Number]) - the 2nd argument must be number, got string
+	Test("hi", "next")
+end)
+```
+
+So we can use `type/default` (`type/nil` also can be used) to decalre an optional variable, and use `type * mincount` to declare a varargs.
+
+
 ## Throw Exception
 
 There are more checks than the argument check, if we need notify the outside something goes wrong, normally we should use the **error** API, but the stack level is a problem, especially for the constructor and the overload system, so we need a new **Exception** system for them, the **PLoop** provide a keyword named **throw**, it'd convert the error message to an Exception object which can be catch by the pcall.
 
 ```lua
-class "A" (function(_ENV)
-	local function check(self)
-		throw("something wrong")
-	end
+require "PLoop"
 
-	function A(self)
-		check(self)
-	end
+PLoop(function(_ENV)
+	class "A" (function(_ENV)
+		local function check(self)
+			throw("something wrong")
+		end
+
+		function A(self)
+			check(self)
+		end
+	end)
+
+	o = A() -- something wrong
 end)
-
-o = A() -- something wrong
 ```
 
 The object creation is controlled by the system, so the system can covert the Exception object to error message and throw the error at the right place.
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	__Arguments__{ String }:Throwable()
 	function test(name)
@@ -2872,17 +3222,46 @@ end)
 
 If we need use the throw in some functions or mehods(not constructor), we should use the `__Arguments__` and mark it as *Throwable*.
 
+If you want handle the exceptions by yourself, you can follow the example :
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function safecall(func, ...)
+		local ok, ret = pcall(func, ...)
+
+		if not ok then
+			if type(ret) == "string" then
+				error(ret, 0) -- keep the stack level
+			else
+				error(tostring(ret), 2) -- convert the exception object to string
+			end
+		end
+	end
+
+	function test()
+		throw("some thing not right")
+	end
+
+	safecall(test) -- Here: some thing not right
+end)
+```
+
+You can change the **throw** to **error** to see the different.
+
 
 ## Template class
 
 We may create several classes with the same behaviors but for different types, since we use the function as the class's definition body, it's very simple to use them as template classes.
 
 ```lua
-PLoop(function(_ENV)
+require "PLoop"
 
+PLoop(function(_ENV)
 	__Template__ { Any }
 	class "Array" (function(_ENV, eletype)
-		__Arguments__{ Variable.Rest(eletype) }
+		__Arguments__{ eletype * 0 }
 		function __new(cls, ...)
 			return { ... }, true
 		end
@@ -2902,8 +3281,9 @@ After the **Array** class is created, we can use **Array[Integer]** to pass in t
 You also can create multi-types template, just like :
 
 ```lua
-PLoop(function(_ENV)
+require "PLoop"
 
+PLoop(function(_ENV)
 	__Template__ { Any, Any }
 	class "Dict" (function(_ENV, ktype, vtype)
 		__Arguments__{ ktype, vtype }
@@ -2919,70 +3299,23 @@ PLoop(function(_ENV)
 end)
 ```
 
-You also can create template interface and template struct.
+You also can create template interface and template struct. This is an experimental feature, and normally we don't really need a strict type system in a dynamic language, so don't abuse it.
 
 
-## Namespace And Environment
+## System.Module
 
-In the **PLoop** environment, we can easily use types like **Number**, **String** and other attribute types, but within the `_G`, we need use keyword **import** to import the **System** namespace, then we can use them:
+**PLoop** is using private environment to isolate codes, but in a project, we still need to share some global features.
 
-```lua
-require "PLoop"
+To provide the management of those projects, **PLoop** provide the **System.Module**, its objects is designed based on the **PLoop**'s private environment system.
 
-import "System"
-
-print(Number) -- System.Number
-```
-
-The namespaces are used to organize feature types. Same name features can be saved in different namespaces so there won't be any conflict.
-
-The environment(include the `_G`) can have a root namespace so all features defined in it will be saved to the root namespace.
-
-```lua
-PLoop(function(_ENV)
-	namespace "MyNs"
-
-	class "A" {}
-
-	print(A) -- MyNs.A
-end)
-```
-
-Also it can import several other namespaces, features that defined in them can be used in the environment directly.
-
-```lua
-PLoop(function(_ENV)
-	print(A) -- nil
-
-	import "MyNs"
-
-	print(A) -- MyNs.A
-end)
-```
-
-The namespace's path is from the root namespace to the sub namepsace, and to the final type. You can also specific the full namespace when define types:
-
-```lua
-PLoop(function(_ENV)
-	namespace "MyNs"
-
-	class "System.TestNS.A" {}
-
-	print(A) -- System.TestNS.A
-end)
-```
-
-So, it won't use the environment's namespace as root.
-
-
-## Module
-
-Using `PLoop(function(_ENV) end)` is a little weird, it's normally used by libraries. The recommend way is using **System.Module**, each file are considered as one module:
+Task an example to start:
 
 ```lua
 require "PLoop"
 
 _ENV = Module "TestMDL" "1.0.0"
+
+namespace "Test"
 
 __Async__()
 function dotask()
@@ -2990,23 +3323,48 @@ function dotask()
 end
 ```
 
-`Module "TestMDL"` is short for `Module("TestMDL")`, so it created a Module object, call the object with a version number (also can be empty string) will change the current environment to the object itself, combine with the `_Env =` will make sure the code can run in Lua 5.1 and above version.
+`Module "TestMDL"` is short for `Module("TestMDL")`, so it created a Module object, call the object with a version number (also can be empty string) will change the current environment to the object itself, combine with the `_ENV =` will make sure the code can run in Lua 5.1 and above version.
 
-After that, we can enjoy the power of the **PLoop**.
+After that, we can use all the features provided by the **PLoop**.
+
+### child-modules
 
 A module object can have many child-modules :
 
 ```lua
 _ENV = Module "TestMDL.SubMDL" "1.0.0"
 
-dotask() -- ok
+enum "A" {}
+
+print(A) -- Test.A
+
+dotask() -- thread: 02E7F75C	false
+
+function dosubtask()
+end
 ```
+
+```lua
+_ENV = Module "TestMDL.SubMDL2" "1.0.0"
+
+print(dosubtask) -- nil
+```
+
+A module can have no-limit child modules, but can only have one parent module, so there is a root module whose global variables'd be shared by all child-modules.
 
 The child module can access its parent module's global variables, the root module can access the `_G`'s global variables.
 
-When the module have access any variable contains in its parent or `_G`, the module will save the variable in itself.
-
 The child module'll share its parent module's namespace unless it use **namespace** keyword to change it.
+
+The module can't access global variables defined in its brothers. But you still can share defined types.
+
+You can create any child module of the child module like
+
+```lua
+Module "TestMDL.SubMDL2.SSubMDL.XXXX"
+```
+
+So the whole project'd be saved to a tree of the modules. The **namespace** is used to save types, and the Modules are used to save codes.
 
 
 ## Attribute System
@@ -3016,6 +3374,8 @@ We have seen many attributes, they are used to modify the target's behaviors.
 If you only need to decorate some functions, you can simply use the `__Delegate__` attribute on functions like :
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	function decorate(func, ...)
 		print("Call", func, ...)
@@ -3029,6 +3389,10 @@ PLoop(function(_ENV)
 	test(1, 2, 3)
 end)
 ```
+
+But if you want more, let's see how to create our own attributes.
+
+### System.IAttribute
 
 To define an attribute class, we should extend the **System.IAttribute** interface or its extend interfaces :
 
@@ -3064,13 +3428,15 @@ It's also require several properties if you don't want use the default value:
 
 * SubLevel          - the attribute priority's sublevel, if two attribute have the same priority, the bigger sublevel will be first applied, default 0
 
-There are three type attributes:
+There are three type attributes, the init attributes are called before the definition of the target, the apply attributes are called during the definition of the target and the attach attributes are called after the definition of the target:
 
 ### System.IInitAttribute
 
 Those attributes are used to modify the target's definitions, normally used on functions or enums:
 
 ```lua
+require "PLoop"
+
 PLoop(function(_ENV)
 	class "__SafeCall__" (function(_ENV)
 		extend "IInitAttribute"
