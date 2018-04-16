@@ -157,6 +157,21 @@ do
         -- @owner       PLOOP_PLATFORM_SETTINGS
         ENV_ALLOW_GLOBAL_VAR_BE_NIL         = true,
 
+        --- The filter function used to validation the new declared global
+        -- variables with key and value, if the function return non-false
+        -- value, that means the assignment is not legal(if we write the
+        -- code `idx = 1` in a function, we normally missed the `local`),
+        -- so the assignment should be canceled or warned, you also can use
+        -- the filter to record the global assignments
+        GLOBAL_VARIABLE_FILTER              = fakefunc,
+
+        --- Whether use warning instead of the error, if use warning, the
+        -- assignment will still be processed
+        GLOBAL_VARIABLE_FILTER_USE_WARN     = false,
+
+        --- Whether pass the callline of the global assignment to the filter
+        GLOBAL_VARIABLE_FILTER_GET_CALLLINE = false,
+
         --- Whether allow old style of type definitions like :
         --      class "A"
         --          -- xxx
@@ -1959,20 +1974,101 @@ do
             -- @param   name                        the key
             -- @param   value                       the value
             -- @param   stack                       the stack level
-            ["SaveValue"]       = function(env, key, value, stack)
-                if type(key)   == "string" and type(value) == "function" and attribute.HaveRegisteredAttributes() then
-                    stack       = parsestack(stack) + 1
-                    attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
-                    local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key, stack)
-                    if final ~= value then
-                        attribute.ToggleTarget(value, final)
-                        value   = final
+            ["SaveValue"]       = (function()
+                local head      = _Cache()
+                local body      = _Cache()
+                local upval     = _Cache()
+                local apis      = _Cache()
+
+                tinsert(body, "")
+                tinsert(body, "")
+
+                uinsert(apis, "type")
+                uinsert(apis, "parsestack")
+                uinsert(apis, "rawset")
+
+                tinsert(body, [[
+                    return function(env, key, value, stack)
+                        stack       = parsestack(stack) + 1
+                ]])
+
+                if PLOOP_PLATFORM_SETTINGS.GLOBAL_VARIABLE_FILTER ~= fakefunc then
+                    tinsert(head, "filter")
+                    tinsert(upval, PLOOP_PLATFORM_SETTINGS.GLOBAL_VARIABLE_FILTER)
+
+                    if PLOOP_PLATFORM_SETTINGS.GLOBAL_VARIABLE_FILTER_GET_CALLLINE then
+                        tinsert(apis, "getcallline")
+                        tinsert(body, [[
+                            local result = filter(key, value, getcallline(stack))
+                        ]])
+                    else
+                        tinsert(body, [[
+                            local result = filter(key, value)
+                        ]])
                     end
-                    attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key, stack)
-                    attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
+
+                    tinsert(body, [[
+                        if result then
+                    ]])
+
+                    uinsert(apis, "tostring")
+                    if PLOOP_PLATFORM_SETTINGS.GLOBAL_VARIABLE_FILTER_USE_WARN then
+                        uinsert(apis, "Warn")
+                        tinsert(body, [[
+                            if type(result) == "string" then
+                                Warn(result, stack)
+                            else
+                                Warn("There is an illegal assignment for %q", stack, tostring(key))
+                            end
+                        ]])
+                    else
+                        uinsert(apis, "strformat")
+                        tinsert(body, [[
+                            if type(result) == "string" then
+                                error(result, stack)
+                            else
+                                error(strformat("There is an illegal assignment for %q", tostring(key)), stack)
+                            end
+                        ]])
+                    end
+
+                    tinsert(body, [[
+                        end
+                    ]])
                 end
-                return rawset(env, key, value)
-            end;
+
+                tinsert(body, [[
+                        if type(key)   == "string" and type(value) == "function" and attribute.HaveRegisteredAttributes() then
+                            attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
+                            local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key, stack)
+                            if final ~= value then
+                                attribute.ToggleTarget(value, final)
+                                value   = final
+                            end
+                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key, stack)
+                            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
+                        end
+                        return rawset(env, key, value)
+                    end
+                ]])
+
+                if #head > 0 then
+                    body[1] = "local " .. tblconcat(head, ",") .. "= ..."
+                end
+                if #apis > 0 then
+                    local declare = tblconcat(apis, ", ")
+                    body[2] = strformat("local %s = %s", declare, declare)
+                end
+
+                local func = loadsnippet(tblconcat(body, "\n"), "environment.GetValue", _PLoopEnv)(unpack(upval))
+
+                _Cache(head)
+                _Cache(body)
+                _Cache(upval)
+                _Cache(apis)
+
+                return func
+            end)();
 
             --- Turn on/off the definition mode for an environment, the value won't be auto-cached
             -- to the environment in definition mode
@@ -4976,7 +5072,7 @@ do
         __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setStructBuilderValue(self, key, value, 2) then
-                return rawset(self, key, value)
+                environment.SaveValue(self, key, value, 2)
             end
         end,
         __call                  = function(self, definition, stack)
@@ -8719,7 +8815,7 @@ do
         __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setIFBuilderValue(self, key, value, 2) then
-                return rawset(self, key, value)
+                environment.SaveValue(self, key, value, 2)
             end
         end,
         __call                  = function(self, definition, stack)
@@ -8771,7 +8867,7 @@ do
         __index                 = environment.GetValue,
         __newindex              = function(self, key, value)
             if not setClassBuilderValue(self, key, value, 2) then
-                return rawset(self, key, value)
+                environment.SaveValue(self, key, value, 2)
             end
         end,
         __call                  = function(self, definition, stack)
@@ -11829,10 +11925,10 @@ do
     --                              structs                              --
     -----------------------------------------------------------------------
     --- Represents any value
-    __Sealed__() struct "System.Any"                { }
+    __Sealed__() Any    = struct "System.Any"       { }
 
     --- Represents boolean value
-    __Sealed__() Boolean = struct "System.Boolean"  { genBasicValidator("boolean")  }
+    __Sealed__() Boolean= struct "System.Boolean"   { genBasicValidator("boolean")  }
 
     --- Represents string value
     __Sealed__() String = struct "System.String"    { genBasicValidator("string")   }
