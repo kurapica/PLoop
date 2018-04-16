@@ -47,6 +47,7 @@ You also can find useful features for large enterprise development like code org
 * [Interface](#interface)
     * [System.Interface](#systeminterface)
     * [Interface's anonymous class](#interfaces-anonymous-class)
+	* [the require class of the interface](#the-require-class-of-the-interface)
 * [Event](#event)
     * [The event of the event handler's changes](#the-event-of-the-event-handlers-changes)
     * [Static event](#static-event)
@@ -89,6 +90,32 @@ You also can find useful features for large enterprise development like code org
     * [System.IInitAttribute](#systemiinitattribute)
     * [System.IApplyAttribute](#systemiapplyattribute)
     * [System.IAttachAttribute](#systemiattachattribute)
+	* [System Attributes](#system-attributes)
+		* [`__Abstract__`](#abstract)
+		* [`__AnonymousClass__`](#anonymousclass)
+		* [`__AutoIndex__`](#autoindex)
+		* [`__Arguments__`](#arguments)
+		* [`__Base__`](#base)
+		* [`__Default__`](#default)
+		* [`__Delegate__`](#delegate)
+		* [`__EventChangeHandler__`](#eventchangehandler)
+		* [`__Final__`](#final)
+		* [`__Flags__`](#flags)
+		* [`__Get__`](#get)
+		* [`__Indexer__`](#indexer)
+		* [`__Namespace__`](#namespace)
+		* [`__NoNilValue__`](#nonilvalue)
+		* [`__NoRawSet__`](#norawset)
+		* [`__ObjFuncAttr__`](#objfuncattr)
+		* [`__ObjectSource__`](#objectsource)
+		* [`__Require__`](#require)
+		* [`__Sealed__`](#sealed)
+		* [`__Set__`](#set)
+		* [`__SingleVer__`](#singlever)
+		* [`__Static__`](#static)
+		* [`__Super__`](#super)
+		* [`__SuperObject__`](#superobject)
+		* [`__Template__`](#template)
 
 ## Install
 
@@ -492,7 +519,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-Unlike the `_G`, the **PLoop** environments are very sensitive about new variables, when the *iter* is defiend, the system will check if there is any attribtues should be applied on the function, here we have the `__Iterator__()`.
+Unlike the `_G`, the **PLoop** environments are very sensitive about new variables, when the *iter* is defiend, the system will check if there is any attributes should be applied on the function, here we have the `__Iterator__()`.
 
 The `__Iterator__` is an attribute class defined in **System.Threading**, when we use it to create an object, the object is registered to the system, and waiting for the next attribute target(like function, class and etc) that should be defined. The attributes are used to modify or attach data to the attribute targets.
 
@@ -1998,6 +2025,26 @@ PLoop(function(_ENV)
 end)
 ```
 
+### the require class of the interface
+
+We can use the **require** keyword to set a class to the interface, so all classes that extend the interface must be the class's sub-types:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" {}
+
+	interface "IA" (function(_ENV)
+		require "A"
+	end)
+
+	class "B" (function(_ENV)
+		extend "IA" -- Error: interface.AddExtend(target, extendinterface[, stack]) - the class must be A's sub-class
+	end)
+end)
+```
+
 
 ## Event
 
@@ -3451,27 +3498,6 @@ So the whole project'd be saved to a tree of the modules. The **namespace** is u
 
 We have seen many attributes, they are used to modify the target's behaviors.
 
-If you only need to decorate some functions, you can simply use the `__Delegate__` attribute on functions like :
-
-```lua
-require "PLoop"
-
-PLoop(function(_ENV)
-	function decorate(func, ...)
-		print("Call", func, ...)
-		return func(...)
-	end
-
-	__Delegate__(decorate)
-	function test() end
-
-	-- Call function: 02E7B1C8  1   2   3
-	test(1, 2, 3)
-end)
-```
-
-But if you want more, let's see how to create our own attributes.
-
 ### System.IAttribute
 
 To define an attribute class, we should extend the **System.IAttribute** interface or its extend interfaces :
@@ -3484,7 +3510,7 @@ It's also require several properties if you don't want use the default value:
 
 * AttributeTarget   - the attribute targets, can be combined
 	* System.AttributeTargets.All  (Default)
-	* System.AttributeTargets.Function  - for common lua functions
+	* System.AttributeTargets.Function  - for common lua functions, event handlers
 	* System.AttributeTargets.Namespace - for namespaces
 	* System.AttributeTargets.Enum      - for enumerations
 	* System.AttributeTargets.Struct    - for structures
@@ -3495,7 +3521,7 @@ It's also require several properties if you don't want use the default value:
 	* System.AttributeTargets.Event     - for events
 	* System.AttributeTargets.Property  - for properies
 
-* Inheritable       - whether the attribtue is inheritable, default false
+* Inheritable       - whether the attribute is inheritable, default false
 
 * Overridable       - Whether the attribute's attach data is overridable, default true
 
@@ -3557,7 +3583,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attribtues are called before the define process of the target.
+the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attributes are called before the define process of the target.
 
 ### System.IApplyAttribute
 
@@ -3589,11 +3615,11 @@ class "__Sealed__" (function(_ENV)
 end)
 ```
 
-the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attribtues are applied during the define process of the target.
+the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attributes are applied during the define process of the target.
 
 ### System.IAttachAttribute
 
-Those attributes are used to attach attribtue datas on the target, also can be used to register the final result to other systems.
+Those attributes are used to attach attribute datas on the target, also can be used to register the final result to other systems.
 
 ```lua
 PLoop(function(_ENV)
@@ -3624,3 +3650,306 @@ end)
 ```
 
 the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
+
+### System Attributes
+
+#### `__Abstract__`
+
+Used to mark a class as abstract, so it can't be used to generate objects, or used to mark the method, event or property as abstract, so they need(not must) be implemented by child types.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__AnonymousClass__`
+
+See [Interface's anonymous class](#interfaces-anonymous-class) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Interface
+
+#### `__AutoIndex__`
+
+See [enum](#enum) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Enum
+
+#### `__Arguments__`
+
+See [Overload](#overload) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Member
+
+#### `__Base__`
+
+See [struct](#struct) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Struct
+
+#### `__Default__`
+
+See [enum](enum) and [struct](#struct) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Enum
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Member
+
+#### `__Delegate__`
+
+Decorate the target functions.
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Member
+
+Usage: 
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function decorate(func, ...)
+		print("Call", func, ...)
+		return func(...)
+	end
+
+	__Delegate__(decorate)
+	function test() end
+
+	-- Call function: 02E7B1C8  1   2   3
+	test(1, 2, 3)
+end)
+```
+
+#### `__EventChangeHandler__`
+
+See [The event of the event handler's changes](#the-event-of-the-event-handlers-changes) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Event
+
+#### `__Final__`
+
+Set a class or interface as final, so they can't be inherited or extended by other types. Also can be used to mark the method, event and property as final, so they shouldn't be overridden.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__Flags__`
+
+See [enum](#enum) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Enum
+
+#### `__Get__`
+
+See [Get/Set Modifier](#getset-modifier) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Property
+
+#### `__Indexer__`
+
+See [indexer property](#indexer-property) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Property
+
+#### `__Namespace__`
+
+Set the namespace for the next created type
+
+Attribute Targets:
+* System.AttributeTargets.All
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	__Namespace__ "MyNS"
+	class "A" {}
+
+	print(A)   -- MyNS.A
+end)
+```
+
+#### `__NoNilValue__`
+
+Get the class's objects so access non-existent fields on them will be denied.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__NoNilValue__()
+	class "A" {}
+
+	o = A()
+	v = o.age -- Error: The object don't have any field that named "age"
+end)
+```
+
+#### `__NoRawSet__`
+
+Set the class's objects so save value to non-existent fields on them will be denied.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__NoRawSet__()
+	class "A" {}
+
+	o = A()
+	o.age = 10 -- Error: The object can't accept field that named "age"
+end)
+```
+
+#### `__ObjFuncAttr__`
+
+Set the class's objects so functions that be assigned on them will be modified by the attribute system(target type is function)
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__ObjFuncAttr__()
+	class "A" {}
+
+	o = A()
+
+	__Async__()
+	function o:Test()
+		print(coroutine.running())
+	end
+
+	o:Test() -- thread: 02F195E8
+end)
+```
+
+#### `__ObjectSource__`
+
+Set the class's objects to save the source where it's created
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__ObjectSource__()
+	class "A" {}
+
+	o = A()
+
+	print(Class.GetObjectSource(o)) -- @path_to_file\file.lua:7
+end)
+```
+
+#### `__Require__`
+
+Set a require class to the target interface, see [the require class of the interface](#the-require-class-of-the-interface)
+
+Attribute Targets:
+* System.AttributeTargets.Interface
+
+#### `__Sealed__`
+
+Seal the enum, struct, interface or class, so they can't be re-defined.
+
+Attribute Targets:
+* System.AttributeTargets.Enum
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class
+
+#### `__Set__`
+
+See [Get/Set Modifier](#getset-modifier) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Property
+ 
+#### `__SingleVer__`
+
+See [The multi-version class](#the-multi-version-class) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+#### `__Static__`
+
+Set the object methods or object features as static, so they can only be used by the struct, interface or class itself.
+
+Attribute Targets:
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__Super__`
+
+Set a super class to the target class
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+#### `__SuperObject__`
+
+Whether the class's objects use the super object access style like `super[self]:Method()`, `super[self].Name = xxx`.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+```lua
+-- make sure class A use the super object access style
+__SuperObject__(true)
+class "A" {}
+
+-- make sure class B don't use the super object access style
+__SuperObject__(false)
+class "B" {}
+```
+
+#### `__Template__`
+
+See [Template class](#template-class) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class

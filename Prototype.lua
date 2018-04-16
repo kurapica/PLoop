@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/04/15                                               --
--- Version      :   1.0.0-beta007                                            --
+-- Update Date  :   2018/04/16                                               --
+-- Version      :   1.0.0-beta008                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11300,13 +11300,13 @@ do
     __Abstract__ = namespace.SaveNamespace("System.__Abstract__", prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
+                if targettype == ATTRTAR_CLASS then
                     getmetatable(target).SetAbstract(target, parsestack(stack) + 1)
                 elseif class.Validate(owner) or interface.Validate(owner) then
                     getmetatable(owner).SetAbstract(owner, name, parsestack(stack) + 1)
                 end
             end,
-            ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
+            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
         __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
     })
@@ -11742,7 +11742,7 @@ do
     namespace.SaveNamespace("System.__Require__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                interface.GetRequireClass(target, self[1], parsestack(stack) + 1)
+                interface.SetRequireClass(target, self[1], parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
         },

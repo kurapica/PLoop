@@ -43,6 +43,7 @@
 * [Interface 接口](#interface-接口)
     * [System.Interface](#systeminterface)
     * [Interface的匿名类](#interface的匿名类)
+	* [接口的所需类](#接口的所需类)
 * [Event 事件](#event-事件)
     * [事件处理方法变更的处理](#事件处理方法变更的处理)
     * [静态事件](#静态事件)
@@ -85,6 +86,33 @@
     * [System.IInitAttribute 初始化特性](#systemiinitattribute-初始化特性)
     * [System.IApplyAttribute 应用特性](#systemiapplyattribute-应用特性)
     * [System.IAttachAttribute 附着特性](#systemiattachattribute-附着特性)
+	* [System特性](#system-attributes)
+		* [`__Abstract__`](#abstract)
+		* [`__AnonymousClass__`](#anonymousclass)
+		* [`__AutoIndex__`](#autoindex)
+		* [`__Arguments__`](#arguments)
+		* [`__Base__`](#base)
+		* [`__Default__`](#default)
+		* [`__Delegate__`](#delegate)
+		* [`__EventChangeHandler__`](#eventchangehandler)
+		* [`__Final__`](#final)
+		* [`__Flags__`](#flags)
+		* [`__Get__`](#get)
+		* [`__Indexer__`](#indexer)
+		* [`__Namespace__`](#namespace)
+		* [`__NoNilValue__`](#nonilvalue)
+		* [`__NoRawSet__`](#norawset)
+		* [`__ObjFuncAttr__`](#objfuncattr)
+		* [`__ObjectSource__`](#objectsource)
+		* [`__Require__`](#require)
+		* [`__Sealed__`](#sealed)
+		* [`__Set__`](#set)
+		* [`__SingleVer__`](#singlever)
+		* [`__Static__`](#static)
+		* [`__Super__`](#super)
+		* [`__SuperObject__`](#superobject)
+		* [`__Template__`](#template)
+
 
 ## 安装
 
@@ -2022,6 +2050,26 @@ PLoop(function(_ENV)
 end)
 ```
 
+### 接口的所需类
+
+我们可以使用**require**关键字指定扩展接口的类必须是某个类的子类:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" {}
+
+	interface "IA" (function(_ENV)
+		require "A"
+	end)
+
+	class "B" (function(_ENV)
+		extend "IA" -- Error: interface.AddExtend(target, extendinterface[, stack]) - the class must be A's sub-class
+	end)
+end)
+```
+
 
 ## Event 事件
 
@@ -3500,27 +3548,6 @@ Module "TestMDL.SubMDL2.SSubMDL.XXXX"
 
 在上面的处理中，我们接触到了很多的内置特性，都是用于修改目标的行为。
 
-如果你只需要修饰或者说封装某个函数的话，你可以简单的使用`System.__Delegate__` 特性：
-
-```lua
-require "PLoop"
-
-PLoop(function(_ENV)
-	function decorate(func, ...)
-		print("Call", func, ...)
-		return func(...)
-	end
-
-	__Delegate__(decorate)
-	function test() end
-
-	-- Call function: 02E7B1C8  1   2   3
-	test(1, 2, 3)
-end)
-```
-
-但如果你希望了解更多的话，可以具体看下特性系统的定制。
-
 ### System.IAttribute
 
 我们需要扩展**System.IAttribute**接口或者它的扩展接口来定义特性类：
@@ -3533,12 +3560,12 @@ end)
 
 * AttributeTarget   - 特性的目标类型，位标识枚举类型
 	* System.AttributeTargets.All         (默认)
-	* System.AttributeTargets.Function  - 普通Lua函数，非对象方法等
+	* System.AttributeTargets.Function  - 普通Lua函数，事件处理方法
 	* System.AttributeTargets.Namespace - 命名空间
 	* System.AttributeTargets.Enum      - 枚举类型
 	* System.AttributeTargets.Struct    - 结构体
 	* System.AttributeTargets.Member    - 结构体成员
-	* System.AttributeTargets.Method    - 对象方法，元方法等
+	* System.AttributeTargets.Method    - 结构体方法，对象方法，元方法等
 	* System.AttributeTargets.Interface - 接口
 	* System.AttributeTargets.Class     - 类
 	* System.AttributeTargets.Event     - 事件
@@ -3673,3 +3700,306 @@ end)
 ```
 
 这种类型需要扩展**System.IAttachAttribute**接口并覆盖**AttachAttribute**虚方法，这个方法的返回值会被保存，便于之后查询。
+
+### System特性
+
+#### `__Abstract__`
+
+用于标记一个类为抽象类，抽象类无法构建对象。或者标记方法，事件，属性为虚方法，虚方法需要（但不是必须）被子类型实现。
+
+特性目标类型:
+* System.AttributeTargets.Class
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__AnonymousClass__`
+
+详细信息见[Interface的匿名类](#interface的匿名类)
+
+特性目标类型:
+* System.AttributeTargets.Interface
+
+#### `__AutoIndex__`
+
+详细信息见[enum 枚举类型](#enum-枚举类型)
+
+特性目标类型:
+* System.AttributeTargets.Enum
+
+#### `__Arguments__`
+
+详细信息见[重载](#重载)
+
+特性目标类型:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Member
+
+#### `__Base__`
+
+详细信息见[struct 结构体](#struct-结构体)
+
+特性目标类型:
+* System.AttributeTargets.Struct
+
+#### `__Default__`
+
+详细信息见[enum 枚举类型](#enum-枚举类型)和[struct 结构体](#struct-结构体)
+
+特性目标类型:
+* System.AttributeTargets.Enum
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Member
+
+#### `__Delegate__`
+
+封装目标函数来使用
+
+特性目标类型:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Member
+
+用法： 
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	function decorate(func, ...)
+		print("Call", func, ...)
+		return func(...)
+	end
+
+	__Delegate__(decorate)
+	function test() end
+
+	-- Call function: 02E7B1C8  1   2   3
+	test(1, 2, 3)
+end)
+```
+
+#### `__EventChangeHandler__`
+
+详细信息见[事件处理方法变更的处理](#事件处理方法变更的处理)
+
+特性目标类型:
+* System.AttributeTargets.Event
+
+#### `__Final__`
+
+设置类或者接口为最终，最终类无法被继承，最终接口无法被其他类型扩展。或者用于标记方法，属性，事件为最终，它们不应被覆盖。
+
+特性目标类型:
+* System.AttributeTargets.Class
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__Flags__`
+
+详细信息见[enum 枚举类型](#enum-枚举类型)
+
+特性目标类型:
+* System.AttributeTargets.Enum
+
+#### `__Get__`
+
+详细信息见[Get/Set行为修饰](#getset行为修饰)
+
+特性目标类型:
+* System.AttributeTargets.Property
+
+#### `__Indexer__`
+
+详细信息见[索引属性](#索引属性)
+
+特性目标类型:
+* System.AttributeTargets.Property
+
+#### `__Namespace__`
+
+为下一个创建的类型设置姓名空间
+
+特性目标类型:
+* System.AttributeTargets.All
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	namespace "Test"
+
+	__Namespace__ "MyNS"
+	class "A" {}
+
+	print(A)   -- MyNS.A
+end)
+```
+
+#### `__NoNilValue__`
+
+从类对象不存在的字段设置读取值是非法的。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__NoNilValue__()
+	class "A" {}
+
+	o = A()
+	v = o.age -- Error: The object don't have any field that named "age"
+end)
+```
+
+#### `__NoRawSet__`
+
+向类对象不存在的字段设置值是非法的。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__NoRawSet__()
+	class "A" {}
+
+	o = A()
+	o.age = 10 -- Error: The object can't accept field that named "age"
+end)
+```
+
+#### `__ObjFuncAttr__`
+
+向目标类的对象写入新函数时，函数将被传入特性系统被调整（目标类型为function）
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__ObjFuncAttr__()
+	class "A" {}
+
+	o = A()
+
+	__Async__()
+	function o:Test()
+		print(coroutine.running())
+	end
+
+	o:Test() -- thread: 02F195E8
+end)
+```
+
+#### `__ObjectSource__`
+
+目标类的对象会被记录构造位置。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__ObjectSource__()
+	class "A" {}
+
+	o = A()
+
+	print(Class.GetObjectSource(o)) -- @path_to_file\file.lua:7
+end)
+```
+
+#### `__Require__`
+
+设置一个接口的所需类，参考[接口的所需类](#接口的所需类)
+
+特性目标类型:
+* System.AttributeTargets.Interface
+
+#### `__Sealed__`
+
+封闭枚举，结构体，接口或者类，这样它们无法被重定义。
+
+特性目标类型:
+* System.AttributeTargets.Enum
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class
+
+#### `__Set__`
+
+详细信息见[Get/Set行为修饰](#getset行为修饰)
+
+特性目标类型:
+* System.AttributeTargets.Property
+ 
+#### `__SingleVer__`
+
+详细信息见[类的多重版本](#类的多重版本)
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+#### `__Static__`
+
+设置方法，属性或者事件为静态，只能被类型自身使用。
+
+特性目标类型:
+* System.AttributeTargets.Method
+* System.AttributeTargets.Event
+* System.AttributeTargets.Property
+
+#### `__Super__`
+
+为目标设置一个超类。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+#### `__SuperObject__`
+
+目标的对象是否使用超类对象访问形式，形如`super[self]:Method()`, `super[self].Name = xxx`.
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+```lua
+-- 确保类A使用超类对象访问形式
+__SuperObject__(true)
+class "A" {}
+
+-- 确保类B不使用超类对象访问形式
+__SuperObject__(false)
+class "B" {}
+```
+
+#### `__Template__`
+
+详细信息见[模板类](#模板类)
+
+特性目标类型:
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class
