@@ -67,6 +67,9 @@ You also can find useful features for large enterprise development like code org
     * [Get/Set Modifier](#getset-modifier)
     * [System.Property](#system.property)
 * [Inheritance and Priority](#inheritance-and-priority)
+* [Use other definition style](#use-other-definition-style)
+    * [Use string as definition body](#use-string-as-definition-body)
+    * [Use table as definition body](#use-table-as-definition-body)
 * [Namespace and Anonymous types](#namespace-and-anonymous-types)
     * [System.Namespace](#systemnamespace)
 * [The Environment](#the-environment)
@@ -95,6 +98,7 @@ You also can find useful features for large enterprise development like code org
 		* [`__AnonymousClass__`](#__anonymousclass__)
 		* [`__AutoIndex__`](#__autoindex__)
 		* [`__Arguments__`](#__arguments__)
+		* [`__Async__`](#__async__)
 		* [`__Base__`](#__base__)
 		* [`__Default__`](#__default__)
 		* [`__Delegate__`](#__delegate__)
@@ -103,6 +107,7 @@ You also can find useful features for large enterprise development like code org
 		* [`__Flags__`](#__flags__)
 		* [`__Get__`](#__get__)
 		* [`__Indexer__`](#__indexer__)
+		* [`__Iterator__`](#__iterator__)
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
@@ -116,6 +121,15 @@ You also can find useful features for large enterprise development like code org
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
 		* [`__Template__`](#__template__)
+* [keyword](#keyword)
+    * [Global keyword](#global-keyword)
+        * [export](#export)
+    * [Context keyword](#context-keyword)
+    * [Features can be used in `_G`](#features-can-be-used-in-_g)
+* [Serialization](#serialization)
+    * [Start with JSON](#start-with-json)
+    * [Serializable Type](#serializable-type)
+    * [Custom Serialize & Deserialize](#custom-serialize--deserialize)
 
 ## Install
 
@@ -2780,6 +2794,75 @@ PLoop(function(_ENV)
 end)
 ```
 
+## Use other definition style
+
+### Use string as definition body
+
+The struct, interface and class can use string as the definition body, it's very simple, just have one example:
+
+```lua
+PLoop(function(_ENV)
+	class "A" [[
+		property "Name" { default = "anonymous" }
+	]]
+
+	print(A().Name)
+end)
+```
+
+Just replace the `function(_ENV)` and `end)` to the start and end of the string.
+
+### Use table as definition body
+
+We already see [Table Style Definition](#table-style-definition) for the struct, it's also possible to define interface or class with tables:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" {
+		-- Declare a static event
+		-- it's not good to use the event in table
+		OnPersonCreated = true,
+
+		-- Declare an object event
+		OnNameChanged   = false,
+
+		-- Define property, we can use type
+		-- or a table for the property
+		Name = String,
+		Age  = { type = Number, default = 0 },
+
+		-- Define a object method
+		SetName = function(self, name)
+			self:OnNameChanged(name, self.Name)
+			self.Name = name
+		end,
+
+		-- Declare the constructor, we also can use
+		-- `__ctor` as the key
+		function (self, name)
+			Person.OnPersonCreated(name)
+			self.Name = name
+		end,
+	}
+
+	interface "IScore" {
+		Person, -- if the type is class, means require it
+		ICloneable,  -- if the type is interface, means extend it
+	}
+
+	class "Student" {
+		Person, -- if the type is class, means inherit it
+		IScore, -- if the type is interface, means extend it
+	}
+
+	-- We can declare the method later
+	function Student:SetScore(score)
+	end
+end)
+```
+
 
 ## Namespace and Anonymous types
 
@@ -3683,7 +3766,15 @@ See [Overload](#overload) for more details.
 
 Attribute Targets:
 * System.AttributeTargets.Function
-* System.AttributeTargets.Member
+* System.AttributeTargets.Method
+
+#### `__Async__`
+
+See [Attribute and Thread Pool](#attribute-and-thread-pool) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
 
 #### `__Base__`
 
@@ -3766,6 +3857,14 @@ See [indexer property](#indexer-property) for more details.
 
 Attribute Targets:
 * System.AttributeTargets.Property
+
+#### `__Iterator__`
+
+See [Attribute and Thread Pool](#attribute-and-thread-pool) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
 
 #### `__Namespace__`
 
@@ -3953,3 +4052,406 @@ Attribute Targets:
 * System.AttributeTargets.Struct
 * System.AttributeTargets.Interface
 * System.AttributeTargets.Class
+
+
+## keyword
+
+### Global keyword
+
+There are two types keywords in the **PLoop**, one is for global, you can use them in any private environment of the **PLoop**:
+
+* namespace  -- declare a namespace for current environment
+* import     -- import a namespace to current environment
+* export     -- export contents to current environment
+* enum       -- define a new enum type
+* struct     -- define a new struct type
+* interface  -- define a new interface type
+* class      -- define a new class type
+* throw      -- throw an exception
+
+#### export
+
+There is only one unknow keyword **export**, the keyword is designed for multi os thread platform:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { MULTI_OS_THREAD = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	export {
+		-- cache the global variables
+		ipairs 	= ipairs,
+
+		-- also can use the name directly
+		"pairs",
+
+		-- import types, the system know their names,
+		-- so no need to specific the name
+		List,
+	}
+
+	_G.test = function()
+		print("hi")
+	end
+end)
+
+-- [PLoop: Warn]The [print] is auto saved to table: 030066C8, need use 'export{ "print" }'@path_to_file\file.lua:16
+test()
+```
+
+So the system'll warn us that we need use `export { "print" }` in the multi-os-thread mode.
+
+The **export** will save the contents of the table into the current environment directly, so why we need this since the private environment can cache anything they accessed?
+
+Unfortunately, auto-cache mechanism works a little different in the multi os thread platform, we can't risk to trigger the re-hash during runtime, since the environment may be accessed by two or more thread in the same time. So the system will create another table as the cache and replace it when a new global variables is auto saved.
+
+So when we access global variables in the environment, we need get the value from the cache table through a meta-call, it won't cause too much, but we can eliminate the cost by using the **export**.
+
+It's also useful for non-multi-os-thread platform, combine with the [Write to illegal global variables](#write-to-illegal-global-variables), we can declare all global variables with the **export**, and any other global assignment would be treated as illegal:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { GLOBAL_VARIABLE_FILTER = function() return true end, GLOBAL_VARIABLE_FILTER_USE_WARN = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	export {
+		-- declare constant
+		CONST_VAR_DATA  = 1,
+
+		-- declare other global variables
+		dotask 			= false,
+	}
+
+	function dotask() -- it's ok now
+	end
+
+	-- [PLoop: Warn]There is an illegal assignment for "test"@path_to_file\file.lua:17
+	function test()
+	end
+end)
+```
+
+### Context keyword
+
+There are other keywords designed for context, like the definition environment of the class, struct and interface.
+
+* struct
+	* member   -- define a member of the struct
+	* array    -- set the array element type
+* interface
+	* require  -- set the require class of the interface
+	* extend   -- extend other interfaces
+	* field    -- add object fields
+	* event    -- define an event
+	* property -- define a property
+* class
+	* inherit  -- inheirt a super class
+	* extend   -- extend interfaces
+	* field    -- add object fields
+	* event    -- define an event
+	* property -- define a property
+
+### Features can be used in `_G`
+
+The **PLoop** will try to save several keywords and feature types into the `_G`, so you can use them directly:
+
+* PLoop 	 -- the root namespace
+* namespace  -- declare a namespace for `_G`
+* import     -- save a namespace and its sub namespaces into the `_G`
+* enum       -- define a new enum type
+* struct     -- define a new struct type
+* interface  -- define a new interface type
+* class      -- define a new class type
+* Module     -- the System.Module
+
+Only the **PLoop** must existed in the `_G`, others won't override the existed in the `_G`.
+
+
+## Serialization
+
+### Start with JSON
+
+Task an example from the [PLoop_Web](https://github.com/kurapica/PLoop_Web):
+
+```lua
+require "PLoop_Web"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+	import "System.Web"
+
+	json = [==[
+	{
+		"debug": "on\toff",
+		"nums" : [1,7,89,4,5,6,9,3,2,1,1,9,3,0,11]
+	}]==]
+
+	-- deserialize json data to lua table
+	data = Serialization.Deserialize(JsonFormatProvider(), json)
+
+	-- Serialize lua table to string with indent
+	-- {
+	-- 		debug = "on	off",
+	-- 		nums = {
+	-- 			[1] = 1,
+	-- 			[2] = 7,
+	-- 			[3] = 89,
+	-- 			[4] = 4,
+	-- 			[5] = 5,
+	-- 			[6] = 6,
+	-- 			[7] = 9,
+	-- 			[8] = 3,
+	-- 			[9] = 2,
+	-- 			[10] = 1,
+	-- 			[11] = 1,
+	-- 			[12] = 9,
+	-- 			[13] = 3,
+	-- 			[14] = 0,
+	-- 			[15] = 11
+	-- 		}
+	-- }
+	print(Serialization.Serialize(StringFormatProvider{Indent = true}, data))
+end)
+```
+
+The example is using **System.Serialization** deserialize a json string to lua data by using **System.Web.JsonFormatProvider**, then use **System.Serialization.StringFormatProvider** to serialize the data to a string.
+
+**System.Serialization.Deserialize** and **System.Serialization.Serialize** are static methods.
+
+The **System.Serialization.Serialize** would convert **PLoop** type data into normal lua data, then passed the lua data to a format provider, the provider would translate the lua data to the target format data.
+
+The **System.Serialization.Deserialize** would use the format provider to translate the target format data into lua data, if a **PLoop** type is provided or contained in the lua data, the lua data would be converted to the type data. 
+
+* Serialize : PLoop object -> lua table -> target format( string, json, xml )
+* Deserialize : target format -> lua table -> PLoop object
+
+The **JsonFormatProvider** is defined in **System.Web** in [PLoop_Web](https://github.com/kurapica/PLoop_Web). The **StringFormatProvider** is defined in **System.Serialization**.
+
+### Serializable Type
+
+Not all **PLoop** type data are serializable, the enum are always serializable, a serializable class or serializable custom struct must have the attribute `System.Serialization.__Serializable__`. The array struct is serializable only if it's element type is serializable, the member struct is serializable only if all the members' type is serializable(unless the member is marked as non-serialized).
+
+You can also use `System.Serialization.__NonSerialized__` to mark class's property or struct's member as non-serialized data.
+
+We'll only use string as the target format for examples, so only **StringFormatProvider** would be used.
+
+Take an example :
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" {
+		Name = String,
+		Age  = Number,
+		Childs = struct { Person }
+	}
+
+	King = Person {
+		Name = "King", Age = 65,
+		Childs = {
+			Person {
+				Name = "Ann", Age = 33,
+				Childs = {
+					Person { Name = "Dio", Age = 12 }
+				}
+			}
+		}
+	}
+
+	--	{
+	--		__PLoop_Serial_ObjectType = "Test.Person",
+	--		Childs = {
+	--			[1] = {
+	--				__PLoop_Serial_ObjectType = "Test.Person",
+	--				Childs = {
+	--					[1] = {
+	--						__PLoop_Serial_ObjectType = "Test.Person",
+	--						Name = "Dio",
+	--						Age = 12
+	--					}
+	--				},
+	--				Name = "Ann",
+	--				Age = 33
+	--			}
+	--		},
+	--		Name = "King",
+	--		Age = 65
+	--	}
+	print( Serialization.Serialize( StringFormatProvider{ Indent = true }, King ) )
+end)
+```
+
+**StringFormatProvider** has several properties :
+
+* Indent - Whether using indented format, default false
+* LineBreak - The line break, default '\n'
+* IndentChar - The char used as the indented character, default '\t'
+* ObjectTypeIgnored - Whether ignore the object's type for serialization, default false
+
+Since we turn *Indent* on, the result would be formatted, we would see there were several `__PLoop_Serial_ObjectType`, if the object's type is not anymouse, it would be stored in the string, so when we deserialize the string, we'll know what type the data would be, if we turn on the *ObjectTypeIgnored*, the `__PLoop_Serial_ObjectType` won't be output.
+
+Now, we'll try to deserialize the string :
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" {
+		Name = String,
+		Age  = Number,
+		Childs = struct { Person }
+	}
+
+	King = Person {
+		Name = "King", Age = 65,
+		Childs = {
+			Person {
+				Name = "Ann", Age = 33,
+				Childs = {
+					Person { Name = "Dio", Age = 12 }
+				}
+			}
+		}
+	}
+
+	data = Serialization.Serialize( StringFormatProvider{ Indent = true }, King )
+
+	p = Serialization.Deserialize( StringFormatProvider(), data)
+
+	-- Test.Person	Dio
+	print( getmetatable(p), p.Childs[1].Childs[1].Name)
+end)
+```
+
+So the p is *Person* type data, and we get all data back. Now, if we turn on the ObjectTypeIgnored :
+
+```lua
+data = Serialization.Serialize( StringFormatProvider{ ObjectTypeIgnored  = true }, King )
+
+p = Serialization.Deserialize( StringFormatProvider(), data)
+
+-- nil	Dio
+print( getmetatable(p), p.Childs[1].Childs[1].Name)
+```
+
+The p has no type related, since the system won't know what type it would be. We should provide the type like :
+
+```lua
+data = Serialization.Serialize( StringFormatProvider{ ObjectTypeIgnored  = true }, King )
+
+p = Serialization.Deserialize( StringFormatProvider(), data, Person)
+
+-- Test.Person	Dio
+print( getmetatable(p), p.Childs[1].Childs[1].Name)
+```
+
+Normally, we should provide the type in both **Serialize** and **Deserialize**, but since the King is a *Person* object, the system can easily know how to handle it, so we can ignored it.
+
+But when we using the system on struct, we must provide the type in the **Serialize**, (whether using in **Deserialize** depends on whether using ObjectTypeIgnored or not).
+
+So why provide the struct type on a normal lua data(struct is just normal lua data), the reason is, the type would be passed to the format provider, if the provider know the data is a array struct, it wouldn't check all the data to know it( special for json data format).
+
+### Custom Serialize & Deserialize
+
+Not all the class data are so simple, in some condition, the system can't figure out the true data that need to be serialized(The system can only handle the class's properties not super class's), or the classes have constructor defined(not support the init-table), the system won't know how to create the object.
+
+So, the type should provide the information by itself.
+
+A class need to do custom serialization must extend the **System.Serialization.ISerializable** interface, the interface defined a method **Serialize**, it receive one argument **System.Serialization.SerializationInfo**, the class have two methods:
+
+* obj:SetValue(name, value, valueType)  -- Store the data to the SerializationInfo.
+* obj:GetValue(name, valueType)         -- Get the data from the SerializationInfo with data type.
+
+So the class object can save the data to the SerializationInfo object, and then the system can use the SerializationInfo for serialization.
+
+The class also should have an overloaded constructor that only accept the SerializationInfo as argument. Here is an example :
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" (function (_ENV)
+		extend "ISerializable"
+
+		property "Name" { Type = String }
+		property "Age"  { Type = Number }
+
+		function Serialize(self, info)
+			-- Set the value with type
+			info:SetValue("name", self.Name, String)
+			info:SetValue("age",  self.Age, Number)
+		end
+
+		__Arguments__{ String, Number }
+		function Person(self, name, age)
+			self.Name = name
+			self.Age = age
+		end
+
+		__Arguments__{ SerializationInfo }
+		function Person(self, info)
+			-- Get the value with type
+			this(self, info:GetValue("name", String) or "Noname", info:GetValue("age", Number) or 0)
+		end
+	end)
+
+	__Serializable__()
+	class "Student"(function (_ENV)
+		inherit "Person"
+
+		property "Score" { Type = Number }
+
+		function Serialize(self, info)
+			-- Set the child class's value with type
+			info:SetValue("score", self.Score, Number)
+
+			-- Call the super's Serialize
+			super.Serialize(self, info)
+		end
+
+		__Arguments__{ SerializationInfo }
+		function Student(self, info)
+			super(self, info)
+
+			-- Get child class value with type
+			self.Score = info:GetValue("score", Number)
+		end
+
+		__Arguments__.Rest()
+		function Student(self, ...)
+			super(self, ...)
+		end
+	end)
+
+	Ann = Student("Ann", 16)
+	Ann.Score = 81
+
+	data = Serialization.Serialize( StringFormatProvider(), Ann)
+
+	-- {__PLoop_Serial_ObjectType="Test.Student",name="Ann",age=16,score=81}
+	print(data)
+
+	p = Serialization.Deserialize( StringFormatProvider(), data)
+
+	-- Test.Student	Ann	16	81
+	print( getmetatable(p), p.Name, p.Age, p.Score)
+end)
+```

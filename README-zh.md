@@ -63,6 +63,9 @@
     * [Get/Set行为修饰](#getset行为修饰)
     * [System.Property](#systemproperty)
 * [继承和优先级](#继承和优先级)
+* [使用其他定义形式](#使用其他定义形式)
+    * [使用字符串作为定义体](#使用字符串作为定义体)
+    * [使用table作为定义体](#使用table作为定义体)
 * [命名空间和匿名类型](#命名空间和匿名类型)
     * [System.Namespace](#systemnamespace)
 * [环境](#环境)
@@ -76,7 +79,7 @@
     * [this和构造体方法](#this和构造体方法)
     * [使用超类方法处理未处理的参数样式](#使用超类方法处理未处理的参数样式)
     * [System.Variable](#systemvariable)
-    * [申明变量申明的简易版本](#申明变量申明的简易版本)
+    * [申明变量的简易版本](#申明变量的简易版本)
 * [Throw Exception 异常处理](#throw-exception-异常处理)
 * [模板类](#模板类)
 * [System.Module](#systemmodule)
@@ -91,6 +94,7 @@
 		* [`__AnonymousClass__`](#__anonymousclass__)
 		* [`__AutoIndex__`](#__autoindex__)
 		* [`__Arguments__`](#__arguments__)
+		* [`__Async__`](#__async__)
 		* [`__Base__`](#__base__)
 		* [`__Default__`](#__default__)
 		* [`__Delegate__`](#__delegate__)
@@ -99,6 +103,7 @@
 		* [`__Flags__`](#__flags__)
 		* [`__Get__`](#__get__)
 		* [`__Indexer__`](#__indexer__)
+		* [`__Iterator__`](#__iterator__)
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
@@ -112,7 +117,16 @@
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
 		* [`__Template__`](#__template__)
-
+* [keyword 关键字](#keyword关键字)
+    * [全局关键字](#全局关键字)
+        * [export 关键字](#export关键字)
+    * [上下文相关的关键字](#上下文相关的关键字)
+    * [`_G`中可用的资源](#_g中可用的资源)
+* [Serialization 序列化](#serialization序列化)
+    * [从JSON开始](#从json开始)
+    * [可序列化类型](#可序列化类型)
+    * [自定义序列化和反序列化](#自定义序列化和反序列化)
+    
 
 ## 安装
 
@@ -945,7 +959,6 @@ PLoop(function(_ENV)
 	end)
 
 	v = Number(true)  -- Error : the value must be number, got boolean
-	end)
 end)
 ```
 
@@ -2810,6 +2823,73 @@ PLoop(function(_ENV)
 end)
 ```
 
+## 使用其他定义形式
+
+### 使用字符串作为定义体
+
+对于结构体，接口和类，我们可以使用字符串作为定义体，以便于某些情况下自动生成定义：
+
+```lua
+PLoop(function(_ENV)
+	class "A" [[
+		property "Name" { default = "anonymous" }
+	]]
+
+	print(A().Name)
+end)
+```
+
+仅需要将`function(_ENV)`和`end)`替换成字符串的起始和结束即可。
+
+### 使用table作为定义体
+
+在[使用table来定义结构体](#使用table来定义结构体)中，我们已经看到如何用table定义结构体，同样，我们也可以使用table来定义接口和类：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" {
+		-- 定义静态事件
+		-- 不过使用table定义并不能很好的使用事件
+		OnPersonCreated = true,
+
+		-- 定义对象事件
+		OnNameChanged   = false,
+
+		-- 定义属性，可以指定类型或者定义table
+		Name = String,
+		Age  = { type = Number, default = 0 },
+
+		-- 定义对象方法
+		SetName = function(self, name)
+			self:OnNameChanged(name, self.Name)
+			self.Name = name
+		end,
+
+		-- 定义构造体方法，也可以使用`__ctor`作为键
+		function (self, name)
+			Person.OnPersonCreated(name)
+			self.Name = name
+		end,
+	}
+
+	interface "IScore" {
+		Person,      -- 如果是类，那么require它
+		ICloneable,  -- 如果是接口，那么extend它
+	}
+
+	class "Student" {
+		Person, -- 如果是类，那么inherit它
+		IScore, -- 如果是接口，那么extend它
+	}
+
+	-- 我们可以在之后，再定义对象或者静态方法
+	function Student:SetScore(score)
+	end
+end)
+```
+
 
 ## 命名空间和匿名类型
 
@@ -3318,7 +3398,7 @@ PLoop (function(_ENV)
 end)
 ```
 
-### 申明变量申明的简易版本
+### 申明变量的简易版本
 
 为了定义可选和可变参数不断的使用**Variable**是比较辛苦的用法，因为过于常用，**PLoop**为此提供了简便的处理方式：
 
@@ -3733,7 +3813,15 @@ end)
 
 特性目标类型:
 * System.AttributeTargets.Function
-* System.AttributeTargets.Member
+* System.AttributeTargets.Method
+
+#### `__Async__`
+
+详细信息见[特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
 
 #### `__Base__`
 
@@ -3816,6 +3904,14 @@ end)
 
 特性目标类型:
 * System.AttributeTargets.Property
+
+#### `__Iterator__`
+
+详细信息见[特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
 
 #### `__Namespace__`
 
@@ -4003,3 +4099,407 @@ class "B" {}
 * System.AttributeTargets.Struct
 * System.AttributeTargets.Interface
 * System.AttributeTargets.Class
+
+
+## keyword 关键字
+
+### 全局关键字
+
+**PLoop**提供两种关键字，一种是全局的，可以在所有**PLoop**的私有环境中使用:
+
+* namespace  -- 为当前环境申明命名空间
+* import     -- 为当前环境导入命名空间
+* export     -- 导出内容到当前环境
+* enum       -- 定义新枚举类型
+* struct     -- 定义新结构体类型
+* interface  -- 定义新接口类型
+* class      -- 定义新类
+* throw      -- 抛出异常
+
+#### export 关键字
+
+这里有一个未曾使用过的关键字**export**，它是为了多os thread平台设计的：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { MULTI_OS_THREAD = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	export {
+		-- 缓存全局变量
+		ipairs 	= ipairs,
+
+		-- 也可以直接使用全局变量名
+		"pairs",
+
+		-- 导入类型，系统能直接获取它的名字
+		-- 所以无需指定
+		List,
+	}
+
+	_G.test = function()
+		print("hi")
+	end
+end)
+
+-- [PLoop: Warn]The [print] is auto saved to table: 030066C8, need use 'export{ "print" }'@path_to_file\file.lua:16
+test()
+```
+
+在多os-thread模式中，**PLoop**会警告我们需要使用`export { "print" }`来导入*print*函数。
+
+**export**关键字会将table中的内容直接保存在当前环境中，那么既然**PLoop**的私有环境可以自动缓存变量，我们还需要这么处理呢？
+
+比较不幸的是，自动缓存机制在多os-thread环境下的运行机制有些差别，运行期，我们必须避免环境table的rehash问题造成多os-thread访问冲突，为了解决这个问题，**PLoop**另外使用了一个缓存表，每次新值加入时，新的表会被用来替换它，通过无rehash的处理来避免冲突。
+
+但这就导致了，当我们通过私有环境获取自动缓存的全局变量实际时需要通过一次元表调用才能拿到，这虽然开销很小，但如果使用**export**我们可以完全去掉这开销。这对于写库是很重要的做法。
+
+对于非多os-thread平台来说，也就是Lua常对应的平台，它可以配合[写非法全局变量](#写非法全局变量)来使用，我们可以将需要被定义全局变量都在**export**中申明，这样任意其他的全局变量赋值都是非法的：
+
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { GLOBAL_VARIABLE_FILTER = function() return true end, GLOBAL_VARIABLE_FILTER_USE_WARN = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+	export {
+		-- declare constant
+		CONST_VAR_DATA  = 1,
+
+		-- declare other global variables
+		dotask 			= false,
+	}
+
+	function dotask() -- it's ok now
+	end
+
+	-- [PLoop: Warn]There is an illegal assignment for "test"@path_to_file\file.lua:17
+	function test()
+	end
+end)
+```
+
+### 上下文相关的关键字
+
+其他的关键字都是为了特定上下文定义的，比如结构体，接口，类的定义环境：
+
+* struct
+	* member   -- 定义结构体成员
+	* array    -- 设置数组元素类型
+* interface
+	* require  -- 设置接口的需要类
+	* extend   -- 扩展其他接口
+	* field    -- 添加对象字段
+	* event    -- 定义事件
+	* property -- 定义属性
+* class
+	* inherit  -- 继承类
+	* extend   -- 扩展其他接口
+	* field    -- 添加对象字段
+	* event    -- 定义事件
+	* property -- 定义属性
+
+### `_G`中可用的资源
+
+**PLoop**会尝试将一些关键字和类型保存到`_G`中，这样你可以直接使用它们:
+
+* PLoop 	 -- 所有命名空间的根
+* namespace  -- 为`_G`申明命名空间
+* import     -- 将命名空间及其内部的子命名空间实体都保存到`_G`
+* enum       -- 定义新枚举类型
+* struct     -- 定义新结构体类型
+* interface  -- 定义新接口类型
+* class      -- 定义新类
+* Module     -- System.Module
+
+只有**PLoop**必定存在，其他不会覆盖`_G`中同名的其他变量。
+
+
+## Serialization 序列化
+
+### 从JSON开始
+
+使用取自[PLoop_Web](https://github.com/kurapica/PLoop_Web)的一个例子：
+
+
+```lua
+require "PLoop_Web"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+	import "System.Web"
+
+	json = [==[
+	{
+		"debug": "on\toff",
+		"nums" : [1,7,89,4,5,6,9,3,2,1,1,9,3,0,11]
+	}]==]
+
+	-- 反序列化json数据为lua table
+	data = Serialization.Deserialize(JsonFormatProvider(), json)
+
+	-- 序列化lua table为字符串，带缩进
+	-- {
+	-- 		debug = "on	off",
+	-- 		nums = {
+	-- 			[1] = 1,
+	-- 			[2] = 7,
+	-- 			[3] = 89,
+	-- 			[4] = 4,
+	-- 			[5] = 5,
+	-- 			[6] = 6,
+	-- 			[7] = 9,
+	-- 			[8] = 3,
+	-- 			[9] = 2,
+	-- 			[10] = 1,
+	-- 			[11] = 1,
+	-- 			[12] = 9,
+	-- 			[13] = 3,
+	-- 			[14] = 0,
+	-- 			[15] = 11
+	-- 		}
+	-- }
+	print(Serialization.Serialize(StringFormatProvider{Indent = true}, data))
+end)
+```
+
+这个例子使用**System.Serialization**通过**System.Web.JsonFormatProvider**来反序列化json字符串为lua的普通table，然后使用**System.Serialization.StringFormatProvider**将这个普通table转换成lua的字符串。
+
+**System.Serialization.Serialize**和 **System.Serialization.Deserialize**是两个静态方法。
+
+**System.Serialization.Serialize**用于将**PLoop**的对象或者数据转换为普通的Lua数据，然后使用传入的格式工具（FormatProvider）将Lua数据转换为目标数据，例如字符串，或者JSON数据。
+
+**System.Serialization.Deserialize**先使用传入的格式工具将目标数据转换为普通Lua数据，然后根据传入的类型将Lua数据转换为对象或者普通数据。
+
+* Serialize : PLoop object -> lua table -> target format( string, json, xml )
+* Deserialize : target format -> lua table -> PLoop object
+
+**JsonFormatProvider**定义在**System.Web**，由[PLoop_Web](https://github.com/kurapica/PLoop_Web)提供，而**StringFormatProvider**定义在**System.Serialization**，由[PLoop]()提供。
+
+### 可序列化类型
+
+并非所有的**PLoop**类型都是可以序列化的，枚举类型均是可序列化的，可序列化的类或自定义结构体必须使用`System.Serialization.__Serializable__`特性标记，一个数组结构体仅当它的元素类型是可序列化，一个成员结构体仅当它的所有成员类型是可序列化的。
+
+可以使用`System.Serialization.__NonSerialized__`标记不可序列化的属性（property）或者结构体成员（member）。
+
+后面的例子中，我们只使用字符串作为目标格式，所以，我们仅需要使用**StringFormatProvider**。
+
+首先看一个例子：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" {
+		Name = String,
+		Age  = Number,
+		Childs = struct { Person }
+	}
+
+	King = Person {
+		Name = "King", Age = 65,
+		Childs = {
+			Person {
+				Name = "Ann", Age = 33,
+				Childs = {
+					Person { Name = "Dio", Age = 12 }
+				}
+			}
+		}
+	}
+
+	--	{
+	--		__PLoop_Serial_ObjectType = "Test.Person",
+	--		Childs = {
+	--			[1] = {
+	--				__PLoop_Serial_ObjectType = "Test.Person",
+	--				Childs = {
+	--					[1] = {
+	--						__PLoop_Serial_ObjectType = "Test.Person",
+	--						Name = "Dio",
+	--						Age = 12
+	--					}
+	--				},
+	--				Name = "Ann",
+	--				Age = 33
+	--			}
+	--		},
+	--		Name = "King",
+	--		Age = 65
+	--	}
+	print( Serialization.Serialize( StringFormatProvider{ Indent = true }, King ) )
+end)
+```
+
+**StringFormatProvider**有以下属性：
+
+* Indent - 是否使用缩进，默认false
+* LineBreak - 换行符, 默认'\n'
+* IndentChar - 缩进符，默认'\t'
+* ObjectTypeIgnored - 是否不保存对象类型，默认false
+
+因为我们设置**Indent**为true，所以，我们的返回结果是格式化的。我们可以看到多个`__PLoop_Serial_ObjectType`，如果对象的类型不是匿名的，序列化时会保存数据的类型，便于之后反序列化时，系统知道该转换为何种类型。可以设置**ObjectTypeIgnored**为true关闭这个功能。
+
+之后我们可以尝试进行反序列化：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" {
+		Name = String,
+		Age  = Number,
+		Childs = struct { Person }
+	}
+
+	King = Person {
+		Name = "King", Age = 65,
+		Childs = {
+			Person {
+				Name = "Ann", Age = 33,
+				Childs = {
+					Person { Name = "Dio", Age = 12 }
+				}
+			}
+		}
+	}
+
+	data = Serialization.Serialize( StringFormatProvider{ Indent = true }, King )
+
+	p = Serialization.Deserialize( StringFormatProvider(), data)
+
+	-- Test.Person	Dio
+	print( getmetatable(p), p.Childs[1].Childs[1].Name)
+end)
+```
+
+根据最后的结果，*p*是**Person**对象，我们拿回了所有的数据，如果我们开启**ObjectTypeIgnored**：
+
+```lua
+data = Serialization.Serialize( StringFormatProvider{ ObjectTypeIgnored  = true }, King )
+
+p = Serialization.Deserialize( StringFormatProvider(), data)
+
+-- nil	Dio
+print( getmetatable(p), p.Childs[1].Childs[1].Name)
+```
+
+现在虽然我们拿到了*Name*，但*p*并非**Person**对象，这是因为系统无法知道数据对应的类型，我们可以在反序列化时传入类型：
+
+```lua
+data = Serialization.Serialize( StringFormatProvider{ ObjectTypeIgnored  = true }, King )
+
+p = Serialization.Deserialize( StringFormatProvider(), data, Person)
+
+-- Test.Person	Dio
+print( getmetatable(p), p.Childs[1].Childs[1].Name)
+```
+
+通常来说，我们需要在**Serialize**和**Deserialize**中都传入类型，不过对于**Person**对象，系统可以直接从它上面获取类型信息，所以，在之前处理中可以无视这条。
+
+不过如果我们对结构体使用序列化机制，就必须给出类型，因为系统无法自行获得。
+
+至于为什么要提供结构体类型给普通的Lua数据（结构体数据一般都是普通Lua数据）。原因在于，类型会被传递给格式工具类，将会有利于格式工具处理数据，比如数据是数组结构体，那么生成Json时，就不需要检查里面的所有数据才能推断出来。
+
+### 自定义序列化和反序列化
+
+序列化系统只能处理类的属性值，而无法处理它可能存在的字段等，如果需要将这些数据序列化和反序列化，就需要类自行提供功能。如果类存在构造体，系统也无法直接传入初始化表来构造对象，同样需要类自己提供构造功能。
+
+如果类需要自行处理序列化操作，它必须扩展**System.Serialization.ISerializable**接口，然后覆盖**Serialize**虚方法，这个方法接收一个**System.Serialization.SerializationInfo**对象，这个类有两个方法：
+
+* obj:SetValue(name, value, valueType)  -- 将键值按照类型保存到obj对象中
+* obj:GetValue(name, valueType)         -- 从obj对象中按类型获取值
+
+利用这个**SerializationInfo**对象，类可以写入需要序列化的数据，也可以从中读取用来构造对象的值：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	namespace "Test"
+
+	__Serializable__()
+	class "Person" (function (_ENV)
+		extend "ISerializable"
+
+		property "Name" { Type = String }
+		property "Age"  { Type = Number }
+
+		function Serialize(self, info)
+			-- 按类型写入需要序列化的数据
+			info:SetValue("name", self.Name, String)
+			info:SetValue("age",  self.Age, Number)
+		end
+
+		__Arguments__{ String, Number }
+		function Person(self, name, age)
+			self.Name = name
+			self.Age = age
+		end
+
+		-- 反虚序列化构造体
+		__Arguments__{ SerializationInfo }
+		function Person(self, info)
+			-- 按类型获取保存的值
+			this(self, info:GetValue("name", String) or "Noname", info:GetValue("age", Number) or 0)
+		end
+	end)
+
+	__Serializable__()
+	class "Student"(function (_ENV)
+		inherit "Person"
+
+		property "Score" { Type = Number }
+
+		function Serialize(self, info)
+			-- 保存子类型的数据
+			info:SetValue("score", self.Score, Number)
+
+			-- 调用超类的序列化方法
+			super.Serialize(self, info)
+		end
+
+		-- 子类反虚序列化构造体
+		__Arguments__{ SerializationInfo }
+		function Student(self, info)
+			-- 调用超类反虚序列化构造体
+			super(self, info)
+
+			-- 获取子类所需的值
+			self.Score = info:GetValue("score", Number)
+		end
+
+		__Arguments__.Rest()
+		function Student(self, ...)
+			super(self, ...)
+		end
+	end)
+
+	Ann = Student("Ann", 16)
+	Ann.Score = 81
+
+	data = Serialization.Serialize( StringFormatProvider(), Ann)
+
+	-- {__PLoop_Serial_ObjectType="Test.Student",name="Ann",age=16,score=81}
+	print(data)
+
+	p = Serialization.Deserialize( StringFormatProvider(), data)
+
+	-- Test.Student	Ann	16	81
+	print( getmetatable(p), p.Name, p.Age, p.Score)
+end)
+```
