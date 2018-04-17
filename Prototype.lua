@@ -300,18 +300,18 @@ do
     --                               share                               --
     -----------------------------------------------------------------------
     strtrim                     = function (s)    return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end
-    readOnly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
-    writeOnly                   = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
+    readonly                    = function (self) error(strformat("The %s can't be written", tostring(self)), 2) end
+    writeonly                   = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
     wipe                        = function (t)    for k in pairs, t do t[k] = nil end return t end
     getfield                    = function (self, key) return self[key] end
     safeget                     = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
-    loadInitTable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
+    loadinittable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     disposeObj                  = function (obj) obj:Dispose() end
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
-    parseIndex                  = (function() local map = { "1st", "2nd", "3rd" } return function(idx) return map[idx] or (idx .. "th") end end)()
+    parseindex                  = (function() local map = { "1st", "2nd", "3rd" } return function(idx) return map[idx] or (idx .. "th") end end)()
 
     --- new type events
     newenum                     = fakefunc
@@ -884,7 +884,7 @@ do
             -- @return  result:boolean              true if the prototype is valid
             ["Validate"]        = function(self) return _Prototype[self] and self or nil end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function (self, ...)
             local meta, super, nodeepclone, stack
 
@@ -1481,7 +1481,7 @@ do
                 end
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
     }
 end
 
@@ -2133,7 +2133,7 @@ do
                 rawset(env, ENV_BASE_ENV, base or nil)
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
     }
 
     tenvironment                = prototype {
@@ -2459,7 +2459,7 @@ do
             -- @return  target                      nil if not namespace
             ["Validate"]        = getValidatedNS;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, _, flag, stack = getFeatureParams(namespace, namespace, ...)
             stack               = stack + 1
@@ -2499,7 +2499,7 @@ do
     -- default type for namespace
     tnamespace                  = prototype {
         __index                 = namespace.GetNamespace,
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __tostring              = namespace.GetNamespaceName,
         __metatable             = namespace,
         __concat                = function (a, b) return tostring(a) .. tostring(b) end,
@@ -3061,7 +3061,7 @@ do
                 return getmetatable(target) == enum and target or nil
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, flag, stack  = getTypeParams(enum, tenum, ...)
             if not target then
@@ -3096,8 +3096,8 @@ do
     })
 
     enumbuilder                 = prototype {
-        __index                 = writeOnly,
-        __newindex              = readOnly,
+        __index                 = writeonly,
+        __newindex              = readonly,
         __call                  = function(self, definition, stack)
             stack               = parsestack(stack) + 1
             if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
@@ -4979,7 +4979,7 @@ do
                 return getmetatable(target) == struct and target or nil
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack  = getTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
@@ -5060,11 +5060,11 @@ do
 
                         for i = 1, count do
                             local param = key[i]
-                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseIndex(i)), 2) end
+                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseindex(i)), 2) end
 
                             if not container[param] then
                                 local ok, msg = checkTemplateParam(origins[i], param)
-                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseIndex(i)), 2) end
+                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseindex(i)), 2) end
 
                                 if i < count then
                                     pcontainer[pkey] = savestorage(pcontainer[pkey], param, {})
@@ -5208,7 +5208,7 @@ do
             -- @return  default                     the member's default value
             ["GetDefault"]      = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEFAULT] end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             if self == member then
                 local visitor, env, name, definition, flag, stack  = getFeatureParams(member, nil, ...)
@@ -6465,10 +6465,10 @@ do
                 end
             else
                 uinsert(apis, "pcall")
-                uinsert(apis, "loadInitTable")
+                uinsert(apis, "loadinittable")
                 uinsert(apis, "strmatch")
                 uinsert(apis, "throw")
-                tinsert(body, [[if init then local ok, msg = pcall(loadInitTable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
+                tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
             if validateflags(FLG_IC_HSIFIN, token) then
@@ -7875,7 +7875,7 @@ do
                 return getmetatable(target) == interface and target or nil
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack = getTypeParams(interface, tinterface, ...)
             if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][stack]) - the interface type can't be created", stack) end
@@ -8633,7 +8633,7 @@ do
                 return getmetatable(target) == class and target or nil
             end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack = getTypeParams(class, tclass, ...)
             if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][stack]) - the class type can't be created", stack) end
@@ -8728,11 +8728,11 @@ do
 
                         for i = 1, count do
                             local param = key[i]
-                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseIndex(i)), 2) end
+                            if not param then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat("the %s parameter can't be nil", parseindex(i)), 2) end
 
                             if not container[param] then
                                 local ok, msg = checkTemplateParam(origins[i], param)
-                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseIndex(i)), 2) end
+                                if not ok then error("Usage: " .. tostring(self) .. "[{...}] - " .. strformat(msg, parseindex(i)), 2) end
 
                                 if i < count then
                                     pcontainer[pkey] = savestorage(pcontainer[pkey], param, {})
@@ -8839,7 +8839,7 @@ do
                 return key
             end
         end,
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __metatable             = interface,
     }
 
@@ -9613,7 +9613,7 @@ do
             -- @return  target                      return the target if it's an event
             ["Validate"]        = function(self) return _EventInfo[self] and self or nil end;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, name, definition, flag, stack = getFeatureParams(event, nil, ...)
 
@@ -9653,7 +9653,7 @@ do
             ["SetEventChangeHandler"] = event.SetEventChangeHandler;
             ["SetStatic"]       = event.SetStatic;
         },
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __call                  = invokeEvent,
         __metatable             = event,
     }
@@ -11132,7 +11132,7 @@ do
 
             interface.AddFeature(owner, name, self, stack)
         end,
-        __newindex              = readOnly,
+        __newindex              = readonly,
         __metatable             = property,
     }
 
@@ -11383,7 +11383,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11423,7 +11423,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11457,7 +11457,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11483,7 +11483,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11516,7 +11516,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11537,7 +11537,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11558,7 +11558,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11669,7 +11669,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11694,7 +11694,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11709,7 +11709,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11721,7 +11721,7 @@ do
         __call = function(self, value)
             namespace.SetNamespaceForNext(value)
         end,
-        __index = writeOnly, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __index = writeonly, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11737,7 +11737,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11753,7 +11753,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11772,7 +11772,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11788,7 +11788,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11806,7 +11806,7 @@ do
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
             ["Inheritable"]     = false,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11824,7 +11824,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11839,7 +11839,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_INTERFACE + ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11872,7 +11872,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11888,7 +11888,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11915,7 +11915,7 @@ do
             ["AttributeTarget"] = ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
             ["Priority"]        = 9999,     -- Should be applied at the first for method
         },
-        __call = regSelfOrObject, __newindex = readOnly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11933,7 +11933,7 @@ do
         __call = function(self, value)
             attribute.Register(prototype.NewObject(self, { value }))
         end,
-        __newindex = readOnly, __tostring = getAttributeName
+        __newindex = readonly, __tostring = getAttributeName
     })
 
     -------------------------------------------------------------------------------
@@ -12407,6 +12407,11 @@ do
         -- @param   env             the environment, default _G
         loadsnippet             = loadsnippet,
 
+        --- Convert an index number to string
+        -- @param   index           the number
+        -- @return  string
+        parseindex              = parseindex,
+
         --- validate flags values
         -- @param   chkvalue        the check value, must be 2^n
         -- @param   targetvalue     the target value
@@ -12500,7 +12505,7 @@ do
             _Cache              = _Cache,
             turnonflags         = turnonflags,
             validateflags       = validateflags,
-            parseIndex          = parseIndex,
+            parseindex          = parseindex,
             unpack              = unpack,
             error               = error,
             select              = select,
@@ -12760,7 +12765,7 @@ do
                                 if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
                                 _ai_ = ret
                             end
-                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseIndex(i))))
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
                     else
                         tinsert(body, (([[
                             if _ai_ == nil then
@@ -12771,7 +12776,7 @@ do
                                 if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 2) end
                                 _ai_ = ret
                             end
-                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseIndex(i))))
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
                     end
                 end
 
@@ -12785,7 +12790,7 @@ do
                         if validateflags(FLG_VAR_IMMLST, token) then
                             if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
-                                uinsert(apis, "parseIndex")
+                                uinsert(apis, "parseindex")
                                 tinsert(body, [[
                                         local vlen = select("#", ...)
                                 ]])
@@ -12808,7 +12813,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
-                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
+                                                if i <= minct then return onlyvalid or ("the " .. parseindex(i + _i_) .. " argument can't be nil") end
                                     ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -12818,7 +12823,7 @@ do
                                     tinsert(body, (([[
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -12835,7 +12840,7 @@ do
                             end
                         else
                             uinsert(apis, "select")
-                            uinsert(apis, "parseIndex")
+                            uinsert(apis, "parseindex")
                             tinsert(body, (([[
                                 local vlen  = select("#", ...)
                                 local minct = _vi_.mincount or 0
@@ -12848,11 +12853,11 @@ do
                                         for i = 1, vlen do
                                             local ival = select(i, ...)
                                             if ival == nil then
-                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
+                                                if i <= minct then return onlyvalid or ("the " .. parseindex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                             end
                                         end
                                         return
@@ -12861,11 +12866,11 @@ do
                                         for i = 1, vlen do
                                             local ival = vlst[i]
                                             if ival == nil then
-                                                if i <= minct then return onlyvalid or ("the " .. parseIndex(i + _i_) .. " argument can't be nil") end
+                                                if i <= minct then return onlyvalid or ("the " .. parseindex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                                 vlst[i] = ret
                                             end
                                         end
@@ -12881,7 +12886,7 @@ do
                         if validateflags(FLG_VAR_IMMLST, token) then
                             if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
                                 uinsert(apis, "select")
-                                uinsert(apis, "parseIndex")
+                                uinsert(apis, "parseindex")
                                 tinsert(body, [[
                                     local vlen = select("#", ...)
                                 ]])
@@ -12904,7 +12909,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
-                                                if i <= minct then error(usage .. " - " .. ("the " .. parseIndex(i + _i_) .. " argument can't be nil"), 2) end
+                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 2) end
                                     ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -12914,7 +12919,7 @@ do
                                     tinsert(body, (([[
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -12930,7 +12935,7 @@ do
                             end
                         else
                             uinsert(apis, "select")
-                            uinsert(apis, "parseIndex")
+                            uinsert(apis, "parseindex")
                             tinsert(body, (([[
                                 local vlen  = select("#", ...)
                                 local minct = _vi_.mincount or 0
@@ -12942,11 +12947,11 @@ do
                                     for i = 1, vlen do
                                         local ival = vlst[i]
                                         if ival == nil then
-                                            if i <= minct then error(usage .. " - " .. ("the " .. parseIndex(i + _i_) .. " argument can't be nil"), 2) end
+                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 2) end
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseIndex(i + _i_) .. " argument") or ("the " .. parseIndex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
                                             vlst[i] = ret
                                         end
                                     end

@@ -15,6 +15,8 @@
 PLoop(function(_ENV)
     namespace "System.Collections"
 
+    import "System.Serialization"
+
     --- The array of objects with event control
     -- @usage
     --      class "A" {
@@ -32,7 +34,7 @@ PLoop(function(_ENV)
     --      function ar:OnNameChanged(new, old)
     --          print( ("%s -> %s"):format(old, new)  )
     --      end
-    __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false)
+    __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false) __Serializable__()
     class "Array" (function(_ENV, eletype)
         inherit (List[eletype])
 
@@ -42,6 +44,11 @@ PLoop(function(_ENV)
         local insert            = List.Insert
         local addeventlistener  = function() end
 
+        export {
+            parseindex      = Toolset.parseindex,
+            getErrorMessage = Struct.GetErrorMessage,
+        }
+
 
         if Interface.Validate(eletype) or Class.Validate(eletype) then
             export {
@@ -50,7 +57,7 @@ PLoop(function(_ENV)
                 rawget          = rawget,
                 rawset          = rawset,
                 pairs           = pairs,
-                ARRAY_EVENT     = "__PLOOP_ARRAY_EVENT"
+                ARRAY_EVENT     = "__PLOOP_ARRAY_EVENT",
             }
 
             export { Event }
@@ -83,9 +90,22 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable.Rest(eletype) }
-        function __new(cls, ...)
-            return {...}, true
+        if eletype ~= Any then
+            local valid = Enum.Validate(eletype) and Enum.ValidateValue or
+                        Struct.Validate(eletype) and Struct.ValidateValue or
+                        Class.Validate(eletype) and Class.ValidateValue or
+                        Interface.Validate(eletype) and Interface.ValidateValue
+
+            function __ctor(self)
+                for i, v in self:GetIterator() do
+                    local ok, ret = valid(eletype, v)
+                    if ret then
+                        throw(("Usage: Array[%s](...) - %s"):format(tostring(eletype), getErrorMessage(ret, parseindex(i))))
+                    else
+                        self[i] = v
+                    end
+                end
+            end
         end
 
         -----------------------------------------------------------
