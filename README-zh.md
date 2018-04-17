@@ -4607,7 +4607,7 @@ end)
 
 ### List, Dictionary和序列化
 
-为了简化序列化的而处理，**List**和**Dictionary和序列化**都被申明为可序列化的类型：
+为了简化序列化的处理，**List**和**Dictionary和序列化**都被申明为可序列化的类型：
 
 ```lua
 require "PLoop"

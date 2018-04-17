@@ -1291,7 +1291,9 @@ do
                 tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
                 _RegisteredAttrs= _Cache()
 
+                local back      = environment.BackupKeywordAccess()
                 local ok, msg   = pcall(definition)
+                environment.RestoreKeywordAccess(back)
 
                 _RegisteredAttrs= tremove(_RegisteredAttrsStack) or _Cache()
 
@@ -1610,6 +1612,17 @@ do
                 end
 
                 error("Usage: environment.Apply(env[, stack]) - the stack should be number or nil", 2)
+            end;
+
+            --- Back up the accessed keyword and visitor, should only be used by the system
+            -- @static
+            -- @method  BackupKeywordAccess
+            -- @owner   environment
+            -- @return  table
+            ["BackupKeywordAccess"] = function()
+                if _AccessKey and _KeyVisitor then
+                    return { key = _AccessKey, visitor = _KeyVisitor }
+                end
             end;
 
             --- Export variables by name or a list of names, those variables are
@@ -1964,6 +1977,20 @@ do
                     if key and not keywords[key] and keyword then keywords[key] = keyword end
                 end
             end;
+
+
+            --- Restore the accessed keyword and visitor, should only be used by the system
+            -- @static
+            -- @method  RestoreKeywordAccess
+            -- @owner   environment
+            -- @param   table
+            ["RestoreKeywordAccess"] = function(back)
+                if type(back) == "table" then
+                    _AccessKey  = back.key
+                    _KeyVisitor = back.visitor
+                end
+            end;
+
 
             --- Save the value to the environment, useful to save attributes for functions
             -- @static
