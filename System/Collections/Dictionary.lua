@@ -28,7 +28,7 @@ PLoop(function(_ENV)
         export {
             ipairs              = ipairs,
 
-            List,
+            List[keytype], List[valtype]
         }
 
         -----------------------------------------------------------
