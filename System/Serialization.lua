@@ -106,7 +106,7 @@ PLoop(function(_ENV)
         local otype             = type(obj)
         if otype == "table" then
             local cls           = getmetatable(obj)
-            return (cls == nil or _SerializeInfo[cls]) and true or false
+            return (cls == nil or isSerializableType(cls)) and true or false
         else
             return otype == "string" or otype == "number" or otype == "boolean"
         end
