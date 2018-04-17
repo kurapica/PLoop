@@ -15,6 +15,8 @@
 PLoop(function(_ENV)
     namespace "System.Collections"
 
+    import "System.Serialization"
+
     --- Represents the list collections that only elements has meanings
     interface "IList" { Iterable }
 
@@ -31,11 +33,35 @@ PLoop(function(_ENV)
     interface "IIndexedList" { ICountable }
 
     --- The default indexed list
-    __Sealed__()
-    class "List" (function (_ENV)
-        extend "IIndexedList"
+    __Sealed__() __Serializable__() __Template__( Any )
+    class "List" (function (_ENV, lsttype)
+        extend "IIndexedList" "ISerializable"
 
         export { type = type }
+
+        lsttype = lsttype ~= Any and lsttype or nil
+
+        -----------------------------------------------------------
+        --                     serialization                     --
+        -----------------------------------------------------------
+        function Serialize(self, info)
+            for i, v in self:GetIterator() do
+                info:SetValue(i, v, lsttype)
+            end
+        end
+
+        __Arguments__{ SerializationInfo }
+        function __new(_, info)
+            local i = 1
+            local v = info:GetValue(i, lsttype)
+            local self  = {}
+            while v ~= nil do
+                self[i] = v
+                i   = i + 1
+                v   = info:GetValue(i, lsttype)
+            end
+            return self, true
+        end
 
         -----------------------------------------------------------
         --                        method                         --

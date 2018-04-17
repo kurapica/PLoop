@@ -130,6 +130,16 @@ You also can find useful features for large enterprise development like code org
     * [Start with JSON](#start-with-json)
     * [Serializable Type](#serializable-type)
     * [Custom Serialize & Deserialize](#custom-serialize--deserialize)
+* [System.Collections](#systemcollections)
+    * [System.Collections.Iterable](#systemcollectionsiterable)
+    * [System.Collections.IList](#systemcollectionsilist)
+        * [System.Collections.ICountable](#systemcollectionsicountable)
+        * [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
+        * [System.Collections.List](#systemcollectionslist)
+    * [System.Collections.IDictionary](#systemcollectionsidictionary)
+        * [System.Collections.Dictionary](#systemcollectionsdictionary)
+    * [List, Dictionary with Serialization](#list-dictionary-with-serialization)
+
 
 ## Install
 
@@ -1415,7 +1425,7 @@ PLoop(function(_ENV)
 	end)
 
 	for index, member in Struct.GetMembers(Location) do
-		print(member.GetName(member), Member.GetType(member))
+		print(Member.GetName(member), Member.GetType(member))
 	end
 end)
 ```
@@ -1595,7 +1605,7 @@ The `__new` would recieve the class and all parameters and return a table and a 
 The `__field` meta is a table, contains several key-value paris to be saved in the object, normally it's used with the **OBJECT_NO_RAWSEST** and the **OBJECT_NO_NIL_ACCESS** options, so authors can only use existing fields to to the jobs, and spell errors can be easily spotted.
 
 ```lua
-PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true, }
 
 require "PLoop"
 
@@ -3377,15 +3387,15 @@ Well, it's a little hard to keep using the **Variables**, the **PLoop** also pro
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Arguments__{ String/"anonymouse", Number * 0 }
+	__Arguments__{ String/"anonymous", Number * 0 }
 	function Test(...)
 		print(...)
 	end
 
-	-- anonymouse
+	-- anonymous
 	Test(nil)
 
-	-- Usage: Test([System.String = "anonymouse"], [... as System.Number]) - the 2nd argument must be number, got string
+	-- Usage: Test([System.String = "anonymous"], [... as System.Number]) - the 2nd argument must be number, got string
 	Test("hi", "next")
 end)
 ```
@@ -4222,7 +4232,7 @@ The example is using **System.Serialization** deserialize a json string to lua d
 
 The **System.Serialization.Serialize** would convert **PLoop** type data into normal lua data, then passed the lua data to a format provider, the provider would translate the lua data to the target format data.
 
-The **System.Serialization.Deserialize** would use the format provider to translate the target format data into lua data, if a **PLoop** type is provided or contained in the lua data, the lua data would be converted to the type data. 
+The **System.Serialization.Deserialize** would use the format provider to translate the target format data into lua data, if a **PLoop** type is provided or contained in the lua data, the lua data would be converted to the type data.
 
 * Serialize : PLoop object -> lua table -> target format( string, json, xml )
 * Deserialize : target format -> lua table -> PLoop object
@@ -4455,3 +4465,234 @@ PLoop(function(_ENV)
 	print( getmetatable(p), p.Name, p.Age, p.Score)
 end)
 ```
+
+
+## System.Collections
+
+We have learn the **List** and **Dictionary** in the [Start with the Collections](#start-with-the-collections), for now we have time to learn more about the collections.
+
+### System.Collections.Iterable
+
+This is the basic interface of the collections, it has only one abstract method **GetIterator** used to return an iterator could be used by the generic for.
+
+### System.Collections.IList
+
+The **IList** interface represents the list collections that only elements has meanings, the key can be ignored by operations. The is a design goal, there is no rule to enforce it. It extend the **Iterable** interface.
+
+Especially, the List's stream method like **Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First**, **FirstOrDefault** are all defined in the **IList** interface, so if a class extend the IList interface, the class can use them directly.
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Queue" (function(_ENV)
+		extend "IList"
+
+		__Iterator__()
+		function GetIterator(self)
+			for i = self.Start, self.End - 1 do
+				coroutine.yield(i, self[i])
+			end
+		end
+
+		-- Queue(1, 2, 3, 4)
+		function __new(cls, ...)
+			return {...}, true
+		end
+
+		function Queue(self)
+			self.Start = 1
+			self.End   = #self + 1
+		end
+
+		function __call(self, val)
+			if val ~= nil then
+				-- queue
+				local endp = self.End
+				self[endp] = val
+				self.End   = endp + 1
+			else
+				-- dequeue
+				local start= self.Start
+				if start < self.End then
+					val    = self[start]
+					self[start] = nil
+					self.Start  = start + 1
+					return val
+				end
+			end
+		end
+	end)
+
+	queue = Queue(1, 2, 3, 4, 5)
+	queue(queue())
+	queue(queue())
+
+	queue:Each(print) -- 3  4  5  1  2
+end)
+```
+
+#### System.Collections.ICountable
+
+The **ICountable** interface represents countable list collections. It extend the **IList** interface.
+
+It only defined an abstract property **Count**, the property will `return #self` as the value, you can override it for special list types like Queue and etc.
+
+#### System.Collections.IIndexedList
+
+The **IIndexedList** interface represents the indexed list collections that can use obj[idx] to access the its elements. It also extend the **ICountable** interface.
+
+Especially, the List's sort method are all defined in the **IIndexedList** interface.
+
+#### System.Collections.List
+
+The **List** extend the **IIndexedList** interface, so it can use all stream methods and sort methods.
+
+### System.Collections.IDictionary
+
+The **IDictionary** interface represents the key-value pairs collections, it also extend the **Iterable** interface.
+
+The dictionary stream methods like **Map**, **Filter**, **Reduce**, **Each** and the **Keys**, **Values** property are also defined in the **IDictionary**. 
+
+So you can extend the interface to gain those features.
+
+#### System.Collections.Dictionary
+
+The **IDictionary**'s implementation, normally enough for dictionary works.
+
+### List, Dictionary with Serialization
+
+To simplify the object's serialization, the **List** and **Dictionary** are designed to be serializable:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = false  }, o )
+
+	--	{
+	--		__PLoop_Serial_ObjectType = "System.Collections.Dictionary",
+	--		[1] = {
+	--			__PLoop_Serial_ObjectType = "System.Collections.List",
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			__PLoop_Serial_ObjectType = "System.Collections.List",
+	--			[1] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v)
+
+	-- 	A	08/13/13 12:00:00
+	-- 	B	04/02/17 12:00:00
+	-- 	C	03/14/18 12:00:00
+	o:Each(print)
+end)
+```
+
+The **System.Date** is a serializable type, so it can be used for the serialization.
+
+Take a look at the *v*, the dictionary object is splitted to two **List** objects, one for keys, one for values. We have those `__PLoop_Serial_ObjectType` to help use deserialize the result, but in many cases, we can't keep the object type into the result:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = true  }, o )
+
+	--	{
+	--		[1] = {
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			[1] = {
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v, Dictionary)
+
+	--	A	table: 03026B90
+	--	C	table: 03026CA8
+	--	B	table: 03026CF8
+	o:Each(print)
+end)
+```
+
+Although we pass the **Dictionary** as the type, we can't pass the key and value's type to the serialization system.
+
+To solve this problem, the **List** and **Dictionary** are designed as [Template class](#template-class), so we can add the key and value type to the **Dictionary**:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = true  }, o )
+
+	--	{
+	--		[1] = {
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			[1] = {
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v, Dictionary[{String, Date}])
+
+	--	A	08/13/13 12:00:00
+	--	B	04/02/17 12:00:00
+	--	C	03/14/18 12:00:00
+	o:Each(print)
+end)
+```
+
+Now, the serialization system can know the key and value's types and we can have our objects back now.

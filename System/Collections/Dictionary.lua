@@ -15,22 +15,51 @@
 PLoop(function(_ENV)
     namespace "System.Collections"
 
+    import "System.Serialization"
+
     --- Represents the key-value pairs collections
     interface "IDictionary" { Iterable }
 
     --- The default dictionary
-    __Sealed__()
-    class "Dictionary" (function (_ENV)
-        extend "IDictionary"
+    __Sealed__() __Serializable__() __Template__( Any, Any )
+    class "Dictionary" (function (_ENV, keytype, valtype)
+        extend "IDictionary" "ISerializable"
 
         export {
             ipairs              = ipairs,
+
+            List,
         }
+
+        -----------------------------------------------------------
+        --                     serialization                     --
+        -----------------------------------------------------------
+        function Serialize(self, info)
+            local key   = {}
+            local val   = {}
+            local idx   = 1
+            for k, v in self:GetIterator() do
+                key[idx]= k
+                val[idx]= v
+                idx     = idx + 1
+            end
+
+            info:SetValue(1, List[keytype](key))
+            info:SetValue(2, List[valtype](val))
+        end
+
+        __Arguments__{ SerializationInfo }
+        function __new(_, info)
+            local key     = info:GetValue(1, List[keytype])
+            local val     = info:GetValue(2, List[valtype])
+
+            return this(_, key, val)
+        end
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        GetIterator = pairs
+        GetIterator     = pairs
 
         -----------------------------------------------------------
         --                      constructor                      --

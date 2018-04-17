@@ -126,7 +126,16 @@
     * [从JSON开始](#从json开始)
     * [可序列化类型](#可序列化类型)
     * [自定义序列化和反序列化](#自定义序列化和反序列化)
-    
+* [System.Collections 集合](#systemcollections-集合)
+    * [System.Collections.Iterable](#systemcollectionsiterable)
+    * [System.Collections.IList](#systemcollectionsilist)
+        * [System.Collections.ICountable](#systemcollectionsicountable)
+        * [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
+        * [System.Collections.List](#systemcollectionslist)
+    * [System.Collections.IDictionary](#systemcollectionsidictionary)
+        * [System.Collections.Dictionary](#systemcollectionsdictionary)
+    * [List, Dictionary和序列化](#list-dictionary和序列化)
+
 
 ## 安装
 
@@ -1431,7 +1440,7 @@ PLoop(function(_ENV)
 	end)
 
 	for index, member in Struct.GetMembers(Location) do
-		print(member.GetName(member), Member.GetType(member))
+		print(Member.GetName(member), Member.GetType(member))
 	end
 end)
 ```
@@ -1620,7 +1629,7 @@ end)
 `__field`元数据的值需要是table，它内部保存的键值对将在对象被创建时复制到对象中，如果配合**OBJECT_NO_RAWSEST**，**OBJECT_NO_NIL_ACCESS**两个平台选项，对象将只能使用这些被初始化的字段，同时因为操作这些字段不会触发`__index`和`__newindex`元表方法，访问速度也是最快的。
 
 ```lua
-PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS= true, }
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true, }
 
 require "PLoop"
 
@@ -3407,15 +3416,15 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Arguments__{ String/"anonymouse", Number * 0 }
+	__Arguments__{ String/"anonymous", Number * 0 }
 	function Test(...)
 		print(...)
 	end
 
-	-- anonymouse
+	-- anonymous
 	Test(nil)
 
-	-- Usage: Test([System.String = "anonymouse"], [... as System.Number]) - the 2nd argument must be number, got string
+	-- Usage: Test([System.String = "anonymous"], [... as System.Number]) - the 2nd argument must be number, got string
 	Test("hi", "next")
 end)
 ```
@@ -4503,3 +4512,235 @@ PLoop(function(_ENV)
 	print( getmetatable(p), p.Name, p.Age, p.Score)
 end)
 ```
+
+
+## System.Collections 集合
+
+在[从使用集合开始](#从使用集合开始)中我们已经了解了**List**和**Dictionary**两种集合类型，现在我们更深入的进行说明。
+
+### System.Collections.Iterable
+
+这个接口是集合最基本的接口，它只有一个虚方法**GetIterator**，用于返回一个供泛型for使用的迭代器。
+
+### System.Collections.IList
+
+**IList**接口代表数组集合，数组集合仅关心元素，它们的索引在通常操作中可以被无视。它扩展了**Iterable**接口。
+
+特别的，List使用的**Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First**, **FirstOrDefault**这类链式方法都是定义在这个接口中，所以，如果类扩展了这个接口，就可以利用这些方法。
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Queue" (function(_ENV)
+		extend "IList"
+
+		__Iterator__()
+		function GetIterator(self)
+			for i = self.Start, self.End - 1 do
+				coroutine.yield(i, self[i])
+			end
+		end
+
+		-- Queue(1, 2, 3, 4)
+		function __new(cls, ...)
+			return {...}, true
+		end
+
+		function Queue(self)
+			self.Start = 1
+			self.End   = #self + 1
+		end
+
+		function __call(self, val)
+			if val ~= nil then
+				-- queue
+				local endp = self.End
+				self[endp] = val
+				self.End   = endp + 1
+			else
+				-- dequeue
+				local start= self.Start
+				if start < self.End then
+					val    = self[start]
+					self[start] = nil
+					self.Start  = start + 1
+					return val
+				end
+			end
+		end
+	end)
+
+	queue = Queue(1, 2, 3, 4, 5)
+	queue(queue())
+	queue(queue())
+
+	queue:Each(print) -- 3  4  5  1  2
+end)
+```
+
+#### System.Collections.ICountable
+
+**ICountable**代表可以计数的数组集合，它扩展了**IList**接口。
+
+它只定义了一个**Count**虚属性，默认返回#self作为数组长度。
+
+#### System.Collections.IIndexedList
+
+**IIndexedList**接口代表数字索引集合，类可以使用`obj[idx]`的连续数字索引访问它的元素，它扩展了**ICountable**接口。
+
+特别的，List使用的Sort之类排序算法都定义在这个接口中。
+
+#### System.Collections.List
+
+**List**类扩展了**IIndexedList**接口，所以它可以使用所有的链式方法和排序算法。
+
+### System.Collections.IDictionary
+
+**IDictionary**代表所有的键值对集合，它扩展了**Iterable**接口。
+
+字典链式处理方法 **Map**, **Filter**, **Reduce**, **Each**和**Keys**, **Values**这两个终止属性都是定义在这个接口。
+
+#### System.Collections.Dictionary
+
+**IDictionary**的唯一实现，通常足以满足日常用途。
+
+### List, Dictionary和序列化
+
+为了简化序列化的而处理，**List**和**Dictionary和序列化**都被申明为可序列化的类型：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = false  }, o )
+
+	--	{
+	--		__PLoop_Serial_ObjectType = "System.Collections.Dictionary",
+	--		[1] = {
+	--			__PLoop_Serial_ObjectType = "System.Collections.List",
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			__PLoop_Serial_ObjectType = "System.Collections.List",
+	--			[1] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				__PLoop_Serial_ObjectType = "System.Date",
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v)
+
+	-- 	A	08/13/13 12:00:00
+	-- 	B	04/02/17 12:00:00
+	-- 	C	03/14/18 12:00:00
+	o:Each(print)
+end)
+```
+
+上面的**Sytem.Date**日期类型也是一个可序列化对象，所以它会被用于完成序列化处理。
+
+仔细看*v*的输出，字典对象实际被分解成两个**List**对象之后再被序列化的。这里面有很多`__PLoop_Serial_ObjectType`来帮助反序列化处理。
+
+不过很多场合下，我们无法传递对象类型:
+
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = true  }, o )
+
+	--	{
+	--		[1] = {
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			[1] = {
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v, Dictionary)
+
+	--	A	table: 03026B90
+	--	C	table: 03026CA8
+	--	B	table: 03026CF8
+	o:Each(print)
+end)
+```
+
+可见，哪怕反序列化时，传入了**Dictionary**类型，因为序列化系统无法了解键值各自的类型，依然无法反序列化这些元素。
+
+为了解决这个问题，**List**和**Dictionary**都被定义为[模板类](#模板类)，这样我们就可以很方便的键值的类型传进去：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	import "System.Serialization"
+
+	o = Dictionary{ A = Date(2013, 8, 13), B = Date(2017, 4, 2), C = Date(2018, 3, 14)}
+
+	v = Serialization.Serialize( StringFormatProvider{ Indent = true, ObjectTypeIgnored = true  }, o )
+
+	--	{
+	--		[1] = {
+	--			[1] = "A",
+	--			[2] = "C",
+	--			[3] = "B"
+	--		},
+	--		[2] = {
+	--			[1] = {
+	--				time = 1376366400
+	--			},
+	--			[2] = {
+	--				time = 1521000000
+	--			},
+	--			[3] = {
+	--				time = 1491105600
+	--			}
+	--		}
+	--	}
+	print(v)
+
+	o = Serialization.Deserialize( StringFormatProvider(), v, Dictionary[{String, Date}])
+
+	--	A	08/13/13 12:00:00
+	--	B	04/02/17 12:00:00
+	--	C	03/14/18 12:00:00
+	o:Each(print)
+end)
+```
+
+现在，序列化系统可以获知键值的类型，我们也能获得我们所需要的对象。

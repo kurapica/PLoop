@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/04/16                                               --
--- Version      :   1.0.0-beta008                                            --
+-- Update Date  :   2018/04/17                                               --
+-- Version      :   1.0.0-beta009                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -3398,6 +3398,7 @@ do
     local FLD_STRUCT_TEMPPRM    = -10               -- FIELD TEMPLATE PARAMS
     local FLD_STRUCT_TEMPDEF    = -11               -- FIELD TEMPLATE DEFINITION
     local FLD_STRUCT_TEMPIMP    = -12               -- FIELD TEMPLATE IMPLEMENTATION
+    local FLD_STRUCT_TEMPENV    = -13               -- FIELD TEMPLATE ENVIRONMENT
 
     local FLD_STRUCT_ARRAY      =  0                -- FIELD ARRAY ELEMENT
     local FLD_STRUCT_ARRVALID   =  2                -- FIELD ARRAY ELEMENT VALIDATOR
@@ -4994,6 +4995,8 @@ do
                     local implement
 
                     if count == 1 then
+                        if key == origins[1] then return self end
+
                         implement   = container[key]
                         if implement then return implement end
 
@@ -5004,7 +5007,7 @@ do
 
                         attribute.IndependentCall(function()
                             implement = struct{}
-                            local builder = struct(implement, true)
+                            local builder = struct(info[FLD_STRUCT_TEMPENV], implement, true)
                             setStructTemplate(implement, key, nil, nil, true)
                             builder(info[FLD_STRUCT_TEMPDEF])
                         end)
@@ -5018,6 +5021,15 @@ do
                     elseif type(key) == "table" and getmetatable(key) == nil then
                         local pcontainer= info
                         local pkey      = FLD_STRUCT_TEMPIMP
+
+                        -- check self
+                        for i = 1, count do
+                            if key[i] == origins[i] then
+                                if i == count then return self end
+                            else
+                                break
+                            end
+                        end
 
                         for i = 1, count do
                             local param = key[i]
@@ -5033,7 +5045,7 @@ do
                                 else
                                     attribute.IndependentCall(function()
                                         implement = struct{}
-                                        local builder = struct(implement, true)
+                                        local builder = struct(info[FLD_STRUCT_TEMPENV], implement, true)
                                         setStructTemplate(implement, key, nil, nil, true)
                                         builder(info[FLD_STRUCT_TEMPDEF])
                                     end)
@@ -5080,9 +5092,15 @@ do
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner = environment.GetNamespace(self)
-            if not (owner and _StructBuilderInDefine[self] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
+            local info  = _StructBuilderInfo[owner]
+            if not (owner and _StructBuilderInDefine[self] and info) then error("The struct's definition is finished", stack) end
 
             definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition, nil, nil, stack), self, stack)
+
+            -- Save template env
+            if info[FLD_STRUCT_TEMPDEF] then
+                info[FLD_STRUCT_TEMPENV] = environment.GetParent(self)
+            end
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -5666,6 +5684,7 @@ do
     local FLD_IC_TEMPPRM        =-15                -- FIELD TEMPLATE ARGUMENTS
     local FLD_IC_TEMPDEF        =-16                -- FIELD TEMPlATE DEFINITION
     local FLD_IC_TEMPIMP        =-17                -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
+    local FLD_IC_TEMPENV        =-18                -- FIELD TEMPLATE ENVIRONMENT
 
     -- CACHE FIELDS
     local FLD_IC_STAFTR         =-20                -- FIELD STATIC TYPE FEATURES
@@ -5985,7 +6004,10 @@ do
             [FLD_IC_SUPER]      = info and info[FLD_IC_SUPER],
             [FLD_IC_ANYMSCL]    = info and info[FLD_IC_ANYMSCL] or isclass and nil,
             [FLD_IC_DEBUGSR]    = info and info[FLD_IC_DEBUGSR] or isclass and INI_FLD_DEBUGSR or nil,
-
+            [FLD_IC_TEMPPRM]    = info and info[FLD_IC_TEMPPRM],
+            [FLD_IC_TEMPDEF]    = info and info[FLD_IC_TEMPDEF],
+            [FLD_IC_TEMPIMP]    = info and info[FLD_IC_TEMPIMP],
+            [FLD_IC_TEMPENV]    = info and info[FLD_IC_TEMPENV],
             -- CACHE FIELDS
             [FLD_IC_STAFTR]     = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
             [FLD_IC_OBJFTR]     = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
@@ -8639,6 +8661,8 @@ do
                     local implement
 
                     if count == 1 then
+                        if key == origins[1] then return self end
+
                         implement   = container[key]
                         if implement then return implement end
 
@@ -8650,7 +8674,7 @@ do
                         attribute.IndependentCall(function()
                             local prototype = getmetatable(self)
                             implement = prototype{}
-                            local builder = prototype(implement, true)
+                            local builder = prototype(info[FLD_IC_TEMPENV], implement, true)
                             setTemplate(implement, key, nil, nil, true)
                             if prototype == class then copyClassSettings(self, implement) end
                             builder(info[FLD_IC_TEMPDEF])
@@ -8665,6 +8689,15 @@ do
                     elseif type(key) == "table" and getmetatable(key) == nil then
                         local pcontainer= info
                         local pkey      = FLD_IC_TEMPIMP
+
+                        -- check self
+                        for i = 1, count do
+                            if key[i] == origins[i] then
+                                if i == count then return self end
+                            else
+                                break
+                            end
+                        end
 
                         for i = 1, count do
                             local param = key[i]
@@ -8681,13 +8714,16 @@ do
                                     attribute.IndependentCall(function()
                                         local prototype = getmetatable(self)
                                         implement = prototype{}
-                                        local builder = prototype(implement, true)
+                                        local builder = prototype(info[FLD_IC_TEMPENV], implement, true)
                                         setTemplate(implement, key, nil, nil, true)
                                         if prototype == class then copyClassSettings(self, implement) end
                                         builder(info[FLD_IC_TEMPDEF])
                                     end)
 
                                     pcontainer[pkey] = savestorage(pcontainer[pkey], param, implement)
+
+                                    -- Save the template to the implment
+                                    _ICInfo[implement][FLD_IC_TEMPIMP] = self
 
                                     return implement
                                 end
@@ -8823,9 +8859,15 @@ do
             if not definition then error("Usage: interface([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner         = environment.GetNamespace(self)
-            if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The interface's definition is finished", stack) end
+            local info          = _ICBuilderInfo[owner]
+            if not (owner and _ICBuilderInDefine[self] and info) then error("The interface's definition is finished", stack) end
 
             definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_INTERFACE, definition, nil, nil, stack), self, stack)
+
+            -- Save template env
+            if info[FLD_IC_TEMPDEF] then
+                info[FLD_IC_TEMPENV] = environment.GetParent(self)
+            end
 
             if type(definition) == "function" then
                 setfenv(definition, self)
@@ -8875,9 +8917,15 @@ do
             if not definition then error("Usage: class([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
             local owner         = environment.GetNamespace(self)
-            if not (owner and _ICBuilderInDefine[self] and _ICBuilderInfo[owner]) then error("The class's definition is finished", stack) end
+            local info          = _ICBuilderInfo[owner]
+            if not (owner and _ICBuilderInDefine[self] and info) then error("The class's definition is finished", stack) end
 
             definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_CLASS, definition, nil, nil, stack), self, stack)
+
+            -- Save template env
+            if info[FLD_IC_TEMPDEF] then
+                info[FLD_IC_TEMPENV] = environment.GetParent(self)
+            end
 
             if type(definition) == "function" then
                 setfenv(definition, self)

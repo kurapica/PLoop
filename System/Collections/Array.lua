@@ -34,7 +34,7 @@ PLoop(function(_ENV)
     --      end
     __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false)
     class "Array" (function(_ENV, eletype)
-        inherit "List"
+        inherit (List[eletype])
 
         -----------------------------------------------------------
         --                        helper                         --
