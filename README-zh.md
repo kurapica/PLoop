@@ -311,7 +311,7 @@ PLoop(function(_ENV)
 	obj = List(10)
 
 	-- 我们将解析下面的操作
-	-- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
+	-- obj:Range(1, -1, 2):Map(function(x) return 2^x end):Each(print)
 
 	-- 队列操作会返回一个流处理工作对象
 	local worker = obj:Range(1, -1, 2)

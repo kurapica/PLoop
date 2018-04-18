@@ -315,7 +315,7 @@ require "PLoop"
 PLoop(function(_ENV)
 	obj = List(10)
 
-	-- obj:Range(1, -1, 2)::Map(function(x) return 2^x end):Each(print)
+	-- obj:Range(1, -1, 2):Map(function(x) return 2^x end):Each(print)
 	-- get a stream worker for next operations
 	local worker = obj:Range(1, -1, 2)
 
