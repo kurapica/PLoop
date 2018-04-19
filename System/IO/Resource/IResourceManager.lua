@@ -29,9 +29,6 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceLoader.LoadResource,
             isanonymous         = Namespace.IsAnonymousNamespace,
 
-            TryRunWithLock      = ILockManager.TryRunWithLock,
-            RunWithLock         = ILockManager.RunWithLock,
-
             IResourceManager,
         }
 
@@ -103,15 +100,15 @@ PLoop(function(_ENV)
                 local path      = self.resourcePath
                 local ok, res
                 if self.resource then
-                    res         = TryRunWithLock("PLOOP_IRESOURCE_MANAGER", loadresource, path)
+                    res         = loadresource(path, nil, true)
                     if not res then
                         res     = self.resource
                     else
-                        Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
+                        Debug("[System.IO.Resource][ReGenerate] %s [For] %s", tostring(res), path)
                         if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                     end
                 else
-                    res         = RunWithLock("PLOOP_IRESOURCE_MANAGER", loadresource, path)
+                    res         = loadresource(path)
                     Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
                     if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                 end

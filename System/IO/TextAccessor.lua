@@ -53,10 +53,16 @@ PLoop(function(_ENV)
         --- Reads a line of characters from the text reader and returns the data as a string.
         __Abstract__() function ReadLine(self) end
 
+        --- Return the ReadLine method and self for a generic for
+        function ReadLines(self) return self.ReadLine, self end
+
         --- Reads a specified maximum number of characters from the current text reader and writes the data to a buffer, beginning at the specified index.
         __Abstract__() function ReadBlock(self, indx, count) end
 
         --- Reads all characters from the current position to the end of the text reader and returns them as one string.
         __Abstract__() function ReadToEnd(self) end
+
+        --- Gets or Sets the operation position
+        __Abstract__() property "Position" { type = Number }
     end)
 end)
