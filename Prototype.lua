@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/04/17                                               --
--- Version      :   1.0.0-beta009                                            --
+-- Update Date  :   2018/04/19                                               --
+-- Version      :   1.0.0-beta010                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1566,7 +1566,7 @@ do
             tname               = type(value)
 
             if tname == "string" then
-                rawset(env, name, environment.GetValue(env, name, stack))
+                rawset(env, value, environment.GetValue(env, value, stack) or nil)
             elseif namespace.Validate(value) then
                 rawset(env, namespace.GetNamespaceName(value, true), value)
             end
@@ -1574,10 +1574,10 @@ do
             if value ~= nil then
                 rawset(env, name, value)
             else
-                rawset(env, name, environment.GetValue(env, name, stack))
+                rawset(env, name, environment.GetValue(env, name, stack) or nil)
             end
         elseif namespace.Validate(name) then
-            rawset(env, namespace.GetNamespaceName(name, true), value)
+            rawset(env, namespace.GetNamespaceName(name, true), name)
         end
     end
 
@@ -2172,7 +2172,7 @@ do
     -- @usage       export { "print", log = "math.log", System.Delegate }
     -----------------------------------------------------------------------
     export                      = function (...)
-        local visitor, env, name, definition, flag, stack  = getFeatureParams(export, nil, ...)
+        local visitor, env, name, definition, flag, stack  = getFeatureParams(export, namespace, ...)
 
         if not visitor  then error("Usage: export(name|namelist) - The system can't figure out the environment", stack + 1) end
 
