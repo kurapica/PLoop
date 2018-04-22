@@ -26,7 +26,7 @@ PLoop(function(_ENV)
             strlower                = string.lower,
             safeset                 = Toolset.safeset,
             getsuffix               = IO.Path.GetSuffix,
-
+            existfile               = IO.File.Exist,
             TryRunWithLock          = ILockManager.TryRunWithLock,
             RunWithLock             = ILockManager.RunWithLock,
         }
@@ -45,6 +45,7 @@ PLoop(function(_ENV)
         __Static__() function LoadResource(path, reader, trylock)
             local loader        = _ResourceLoader[strlower(getsuffix(path))]
             if not loader then return end
+            if not reader and not existfile(path) then return end
 
             loader              = loader()
             return (trylock and TryRunWithLock or RunWithLock)("PLOOP_IRESOURCE_LOADER", loader.Load, loader, path, reader)
