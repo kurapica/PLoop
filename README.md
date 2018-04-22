@@ -161,7 +161,7 @@ Before the introduction of the OOP part, I'll show some scenarios of the usages 
 In Lua, we use the table in two ways to store datas:
 
 * array table, we only care the values with orders
-* has table, we care about the key and value
+* hash table, we care about the key and value
 
 In the **PLoop**, we have the **System.Collections.List** represents the array table and the **System.Collections.Dictionary** represents the hash table.
 
@@ -4552,7 +4552,7 @@ The **List** extend the **IIndexedList** interface, so it can use all stream met
 
 The **IDictionary** interface represents the key-value pairs collections, it also extend the **Iterable** interface.
 
-The dictionary stream methods like **Map**, **Filter**, **Reduce**, **Each** and the **Keys**, **Values** property are also defined in the **IDictionary**. 
+The dictionary stream methods like **Map**, **Filter**, **Reduce**, **Each** and the **Keys**, **Values** property are also defined in the **IDictionary**.
 
 So you can extend the interface to gain those features.
 
