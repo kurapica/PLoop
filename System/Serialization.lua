@@ -488,13 +488,13 @@ PLoop(function(_ENV)
             return deserialize(provider:Deserialize(reader), otype)
         end
 
-        __Arguments__{ FormatProvider, Serializable, Variable.Optional(Function + System.IO.TextWriter) }
+        __Arguments__{ FormatProvider, Serializable, (Function + System.IO.TextWriter)/nil }
         __Static__() function Serialize(provider, object, writer)
             if type(object) ~= "table" then return provider:Serialize(object, writer) end
             return provider:Serialize(serialize(object, nil, {}), writer)
         end
 
-        __Arguments__{ FormatProvider, Serializable, SerializableType, Variable.Optional(Function + System.IO.TextWriter) }
+        __Arguments__{ FormatProvider, Serializable, SerializableType, (Function + System.IO.TextWriter)/nil }
         __Static__() function Serialize(provider, object, otype, writer)
             if type(object) ~= "table" then return provider:Serialize(object, writer) end
             return provider:Serialize(serialize(object, otype, {}), writer)

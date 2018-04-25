@@ -146,7 +146,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable("type", StructType + ClassType, true), Variable.Rest() }
+        __Arguments__{ Variable("type", StructType + ClassType, true), Any * 0 }
         function Recycle(self, cls, ...)
             if cls then
                 self.Type = cls

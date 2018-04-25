@@ -115,13 +115,13 @@ PLoop(function(_ENV)
         function Diff(self, obj) return diff(self.time, obj.time) end
 
         --- Converts the value of the current DateTime object to its equivalent string representation using the specified format.
-        __Arguments__{ Variable.Optional(TimeFormat, "%c") }
+        __Arguments__{ TimeFormat/"%c" }
         function ToString(self, fmt)
             return date(fmt, self.time)
         end
 
         --- Converts the value of the current DateTime object to its equivalent UTC string representation using the specified format.
-        __Arguments__{ Variable.Optional(TimeFormat, "!%c") }
+        __Arguments__{ TimeFormat/"!%c" }
         function ToUTCString(self, fmt)
             if not strfind(fmt, "^!") then fmt = "!" .. fmt end
             return date(fmt, self.time)

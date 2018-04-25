@@ -74,7 +74,7 @@ PLoop(function(_ENV)
             end
         end
 
-        __Arguments__{ String, Variable.Optional(FileReadMode, FileReadMode.Read) }
+        __Arguments__{ String, FileReadMode/FileReadMode.Read }
         function FileReader(self, file, mode)
             self.__file = fopen(file, mode) or false
 

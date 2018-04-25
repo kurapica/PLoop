@@ -60,7 +60,7 @@ PLoop(function(_ENV)
             end
         end
 
-        __Arguments__{ String, Variable.Optional(FileWriteMode, FileWriteMode.Write) }
+        __Arguments__{ String, FileWriteMode/FileWriteMode.Write }
         function FileWriter(self, file, mode)
             self.__file = fopen(file, mode) or false
 

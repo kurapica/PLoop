@@ -337,7 +337,7 @@ PLoop(function(_ENV)
     --                     extend method                     --
     -----------------------------------------------------------
     --- Reverse the indexed list
-    __Arguments__{ Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Integer/1, Integer/-1 }
     function IIndexedList:Reverse(start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -355,7 +355,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply insertion sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:InsertionSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -372,7 +372,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply bubble sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:BubbleSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -408,7 +408,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply selection sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:SelectionSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -423,7 +423,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply comb sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:CombSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -453,7 +453,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply merge sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:MergeSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -465,7 +465,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply quick sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:QuickSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -474,7 +474,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply heap sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:HeapSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -491,7 +491,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply timsort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:TimSort(compare, start, stop)
         start, stop = formatParams(self, start, stop)
 
@@ -588,7 +588,7 @@ PLoop(function(_ENV)
     end
 
     --- Apply default sort on the indexed list
-    __Arguments__{ Variable.Optional(Callable, "x,y=>x<y"), Variable.Optional(Integer, 1), Variable.Optional(Integer, -1) }
+    __Arguments__{ Callable/"x,y=>x<y", Integer/1, Integer/-1 }
     function IIndexedList:Sort(func, start, stop)
         if start == 1 and (stop == -1 or stop == self.Count) then tsort(self, func) return self end
         return self:TimSort(func, start, stop)

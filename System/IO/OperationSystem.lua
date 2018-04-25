@@ -154,7 +154,7 @@ PLoop(function(_ENV)
         __Arguments__{}
         function __PipeRead__() end
 
-        __Arguments__{ Callable, Callable, OperationSystemType, Variable.Optional(NaturalNumber, 1) }
+        __Arguments__{ Callable, Callable, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandProvider, resultProvider, ostype, argCount)
             self.CommandProvider    = commandProvider
             self.ResultProvider     = resultProvider
@@ -162,7 +162,7 @@ PLoop(function(_ENV)
             self.ArgumetCount       = argCount
         end
 
-        __Arguments__{ Callable, String, OperationSystemType, Variable.Optional(NaturalNumber, 1) }
+        __Arguments__{ Callable, String, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandProvider, resultFormat, ostype, argCount)
             self.CommandProvider    = commandProvider
             self.ResultFormat       = resultFormat
@@ -170,7 +170,7 @@ PLoop(function(_ENV)
             self.ArgumetCount       = argCount
         end
 
-        __Arguments__{ String, Callable, OperationSystemType, Variable.Optional(NaturalNumber, 1) }
+        __Arguments__{ String, Callable, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandFormat, resultProvider, ostype, argCount)
             self.CommandFormat      = commandFormat
             self.ResultProvider     = resultProvider
@@ -178,7 +178,7 @@ PLoop(function(_ENV)
             self.ArgumetCount       = argCount
         end
 
-        __Arguments__{ String, String, OperationSystemType, Variable.Optional(NaturalNumber, 1) }
+        __Arguments__{ String, String, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandFormat, resultFormat, ostype, argCount)
             self.CommandFormat      = commandFormat
             self.ResultFormat       = resultFormat

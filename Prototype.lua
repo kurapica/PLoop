@@ -34,7 +34,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
 -- Update Date  :   2018/04/19                                               --
--- Version      :   1.0.0-beta010                                            --
+-- Version      :   1.0.0-beta011                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -12067,7 +12067,7 @@ do
 
     --- Represents the variable types for arguments or return values
     __Sealed__() Variable = struct (_PLoopEnv, "System.Variable") (function(_ENV)
-        export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue }
+        export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue, Any }
 
         --- the variable's name
         member "name"       { type = NEString }
@@ -12140,6 +12140,10 @@ do
 
                 if var.default ~= nil then
                     var.default = var.validate(var.type, var.default)
+                end
+
+                if var.type == Any then
+                    var.validate = nil
                 end
             else
                 var.validate = nil
@@ -12675,7 +12679,7 @@ do
                 if vars[len].immutable then
                     token = turnonflags(FLG_VAR_IMMLST, token)
                 end
-                if vars[len].type then
+                if vars[len].validate then
                     token = turnonflags(FLG_VAR_LSTVLD, token)
                 end
                 if (vars[len].mincount or 0) == 0 then
@@ -12760,7 +12764,7 @@ do
                             if _ai_ == nil then
                                 if not _vi_.optional then return onlyvalid or "the _i_ argument can't be nil" end
                                 _ai_ = _vi_.default
-                            elseif _vi_.type then
+                            elseif _vi_.validate then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_, nochange)
                                 if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
                                 _ai_ = ret
@@ -12771,7 +12775,7 @@ do
                             if _ai_ == nil then
                                 if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", 2) end
                                 _ai_ = _vi_.default
-                            elseif _vi_.type then
+                            elseif _vi_.validate then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_)
                                 if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 2) end
                                 _ai_ = ret
@@ -13391,7 +13395,7 @@ do
             return params, true
         end
 
-        __Arguments__{ Variable.Rest(AnyType) }
+        __Arguments__{ AnyType * 0 }
         function __new(_, ...)
             return { ... }, true
         end
@@ -13452,7 +13456,7 @@ do
 
         --- Set the init function to the delegate
         -- @param   init                        the init function
-        __Arguments__{ Variable.Optional(Function) }
+        __Arguments__{ Function/nil }
         function SetInitFunction(self, func)
             func = func or false
             if self[0] ~= func then
@@ -13463,7 +13467,7 @@ do
 
         --- Set the final function to the delegate
         -- @param   final                       the final function
-        __Arguments__{ Variable.Optional(Function) }
+        __Arguments__{ Function/nil }
         function SetFinalFunction(self, func)
             func = func or false
             if self[-1] ~= func then

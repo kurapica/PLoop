@@ -46,7 +46,7 @@ PLoop(function(_ENV)
         -- @param   logLevel                the message's log level, if lower than object.LogLevel, the message will be discarded
         -- @param   message                 the send out message, can be a formatted string
         -- @param   ...                     the list values to be included into the formatted string
-        __Arguments__{ LogLevel, String, Variable.Rest() }
+        __Arguments__{ LogLevel, String, Any * 0 }
         function Log(self, logLvl, msg, ...)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
@@ -68,7 +68,7 @@ PLoop(function(_ENV)
         -- @format  (handler[, loglvl])
         -- @param   handler                 the log handler
         -- @param   loglvl                  the handler only receive this level's message if setted, or receive all level's message if keep nil
-        __Arguments__{ Callable, Variable.Optional(LogLevel) }
+        __Arguments__{ Callable, LogLevel/nil }
         function AddHandler(self, handler, loglevel)
             if not self.__Handler[handler] then
                 self.__Handler[handler] = loglevel or true
@@ -87,7 +87,7 @@ PLoop(function(_ENV)
         --- Set a prefix for a log level, thre prefix will be added to the message when the message is with the same log level
         -- @param   logLevel                the log level
         -- @param   prefix                  the prefix string
-        __Arguments__{ LogLevel, Variable.Optional(String) }
+        __Arguments__{ LogLevel, String/nil }
         function SetPrefix(self, loglvl, prefix)
             self.__Prefix[loglvl] = prefix
             return self[loglvl]

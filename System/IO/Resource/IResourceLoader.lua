@@ -123,7 +123,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable.Rest(NEString) }
+        __Arguments__{ NEString * 0 }
         function __new(_, ...)
             return { ... }, true
         end

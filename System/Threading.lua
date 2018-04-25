@@ -140,7 +140,7 @@ PLoop(function(_ENV)
             --
             --          -- Oupput
             --          -- thread: 00F95100 1   2   3
-            __Arguments__{ Function, Variable.Rest() }
+            __Arguments__{ Function, Any * 0 }
             function ThreadCall(self, func, ...)
                 local thread        = newthread(self)
                 return thread(func)(...)
@@ -164,7 +164,7 @@ PLoop(function(_ENV)
             --
             --          -- Also can be used as
             --          for k, v in Threading.Iterator(a, 1, 3) do print(k, v) end
-            __Arguments__{ Function, Variable.Rest() }
+            __Arguments__{ Function, Any * 0 }
             function GetIterator(self, func, ...)
                 local thread        = newthread(self)
                 return thread(func, ...)

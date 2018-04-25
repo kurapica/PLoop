@@ -103,7 +103,7 @@ PLoop(function(_ENV)
             return obj, true
         end
 
-        __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function __new(_, iter, obj, idx)
             local i     = 1
             local lst   = {}
@@ -130,7 +130,7 @@ PLoop(function(_ENV)
             return obj, true
         end
 
-        __Arguments__{ NaturalNumber, Variable.Optional() }
+        __Arguments__{ NaturalNumber, System.Any/nil }
         function __new(_, count, initValue)
             local obj   = {}
             if initValue ~= nil then
@@ -444,7 +444,7 @@ PLoop(function(_ENV)
         end
 
         --- Used to filter the items with a check function
-        __Arguments__{ String, Variable.Optional() }
+        __Arguments__{ String, System.Any/nil }
         function Filter(self, feature, value)
             self[FLD_FILTERACTN] = value ~= nil and function(item)
                 if type(item) == "table" then
@@ -463,7 +463,7 @@ PLoop(function(_ENV)
         end
 
         --- Used to select items with ranged index
-        __Arguments__{ Variable.Optional(Integer, 1), Variable.Optional(Integer, -1), Variable.Optional(Integer, 1) }
+        __Arguments__{ Integer/1, Integer/-1, Integer/1 }
         function Range(self, start, stop, step)
             self[FLD_RANGESTART], self[FLD_RANGESTOP], self[FLD_RANGESTEP] = start, stop, step
             return self
@@ -477,7 +477,7 @@ PLoop(function(_ENV)
             self[FLD_TARGETLIST] = list
         end
 
-        __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function ListStreamWorker(self, iter, obj, idx)
             self[FLD_TARGETITER] = iter
             self[FLD_ITEROBJECT] = obj
@@ -494,7 +494,7 @@ PLoop(function(_ENV)
             return worker
         end
 
-        __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function __exist(_, iter, obj, idx)
             local worker = getIdleworkers()
             if worker then
@@ -533,22 +533,22 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Filter(self, func) return ListStreamWorker(self):Filter(func) end
 
-        __Arguments__{ String, Variable.Optional() }
+        __Arguments__{ String, System.Any/nil }
         function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
 
         --- Used to select items with ranged index
-        __Arguments__{ Variable.Optional(Integer, 1), Variable.Optional(Integer, -1), Variable.Optional(Integer, 1) }
+        __Arguments__{ Integer/1, Integer/-1, Integer/1 }
         function Range(self, start, stop, step) return ListStreamWorker(self):Range(start, stop, step) end
 
         -----------------------------------------------------------
         --                     Final method                      --
         -----------------------------------------------------------
         --- Convert the selected items to a list
-        __Arguments__{ Variable.Optional(-IList, List) }
+        __Arguments__{ -IList/List }
         function ToList(self, cls) return cls(self) end
 
         --- Combine the items to get a result
-        __Arguments__{ Callable, Variable.Optional() }
+        __Arguments__{ Callable, System.Any/nil }
         function Reduce(self, func, init)
             for _, obj in self:GetIterator() do
                 if init == nil then
@@ -561,14 +561,14 @@ PLoop(function(_ENV)
         end
 
         --- Call the function for each element or set property's value for each element
-        __Arguments__{ Callable, Variable.Rest() }
+        __Arguments__{ Callable, System.Any * 0 }
         function Each(self, func, ...)
             for _, obj in self:GetIterator() do
                 func(obj, ...)
             end
         end
 
-        __Arguments__{ String, Variable.Rest() }
+        __Arguments__{ String, System.Any * 0 }
         function Each(self, feature, ...)
             local cls, cmethod
 
@@ -595,7 +595,7 @@ PLoop(function(_ENV)
         end
 
         --- Check if any element meet the requirement of the target function
-        __Arguments__{ Callable, Variable.Rest() }
+        __Arguments__{ Callable, System.Any * 0 }
         function Any(self, chk, ...)
             local iter, obj, idx, val = self:GetIterator()
             idx, val = iter(obj, idx)
@@ -611,7 +611,7 @@ PLoop(function(_ENV)
         end
 
         --- Check if all elements meet the requirement of the target function
-        __Arguments__{ Callable, Variable.Rest() }
+        __Arguments__{ Callable, System.Any * 0 }
         function All(self, chk, ...)
             local iter, obj, idx, val = self:GetIterator()
             idx, val = iter(obj, idx)
@@ -627,7 +627,7 @@ PLoop(function(_ENV)
         end
 
         --- Get the first element of the list
-        __Arguments__{ Callable, Variable.Rest() }
+        __Arguments__{ Callable, System.Any * 0 }
         function First(self, chk, ...)
             local iter, obj, idx, val = self:GetIterator()
             idx, val = iter(obj, idx)
@@ -653,7 +653,7 @@ PLoop(function(_ENV)
         end
 
         --- Get the first element of the list, if not existed use the default as result
-        __Arguments__{ Variable("default"), Callable, Variable.Rest() }
+        __Arguments__{ Variable("default"), Callable, System.Any * 0 }
         function FirstOrDefault(self, default, chk, ...)
             local iter, obj, idx, val = self:GetIterator()
             idx, val = iter(obj, idx)

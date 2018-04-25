@@ -109,7 +109,7 @@ PLoop(function(_ENV)
             return dict, true
         end
 
-        __Arguments__{ Callable, Variable.Optional(), Variable.Optional() }
+        __Arguments__{ Callable, Any/nil, Any/nil }
         function __new(_, iter, obj, idx)
             local dict  = {}
             for key, value in iter, obj, idx do
@@ -263,14 +263,14 @@ PLoop(function(_ENV)
         --                     Final method                      --
         -----------------------------------------------------------
         --- Combine the key-value pairs to get a result
-        __Arguments__{ Callable, Variable.Optional()}
+        __Arguments__{ Callable, Any/nil }
         function Reduce(self, func, init)
             for key, value in self:GetIterator() do init = func(key, value, init) end
             return init
         end
 
         --- Call the function for each element or set property's value for each element
-        __Arguments__{ Callable, Variable.Rest() }
+        __Arguments__{ Callable, Any * 0 }
         function Each(self, func, ...) for key, value in self:GetIterator() do func(key, value, ...) end end
 
         --- get the keys
