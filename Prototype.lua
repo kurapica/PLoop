@@ -6222,6 +6222,12 @@ do
             tinsert(upval, data)
         elseif validateflags(MOD_NORAWSET_OBJ, info[FLD_IC_MOD]) then
             token   = turnonflags(FLG_IC_NRAWST, token)
+
+            -- Still can override the object method
+            if not validateflags(FLG_IC_OBJATR, token) and info[FLD_IC_OBJMTD] then
+                token   = turnonflags(FLG_IC_OBJMTD, token)
+                tinsert(upval, info[FLD_IC_OBJMTD])
+            end
         end
 
         -- No __newindex generated
@@ -6268,14 +6274,30 @@ do
                 ]])
             end
 
-            if validateflags(FLG_IC_NEWIDX, token) or not validateflags(FLG_IC_NRAWST, token) then
+            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
+                tinsert(body, [[
+                    local assign = false
+                ]])
+            end
+
+            if validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
+                uinsert(apis, "type")
+                tinsert(body, [[
+                    if type(value) == "function" then
+                ]])
+
                 if validateflags(FLG_IC_OBJATR, token) then
-                    uinsert(apis, "type")
                     uinsert(apis, "attribute")
                     uinsert(apis, "ATTRTAR_FUNCTION")
+
+                    if validateflags(FLG_IC_NRAWST, token) then
+                        tinsert(body, [[
+                        assign = true
+                        ]])
+                    end
+
                     tinsert(body, [[
-                        local tvalue = type(value)
-                        if tvalue == "function" and attribute.HaveRegisteredAttributes() then
+                        if attribute.HaveRegisteredAttributes() then
                             attribute.SaveAttributes(value, ATTRTAR_FUNCTION, 2)
                             local ret = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, key, 2)
                             if value ~= ret then
@@ -6286,14 +6308,37 @@ do
                             attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, 2)
                         end
                     ]])
+                else
+                    tinsert(head, "methods")
+                    tinsert(body, [[
+                        if methods[key] then
+                            assign = true
+                        end
+                    ]])
                 end
 
+                tinsert(body, [[
+                    end
+                ]])
+            end
+
+            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
+                tinsert(body, [[
+                    if assign then
+                ]])
+            end
+
+            if not validateflags(FLG_IC_NRAWST, token) or validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
                 if validateflags(FLG_IC_NEWIDX, token) then
                     tinsert(head, "_newindex")
-                    tinsert(body, [[_newindex(self, key, value)]])
+                    tinsert(body, [[
+                        _newindex(self, key, value)
+                    ]])
                 else
                     uinsert(apis, "rawset")
-                    tinsert(body, [[rawset(self, key, value)]])
+                    tinsert(body, [[
+                        rawset(self, key, value)
+                    ]])
                 end
             end
 
@@ -6301,7 +6346,17 @@ do
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
-                tinsert(body, [[error(strformat("The object can't accept field that named %q", tostring(key)), 2)]])
+                if validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
+                    tinsert(body, [[
+                    else
+                        error(strformat("The object can't accept field that named %q", tostring(key)), 2)
+                    end
+                    ]])
+                else
+                    tinsert(body, [[
+                    error(strformat("The object can't accept field that named %q", tostring(key)), 2)
+                    ]])
+                end
             end
 
             tinsert(body, [[end]])

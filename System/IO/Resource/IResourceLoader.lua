@@ -88,7 +88,7 @@ PLoop(function(_ENV)
     end)
 
     --- The resource loader for specific suffix files to generate type features or others.
-    __Final__() __Sealed__()
+    __Final__() __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
     class "__ResourceLoader__" (function (_ENV)
         extend "IAttachAttribute"
 

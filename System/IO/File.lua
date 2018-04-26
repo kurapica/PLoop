@@ -38,6 +38,7 @@ PLoop(function(_ENV)
         __PipeRead__ (function(path) return strformat("dir /t:c \"%s\"", strgsub(path, "/", "\\")) end, "%d+/%d+/%d+%s+[%d:]+", OperationSystemType.Windows)
         __PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -U \"%s\"", formatMacTime, OperationSystemType.MacOS)
         __PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OperationSystemType.Linux)
+        __Static__()
         function GetCreationTime(path, result)
             if not result then Error("[System.IO.File][GetCreationTime][Fail] %s - %s", path, result or "nil") end
             return result
@@ -47,6 +48,7 @@ PLoop(function(_ENV)
         __PipeRead__ (function(path) return strformat("forfiles /p \"%s\" /M \"%s\" /C \"cmd /c echo @fdate @ftime\"", strmatch(strgsub(path, "/", "\\"), "^(.+)[\\/](.-)$")) end, "[^\n]+", OperationSystemType.Windows)
         __PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T \"%s\"", formatMacTime, OperationSystemType.MacOS)
         __PipeRead__ ("ls --full-time \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OperationSystemType.Linux)
+        __Static__()
         function GetLastWriteTime(path, result)
             if not result then Error("[System.IO.File][GetLastWriteTime][Fail] %s - %s", path, result or "nil") end
             return result
@@ -56,12 +58,14 @@ PLoop(function(_ENV)
         __PipeRead__ (function(path) return strformat("dir /t:a \"%s\"", strgsub(path, "/", "\\")) end, "%d+/%d+/%d+%s+[%d:]+", OperationSystemType.Windows)
         __PipeRead__ ("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l -T -u \"%s\"", formatMacTime, OperationSystemType.MacOS)
         __PipeRead__ ("ls --full-time -u \"%s\"", "%d+-%d+-%d+%s+[%d:]+", OperationSystemType.Linux)
+        __Static__()
         function GetLastAccessTime(path, result)
             if not result then Error("[System.IO.File][GetLastAccessTime][Fail] %s - %s", path, result or "nil") end
             return result
         end
 
         --- Whether the file is existed
+        __Static__()
         function Exist(path) local f = fopen(path, "r") if f then f:close() return true end return false  end
     end)
 end)

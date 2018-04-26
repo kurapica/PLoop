@@ -41,6 +41,7 @@ PLoop(function(_ENV)
         --                           LoadFileInfo                            --
         -----------------------------------------------------------------------
         --- the loaded resource info
+        __NoRawSet__(false) __NoNilValue__(false)
         local LoadFileInfo      = class {
             AddRelatedPath      = function (self, info)
                 if self.reloadWhenModified then
