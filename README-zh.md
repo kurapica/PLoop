@@ -4016,6 +4016,23 @@ PLoop(function(_ENV)
 end)
 ```
 
+即便开启了禁止写入模式，我们依然可以使用函数覆盖对象的方法：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    class "A" { Test = function() end }
+
+    o = A()
+    o.Test = 123    -- 错误
+    o.Test = print  -- 正常
+    o.Test1= print  -- 错误
+end)
+
+
 #### `__ObjFuncAttr__`
 
 向目标类的对象写入新函数时，函数将被传入特性系统被调整（目标类型为function）
@@ -4042,6 +4059,9 @@ PLoop(function(_ENV)
 	o:Test() -- thread: 02F195E8
 end)
 ```
+
+如果这个类同时被标识为`__NoRawSet__`，我们依然可以向它赋予任意的函数值，因为`__ObjFuncAttr__`特性表明这个类的对象将被用来作为函数的容器。
+
 
 #### `__ObjectSource__`
 

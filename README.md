@@ -3970,6 +3970,23 @@ PLoop(function(_ENV)
 end)
 ```
 
+Even with the no rawset mode on, you still can override the object's method with functions:
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    class "A" { Test = function() end }
+
+    o = A()
+    o.Test = 123    -- Error
+    o.Test = print  -- Okay
+    o.Test1= print  -- Error
+end)
+
+
 #### `__ObjFuncAttr__`
 
 Set the class's objects so functions that be assigned on them will be modified by the attribute system(target type is function)
@@ -3996,6 +4013,9 @@ PLoop(function(_ENV)
 	o:Test() -- thread: 02F195E8
 end)
 ```
+
+If the class is also marked with `__NoRawSet__`, we still can assign any functions on the object since the `__ObjFuncAttr__` means the object'll be used as a container of functions.
+
 
 #### `__ObjectSource__`
 
