@@ -6332,7 +6332,7 @@ do
                 if validateflags(FLG_IC_NEWIDX, token) then
                     tinsert(head, "_newindex")
                     tinsert(body, [[
-                        _newindex(self, key, value)
+                        _newindex(self, key, value, 2)
                     ]])
                 else
                     uinsert(apis, "rawset")
