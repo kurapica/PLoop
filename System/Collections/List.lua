@@ -34,6 +34,7 @@ PLoop(function(_ENV)
 
     --- The default indexed list
     __Sealed__() __Serializable__() __Template__( Any )
+    __NoRawSet__(false) __NoNilValue__(false)
     class "List" (function (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
@@ -169,6 +170,7 @@ PLoop(function(_ENV)
     --- the list stream worker, used to provide stream filter, map and etc
     -- operations on a list without creating any temp caches
     __Final__() __Sealed__() __SuperObject__(false)
+    __NoRawSet__(false) __NoNilValue__(false)
     class "ListStreamWorker" (function (_ENV)
         extend "IList"
 

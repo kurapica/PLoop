@@ -3919,6 +3919,21 @@ PLoop(function(_ENV)
 end)
 ```
 
+Also you can mark a class so its object's fields can be accessed no matter how the platform settings is applied
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    __NoNilValue__(false)
+    class "A" {}
+
+    print(A().Test) -- nil
+end)
+```
+
 #### `__NoRawSet__`
 
 Set the class's objects so save value to non-existent fields on them will be denied.
@@ -3937,6 +3952,21 @@ PLoop(function(_ENV)
 
 	o = A()
 	o.age = 10 -- Error: The object can't accept field that named "age"
+end)
+```
+
+Also you can mark a class so its object's fields can be assigned no matter how the platform settings is applied
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    __NoRawSet__(false)
+    class "A" {}
+
+    A().Test = 123 -- Okay
 end)
 ```
 

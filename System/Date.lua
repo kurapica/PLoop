@@ -44,7 +44,7 @@ PLoop(function(_ENV)
     }
 
     --- Represents the date object
-    __Final__() __Sealed__() __Serializable__()
+    __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false)
     class "Date" (function (_ENV)
         extend "ICloneable" "ISerializable"
 

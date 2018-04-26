@@ -22,6 +22,7 @@ PLoop(function(_ENV)
 
     --- The default dictionary
     __Sealed__() __Serializable__() __Template__( Any, Any )
+    __NoRawSet__(false) __NoNilValue__(false)
     class "Dictionary" (function (_ENV, keytype, valtype)
         extend "IDictionary" "ISerializable"
 
@@ -122,6 +123,7 @@ PLoop(function(_ENV)
     --- the dictionary stream worker, used to provide stream filter, map and
     -- etc operations on a dictionary without creating any temp caches
     __Final__() __Sealed__() __SuperObject__(false)
+    __NoRawSet__(false) __NoNilValue__(false)
     class "DictionaryStreamWorker" (function (_ENV)
         extend "IDictionary"
 

@@ -6337,7 +6337,7 @@ do
     local genConstructor        = function (target, info)
         if validateflags(MOD_ABSTRACT_CLS, info[FLD_IC_MOD]) then
             local msg = strformat("The %s is abstract, can't be used to create objects", tostring(target))
-            info[FLD_IC_OBCTOR] = function() error(msg, 3) end
+            info[FLD_IC_OBCTOR] = function() throw(msg) end
             return
         end
 
@@ -7017,14 +7017,14 @@ do
         info[FLD_IC_MOD]        = turnonflags(flag, info[FLD_IC_MOD])
     end
 
-    local setSuperObjectStyle   = function (target, on, stack)
+    local toggleICMode          = function (target, flag, on, stack)
         local info, _, stack, msg  = preDefineCheck(target, nil, stack)
         if not info then return msg, stack end
 
         if on then
-            info[FLD_IC_MOD]        = turnoffflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD])
+            info[FLD_IC_MOD]        = turnonflags(flag, info[FLD_IC_MOD])
         else
-            info[FLD_IC_MOD]        = turnonflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD])
+            info[FLD_IC_MOD]        = turnoffflags(flag, info[FLD_IC_MOD])
         end
     end
 
@@ -8499,15 +8499,17 @@ do
                 if msg then error("Usage: class.SetObjectGenerator(target, func[, stack]) - " .. msg, stack + 1) end
             end;
 
-            --- Make the class object don't receive any value assignment excpet existed fields
+            --- Make the class object so you can't read value from a non-existed fields
             -- @static
             -- @method  SetNilValueBlocked
             -- @owner   class
-            -- @format  (target[, stack])
+            -- @format  (target, on[, stack])
             -- @param   target                      the target class
+            -- @param   on                          true if we can't read non-existed fields from the object
             -- @param   stack                       the stack level
-            ["SetNilValueBlocked"] = function(target, stack)
-                setModifiedFlag(class, target, MOD_NONILVAL_OBJ, "SetNilValueBlocked", stack)
+            ["SetNilValueBlocked"] = function(target, on, stack)
+                local msg, stack    = toggleICMode(target, MOD_NONILVAL_OBJ, on, stack)
+                if msg then error("Usage: class.SetNilValueBlocked(target, on, [, stack])  - " .. msg, stack + 1) end
             end;
 
             --- Make the class whether use super object access style like `super[obj].Name = "Ann"`
@@ -8519,7 +8521,7 @@ do
             -- @param   on                          true if using the super object access style
             -- @param   stack                       the stack level
             ["SetSuperObjectStyle"] = function(target, on, stack)
-                local msg, stack    = setSuperObjectStyle(target, on, stack)
+                local msg, stack    = toggleICMode(target, MOD_NOSUPER_OBJ, not on, stack)
                 if msg then error("Usage: class.SetSuperObjectStyle(target, on, [, stack])  - " .. msg, stack + 1) end
             end;
 
@@ -8535,15 +8537,17 @@ do
                 if msg then error("Usage: class.SetObjectSourceDebug(target[, stack])  - " .. msg, stack + 1) end
             end;
 
-            --- Make the class object don't receive any value assignment excpet existed fields
+            --- Make the class object so we can't assign value to non-existed fields
             -- @static
-            -- @method  IsRawSetBlocked
+            -- @method  SetRawSetBlocked
             -- @owner   class
             -- @format  (target[, stack])
             -- @param   target                      the target class
+            -- @param   on                          true if we can't assign value to non-existed fields
             -- @param   stack                       the stack level
-            ["SetRawSetBlocked"]= function(target, stack)
-                setModifiedFlag(class, target, MOD_NORAWSET_OBJ, "SetRawSetBlocked", stack)
+            ["SetRawSetBlocked"]= function(target, on, stack)
+                local msg, stack    = toggleICMode(target, MOD_NORAWSET_OBJ, on, stack)
+                if msg then error("Usage: class.SetRawSetBlocked(target, on, [, stack])  - " .. msg, stack + 1) end
             end;
 
             --- Seal the class
@@ -11313,9 +11317,10 @@ do
         return function(val, onlyvalid) return not valid(val) and (onlyvalid or msg) or nil end
     end
 
-    local getAttributeName      = function(self) return namespace.GetNamespaceName(getmetatable(self)) end
-
-    local regSelfOrObject       = function(self, tbl) attribute.Register(type(tbl) == "table" and prototype.NewObject(self, tbl) or self) end
+    local getAttributeName      = function(self) return namespace.GetNamespaceName(namespace.Validate(self) and self or getmetatable(self)) end
+    local regValue              = function(self, ...) attribute.Register(prototype.NewObject(self, { ... })) end
+    local regSelfOrObject       = function(self, tbl) attribute.Register(type(tbl) == "table" and getmetatable(tbl) == nil and prototype.NewObject(self, tbl) or self) end
+    local regSelfOrValue        = function(self, tbl) attribute.Register(type(tbl) == "table" and getmetatable(tbl) == nil and prototype.NewObject(self, tbl) or tbl ~= nil and prototype.NewObject(self, { tbl }) or self) end
 
     local parseLambda           = function(value, onlyvalid)
         if _LambdaCache[value] then return end
@@ -11383,7 +11388,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11423,7 +11428,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11454,10 +11459,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11480,10 +11482,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_STRUCT,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11513,10 +11512,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_MEMBER,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11534,10 +11530,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_EVENT,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11558,7 +11551,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE + ATTRTAR_CLASS + ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = attribute.Register, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11669,7 +11662,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = attribute.Register, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11691,10 +11684,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11709,7 +11699,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11718,9 +11708,7 @@ do
     -- @attribute   System.__Namespace__
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Namespace__",             prototype {
-        __call = function(self, value)
-            namespace.SetNamespaceForNext(value)
-        end,
+        __call = function(self, value) namespace.SetNamespaceForNext(value) end,
         __index = writeonly, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
@@ -11730,14 +11718,18 @@ do
     --
     -- @attribute   System.__NoNilValue__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoNilValue__",            prototype {
+    __NoNilValue__ = namespace.SaveNamespace("System.__NoNilValue__", prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetNilValueBlocked(target, parsestack(stack) + 1)
+                if targettype  == ATTRTAR_CLASS then
+                    local on        = self[1]
+                    if on == nil then on = true end
+                    class.SetNilValueBlocked(target, on, parsestack(stack) + 1)
+                end
             end,
-            ["AttributeTarget"] = ATTRTAR_CLASS,
+            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11746,14 +11738,18 @@ do
     --
     -- @attribute   System.__NoRawSet__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__NoRawSet__",              prototype {
+    __NoRawSet__ = namespace.SaveNamespace("System.__NoRawSet__", prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetRawSetBlocked(target, parsestack(stack) + 1)
+                if targettype  == ATTRTAR_CLASS then
+                    local on        = self[1]
+                    if on == nil then on = true end
+                    class.SetRawSetBlocked(target, on, parsestack(stack) + 1)
+                end
             end,
-            ["AttributeTarget"] = ATTRTAR_CLASS,
+            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11765,14 +11761,13 @@ do
     namespace.SaveNamespace("System.__SuperObject__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
-                class.SetSuperObjectStyle(target, self[1] and true or false, parsestack(stack) + 1)
+                local on        = self[1]
+                if on == nil then on = true end
+                class.SetSuperObjectStyle(target, on, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11788,7 +11783,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11806,7 +11801,7 @@ do
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
             ["Inheritable"]     = false,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11821,10 +11816,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11839,7 +11831,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_INTERFACE + ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11869,10 +11861,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11888,7 +11877,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -11915,7 +11904,7 @@ do
             ["AttributeTarget"] = ATTRTAR_METHOD + ATTRTAR_EVENT + ATTRTAR_PROPERTY,
             ["Priority"]        = 9999,     -- Should be applied at the first for method
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = namespace.GetNamespaceName
+        __call = attribute.Register, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
 
     -----------------------------------------------------------------------
@@ -11930,10 +11919,7 @@ do
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
         },
-        __call = function(self, value)
-            attribute.Register(prototype.NewObject(self, { value }))
-        end,
-        __newindex = readonly, __tostring = getAttributeName
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -------------------------------------------------------------------------------
@@ -12364,6 +12350,7 @@ do
 
     --- Represents the interface for code environment
     __Sealed__() __ObjectSource__{ Inheritable = true }
+    __NoNilValue__{ false, Inheritable = true } __NoRawSet__{ false, Inheritable = true }
     IEnvironment = interface "System.IEnvironment" (function(_ENV)
         export {
             tostring            = tostring,
@@ -12483,7 +12470,8 @@ do
             FLG_VAR_LENGTH      = newflags(),        -- the multiply factor of length
 
             FLG_OVD_SELFIN      = newflags(true),    -- has self
-            FLG_OVD_THIS        = newflags(),        -- the constructor, use throw and this keyword
+            FLG_OVD_THROW       = newflags(),        -- the constructor, use throw
+            FLG_OVD_THIS        = newflags(),        -- need this keyword
             FLG_OVD_ONECNT      = newflags(),        -- only one variable list
 
             -----------------------------------------------------------
@@ -13008,7 +12996,11 @@ do
             end
 
             if THIS_METHOD[name] then
-                token           = turnonflags(FLG_OVD_THIS, token)
+                token           = turnonflags(FLG_OVD_THROW, token)
+
+                if #overload > 1 then
+                    token       = turnonflags(FLG_OVD_THIS, token)
+                end
             end
 
             if #overload == 1 then
@@ -13023,7 +13015,7 @@ do
             if not _OverloadMap[token] then
                 local body      = _Cache()
                 local apis      = _Cache()
-                local needthis  = THIS_METHOD[name] and #overload > 1
+                local needthis  = validateflags(FLG_OVD_THIS, token)
 
                 uinsert(apis, "select")
                 uinsert(apis, "chkandret")
@@ -13071,7 +13063,7 @@ do
                             msg  = valid(false, ]] .. (hasself and "self, " or "") .. [[...)
                         end
                     ]])
-                    if validateflags(FLG_OVD_THIS, token) then
+                    if validateflags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
                             if msg then throw(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg) end
                         ]])
@@ -13135,7 +13127,7 @@ do
                         end
                         -- Raise the usages
                     ]])
-                    if validateflags(FLG_OVD_THIS, token) then
+                    if validateflags(FLG_OVD_THROW, token) then
                         tinsert(body, [[
                             throw(usages)
                         ]])
@@ -13330,7 +13322,7 @@ do
         -----------------------------------------------------------
         Environment.RegisterContextKeyword(Class.GetDefinitionContext(), {
             this = function(...)
-                local ok, ret       = pcall(getCurrentOverload, 5)
+                local ok, ret   = pcall(getCurrentOverload, 4)
                 if ok and ret then
                     return ret(...)
                 else
@@ -13402,7 +13394,7 @@ do
     end)
 
     --- Represents containers of several functions as event handlers
-    __Sealed__() __Final__()
+    __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     Delegate = class (_PLoopEnv, "System.Delegate") (function(_ENV)
         event "OnChange"
 
@@ -13883,7 +13875,7 @@ do
 
     --- Represents the context object used to process the operations in an
     -- os thread, normally used in multi-os thread platforms
-    __Sealed__()
+    __Sealed__() __NoNilValue__{ false, Inheritable = true } __NoRawSet__{ false, Inheritable = true }
     class (_PLoopEnv, "System.Context") (function(_ENV)
         export {
             getlocal            = getlocal,

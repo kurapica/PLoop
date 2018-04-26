@@ -46,7 +46,7 @@ PLoop(function(_ENV)
     --         return self.Type(self.Cnt)
     --     end
     --
-    __Sealed__()
+    __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
     class "Recycle" (function(_ENV)
         export {
             type                = type,

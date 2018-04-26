@@ -35,6 +35,7 @@ PLoop(function(_ENV)
     --          print( ("%s -> %s"):format(old, new)  )
     --      end
     __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false) __Serializable__()
+    __NoRawSet__(false) __NoNilValue__(false)
     class "Array" (function(_ENV, eletype)
         inherit (List[eletype])
 

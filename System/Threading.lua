@@ -17,7 +17,7 @@ PLoop(function(_ENV)
         Environment.RegisterGlobalNamespace("System.Threading")
 
         --- the thread pool used to generate and recycle coroutines
-        __Sealed__() __Final__()
+        __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
         class "ThreadPool" (function(_ENV)
             export {
                 create              = coroutine.create,

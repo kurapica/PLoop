@@ -3965,6 +3965,21 @@ PLoop(function(_ENV)
 end)
 ```
 
+我们也可以给一个类进行标记，使它在任何平台设置下都可以被读取：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    __NoNilValue__(false)
+    class "A" {}
+
+    print(A().Test) -- nil
+end)
+```
+
 #### `__NoRawSet__`
 
 向类对象不存在的字段设置值是非法的。
@@ -3983,6 +3998,21 @@ PLoop(function(_ENV)
 
 	o = A()
 	o.age = 10 -- Error: The object can't accept field that named "age"
+end)
+```
+
+我们也可以给一个类进行标记，使它在任何平台设置下都可以被赋值：
+
+```lua
+PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true }
+
+require "PLoop"
+
+PLoop(function(_ENV)
+    __NoRawSet__(false)
+    class "A" {}
+
+    A().Test = 123 -- Okay
 end)
 ```
 
