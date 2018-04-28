@@ -3985,6 +3985,7 @@ PLoop(function(_ENV)
     o.Test = print  -- Okay
     o.Test1= print  -- Error
 end)
+```
 
 
 #### `__ObjFuncAttr__`
