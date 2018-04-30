@@ -34,7 +34,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
 -- Update Date  :   2018/04/19                                               --
--- Version      :   1.0.0-beta011                                            --
+-- Version      :   1.0.0-beta012                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -6040,7 +6040,10 @@ do
             [FLD_IC_OBJFTR]     = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
         }
 
-        if info then for i, extif in ipairs, info, FLD_IC_STEXT - 1 do ninfo[i] = extif end end
+        if info then
+            for i, extif  in ipairs, info, FLD_IC_STEXT - 1 do ninfo[i] = extif end
+            for k, method in pairs,  info do if not tonumber(k) then ninfo[k] = method end end
+        end
 
         return ninfo
     end
