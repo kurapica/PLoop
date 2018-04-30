@@ -4511,7 +4511,7 @@ PLoop(function(_ENV)
 			self.Age = age
 		end
 
-		-- 反虚序列化构造体
+		-- 反序列化构造体
 		__Arguments__{ SerializationInfo }
 		function Person(self, info)
 			-- 按类型获取保存的值
@@ -4533,10 +4533,10 @@ PLoop(function(_ENV)
 			super.Serialize(self, info)
 		end
 
-		-- 子类反虚序列化构造体
+		-- 子类反序列化构造体
 		__Arguments__{ SerializationInfo }
 		function Student(self, info)
-			-- 调用超类反虚序列化构造体
+			-- 调用超类反序列化构造体
 			super(self, info)
 
 			-- 获取子类所需的值
