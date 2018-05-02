@@ -2605,7 +2605,7 @@ do
                 if not msg then
                     default     = ret
                 else
-                    error(struct.GetErrorMessage(msg, ("default in (%s/default)"):format(namespace.GetNamespaceName(self, true))), 2)
+                    error(struct.GetErrorMessage(msg, "default in (type/default)"), 2)
                 end
             end
 
@@ -2619,7 +2619,7 @@ do
             end
 
             if mincount ~= nil and (type(mincount) ~= "number" or mincount < 0) then
-                error(("The mincount in (%s * mincount) must a nature number"):format(namespace.GetNamespaceName(self, true)), 2)
+                error("The mincount in (type * mincount) must a nature number", 2)
             end
 
             return Variable.Rest(self, mincount)
