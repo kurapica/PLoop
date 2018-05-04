@@ -19,6 +19,8 @@ PLoop(function(_ENV)
         --- the thread pool used to generate and recycle coroutines
         __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
         class "ThreadPool" (function(_ENV)
+            extend "IContext" -- Keep the context for threads
+
             export {
                 create              = coroutine.create,
                 resume              = coroutine.resume,
@@ -41,7 +43,7 @@ PLoop(function(_ENV)
                 strformat           = string.format,
             }
 
-            export { ThreadPool, Platform }
+            export { ThreadPool, Platform, Context }
 
             -----------------------------------------------------------
             --                        helpers                        --
@@ -84,7 +86,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            local function newthread(self)
+            local function newrecyclethread(self)
                 local thread        = tremove(self)
 
                 if thread then
@@ -95,6 +97,27 @@ PLoop(function(_ENV)
                 thread              = wrap(recyclethread)
                 thread(self, thread)    -- pass the pool and thread to be recycled
                 return thread
+            end
+
+            -- make sure we can get the thread pool in the func
+            local function retresult(...)
+                return ...
+            end
+
+            local function poolthread(pool, func)
+                return retresult(func(yield()))
+            end
+
+            local function newpoolthread(self, func, aswrap)
+                if aswrap then
+                    local thread    = wrap(poolthread)
+                    thread(self, func)
+                    return thread
+                else
+                    local thread    = create(poolthread)
+                    resume(thread, self, func)
+                    return thread
+                end
             end
 
             local getCurrentPool    = getlocal and function()
@@ -116,20 +139,14 @@ PLoop(function(_ENV)
             -----------------------------------------------------------
             --                        method                         --
             -----------------------------------------------------------
-            --- get a recycle coroutine wrap for given function, when
-            -- the function job is done, the wrap will be send back to
-            -- the pool
+            --- Get the thread or wrap function for the function, this
+            -- thread should be processed under the thread pool
             -- @param  func                 the target function
-            -- @return wrap                 the wrap function
-            -- @usage   local v = pool:GetThreadWrap(function(cnt) for i = 1, cnt do Task.Sleep(1) print(i) end end)
-            --          v(10) -- print 1 - 10 for each second
+            -- @return wrap                 the wrap function or thread
             __Arguments__{ Function }
-            function GetThread(self, func)
-                local thread        = newthread(self)
-                return thread(func)
-            end
+            GetThread = newpoolthread
 
-            --- call the function with arguments as coroutine
+            --- call the function with arguments in a recyclable coroutine
             -- @param   func                the target function
             -- @param   ...                 the arguments
             -- @usage   function a(...)
@@ -142,11 +159,11 @@ PLoop(function(_ENV)
             --          -- thread: 00F95100 1   2   3
             __Arguments__{ Function, Any * 0 }
             function ThreadCall(self, func, ...)
-                local thread        = newthread(self)
+                local thread        = newrecyclethread(self)
                 return thread(func)(...)
             end
 
-            --- Used to make iterator from functions
+            --- Run the function as an iterator in a recyclable coroutine
             -- @param   func            the function contains yield instructions
             -- @param   ...             The arguments
             -- @usage   function a(start, endp)
@@ -166,7 +183,7 @@ PLoop(function(_ENV)
             --          for k, v in Threading.Iterator(a, 1, 3) do print(k, v) end
             __Arguments__{ Function, Any * 0 }
             function GetIterator(self, func, ...)
-                local thread        = newthread(self)
+                local thread        = newrecyclethread(self)
                 return thread(func, ...)
             end
 
@@ -182,7 +199,19 @@ PLoop(function(_ENV)
             property "Current" {
                 get = function()
                     local ok, ret = pcall(getCurrentPool)
-                    return ok and ret or nil
+                    if ok and ret then return ret end
+
+                    local context   = Context.Current
+                    if context then
+                        local cpool = context[ThreadPool]
+                        if not cpool then
+                            cpool   = ThreadPool()
+                            context[ThreadPool] = cpool
+                        end
+                        return cpool
+                    end
+
+                    return ThreadPool.Default
                 end
             }
 
@@ -330,19 +359,7 @@ PLoop(function(_ENV)
 
             local wraptarget = Platform.MULTI_OS_THREAD and function(target)
                 return function(...)
-                    local cpool         = ThreadPool.Current
-                    if cpool then return cpool:ThreadCall(target, ...) end
-
-                    local context       = Context.Current
-                    if context then
-                        cpool           = context[ThreadPool]
-                        if not cpool then
-                            cpool        = ThreadPool()
-                            context[ThreadPool] = cpool
-                        end
-                        return cpool:ThreadCall(target, ...)
-                    end
-                    return ThreadPool.Default:ThreadCall(target, ...)
+                    return ThreadPool.Current:ThreadCall(target, ...)
                 end
             end or function(target)
                 return function(...)
@@ -384,19 +401,7 @@ PLoop(function(_ENV)
 
             local wraptarget = Platform.MULTI_OS_THREAD and function(target)
                 return function(...)
-                    local cpool         = ThreadPool.Current
-                    if cpool then return cpool:GetIterator(target, ...) end
-
-                    local context       = Context.Current
-                    if context then
-                        cpool           = context[ThreadPool]
-                        if not cpool then
-                            cpool       = ThreadPool()
-                            context[ThreadPool] = cpool
-                        end
-                        return cpool:GetIterator(target, ...)
-                    end
-                    return ThreadPool.Default:GetIterator(target, ...)
+                    return ThreadPool.Current:GetIterator(target, ...)
                 end
             end or function(target)
                 return function(...)

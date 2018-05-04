@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/04/19                                               --
--- Version      :   1.0.0-beta012                                            --
+-- Update Date  :   2018/05/04                                               --
+-- Version      :   1.0.0-beta014                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2762,7 +2762,7 @@ do
                 local info      = _EnumInfo[target]
 
                 -- if info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                -- if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
                     [FLD_ENUM_MOD    ]  = 0,
@@ -4344,7 +4344,7 @@ do
                 local info      = _StructInfo[target]
 
                 if info and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                -- if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _StructBuilderInfo      = savestorage(_StructBuilderInfo, target, {
                     [FLD_STRUCT_MOD ]   = 0,
@@ -7341,7 +7341,7 @@ do
                 if not target then error("Usage: interface.BeginDefinition(target[, stack]) - the target is not valid", stack) end
 
                 if _ICInfo[target] and validateflags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _ICBuilderInfo[target] then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s's definition has already begun", tostring(target)), stack) end
+                -- if _ICBuilderInfo[target] then error(strformat("Usage: interface.BeginDefinition(target[, stack]) - the %s's definition has already begun", tostring(target)), stack) end
 
                 _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, getInitICInfo(target, false))
 
@@ -8061,7 +8061,7 @@ do
                 if not target then error("Usage: class.BeginDefinition(target[, stack]) - the target is not valid", stack) end
 
                 if _ICInfo[target] and validateflags(MOD_SEALED_IC, _ICInfo[target][FLD_IC_MOD]) then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                if _ICBuilderInfo[target] then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+                -- if _ICBuilderInfo[target] then error(strformat("Usage: class.BeginDefinition(target[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
                 _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, getInitICInfo(target, true))
 
@@ -13391,7 +13391,7 @@ do
     end)
 
     -- set the target struct, class or interface as template
-    __Sealed__() __Final__()
+    __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     class (_PLoopEnv, "System.__Template__") (function(_ENV)
         extend "IInitAttribute"
 
