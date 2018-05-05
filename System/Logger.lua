@@ -37,6 +37,7 @@ PLoop(function(_ENV)
         enum "LogLevel" { "Trace", "Debug", "Info", "Warn", "Error", "Fatal" }
 
         local date              = _G.os and os.date or _G.date
+        local regLogger         = setmetatable({}, {__mode="v"})
 
         -----------------------------------------------------------
         --                        method                         --
@@ -109,7 +110,15 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{ String/nil }
+        function __exist(_, name) return regLogger[name] end
+
         function __new() return { __Handler = {}, __Prefix  = {} } end
+
+        __Arguments__{ String/nil }
+        function __ctor(self, name)
+            if name then regLogger[name] = self end
+        end
 
         -----------------------------------------------------------
         --                      meta-method                      --
