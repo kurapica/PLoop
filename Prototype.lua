@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/05/04                                               --
--- Version      :   1.0.0-beta014                                            --
+-- Update Date  :   2018/05/06                                               --
+-- Version      :   1.0.0-beta015                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5667,6 +5667,7 @@ do
     ATTRTAR_INTERFACE           = attribute.RegisterTargetType("Interface")
     ATTRTAR_CLASS               = attribute.RegisterTargetType("Class")
     ATTRTAR_METHOD              = rawget(_PLoopEnv, "ATTRTAR_METHOD") or attribute.RegisterTargetType("Method")
+    ATTRTAR_OBJECT              = attribute.RegisterTargetType("Object")
 
     -----------------------------------------------------------------------
     --                         private constants                         --
@@ -5678,9 +5679,10 @@ do
     local MOD_SINGLEVER_CLS     = newflags()        -- SINGLE VERSION CLASS - NO MULTI VERSION
     local MOD_ATTRFUNC_OBJ      = newflags()        -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
     local MOD_NORAWSET_OBJ      = newflags()        -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ      = newflags()        -- NO NIL dFIELD ACCESS
+    local MOD_NONILVAL_OBJ      = newflags()        -- NO NIL FIELD ACCESS
     local MOD_NOSUPER_OBJ       = newflags()        -- OLD SUPER ACCESS STYLE
     local MOD_ANYMOUS_CLS       = newflags()        -- HAS ANONYMOUS CLASS
+    local MOD_ATTROBJ_CLS       = newflags()        -- CAN APPLY ATTRIBUTES ON OBJECTS
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -5743,7 +5745,7 @@ do
     local FLG_IC_IDXFUN         = newflags()        -- HAS INDEX FUNCTION
     local FLG_IC_IDXTBL         = newflags()        -- HAS INDEX TABLE
     local FLG_IC_NEWIDX         = newflags()        -- HAS NEW INDEX
-    local FLG_IC_OBJATR         = newflags()        -- ENABLE OBJECT METHOD ATTRIBUTE
+    local FLG_IC_OMDATR         = newflags()        -- ENABLE OBJECT METHOD ATTRIBUTE
     local FLG_IC_NRAWST         = newflags()        -- ENABLE NO RAW SET
     local FLG_IC_NNILVL         = newflags()        -- NO NIL VALUE ACCESS
     local FLG_IC_SUPACC         = newflags()        -- SUPER OBJECT ACCESS
@@ -5754,6 +5756,7 @@ do
     local FLG_IC_FIELD          = newflags()        -- HAS __field
     local FLG_IC_HSCLIN         = newflags()        -- HAS CLASS INITIALIZER
     local FLG_IC_HSIFIN         = newflags()        -- NEED CALL INTERFACE'S INITIALIZER
+    local FLG_IC_OBJATR         = newflags()        -- OBJECT ATTRIBUTE
 
     -- Meta Datas
     local IC_META_DISPOB        = "Dispose"
@@ -6215,7 +6218,7 @@ do
         end
 
         if validateflags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) then
-            token   = turnonflags(FLG_IC_OBJATR, token)
+            token   = turnonflags(FLG_IC_OMDATR, token)
         end
 
         local data  = meta[META_KEYS[IC_META_NEWIDX]]
@@ -6227,7 +6230,7 @@ do
             token   = turnonflags(FLG_IC_NRAWST, token)
 
             -- Still can override the object method
-            if not validateflags(FLG_IC_OBJATR, token) and info[FLD_IC_OBJMTD] then
+            if not validateflags(FLG_IC_OMDATR, token) and info[FLD_IC_OBJMTD] then
                 token   = turnonflags(FLG_IC_OBJMTD, token)
                 tinsert(upval, info[FLD_IC_OBJMTD])
             end
@@ -6277,19 +6280,19 @@ do
                 ]])
             end
 
-            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
+            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OMDATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
                 tinsert(body, [[
                     local assign = false
                 ]])
             end
 
-            if validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
+            if validateflags(FLG_IC_OMDATR, token) or validateflags(FLG_IC_OBJMTD, token) then
                 uinsert(apis, "type")
                 tinsert(body, [[
                     if type(value) == "function" then
                 ]])
 
-                if validateflags(FLG_IC_OBJATR, token) then
+                if validateflags(FLG_IC_OMDATR, token) then
                     uinsert(apis, "attribute")
                     uinsert(apis, "ATTRTAR_FUNCTION")
 
@@ -6325,13 +6328,13 @@ do
                 ]])
             end
 
-            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
+            if validateflags(FLG_IC_NRAWST, token) and (validateflags(FLG_IC_OMDATR, token) or validateflags(FLG_IC_OBJMTD, token)) then
                 tinsert(body, [[
                     if assign then
                 ]])
             end
 
-            if not validateflags(FLG_IC_NRAWST, token) or validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
+            if not validateflags(FLG_IC_NRAWST, token) or validateflags(FLG_IC_OMDATR, token) or validateflags(FLG_IC_OBJMTD, token) then
                 if validateflags(FLG_IC_NEWIDX, token) then
                     tinsert(head, "_newindex")
                     tinsert(body, [[
@@ -6349,7 +6352,7 @@ do
                 uinsert(apis, "error")
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
-                if validateflags(FLG_IC_OBJATR, token) or validateflags(FLG_IC_OBJMTD, token) then
+                if validateflags(FLG_IC_OMDATR, token) or validateflags(FLG_IC_OBJMTD, token) then
                     tinsert(body, [[
                     else
                         error(strformat("The object can't accept field that named %q", tostring(key)), 2)
@@ -6433,6 +6436,10 @@ do
             local i = FLD_IC_STINIT
             while info[i + 1] do i = i + 1 end
             tinsert(upval, i)
+        end
+
+        if validateflags(MOD_ATTROBJ_CLS, info[FLD_IC_MOD]) then
+            token   = turnonflags(FLG_IC_OBJATR, token)
         end
 
         if not _ClassCtorMap[token] then
@@ -6529,10 +6536,22 @@ do
                 tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
+            if validateflags(FLG_IC_OBJATR, token) then
+                tinsert(body, [[
+                    attribute.SaveAttributes(obj, ATTRTAR_OBJECT)
+                    attribute.ApplyAttributes(obj, ATTRTAR_OBJECT)
+                ]])
+            end
+
             if validateflags(FLG_IC_HSIFIN, token) then
                 tinsert(head, "_max")
-
                 tinsert(body, [[for i = ]] .. FLD_IC_STINIT .. [[, _max do info[i](obj) end]])
+            end
+
+            if validateflags(FLG_IC_OBJATR, token) then
+                tinsert(body, [[
+                    attribute.AttachAttributes(obj, ATTRTAR_OBJECT)
+                ]])
             end
 
             tinsert(body, [[return obj end end]])
@@ -8302,6 +8321,17 @@ do
             -- @return  boolean                     true if the value should be immutable
             ["IsImmutable"]     = interface.IsImmutable;
 
+            --- Whether the attributes can be applied on the class's objects
+            -- @static
+            -- @method  IsObjectAttributeEnabled
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the attributes can be applied on the class's objects
+            ["IsObjectAttributeEnabled"] = function(target)
+                local info      = getICTargetInfo(target)
+                return info and validateflags(MOD_ATTROBJ_CLS, info[FLD_IC_MOD]) or false
+            end;
+
             --- Whether the class object has enabled the attribute for functions will be defined in it
             -- @static
             -- @method  IsObjectFunctionAttributeEnabled
@@ -8531,6 +8561,17 @@ do
             ["SetObjectExistChecker"] = function(target, func, stack)
                 local msg, stack= addMetaData(target, IC_META_EXIST, func, stack)
                 if msg then error("Usage: class.SetObjectExistChecker(target, func[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Make the class to enable the attribute for objects
+            -- @static
+            -- @method  SetObjectAttributeEnabled
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["SetObjectAttributeEnabled"] = function(target, stack)
+                setModifiedFlag(class, target, MOD_ATTROBJ_CLS, "SetObjectAttributeEnabled", stack)
             end;
 
             --- Make the class objects enable the attribute for functions will be defined in it
@@ -11829,6 +11870,21 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Set the class so the attributes can be applied on its objects
+    --
+    -- @attribute   System.__ObjectAttr__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__ObjectAttr__",           prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                class.SetObjectAttributeEnabled(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
+        },
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the class's objects so functions that be assigned on them will
     -- be modified by the attribute system
     --
@@ -12000,6 +12056,7 @@ do
         Method      = ATTRTAR_METHOD,
         Interface   = ATTRTAR_INTERFACE,
         Class       = ATTRTAR_CLASS,
+        Object      = ATTRTAR_OBJECT,
         Event       = ATTRTAR_EVENT,
         Property    = ATTRTAR_PROPERTY,
     }

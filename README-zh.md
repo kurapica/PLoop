@@ -107,6 +107,7 @@
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
+        * [`__ObjectAttr__`](#__objectattr__)
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
@@ -3657,6 +3658,7 @@ Module "TestMDL.SubMDL2.SSubMDL.XXXX"
 	* System.AttributeTargets.Method    - 结构体方法，对象方法，元方法等
 	* System.AttributeTargets.Interface - 接口
 	* System.AttributeTargets.Class     - 类
+    * System.AttributeTargets.Object    - 对象
 	* System.AttributeTargets.Event     - 事件
 	* System.AttributeTargets.Property  - 属性
 
@@ -4033,6 +4035,36 @@ PLoop(function(_ENV)
 end)
 ```
 
+#### `__ObjectAttr__`
+
+用于标记类，这样特性系统可以使用在它生成的对象上。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    class "__Reg__" (function(_ENV)
+        extend "IAttachAttribute"
+
+        function AttachAttribute(self, target, targettype)
+            print("Attach To", target.name)
+        end
+
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
+    end)
+
+    __ObjectAttr__()
+    class "A" { name = String }
+
+    __Reg__()
+    A{ name = "Ann" } -- Attach To Ann
+end)
+```
 
 #### `__ObjFuncAttr__`
 

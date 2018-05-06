@@ -111,6 +111,7 @@ You also can find useful features for large enterprise development like code org
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
+        * [`__ObjectAttr__`](#__objectattr__)
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
@@ -3611,6 +3612,7 @@ It's also require several properties if you don't want use the default value:
 	* System.AttributeTargets.Method    - for struct, interface or class methods
 	* System.AttributeTargets.Interface - for interfaces
 	* System.AttributeTargets.Class     - for classes
+    * System.AttributeTargets.Object    - for objects
 	* System.AttributeTargets.Event     - for events
 	* System.AttributeTargets.Property  - for properies
 
@@ -3987,6 +3989,36 @@ PLoop(function(_ENV)
 end)
 ```
 
+#### `__ObjectAttr__`
+
+Mark the class, so the attributes can be used on its objects.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    class "__Reg__" (function(_ENV)
+        extend "IAttachAttribute"
+
+        function AttachAttribute(self, target, targettype)
+            print("Attach To", target.name)
+        end
+
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
+    end)
+
+    __ObjectAttr__()
+    class "A" { name = String }
+
+    __Reg__()
+    A{ name = "Ann" } -- Attach To Ann
+end)
+```
 
 #### `__ObjFuncAttr__`
 
