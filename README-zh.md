@@ -1794,6 +1794,7 @@ GetSuperFeature(target, name)               |获取目标的超类特征
 IsAbstract(target[, name])                  |检查目标是否是虚类，或者目标的指定名字的方法，元方法或特征是虚方法，虚元方法或虚特征
 IsFinal(target[, name])                     |检查目标是否最终类，最终类无法被继承，或者目标的指定名字的方法，元方法或特征是最终定义，无法被子类覆盖
 IsImmutable(target)                         |永远返回true，用类去验证对象，不会改变对象
+IsObjectType(object, type)                  |对象是否是对应类型的实体
 IsSealed(target)                            |检查目标是否封闭，无法被重定义
 IsStaticMethod(target, name)                |检查目标指定名字的方法是静态方法
 IsSubType(target, super)                    |检查目标是否是指定类或接口的子类型

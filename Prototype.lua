@@ -8354,6 +8354,18 @@ do
                 return info and info[FLD_IC_DEBUGSR] or false
             end;
 
+            --- Whether the object is generated from the target type
+            -- @static
+            -- @method  IsObjectType
+            -- @owner   class
+            -- @param   target                      the object
+            -- @param   type                        the interface or class
+            -- @param   boolean                     true if the object is generated from the target type
+            ["IsObjectType"]        = function(target, type)
+                local otype         = class.GetObjectClass(target)
+                return otype and class.IsSubType(otype, type) or false
+            end;
+
             --- Whether the class object don't receive any value assignment excpet existed fields
             -- @static
             -- @method  IsRawSetBlocked
@@ -10084,14 +10096,21 @@ do
         return prop
     end
 
-    local getPropertyIndexer    = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(get, set, fld)
-            return function(_, self)
-                local indexer   = rawget(self, fld)
-                if not indexer then
-                    indexer     = prototype.NewObject(tindexer, { [FLD_INDEXER_OBJECT] = self, [FLD_INDEXER_GET] = get, [FLD_INDEXER_SET] = set})
-                    rawset(self, fld, indexer)
+    local getPropertyIndexer    = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(get, set, fld, isstaic, owner)
+            if isstaic then
+                local indexer   = prototype.NewObject(tindexer, { [FLD_INDEXER_OBJECT] = owner, [FLD_INDEXER_GET] = get, [FLD_INDEXER_SET] = set})
+                return function(_, self)
+                    return indexer
                 end
-                return indexer
+            else
+                return function(_, self)
+                    local indexer   = rawget(self, fld)
+                    if not indexer then
+                        indexer     = prototype.NewObject(tindexer, { [FLD_INDEXER_OBJECT] = self, [FLD_INDEXER_GET] = get, [FLD_INDEXER_SET] = set})
+                        rawset(self, fld, indexer)
+                    end
+                    return indexer
+                end
             end
         end or function(get, set)
             return function(_, self)
@@ -10324,7 +10343,7 @@ do
 
         if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
             info[FLD_PROP_INDEXERGET] = info[FLD_PROP_RAWGET]
-            info[FLD_PROP_RAWGET]   = getPropertyIndexer(info[FLD_PROP_INDEXERGET], info[FLD_PROP_INDEXERSET], info[FLD_PROP_INDEXERFLD])
+            info[FLD_PROP_RAWGET]   = getPropertyIndexer(info[FLD_PROP_INDEXERGET], info[FLD_PROP_INDEXERSET], info[FLD_PROP_INDEXERFLD], validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]), info[FLD_PROP_OWNER])
         end
 
         _Cache(upval)

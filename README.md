@@ -1768,6 +1768,7 @@ GetSuperFeature(target, name)               |Get the target's super type feature
 IsAbstract(target[, name])                  |Whether the class's method, meta-method or feature is abstract
 IsFinal(target[, name])                     |Whether the class or its method, meta-method, feature is final
 IsImmutable(target)                         |Always return true
+IsObjectType(object, type)                  |Whether the object is generated from the target type
 IsSealed(target)                            |Whether the target is sealed
 IsStaticMethod(target, name)                |Whether the class's given name method is static
 IsSubType(target, super)                    |Whether the target class is a sub-type of another interface or class
