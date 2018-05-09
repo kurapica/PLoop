@@ -667,7 +667,7 @@ do
 
     parseDefinition             = function(definition, env, stack)
         if type(definition) == "string" then
-            local def, msg  = loadsnippet("return function(_ENV)\n" .. definition .. "\nend", nil, env)
+            local def, msg  = loadsnippet("return function(_ENV) " .. definition .. " end", nil, env)
             if def then
                 def, msg    = pcall(def)
                 if def then
@@ -5147,11 +5147,11 @@ do
             stack               = parsestack(stack) + 1
             if not definition then error("Usage: struct([env, ][name, ][stack]) (definition) - the definition is missing", stack) end
 
-            local owner = environment.GetNamespace(self)
-            local info  = _StructBuilderInfo[owner]
+            local owner         = environment.GetNamespace(self)
+            local info          = _StructBuilderInfo[owner]
             if not (owner and _StructBuilderInDefine[self] and info) then error("The struct's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_STRUCT, definition, nil, nil, stack), self, stack)
+            definition          = attribute.InitDefinition(owner, ATTRTAR_STRUCT, parseDefinition(definition, self, stack), nil, nil, stack)
 
             -- Save template env
             if info[FLD_STRUCT_TEMPDEF] then
@@ -9033,8 +9033,7 @@ do
             local info          = _ICBuilderInfo[owner]
             if not (owner and _ICBuilderInDefine[self] and info) then error("The interface's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_INTERFACE, definition, nil, nil, stack), self, stack)
-
+            definition          = attribute.InitDefinition(owner, ATTRTAR_INTERFACE, parseDefinition(definition, self, stack), nil, nil, stack)
             -- Save template env
             if info[FLD_IC_TEMPDEF] then
                 info[FLD_IC_TEMPENV] = environment.GetParent(self)
@@ -9091,7 +9090,7 @@ do
             local info          = _ICBuilderInfo[owner]
             if not (owner and _ICBuilderInDefine[self] and info) then error("The class's definition is finished", stack) end
 
-            definition = parseDefinition(attribute.InitDefinition(owner, ATTRTAR_CLASS, definition, nil, nil, stack), self, stack)
+            definition          = attribute.InitDefinition(owner, ATTRTAR_CLASS, parseDefinition(definition, self, stack), nil, nil, stack)
 
             -- Save template env
             if info[FLD_IC_TEMPDEF] then
