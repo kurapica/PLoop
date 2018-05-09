@@ -2942,6 +2942,7 @@ Static Method                        |Description
 :------------------------------------|:-----------------------------
 ExportNamespace(env, ns[, override]) |Export a namespace and its children to an environment
 GetNamespace([root,] path)           |Get the namespace by path
+GetNamespaces(root[, cache])         |Get all the sub-namespaces
 GetNamespaceName(ns, onlyname)       |Get the namespace's path or name
 IsAnonymousNamespace(target)         |Whether the target is an anonymous namespace
 Validate(target)                     |Whether the target is a namespace

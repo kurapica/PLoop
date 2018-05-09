@@ -2967,6 +2967,7 @@ end)
 :------------------------------------|:-----------------------------
 ExportNamespace(env, ns[, override]) |将指定ns及其子命名空间保存到env环境中
 GetNamespace([root,] path)           |使用路径获取对应的命名空间实体
+GetNamespaces(root[, cache])         |获取所有子命名空间
 GetNamespaceName(ns, onlyname)       |获取命名空间实体的路径或者名字
 IsAnonymousNamespace(target)         |目标是否是一个匿名类型
 Validate(target)                     |目标是否是一个命名空间实体

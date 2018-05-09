@@ -2310,6 +2310,35 @@ do
             -- @return  ns                          the namespace
             ["GetNamespace"]    = getNamespace;
 
+            --- Get the sub-namespaces
+            -- @static
+            -- @method  GetNamespaces
+            -- @owner   namespace
+            -- @format  (root[, cache])
+            -- @param   root                        the root namespace
+            -- @param   cache                       the table used to save the result
+            -- @rformat (cache)                     the cache
+            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            ["GetNamespaces"]   = function(target, cache)
+                local tree      = _NSTree[target]
+                if tree then
+                    if cache then
+                        cache   = type(cache) == "table" and wipe(cache) or {}
+                        for k, v in pairs, tree do cache[k] = v end
+                        return cache
+                    else
+                        return function(self, n)
+                            return next(tree, n)
+                        end, target
+                    end
+                end
+                if cache then
+                    return type(cache) == "table" and cache or nil
+                else
+                    return fakefunc, target
+                end
+            end;
+
             --- Get the namespace's path
             -- @static
             -- @method  GetNamespaceName

@@ -85,7 +85,7 @@ PLoop(function(_ENV)
 
         --- Get the suffix of the path, include the '.'
         __Static__()
-        function GetSuffix(path) return strmatch(path, "%.[^%.]*$") end
+        function GetSuffix(path) return strmatch(path, "%.[_%w]+$") end
 
         --- Get the file name
         __Static__()
@@ -93,7 +93,7 @@ PLoop(function(_ENV)
 
         --- Get the file name without the suffix
         __Static__()
-        function GetFileNameWithoutSuffix(path) return (strgsub(GetFileName(path), "%.[^%.]*$", "")) end
+        function GetFileNameWithoutSuffix(path) return (strgsub(GetFileName(path), "%.[_%w]+$", "")) end
 
         export {
             GetFileName         = Path.GetFileName,
