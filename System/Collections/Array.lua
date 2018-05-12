@@ -58,6 +58,7 @@ PLoop(function(_ENV)
                 rawget          = rawget,
                 rawset          = rawset,
                 pairs           = pairs,
+                tinsert         = table.insert,
                 ARRAY_EVENT     = "__PLOOP_ARRAY_EVENT",
             }
 
@@ -76,36 +77,17 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        __Arguments__{ Integer, eletype }
-        function Insert(self, idx, obj)
-            insert(self, idx, obj)
-            addeventlistener(self, obj)
-        end
+        if Interface.Validate(eletype) or Class.Validate(eletype) then
+            __Arguments__{ Integer, eletype }
+            function Insert(self, idx, obj)
+                tinsert(self, idx, obj)
+                addeventlistener(self, obj)
+            end
 
-        __Arguments__{ eletype }
-        function Insert(self, obj)
-            insert(self, obj)
-            addeventlistener(self, obj)
-        end
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        if eletype ~= Any then
-            local valid = Enum.Validate(eletype) and Enum.ValidateValue or
-                        Struct.Validate(eletype) and Struct.ValidateValue or
-                        Class.Validate(eletype) and Class.ValidateValue or
-                        Interface.Validate(eletype) and Interface.ValidateValue
-
-            function __ctor(self)
-                for i, v in self:GetIterator() do
-                    local ok, ret = valid(eletype, v)
-                    if ret then
-                        throw(("Usage: Array[%s](...) - %s"):format(tostring(eletype), getErrorMessage(ret, parseindex(i))))
-                    else
-                        self[i] = v
-                    end
-                end
+            __Arguments__{ eletype }
+            function Insert(self, obj)
+                tinsert(self, obj)
+                addeventlistener(self, obj)
             end
         end
 

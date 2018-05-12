@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2018/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2018/05/12                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -28,9 +28,19 @@ PLoop(function(_ENV)
 
         export {
             ipairs              = ipairs,
+            GetErrorMessage     = Struct.GetErrorMessage,
+            tostring            = tostring,
 
             List[keytype], List[valtype]
         }
+
+        if keytype ~= Any then
+            export { kvalid     = getmetatable(keytype).ValidateValue, rawset = rawset }
+        end
+
+        if valtype ~= Any then
+            export { vvalid     = getmetatable(valtype).ValidateValue, rawset = rawset }
+        end
 
         -----------------------------------------------------------
         --                     serialization                     --
@@ -117,6 +127,45 @@ PLoop(function(_ENV)
                 dict[key] = value
             end
             return dict, true
+        end
+
+        if keytype ~= Any and valtype ~= Any then
+            function __ctor(self)
+                local msg
+                for k, v in self:GetIterator() do
+                    k, msg = kvalid(keytype, k)
+                    if msg then throw(GetErrorMessage(msg, "field")) end
+
+                    v, msg = vvalid(valtype, v)
+                    if msg then throw(GetErrorMessage(msg, "value")) end
+                    self[k]= v
+                end
+            end
+        elseif keytype ~= Any then
+            function __ctor(self)
+                local msg
+                for k, v in self:GetIterator() do
+                    k, msg = kvalid(keytype, k)
+                    if msg then throw(GetErrorMessage(msg, "field")) end
+                end
+            end
+        elseif valtype ~= Any then
+            function __ctor(self)
+                local msg
+                for k, v in self:GetIterator() do
+                    v, msg = vvalid(valtype, v)
+                    if msg then throw(GetErrorMessage(msg, "value")) end
+                    self[k]= v
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        if keytype ~= Any or valtype ~= Any then
+            __Arguments__{ keytype, valtype }
+            __newindex = rawset
         end
     end)
 

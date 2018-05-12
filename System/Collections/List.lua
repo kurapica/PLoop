@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2018/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2018/05/12                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -42,6 +42,14 @@ PLoop(function(_ENV)
 
         lsttype = lsttype ~= Any and lsttype or nil
 
+        if lsttype then
+            export {
+                valid           = getmetatable(lsttype).ValidateValue,
+                GetErrorMessage = Struct.GetErrorMessage,
+                parseindex      = Toolset.parseindex,
+            }
+        end
+
         -----------------------------------------------------------
         --                     serialization                     --
         -----------------------------------------------------------
@@ -70,7 +78,15 @@ PLoop(function(_ENV)
         GetIterator = ipairs
 
         --- Insert an item to the list
-        Insert      = table.insert
+        if lsttype then
+            __Arguments__{ Integer, lsttype }
+            Insert  = table.insert
+
+            __Arguments__{ lsttype }
+            Insert  = table.insert
+        else
+            Insert  = table.insert
+        end
 
         --- Whether an item existed in the list
         function Contains(self, item) for i, chk in self:GetIterator() do if chk == item then return true end end return false end
@@ -149,6 +165,17 @@ PLoop(function(_ENV)
         __Arguments__.Rest()
         function __new(_, ...)
             return { ... }, true
+        end
+
+        if lsttype then
+            function __ctor(self)
+                local msg
+                for k, v in self:GetIterator() do
+                    v, msg = valid(lsttype, v)
+                    if msg then throw(GetErrorMessage(msg, parseindex(k))) end
+                    self[k]= v
+                end
+            end
         end
 
         -----------------------------------------------------------
