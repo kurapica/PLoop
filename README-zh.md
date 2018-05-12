@@ -8,87 +8,88 @@
 
 * [安装](#安装)
 * [从使用集合开始](#从使用集合开始)
-    * [List的创建](#list的创建)
-    * [List的方法](#list的方法)
-    * [List的遍历](#list的遍历)
-    * [List的排序](#list的排序)
-    * [Dictionary的创建](#dictionary的创建)
-    * [Dictionary的方法](#dictionary的方法)
-    * [Dictionary的遍历](#dictionary的遍历)
+	* [List的创建](#list的创建)
+	* [List的方法](#list的方法)
+	* [List的遍历](#list的遍历)
+	* [List的排序](#list的排序)
+	* [Dictionary的创建](#dictionary的创建)
+	* [Dictionary的方法](#dictionary的方法)
+	* [Dictionary的遍历](#dictionary的遍历)
 * [特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
 * [拼写错误检查](#拼写错误检查)
-    * [读取不存在的全局变量](#读取不存在的全局变量)
-    * [写非法全局变量](#写非法全局变量)
-    * [访问不存在的对象字段](#访问不存在的对象字段)
+	* [读取不存在的全局变量](#读取不存在的全局变量)
+	* [写非法全局变量](#写非法全局变量)
+	* [访问不存在的对象字段](#访问不存在的对象字段)
 * [类型验证](#类型验证)
 * [enum 枚举类型](#enum-枚举类型)
-    * [System.Enum](#systemenum)
+	* [System.Enum](#systemenum)
 * [struct 结构体](#struct-结构体)
-    * [Custom 自定义结构体](#custom-自定义结构体)
-    * [Member 成员结构体类型](#member-成员结构体类型)
-    * [Array 数组结构体](#array-数组结构体)
-    * [使用table来定义结构体](#使用table来定义结构体)
-    * [减少验证消耗](#减少验证消耗)
-    * [联合类型](#联合类型)
-    * [子类型](#子类型)
-    * [System.Struct](#systemstruct)
-    * [System.Member](#systemmember)
+	* [Custom 自定义结构体](#custom-自定义结构体)
+	* [Member 成员结构体类型](#member-成员结构体类型)
+	* [Array 数组结构体](#array-数组结构体)
+	* [使用table来定义结构体](#使用table来定义结构体)
+	* [减少验证消耗](#减少验证消耗)
+	* [联合类型](#联合类型)
+	* [子类型](#子类型)
+	* [System.Struct](#systemstruct)
+	* [System.Member](#systemmember)
 * [Class 类](#class-类)
-    * [类方法和对象方法](#类方法和对象方法)
-    * [元数据和对象构造](#元数据和对象构造)
-    * [超类和继承](#超类和继承)
-    * [System.Class](#systemclass)
-    * [类的多重版本](#类的多重版本)
-    * [扩展方法](#扩展方法)
+	* [类方法和对象方法](#类方法和对象方法)
+	* [元数据和对象构造](#元数据和对象构造)
+	* [超类和继承](#超类和继承)
+	* [System.Class](#systemclass)
+	* [类的多重版本](#类的多重版本)
+	* [扩展方法](#扩展方法)
 * [Interface 接口](#interface-接口)
-    * [System.Interface](#systeminterface)
-    * [Interface的匿名类](#interface的匿名类)
+	* [System.Interface](#systeminterface)
+	* [Interface的匿名类](#interface的匿名类)
 	* [接口的所需类](#接口的所需类)
 * [Event 事件](#event-事件)
-    * [事件处理方法变更的处理](#事件处理方法变更的处理)
-    * [静态事件](#静态事件)
-    * [超类事件](#超类事件)
-    * [System.Event](#systemevent)
+	* [事件处理方法变更的处理](#事件处理方法变更的处理)
+	* [静态事件](#静态事件)
+	* [超类事件](#超类事件)
+	* [System.Event](#systemevent)
 * [Property 属性](#property-属性)
-    * [get/set](#getset)
-    * [getmethod/setmethod](#getmethodsetmethod)
-    * [field & default](#field--default)
-    * [default factory](#default-factory)
-    * [property-event](#property-event)
-    * [property-handler](#property-handler)
-    * [static property](#static-property)
-    * [自动绑定](#自动绑定)
-    * [超类属性](#超类属性)
-    * [索引属性](#索引属性)
-    * [Get/Set行为修饰](#getset行为修饰)
-    * [System.Property](#systemproperty)
+	* [get/set](#getset)
+	* [getmethod/setmethod](#getmethodsetmethod)
+	* [property-throw](#property-throw)
+	* [field & default](#field--default)
+	* [default factory](#default-factory)
+	* [property-event](#property-event)
+	* [property-handler](#property-handler)
+	* [static property](#static-property)
+	* [自动绑定](#自动绑定)
+	* [超类属性](#超类属性)
+	* [索引属性](#索引属性)
+	* [Get/Set行为修饰](#getset行为修饰)
+	* [System.Property](#systemproperty)
 * [继承和优先级](#继承和优先级)
 * [使用其他定义形式](#使用其他定义形式)
-    * [使用字符串作为定义体](#使用字符串作为定义体)
-    * [使用table作为定义体](#使用table作为定义体)
+	* [使用字符串作为定义体](#使用字符串作为定义体)
+	* [使用table作为定义体](#使用table作为定义体)
 * [命名空间和匿名类型](#命名空间和匿名类型)
-    * [System.Namespace](#systemnamespace)
+	* [System.Namespace](#systemnamespace)
 * [环境](#环境)
-    * [隔离代码](#隔离代码)
-    * [分享类型](#分享类型)
-    * [特性和全局函数](#特性和全局函数)
-    * [使用命名空间作为调用者](#使用命名空间作为调用者)
-    * [全局变量的读取](#全局变量的读取)
-    * [自动缓存机制](#自动缓存机制)
+	* [隔离代码](#隔离代码)
+	* [分享类型](#分享类型)
+	* [特性和全局函数](#特性和全局函数)
+	* [使用命名空间作为调用者](#使用命名空间作为调用者)
+	* [全局变量的读取](#全局变量的读取)
+	* [自动缓存机制](#自动缓存机制)
 * [重载](#重载)
-    * [this和构造体方法](#this和构造体方法)
-    * [使用超类方法处理未处理的参数样式](#使用超类方法处理未处理的参数样式)
-    * [System.Variable](#systemvariable)
-    * [申明变量的简易版本](#申明变量的简易版本)
+	* [this和构造体方法](#this和构造体方法)
+	* [使用超类方法处理未处理的参数样式](#使用超类方法处理未处理的参数样式)
+	* [System.Variable](#systemvariable)
+	* [申明变量的简易版本](#申明变量的简易版本)
 * [Throw Exception 异常处理](#throw-exception-异常处理)
 * [模板类](#模板类)
 * [System.Module](#systemmodule)
-    * [child-modules 子模组](#child-modules-子模组)
+	* [child-modules 子模组](#child-modules-子模组)
 * [Attribtue 特性系统](#attribtue-特性系统)
-    * [System.IAttribute](#systemiattribute)
-    * [System.IInitAttribute 初始化特性](#systemiinitattribute-初始化特性)
-    * [System.IApplyAttribute 应用特性](#systemiapplyattribute-应用特性)
-    * [System.IAttachAttribute 附着特性](#systemiattachattribute-附着特性)
+	* [System.IAttribute](#systemiattribute)
+	* [System.IInitAttribute 初始化特性](#systemiinitattribute-初始化特性)
+	* [System.IApplyAttribute 应用特性](#systemiapplyattribute-应用特性)
+	* [System.IAttachAttribute 附着特性](#systemiattachattribute-附着特性)
 	* [System特性](#system-attributes)
 		* [`__Abstract__`](#__abstract__)
 		* [`__AnonymousClass__`](#__anonymousclass__)
@@ -107,7 +108,7 @@
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
-        * [`__ObjectAttr__`](#__objectattr__)
+		* [`__ObjectAttr__`](#__objectattr__)
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
@@ -118,24 +119,25 @@
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
 		* [`__Template__`](#__template__)
+		* [`__Throwable__`](#__throwable__)
 * [keyword 关键字](#keyword关键字)
-    * [全局关键字](#全局关键字)
-        * [export 关键字](#export关键字)
-    * [上下文相关的关键字](#上下文相关的关键字)
-    * [`_G`中可用的资源](#_g中可用的资源)
+	* [全局关键字](#全局关键字)
+		* [export 关键字](#export关键字)
+	* [上下文相关的关键字](#上下文相关的关键字)
+	* [`_G`中可用的资源](#_g中可用的资源)
 * [Serialization 序列化](#serialization序列化)
-    * [从JSON开始](#从json开始)
-    * [可序列化类型](#可序列化类型)
-    * [自定义序列化和反序列化](#自定义序列化和反序列化)
+	* [从JSON开始](#从json开始)
+	* [可序列化类型](#可序列化类型)
+	* [自定义序列化和反序列化](#自定义序列化和反序列化)
 * [System.Collections 集合](#systemcollections-集合)
-    * [System.Collections.Iterable](#systemcollectionsiterable)
-    * [System.Collections.IList](#systemcollectionsilist)
-        * [System.Collections.ICountable](#systemcollectionsicountable)
-        * [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
-        * [System.Collections.List](#systemcollectionslist)
-    * [System.Collections.IDictionary](#systemcollectionsidictionary)
-        * [System.Collections.Dictionary](#systemcollectionsdictionary)
-    * [List, Dictionary和序列化](#list-dictionary和序列化)
+	* [System.Collections.Iterable](#systemcollectionsiterable)
+	* [System.Collections.IList](#systemcollectionsilist)
+		* [System.Collections.ICountable](#systemcollectionsicountable)
+		* [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
+		* [System.Collections.List](#systemcollectionslist)
+	* [System.Collections.IDictionary](#systemcollectionsidictionary)
+		* [System.Collections.Dictionary](#systemcollectionsdictionary)
+	* [List, Dictionary和序列化](#list-dictionary和序列化)
 
 
 ## 安装
@@ -2428,6 +2430,7 @@ default         |属性的默认值
 event           |属性值变更时自动发起的事件，如果是字符串，会尝试用该字符串创建事件，仅用于使用field的属性
 handler         |属性值变更时触发的处理方法，这是类或者接口内部自行处理对象属性变更的方法，仅用于使用field的属性
 static          |true，如果希望定义为静态属性
+throwable       |true，如果属性的set方法会抛出错误
 
 我们依次来看一些使用例子:
 
@@ -2476,6 +2479,39 @@ PLoop(function(_ENV)
 	print(Person().Name)
 end)
 ```
+
+
+### property-throw
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		function SetName(self, name)
+			if type(name) ~= "string" then
+				throw("The name must be string")
+			end
+			self.__name = name
+		end
+
+		function GetName(self)
+			return self.__name
+		end
+
+		property "Name" {
+			get = "GetName", -- or getmethod = "GetName"
+			set = "SetName", -- or setmethod = "SetName"
+			throwable = true,
+		}
+	end)
+
+	Person().Name = 123 -- Error: The name must be string
+end)
+```
+
 
 ### field & default
 
@@ -3050,8 +3086,8 @@ Application "WebApplication"(function(_ENV)
 	-- __Route__特性用于将请求处理方法绑定到url地址
 	-- __text__特性用于标记这个函数的返回结果将作为
 	-- "text/plain"类型发送给浏览器
- 	__Route__ "/nginx"
- 	__Text__()
+	__Route__ "/nginx"
+	__Text__()
 	function GetVars(context)
 		return ngx.var[context.Request.QueryString["var"] or "nginx_version"]
 	end
@@ -3660,7 +3696,7 @@ Module "TestMDL.SubMDL2.SSubMDL.XXXX"
 	* System.AttributeTargets.Method    - 结构体方法，对象方法，元方法等
 	* System.AttributeTargets.Interface - 接口
 	* System.AttributeTargets.Class     - 类
-    * System.AttributeTargets.Object    - 对象
+	* System.AttributeTargets.Object    - 对象
 	* System.AttributeTargets.Event     - 事件
 	* System.AttributeTargets.Property  - 属性
 
@@ -3977,10 +4013,10 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    __NoNilValue__(false)
-    class "A" {}
+	__NoNilValue__(false)
+	class "A" {}
 
-    print(A().Test) -- nil
+	print(A().Test) -- nil
 end)
 ```
 
@@ -4013,10 +4049,10 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    __NoRawSet__(false)
-    class "A" {}
+	__NoRawSet__(false)
+	class "A" {}
 
-    A().Test = 123 -- Okay
+	A().Test = 123 -- Okay
 end)
 ```
 
@@ -4028,12 +4064,12 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    class "A" { Test = function() end }
+	class "A" { Test = function() end }
 
-    o = A()
-    o.Test = 123    -- 错误
-    o.Test = print  -- 正常
-    o.Test1= print  -- 错误
+	o = A()
+	o.Test = 123    -- 错误
+	o.Test = print  -- 正常
+	o.Test1= print  -- 错误
 end)
 ```
 
@@ -4050,21 +4086,21 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-    class "__Reg__" (function(_ENV)
-        extend "IAttachAttribute"
+	class "__Reg__" (function(_ENV)
+		extend "IAttachAttribute"
 
-        function AttachAttribute(self, target, targettype)
-            print("Attach To", target.name)
-        end
+		function AttachAttribute(self, target, targettype)
+			print("Attach To", target.name)
+		end
 
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
-    end)
+		property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
+	end)
 
-    __ObjectAttr__()
-    class "A" { name = String }
+	__ObjectAttr__()
+	class "A" { name = String }
 
-    __Reg__()
-    A{ name = "Ann" } -- Attach To Ann
+	__Reg__()
+	A{ name = "Ann" } -- Attach To Ann
 end)
 ```
 
@@ -4193,6 +4229,14 @@ class "B" {}
 * System.AttributeTargets.Struct
 * System.AttributeTargets.Interface
 * System.AttributeTargets.Class
+
+
+#### `__Throwable__`
+
+标记属性的Set方法为throwable，详见[property-throw](#property-throw).
+
+特性目标类型:
+* System.AttributeTargets.Property
 
 
 ## keyword 关键字

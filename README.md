@@ -12,87 +12,88 @@ You also can find useful features for large enterprise development like code org
 
 * [Install](#install)
 * [Start with the Collections](#start-with-the-collections)
-    * [The creation of List](#the-creation-of-list)
-    * [The method of the List](#the-method-of-the-list)
-    * [The traverse of the List](#the-traverse-of-the-list)
-    * [The sort of the List](#the-sort-of-the-list)
-    * [The creation of the Dictionary](#the-creation-of-the-dictionary)
-    * [The method of the Dictionary](#the-method-of-the-dictionary)
-    * [The traverse of the Dictionary](#the-traverse-of-the-dictionary)
+	* [The creation of List](#the-creation-of-list)
+	* [The method of the List](#the-method-of-the-list)
+	* [The traverse of the List](#the-traverse-of-the-list)
+	* [The sort of the List](#the-sort-of-the-list)
+	* [The creation of the Dictionary](#the-creation-of-the-dictionary)
+	* [The method of the Dictionary](#the-method-of-the-dictionary)
+	* [The traverse of the Dictionary](#the-traverse-of-the-dictionary)
 * [Attribute and Thread Pool](#attribute-and-thread-pool)
 * [Spell Error Checks And More](#spell-error-checks-and-more)
-    * [Read un-existed global variables](#read-un-existed-global-variables)
-    * [Write to illegal global variables](#write-to-illegal-global-variables)
-    * [Access un-existed object fields](#access-un-existed-object-fields)
+	* [Read un-existed global variables](#read-un-existed-global-variables)
+	* [Write to illegal global variables](#write-to-illegal-global-variables)
+	* [Access un-existed object fields](#access-un-existed-object-fields)
 * [Type Validation](#type-validation)
 * [enum](#enum)
-    * [System.Enum](#systemenum)
+	* [System.Enum](#systemenum)
 * [struct](#struct)
-    * [Custom](#custom)
-    * [Member](#member)
-    * [Array](#array)
-    * [Table Style Definition](#table-style-definition)
-    * [Reduce the validation cost](#reduce-the-validation-cost)
-    * [Combine type](#combine-type)
-    * [Sub Type](#sub-type)
-    * [System.Struct](#systemstruct)
-    * [System.Member](#systemmember)
+	* [Custom](#custom)
+	* [Member](#member)
+	* [Array](#array)
+	* [Table Style Definition](#table-style-definition)
+	* [Reduce the validation cost](#reduce-the-validation-cost)
+	* [Combine type](#combine-type)
+	* [Sub Type](#sub-type)
+	* [System.Struct](#systemstruct)
+	* [System.Member](#systemmember)
 * [Class](#class)
-    * [Class and Object Method](#class-and-object-method)
-    * [Meta-data and object construction](#meta-data-and-object-construction)
-    * [Super class and Inheritance](#super-class-and-inheritance)
-    * [System.Class](#systemclass)
-    * [The multi-version class](#the-multi-version-class)
-    * [Append methods](#append-methods)
+	* [Class and Object Method](#class-and-object-method)
+	* [Meta-data and object construction](#meta-data-and-object-construction)
+	* [Super class and Inheritance](#super-class-and-inheritance)
+	* [System.Class](#systemclass)
+	* [The multi-version class](#the-multi-version-class)
+	* [Append methods](#append-methods)
 * [Interface](#interface)
-    * [System.Interface](#systeminterface)
-    * [Interface's anonymous class](#interfaces-anonymous-class)
+	* [System.Interface](#systeminterface)
+	* [Interface's anonymous class](#interfaces-anonymous-class)
 	* [the require class of the interface](#the-require-class-of-the-interface)
 * [Event](#event)
-    * [The event of the event handler's changes](#the-event-of-the-event-handlers-changes)
-    * [Static event](#static-event)
-    * [super event](#super-event)
-    * [System.Event](#systemevent)
+	* [The event of the event handler's changes](#the-event-of-the-event-handlers-changes)
+	* [Static event](#static-event)
+	* [super event](#super-event)
+	* [System.Event](#systemevent)
 * [Property](#property)
-    * [get/set](#getset)
-    * [getmethod/setmethod](#getmethodsetmethod)
-    * [field & default](#field--default)
-    * [default factory](#default-factory)
-    * [property-event](#property-event)
-    * [property-handler](#property-handler)
-    * [static property](#static-property)
-    * [Auto-binding](#auto-binding)
-    * [super property](#super-property)
-    * [indexer property](#indexer-property)
-    * [Get/Set Modifier](#getset-modifier)
-    * [System.Property](#system.property)
+	* [get/set](#getset)
+	* [getmethod/setmethod](#getmethodsetmethod)
+	* [property-throw](#property-throw)
+	* [field & default](#field--default)
+	* [default factory](#default-factory)
+	* [property-event](#property-event)
+	* [property-handler](#property-handler)
+	* [static property](#static-property)
+	* [Auto-binding](#auto-binding)
+	* [super property](#super-property)
+	* [indexer property](#indexer-property)
+	* [Get/Set Modifier](#getset-modifier)
+	* [System.Property](#system.property)
 * [Inheritance and Priority](#inheritance-and-priority)
 * [Use other definition style](#use-other-definition-style)
-    * [Use string as definition body](#use-string-as-definition-body)
-    * [Use table as definition body](#use-table-as-definition-body)
+	* [Use string as definition body](#use-string-as-definition-body)
+	* [Use table as definition body](#use-table-as-definition-body)
 * [Namespace and Anonymous types](#namespace-and-anonymous-types)
-    * [System.Namespace](#systemnamespace)
+	* [System.Namespace](#systemnamespace)
 * [The Environment](#the-environment)
-    * [Code Isolated](#code-isolated)
-    * [Share types](#share-types)
-    * [Attribute for global functions](#attribute-for-global-functions)
-    * [Namespace as caller](#namespace-as-caller)
-    * [The global variable access](#the-global-variable-access)
-    * [Auto-cache](#auto-cache)
+	* [Code Isolated](#code-isolated)
+	* [Share types](#share-types)
+	* [Attribute for global functions](#attribute-for-global-functions)
+	* [Namespace as caller](#namespace-as-caller)
+	* [The global variable access](#the-global-variable-access)
+	* [Auto-cache](#auto-cache)
 * [Overload](#overload)
-    * [this For object constructor](#this-for-object-constructor)
-    * [Call super method with unhandled arguments styles](#call-super-method-with-unhandled-arguments-styles)
-    * [System.Variable](#system.variable)
-    * [A simple version of the variables](#a-simple-version-of-the-variables)
+	* [this For object constructor](#this-for-object-constructor)
+	* [Call super method with unhandled arguments styles](#call-super-method-with-unhandled-arguments-styles)
+	* [System.Variable](#system.variable)
+	* [A simple version of the variables](#a-simple-version-of-the-variables)
 * [Throw Exception](#throw-exception)
 * [Template class](#template-class)
 * [System.Module](#systemmodule)
-    * [child-modules](#child-modules)
+	* [child-modules](#child-modules)
 * [Attribute System](#attribute-system)
-    * [System.IAttribute](#systemiattribute)
-    * [System.IInitAttribute](#systemiinitattribute)
-    * [System.IApplyAttribute](#systemiapplyattribute)
-    * [System.IAttachAttribute](#systemiattachattribute)
+	* [System.IAttribute](#systemiattribute)
+	* [System.IInitAttribute](#systemiinitattribute)
+	* [System.IApplyAttribute](#systemiapplyattribute)
+	* [System.IAttachAttribute](#systemiattachattribute)
 	* [System Attributes](#system-attributes)
 		* [`__Abstract__`](#__abstract__)
 		* [`__AnonymousClass__`](#__anonymousclass__)
@@ -111,7 +112,7 @@ You also can find useful features for large enterprise development like code org
 		* [`__Namespace__`](#__namespace__)
 		* [`__NoNilValue__`](#__nonilvalue__)
 		* [`__NoRawSet__`](#__norawset__)
-        * [`__ObjectAttr__`](#__objectattr__)
+		* [`__ObjectAttr__`](#__objectattr__)
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
@@ -122,24 +123,25 @@ You also can find useful features for large enterprise development like code org
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
 		* [`__Template__`](#__template__)
+		* [`__Throwable__`](#__throwable__)
 * [keyword](#keyword)
-    * [Global keyword](#global-keyword)
-        * [export](#export)
-    * [Context keyword](#context-keyword)
-    * [Features can be used in `_G`](#features-can-be-used-in-_g)
+	* [Global keyword](#global-keyword)
+		* [export](#export)
+	* [Context keyword](#context-keyword)
+	* [Features can be used in `_G`](#features-can-be-used-in-_g)
 * [Serialization](#serialization)
-    * [Start with JSON](#start-with-json)
-    * [Serializable Type](#serializable-type)
-    * [Custom Serialize & Deserialize](#custom-serialize--deserialize)
+	* [Start with JSON](#start-with-json)
+	* [Serializable Type](#serializable-type)
+	* [Custom Serialize & Deserialize](#custom-serialize--deserialize)
 * [System.Collections](#systemcollections)
-    * [System.Collections.Iterable](#systemcollectionsiterable)
-    * [System.Collections.IList](#systemcollectionsilist)
-        * [System.Collections.ICountable](#systemcollectionsicountable)
-        * [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
-        * [System.Collections.List](#systemcollectionslist)
-    * [System.Collections.IDictionary](#systemcollectionsidictionary)
-        * [System.Collections.Dictionary](#systemcollectionsdictionary)
-    * [List, Dictionary with Serialization](#list-dictionary-with-serialization)
+	* [System.Collections.Iterable](#systemcollectionsiterable)
+	* [System.Collections.IList](#systemcollectionsilist)
+		* [System.Collections.ICountable](#systemcollectionsicountable)
+		* [System.Collections.IIndexedList](#systemcollectionsiindexedlist)
+		* [System.Collections.List](#systemcollectionslist)
+	* [System.Collections.IDictionary](#systemcollectionsidictionary)
+		* [System.Collections.Dictionary](#systemcollectionsdictionary)
+	* [List, Dictionary with Serialization](#list-dictionary-with-serialization)
 
 
 ## Install
@@ -2401,6 +2403,7 @@ default         |the default value
 event           |the event used to handle the property value changes, if it's value is string, an event will be created:
 handler         |the function used to handle the property value changes, unlike the event, the handler is used to notify the class or interface itself, normally this is used combine with **field** (or auto-gen field), so the class or interface only need to act based on the value changes :
 static          |true if the property is a static property
+throwable       |true if the property's set method'll throw errors
 
 We'll see examples for each case:
 
@@ -2449,6 +2452,38 @@ PLoop(function(_ENV)
 	print(Person().Name)
 end)
 ```
+
+### property-throw
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "Person" (function(_ENV)
+		field { __name = "anonymous" }
+
+		function SetName(self, name)
+			if type(name) ~= "string" then
+				throw("The name must be string")
+			end
+			self.__name = name
+		end
+
+		function GetName(self)
+			return self.__name
+		end
+
+		property "Name" {
+			get = "GetName", -- or getmethod = "GetName"
+			set = "SetName", -- or setmethod = "SetName"
+			throwable = true,
+		}
+	end)
+
+	Person().Name = 123 -- Error: The name must be string
+end)
+```
+
 
 ### field & default
 
@@ -3025,8 +3060,8 @@ Application "WebApplication"(function(_ENV)
 	-- The __Route__ is used bind the function to the url
 	-- The __text__ is used to mark the function's output should
 	-- be send to the client as "text/plain"
- 	__Route__ "/nginx"
- 	__Text__()
+	__Route__ "/nginx"
+	__Text__()
 	function GetVars(context)
 		return ngx.var[context.Request.QueryString["var"] or "nginx_version"]
 	end
@@ -3614,7 +3649,7 @@ It's also require several properties if you don't want use the default value:
 	* System.AttributeTargets.Method    - for struct, interface or class methods
 	* System.AttributeTargets.Interface - for interfaces
 	* System.AttributeTargets.Class     - for classes
-    * System.AttributeTargets.Object    - for objects
+	* System.AttributeTargets.Object    - for objects
 	* System.AttributeTargets.Event     - for events
 	* System.AttributeTargets.Property  - for properies
 
@@ -3931,10 +3966,10 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    __NoNilValue__(false)
-    class "A" {}
+	__NoNilValue__(false)
+	class "A" {}
 
-    print(A().Test) -- nil
+	print(A().Test) -- nil
 end)
 ```
 
@@ -3967,10 +4002,10 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    __NoRawSet__(false)
-    class "A" {}
+	__NoRawSet__(false)
+	class "A" {}
 
-    A().Test = 123 -- Okay
+	A().Test = 123 -- Okay
 end)
 ```
 
@@ -3982,12 +4017,12 @@ PLOOP_PLATFORM_SETTINGS = { OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = tru
 require "PLoop"
 
 PLoop(function(_ENV)
-    class "A" { Test = function() end }
+	class "A" { Test = function() end }
 
-    o = A()
-    o.Test = 123    -- Error
-    o.Test = print  -- Okay
-    o.Test1= print  -- Error
+	o = A()
+	o.Test = 123    -- Error
+	o.Test = print  -- Okay
+	o.Test1= print  -- Error
 end)
 ```
 
@@ -4004,21 +4039,21 @@ Usage:
 require "PLoop"
 
 PLoop(function(_ENV)
-    class "__Reg__" (function(_ENV)
-        extend "IAttachAttribute"
+	class "__Reg__" (function(_ENV)
+		extend "IAttachAttribute"
 
-        function AttachAttribute(self, target, targettype)
-            print("Attach To", target.name)
-        end
+		function AttachAttribute(self, target, targettype)
+			print("Attach To", target.name)
+		end
 
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
-    end)
+		property "AttributeTarget"  { set = false, default = AttributeTargets.Object }
+	end)
 
-    __ObjectAttr__()
-    class "A" { name = String }
+	__ObjectAttr__()
+	class "A" { name = String }
 
-    __Reg__()
-    A{ name = "Ann" } -- Attach To Ann
+	__Reg__()
+	A{ name = "Ann" } -- Attach To Ann
 end)
 ```
 
@@ -4147,6 +4182,14 @@ Attribute Targets:
 * System.AttributeTargets.Struct
 * System.AttributeTargets.Interface
 * System.AttributeTargets.Class
+
+
+#### `__Throwable__`
+
+Mark the property as throwable, See [property-throw](#property-throw) for more details.
+
+Attribute Targets:
+* System.AttributeTargets.Property
 
 
 ## keyword

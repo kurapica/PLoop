@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/05/06                                               --
--- Version      :   1.0.0-beta015                                            --
+-- Update Date  :   2018/05/12                                               --
+-- Version      :   1.0.0-beta016                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -6180,7 +6180,10 @@ do
                         if val ~= nil then return val end
                     ]])
                 else
-                    tinsert(body, [[return _index(self, key)]])
+                    tinsert(body, [[
+                        local val = _index(self, key)
+                        return val
+                    ]])
                 end
             elseif validateflags(FLG_IC_IDXTBL, token) then
                 tinsert(head, "_index")
@@ -9910,6 +9913,8 @@ end
 --
 --      * static        true if the property is a static property
 --
+--      * throwable     true if the property may throw error in the set method
+--
 -- If the **auto** auto-binding mechanism is using and the definition don't
 -- provide get/set, getmethod/setmethod and field, the system will check the
 -- property owner's method(object method if non-static, static method if it
@@ -10012,6 +10017,8 @@ do
 
     local MOD_PROP_INDEXER      = newflags()
 
+    local MOD_PROP_THROWABLE    = newflags()
+
     -- PROPERTY FIELDS
     local FLD_PROP_MOD          =  0
     local FLD_PROP_RAWGET       =  1
@@ -10063,6 +10070,7 @@ do
     local FLG_PROPSET_EVENT     = newflags()
     local FLG_PROPSET_STATIC    = newflags()
     local FLG_PROPSET_INDEXER   = newflags()
+    local FLG_PROPSET_THROWABLE = newflags()
 
     local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
     local FLD_PROP_OBJ_WEAK     = "__PLOOP_PROPERTY_WEAK"
@@ -10417,9 +10425,17 @@ do
             if info[FLD_PROP_SET] then
                 token           = turnonflags(FLG_PROPSET_SET, token)
                 tinsert(upval, info[FLD_PROP_SET])
+
+                if validateflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD]) then
+                    token       = turnonflags(FLG_PROPSET_THROWABLE, token)
+                end
             elseif info[FLD_PROP_SETMETHOD] and not validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) then
                 token           = turnonflags(FLG_PROPSET_SETMETHOD, token)
                 tinsert(upval, info[FLD_PROP_SETMETHOD])
+
+                if validateflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD]) then
+                    token       = turnonflags(FLG_PROPSET_THROWABLE, token)
+                end
             elseif info[FLD_PROP_FIELD] then
                 token           = turnonflags(FLG_PROPSET_FIELD, token)
                 tinsert(upval, info[FLD_PROP_FIELD])
@@ -10512,19 +10528,78 @@ do
                     tinsert(head, "storage")
                 end
 
+                if validateflags(FLG_PROPSET_THROWABLE, token) then
+                    uinsert(apis, "pcall")
+                    uinsert(apis, "type")
+                    uinsert(apis, "tostring")
+                    uinsert(apis, "error")
+                end
+
                 if validateflags(FLG_PROPSET_SET, token) then
                     tinsert(head, "set")
                     if validateflags(FLG_PROPSET_INDEXER, token) then
-                        tinsert(body, [[return set(self, idxname, value)]])
+                        if validateflags(FLG_PROPSET_THROWABLE, token) then
+                            tinsert(body, [[
+                                local ok, err = pcall(set, self, idxname, value)
+                                if not ok then
+                                    if type(err) == "string" then
+                                        error(err, 0)
+                                    else
+                                        error(tostring(err), 3)
+                                    end
+                                end
+                            ]])
+                        else
+                            tinsert(body, [[return set(self, idxname, value)]])
+                        end
                     else
-                        tinsert(body, [[return set(self, value)]])
+                        if validateflags(FLG_PROPSET_THROWABLE, token) then
+                            tinsert(body, [[
+                                local ok, err = pcall(set, self, value)
+                                if not ok then
+                                    if type(err) == "string" then
+                                        error(err, 0)
+                                    else
+                                        error(tostring(err), 3)
+                                    end
+                                end
+                            ]])
+                        else
+                            tinsert(body, [[return set(self, value)]])
+                        end
                     end
                 elseif validateflags(FLG_PROPSET_SETMETHOD, token) then
                     tinsert(head, "setmethod")
                     if validateflags(FLG_PROPSET_INDEXER, token) then
-                        tinsert(body, [[return self[setmethod](self, idxname, value)]])
+                        if validateflags(FLG_PROPSET_THROWABLE, token) then
+                            tinsert(body, [[
+                                local ok, err = pcall(self[setmethod], self, idxname, value)
+                                if not ok then
+                                    if type(err) == "string" then
+                                        error(err, 0)
+                                    else
+                                        error(tostring(err), 3)
+                                    end
+                                end
+                            ]])
+                        else
+                            tinsert(body, [[return self[setmethod](self, idxname, value)]])
+                        end
                     else
-                        tinsert(body, [[return self[setmethod](self, value)]])
+                        if validateflags(FLG_PROPSET_THROWABLE, token) then
+                            tinsert(body, [[
+                                local ok, err = pcall(self[setmethod], self, value)
+                                if not ok then
+                                    if type(err) == "string" then
+                                        error(err, 0)
+                                    else
+                                        error(tostring(err), 3)
+                                    end
+                                end
+                            ]])
+                        else
+                            tinsert(body, [[return self[setmethod](self, value)]])
+                        end
                     end
                 elseif validateflags(FLG_PROPSET_FIELD, token) then
                     tinsert(head, "field")
@@ -10907,6 +10982,17 @@ do
                 return info and validateflags(MOD_PROP_STATIC, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property is throwable
+            -- @static
+            -- @method  IsThrowable
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is throwable
+            ["IsThrowable"]     = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD]) or false
+            end;
+
             --- Whether the property value should kept in a weak table
             -- @static
             -- @method  IsWeak
@@ -11052,6 +11138,22 @@ do
                     info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
                 else
                     error("Usage: property:SetStatic([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                end
+            end;
+
+            --- Mark the property as throwable
+            -- @static
+            -- @method  SetThrowable
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
+            ["SetThrowable"]    = function(self)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetThrowable([stack]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -11209,6 +11311,10 @@ do
                     elseif k == "isstatic" or k == "static" then
                         if v then
                             info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "throwable" then
+                        if v then
+                            info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD])
                         end
                     end
                 end
@@ -12083,6 +12189,24 @@ do
         __call = regValue, __newindex = readonly, __tostring = getAttributeName
     })
 
+    -----------------------------------------------------------------------
+    -- Set the property as throwable
+    --
+    -- @attribute   System.__Throwable__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Throwable__",         prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+                stack           = parsestack(stack) + 1
+                if targettype == ATTRTAR_PROPERTY then
+                    property.SetThrowable(target, stack)
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_PROPERTY,
+        },
+        __call = attribute.Register, __newindex = readonly, __tostring = namespace.GetNamespaceName
+    })
+
     -------------------------------------------------------------------------------
     --                               registration                                --
     -------------------------------------------------------------------------------
@@ -12619,6 +12743,11 @@ do
                 __ctor          = true,
             },
 
+            WRAP_METHOD         = {
+                __index         = true,
+                __newindex      = true,
+            },
+
             PLOOP_THIS_LOCAL    = "_PLoop_Overload_This",
 
             FLG_VAR_METHOD      = newflags(true),    -- is method
@@ -12663,8 +12792,8 @@ do
             unpack              = unpack,
             error               = error,
             select              = select,
-            errorstack          = (LUA_VERSION == 5.1 and not _G.jit) and 3 or 2,
-            chkandret           = function (ok, msg, ...) if ok then return msg, ... end error(tostring(msg), errorstack) end,
+            stackmod            = (LUA_VERSION == 5.1 and not _G.jit) and 1 or 0,
+            chkandret           = function (stack, ok, msg, ...) if ok then return msg, ... end error(tostring(msg), stackmod + stack) end,
             pcall               = pcall,
         }
 
@@ -12760,7 +12889,7 @@ do
             local usage         = {}
 
             if ismethod then
-                if THIS_METHOD[name] then
+                if THIS_METHOD[name] and Class.Validate(owner) then
                     tinsert(usage, strformat("Usage: %s(", tostring(owner)))
                 elseif getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
@@ -12804,41 +12933,42 @@ do
             vars[FLD_VAR_USGMSG]= tblconcat(usage, "")
         end
 
-        local function genArgumentValid(vars, ismethod, hasself)
-            local len   = #vars
-            if len     == 0 and not vars[FLD_VAR_THRABL] then return end
+        local function genArgumentValid(vars, ismethod, owner, name, hasself)
+            local len           = #vars
+            if len              == 0 and not vars[FLD_VAR_THRABL] then return end
 
-            local token = len * FLG_VAR_LENGTH
-            local islist= false
+            local token         = len * FLG_VAR_LENGTH
+            local islist        = false
+            local stack         = WRAP_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and 3 or 2
 
             if ismethod then
-                token   = turnonflags(FLG_VAR_METHOD, token)
+                token           = turnonflags(FLG_VAR_METHOD, token)
 
                 if hasself then
-                    token = turnonflags(FLG_VAR_SELFIN, token)
+                    token       = turnonflags(FLG_VAR_SELFIN, token)
                 end
             end
 
             if vars[FLD_VAR_IMMTBL] then
-                token   = turnonflags(FLG_VAR_IMMTBL, token)
+                token           = turnonflags(FLG_VAR_IMMTBL, token)
             end
 
             if vars[FLD_VAR_ISLIST] then
-                islist  = true
-                token   = turnonflags(FLG_VAR_ISLIST, token)
+                islist          = true
+                token           = turnonflags(FLG_VAR_ISLIST, token)
                 if vars[len].immutable then
-                    token = turnonflags(FLG_VAR_IMMLST, token)
+                    token       = turnonflags(FLG_VAR_IMMLST, token)
                 end
                 if vars[len].validate then
-                    token = turnonflags(FLG_VAR_LSTVLD, token)
+                    token       = turnonflags(FLG_VAR_LSTVLD, token)
                 end
                 if (vars[len].mincount or 0) == 0 then
-                    token = turnonflags(FLG_VAR_LSTNIL, token)
+                    token       = turnonflags(FLG_VAR_LSTNIL, token)
                 end
             end
 
             if vars[FLD_VAR_THRABL] then
-                token   = turnonflags(FLG_VAR_THRABL, token)
+                token           = turnonflags(FLG_VAR_THRABL, token)
             end
 
             -- Build the validator generator
@@ -12857,15 +12987,15 @@ do
                 for i = 1, len do args[i] = "v" .. i end
                 if ismethod then
                     if len == 0 then
-                        tinsert(body, "return function(func)")
+                        tinsert(body, "return function(stack, func)")
                     else
-                        tinsert(body, strformat("return function(func, %s)", tblconcat(args, ", ")))
+                        tinsert(body, strformat("return function(stack, func, %s)", tblconcat(args, ", ")))
                     end
                 else
                     if len == 0 then
-                        tinsert(body, "return function(usage, func)")
+                        tinsert(body, "return function(stack, usage, func)")
                     else
-                        tinsert(body, strformat("return function(usage, func, %s)", tblconcat(args, ", ")))
+                        tinsert(body, strformat("return function(stack, usage, func, %s)", tblconcat(args, ", ")))
                     end
                 end
 
@@ -12923,11 +13053,11 @@ do
                     else
                         tinsert(body, (([[
                             if _ai_ == nil then
-                                if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", 2) end
+                                if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", stack) end
                                 _ai_ = _vi_.default
                             elseif _vi_.validate then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_)
-                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 2) end
+                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), stack) end
                                 _ai_ = ret
                             end
                         ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
@@ -13047,7 +13177,7 @@ do
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
                                         local minct = _vi_.mincount or 0
-                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 2) end
+                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", stack) end
                                     ]]):gsub("_vi_", "v" .. len)))
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
@@ -13063,7 +13193,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
-                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 2) end
+                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), stack) end
                                     ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -13073,7 +13203,7 @@ do
                                     tinsert(body, (([[
                                             else
                                                 ret, msg= valid(vtype, ival, nochange)
-                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -13093,7 +13223,7 @@ do
                             tinsert(body, (([[
                                 local vlen  = select("#", ...)
                                 local minct = _vi_.mincount or 0
-                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 2) end
+                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", stack) end
                                 if vlen > 0 then
                                     local vtype = _vi_.type
                                     local valid = _vi_.validate
@@ -13101,11 +13231,11 @@ do
                                     for i = 1, vlen do
                                         local ival = vlst[i]
                                         if ival == nil then
-                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 2) end
+                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), stack) end
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 2) end
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
                                             vlst[i] = ret
                                         end
                                     end
@@ -13134,7 +13264,7 @@ do
                 end
 
                 if validateflags(FLG_VAR_THRABL, token) then
-                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, _ENV)()
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(stack, pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, _ENV)()
                 else
                     _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, _ENV)()
                 end
@@ -13144,20 +13274,22 @@ do
             end
 
             if ismethod then
-                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](unpack(vars, 0))
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](stack, unpack(vars, 0))
             else
-                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](vars[FLD_VAR_USGMSG], unpack(vars, 0))
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](stack, vars[FLD_VAR_USGMSG], unpack(vars, 0))
             end
         end
 
         local function genOverload(overload, owner, name, hasself)
             local token         = 0
+            local stack         = WRAP_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and 3 or 2
+
 
             if hasself then
                 token           = turnonflags(FLG_OVD_SELFIN, token)
             end
 
-            if THIS_METHOD[name] then
+            if THIS_METHOD[name] and Class.Validate(owner) then
                 token           = turnonflags(FLG_OVD_THROW, token)
 
                 if #overload > 1 then
@@ -13189,7 +13321,7 @@ do
 
                 tinsert(body, "")                       -- remain for shareable variables
 
-                tinsert(body, "return function(overload, count, usages)")
+                tinsert(body, "return function(overload, count, usages, stack)")
 
                 if needthis then
                     if hasself then
@@ -13232,13 +13364,13 @@ do
                     else
                         uinsert(apis, "error")
                         tinsert(body, [[
-                            if msg then error(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg, 2) end
+                            if msg then error(vars[]] .. FLD_VAR_USGMSG .. [[] .. " - " .. msg, stack) end
                         ]])
                     end
                     tinsert(body, [[
                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
                             if vars[]] .. FLD_VAR_THRABL .. [[] then
-                                return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                                return chkandret(stack, pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
                             else
                                 return vars[]] .. FLD_VAR_FUNCTN .. [[](]] .. (hasself and "self, " or "") .. [[...)
                             end
@@ -13258,12 +13390,12 @@ do
                                 if vars[]] .. FLD_VAR_MINARG .. [[] == 0 then
                                     if vars[]] .. FLD_VAR_IMMTBL .. [[] then
                                         if vars[]] .. FLD_VAR_THRABL .. [[] then
-                                            return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                                            return chkandret(stack, pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
                                         else
-                                            return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
+                                            return ]] .. (needthis and (getlocal and "chkandret(stack, true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                         end
                                     else
-                                        return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_VARVLD .. (needthis and not getlocal and [[], nil, ]] or [[](nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
+                                        return ]] .. (needthis and (getlocal and "chkandret(stack, true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_VARVLD .. (needthis and not getlocal and [[], nil, ]] or [[](nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                     end
                                 end
                             end
@@ -13276,12 +13408,12 @@ do
                                     if valid(true, ]] .. (hasself and "self, " or "") .. [[...) == nil then
                                         if vars[]] .. FLD_VAR_IMMTBL .. [[] then
                                             if vars[]] .. FLD_VAR_THRABL .. [[] then
-                                                return chkandret(pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
+                                                return chkandret(stack, pcall(vars[]] .. FLD_VAR_FUNCTN .. [[], ]] .. (hasself and "self, " or "") .. [[...))
                                             else
-                                                return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
+                                                return ]] .. (needthis and (getlocal and "chkandret(stack, true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. [[ vars[]] .. FLD_VAR_FUNCTN .. (needthis and not getlocal and [[], ]] or [[](]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                             end
                                         else
-                                            return ]] .. (needthis and (getlocal and "chkandret(true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. (needthis and not getlocal and [[ valid, nil, ]] or [[ valid(nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
+                                            return ]] .. (needthis and (getlocal and "chkandret(stack, true, " or "releaseAndRet(addCurrent(overloadFunc), pcall(") or "") .. (needthis and not getlocal and [[ valid, nil, ]] or [[ valid(nil, ]]) .. (hasself and "self, " or "") .. [[...) ]] .. (needthis and ")" or "") .. [[
                                         end
                                     end
                                 end
@@ -13296,7 +13428,7 @@ do
                     else
                         uinsert(apis, "error")
                         tinsert(body, [[
-                           error(usages, 2)
+                           error(usages, stack)
                         ]])
                     end
                 end
@@ -13326,7 +13458,7 @@ do
                 _Cache(apis)
             end
 
-            return _OverloadMap[token](overload, #overload, usages)
+            return _OverloadMap[token](overload, #overload, usages, stack)
         end
 
         -----------------------------------------------------------
@@ -13400,7 +13532,7 @@ do
             if targettype == AttributeTargets.Method then
                 local hasself = not getmetatable(owner).IsStaticMethod(owner, name)
                 buildUsage(vars, owner, name, true)
-                genArgumentValid(vars, true, hasself)
+                genArgumentValid(vars, true, owner, name, hasself)
 
                 local overload  = _OverloadMap[owner] and _OverloadMap[owner][name]
 
@@ -13438,7 +13570,7 @@ do
                 if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
                 buildUsage(vars, owner, name, false)
-                genArgumentValid(vars, false)
+                genArgumentValid(vars, false, owner, name, false)
 
                 return vars[FLD_VAR_VARVLD]
             end
