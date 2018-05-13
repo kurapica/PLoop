@@ -6538,9 +6538,9 @@ do
             end
 
             if validateflags(FLG_IC_FIELD, token) then
-                uinsert(apis, "pairs")
+                uinsert(apis, "tblclone")
                 tinsert(head, "fields")
-                tinsert(body, [[for fld, val in pairs, fields do if obj[fld] == nil then obj[fld] = val end end]])
+                tinsert(body, [[tblclone(fields, obj, true, false)]])
             end
 
             if validateflags(FLG_IC_NEWOBJ, token) then
