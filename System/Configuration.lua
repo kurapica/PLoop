@@ -19,11 +19,6 @@ PLoop(function(_ENV)
 	__Sealed__() class "ConfigSection" (function(_ENV)
 		export { "pairs", Enum, Struct, Interface, Class, Any, ConfigSection }
 
-		field {
-			__Fields 	= {},
-			__Sections 	= {},
-		}
-
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -92,6 +87,16 @@ PLoop(function(_ENV)
 			end
 
 			return config
+		end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        function __new(_)
+        	return {
+				__Fields 	= {},
+				__Sections 	= {},
+			}
 		end
 	end)
 end)
