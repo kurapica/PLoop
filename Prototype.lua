@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/05/12                                               --
--- Version      :   1.0.0-beta016                                            --
+-- Update Date  :   2018/05/13                                               --
+-- Version      :   1.0.0-beta017                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2610,7 +2610,7 @@ do
             local msg           = sname and ("the %s must be a sub type of " .. sname) or "the %s don't meet the requirement"
 
             attribute.IndependentCall(function()
-                __Sealed__() __Default__(self)
+                __Sealed__()
                 _UnmSubTypeMap[self]= struct {
                     function (val, onlyvalid)
                         return not issubtype(val, self) and (onlyvalid or msg) or nil
@@ -10728,7 +10728,7 @@ do
             info[FLD_PROP_INDEXERSET] = info[FLD_PROP_RAWSET]
             local emsg = "the " .. info[FLD_PROP_NAME] .. " can't be set"
             info[FLD_PROP_RAWSET]   = function()
-                error(emsg, e)
+                error(emsg, 3)
             end
         end
 

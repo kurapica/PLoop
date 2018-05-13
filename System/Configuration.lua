@@ -17,7 +17,7 @@ PLoop(function(_ENV)
 
 	--- The config section used as a container for configurations
 	__Sealed__() class "ConfigSection" (function(_ENV)
-		export { "pairs", Enum, Struct, Interface, Class, Any }
+		export { "pairs", Enum, Struct, Interface, Class, Any, ConfigSection }
 
 		field {
 			__Fields 	= {},
@@ -27,9 +27,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-		--- Add field with struct type
-		__Arguments__{ String, StructType/Any, Callable/nil }
-		function AddField(self, name, type, handler)
+		--- Set field with struct type
+		__Arguments__{ String, (StructType + EnumType)/Any, Callable/nil }
+		function SetField(self, name, type, handler)
 			local valid
 			if type ~= Any then
 				if Enum.Validate(type) then
@@ -46,11 +46,21 @@ PLoop(function(_ENV)
 			self.__Sections[name] 	= nil
 		end
 
-		--- Add section
+		--- Set section
 		__Arguments__{ String, ConfigSection, Callable/nil }
-		function AddSection(self, name, section, handler)
+		function SetSection(self, name, section, handler)
 			self.__Sections[name] 	= { section, handler }
 			self.__Fields[name] 	= nil
+		end
+
+		--- Get the config section of the given name
+		function GetSection(self, name, autocreate)
+			local secset 			= self.__Sections[name]
+			if not secset and autocreate then
+				secset 				= { ConfigSection() }
+				self.__Sections[name] = secset
+			end
+			return secset and secset[1]
 		end
 
 		__Arguments__{ Table, Any * 0 }
@@ -72,7 +82,7 @@ PLoop(function(_ENV)
 
 				local secset 		= self.__Sections[name]
 				if secset then
-					val, msg 		= secset[1]:ParseConfig(val)
+					val, msg 		= secset[1]:ParseConfig(val, ...)
 					if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
 					config[name] 	= val
 					if secset[2] then
