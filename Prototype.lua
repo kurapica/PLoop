@@ -9913,6 +9913,8 @@ end
 --
 --      * static        true if the property is a static property
 --
+--      * indexer       true if the property is an indexer property
+--
 --      * throwable     true if the property may throw error in the set method
 --
 -- If the **auto** auto-binding mechanism is using and the definition don't
@@ -11311,6 +11313,10 @@ do
                     elseif k == "isstatic" or k == "static" then
                         if v then
                             info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_STATIC, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "indexer" then
+                        if v then
+                            info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
                         end
                     elseif k == "throwable" then
                         if v then

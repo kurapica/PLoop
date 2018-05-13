@@ -2403,6 +2403,7 @@ default         |the default value
 event           |the event used to handle the property value changes, if it's value is string, an event will be created:
 handler         |the function used to handle the property value changes, unlike the event, the handler is used to notify the class or interface itself, normally this is used combine with **field** (or auto-gen field), so the class or interface only need to act based on the value changes :
 static          |true if the property is a static property
+indexer         |true if the property is an indexer property
 throwable       |true if the property's set method'll throw errors
 
 We'll see examples for each case:

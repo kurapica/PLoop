@@ -39,6 +39,8 @@ PLoop(function(_ENV)
 			end
 			self.__Fields[name] 	= { [0] = valid, type, handler }
 			self.__Sections[name] 	= nil
+
+			if not self.__Order:Contains(name) then self.__Order:Insert(name) end
 		end
 
 		--- Set section
@@ -46,6 +48,8 @@ PLoop(function(_ENV)
 		function SetSection(self, name, section, handler)
 			self.__Sections[name] 	= { section, handler }
 			self.__Fields[name] 	= nil
+
+			if not self.__Order:Contains(name) then self.__Order:Insert(name) end
 		end
 
 		--- Get the config section of the given name
@@ -54,6 +58,8 @@ PLoop(function(_ENV)
 			if not secset and autocreate then
 				secset 				= { ConfigSection() }
 				self.__Sections[name] = secset
+
+				if not self.__Order:Contains(name) then self.__Order:Insert(name) end
 			end
 			return secset and secset[1]
 		end
@@ -61,27 +67,33 @@ PLoop(function(_ENV)
 		__Arguments__{ Table, Any * 0 }
 		function ParseConfig(self, config, ...)
 			local msg
+			local fields 	= self.__Fields
+			local sections  = self.__Sections
 
-			for name, val in pairs(config) do
-				local fldset 		= self.__Fields[name]
-				if fldset then
-					if fldset[0] then
-						val, msg 	= fldset[0](fldset[1], val)
+			for _, name in self.__Order:GetIterator() do
+				local val 	= config[name]
+
+				if val ~= nil then
+					local fldset 		= fields[name]
+					if fldset then
+						if fldset[0] then
+							val, msg 	= fldset[0](fldset[1], val)
+							if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
+							config[name]= val
+						end
+						if fldset[2] then
+							fldset[2](name, val, ...)
+						end
+					end
+
+					local secset 		= sections[name]
+					if secset then
+						val, msg 		= secset[1]:ParseConfig(val, ...)
 						if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
-						config[name]= val
-					end
-					if fldset[2] then
-						fldset[2](name, val, ...)
-					end
-				end
-
-				local secset 		= self.__Sections[name]
-				if secset then
-					val, msg 		= secset[1]:ParseConfig(val, ...)
-					if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
-					config[name] 	= val
-					if secset[2] then
-						secset[2](name, val, ...)
+						config[name] 	= val
+						if secset[2] then
+							secset[2](name, val, ...)
+						end
 					end
 				end
 			end
@@ -94,6 +106,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         function __new(_)
         	return {
+        		__Order  	= List(),
 				__Fields 	= {},
 				__Sections 	= {},
 			}
