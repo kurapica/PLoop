@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/05/13                                               --
--- Version      :   1.0.0-beta017                                            --
+-- Update Date  :   2018/05/15                                               --
+-- Version      :   1.0.0-beta018                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -947,6 +947,10 @@ end
 --              * target        the target like class, method and etc
 --              * targettype    the target type, that's a flag value registered
 --                      by the target type. @see attribute.RegisterTargetType
+--              * manager       the definition manager of the target, normally
+--                      the definition environment of the target, it's a little
+--                      dangerous to use the definition environment directly,
+--                      but very useful.
 --              * owner         the target's owner, it the target is a method,
 --                      the owner may be a class or interface that contains it.
 --              * name          the target's name, like method name.
@@ -1114,10 +1118,11 @@ do
             -- @format  (target, targettype, definition, [owner], [name][, stack])
             -- @param   target                      the target, maybe class, method, object and etc
             -- @param   targettype                  the flag value of the target's type
+            -- @param   manager                     the definition manager of the target
             -- @param   owner                       the target's owner, like the class for a method
             -- @param   name                        the target's name if it has owner
             -- @param   stack                       the stack level
-            ["ApplyAttributes"] = function(target, targettype, owner, name, stack)
+            ["ApplyAttributes"] = function(target, targettype, manager, owner, name, stack)
                 local tarAttrs  = _TargetAttrs[target]
                 if not tarAttrs then return end
 
@@ -1133,7 +1138,7 @@ do
                     -- Apply attribute before the definition
                     if apply then
                         Trace("Call %s.ApplyAttribute", tostring(attr))
-                        apply(attr, target, targettype, owner, name, stack)
+                        apply(attr, target, targettype, manager, owner, name, stack)
                     end
                 end
 
@@ -2072,7 +2077,7 @@ do
                                 attribute.ToggleTarget(value, final)
                                 value   = final
                             end
-                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, env, key, stack)
+                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, env, key, stack)
                             attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
                         end
                         return rawset(env, key, value)
@@ -2818,8 +2823,6 @@ do
 
                 stack           = parsestack(stack) + 1
 
-                attribute.ApplyAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
-
                 _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, nil)
 
                 local enums = ninfo[FLD_ENUM_ITEMS]
@@ -3148,6 +3151,8 @@ do
                     enum.AddElement(owner, v, v, stack)
                 end
             end
+
+            attribute.ApplyAttributes(owner, ATTRTAR_ENUM, self, nil, nil, stack)
 
             enum.EndDefinition(owner, stack)
 
@@ -4306,7 +4311,7 @@ do
                     end
 
                     info[idx] = minfo
-                    attribute.ApplyAttributes (mobj, ATTRTAR_MEMBER, target, name, stack)
+                    attribute.ApplyAttributes (mobj, ATTRTAR_MEMBER, nil, target, name, stack)
                     attribute.AttachAttributes(mobj, ATTRTAR_MEMBER, target, name, stack)
                 else
                     error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is not valid", stack)
@@ -4350,7 +4355,7 @@ do
                         info[FLD_STRUCT_TYPEMETHOD][name]   = func
                     end
 
-                    attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
+                    attribute.ApplyAttributes (func, ATTRTAR_METHOD, nil, target, name, stack)
                     attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
                 else
                     error("Usage: struct.AddMethod(structure, name, func[, stack]) - The structure is not valid", stack)
@@ -4395,8 +4400,6 @@ do
                 if not ninfo then return end
 
                 stack = parsestack(stack) + 1
-
-                attribute.ApplyAttributes(target, ATTRTAR_STRUCT, nil, nil, stack)
 
                 _StructBuilderInfo  = savestorage(_StructBuilderInfo, target, nil)
 
@@ -5180,6 +5183,8 @@ do
                 end
             end
 
+            attribute.ApplyAttributes(owner, ATTRTAR_STRUCT, self, nil, nil, stack)
+
             environment.SetDefinitionMode(self, false)
             _StructBuilderInDefine = savestorage(_StructBuilderInDefine, self, nil)
             struct.EndDefinition(owner, stack)
@@ -5308,10 +5313,13 @@ do
         local visitor, env, name, definition, flag, stack  = getFeatureParams(endstruct, nil,  ...)
         local owner = visitor and environment.GetNamespace(visitor)
 
-        stack = stack + 1
+        stack               = stack + 1
 
         if not owner or not visitor then error([[Usage: endstruct "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+        if not (_StructBuilderInDefine[visitor] and _StructBuilderInfo[owner]) then error("The struct's definition is finished", stack) end
+
+        attribute.ApplyAttributes(owner, ATTRTAR_STRUCT, visitor, nil, nil, stack)
 
         environment.SetDefinitionMode(visitor, false)
         _StructBuilderInDefine = savestorage(_StructBuilderInDefine, visitor, nil)
@@ -6342,7 +6350,7 @@ do
                                 attribute.ToggleTarget(value, ret)
                                 value = ret
                             end
-                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, self, key, 2)
+                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, self, key, 2)
                             attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, 2)
                         end
                     ]])
@@ -7000,7 +7008,7 @@ do
         local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
         if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
-        attribute.ApplyAttributes (func, ATTRTAR_METHOD, target, name, stack)
+        attribute.ApplyAttributes (func, ATTRTAR_METHOD, nil, target, name, stack)
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
 
         typmtd = info[FLD_IC_TYPMTD]    -- Maybe generated after attribtues applied
@@ -7047,7 +7055,7 @@ do
             local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name, stack)
             if ret ~= data then attribute.ToggleTarget(data, ret) data = ret end
 
-            attribute.ApplyAttributes (data, ATTRTAR_METHOD, target, name, stack)
+            attribute.ApplyAttributes (data, ATTRTAR_METHOD, nil, target, name, stack)
             attribute.AttachAttributes(data, ATTRTAR_METHOD, target, name, stack)
         end
 
@@ -7411,9 +7419,6 @@ do
                 if not ninfo then return end
 
                 stack           = parsestack(stack) + 1
-
-                attribute.InheritAttributes(target, ATTRTAR_INTERFACE, unpack(ninfo, FLD_IC_STEXT))
-                attribute.ApplyAttributes  (target, ATTRTAR_INTERFACE, nil, nil, stack)
 
                 genTypeCaches(target, ninfo, stack)
 
@@ -8131,9 +8136,6 @@ do
                 if not ninfo then return end
 
                 stack           = parsestack(stack) + 1
-
-                attribute.InheritAttributes(target, ATTRTAR_CLASS, unpack(ninfo, ninfo[FLD_IC_SUPCLS] and FLD_IC_SUPCLS or FLD_IC_STEXT))
-                attribute.ApplyAttributes  (target, ATTRTAR_CLASS, nil, nil, stack)
 
                 -- Generate caches and constructor
                 genTypeCaches(target, ninfo, stack)
@@ -9058,6 +9060,9 @@ do
                 end
             end
 
+            attribute.InheritAttributes(owner, ATTRTAR_INTERFACE, unpack(info, FLD_IC_STEXT))
+            attribute.ApplyAttributes  (owner, ATTRTAR_INTERFACE, self, nil, nil, stack)
+
             environment.SetDefinitionMode(self, false)
             _ICBuilderInDefine = savestorage(_ICBuilderInDefine, self, nil)
             interface.EndDefinition(owner, stack)
@@ -9115,6 +9120,9 @@ do
                     end
                 end
             end
+
+            attribute.InheritAttributes(owner, ATTRTAR_CLASS, unpack(info, info[FLD_IC_SUPCLS] and FLD_IC_SUPCLS or FLD_IC_STEXT))
+            attribute.ApplyAttributes  (owner, ATTRTAR_CLASS, self, nil, nil, stack)
 
             environment.SetDefinitionMode(self, false)
             _ICBuilderInDefine = savestorage(_ICBuilderInDefine, self, nil)
@@ -9236,6 +9244,12 @@ do
         if not owner or not visitor then error([[Usage: endinterface "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
 
+        local info              = _ICBuilderInfo[owner]
+        if not (owner and _ICBuilderInDefine[visitor] and info) then error("The interface's definition is finished", stack) end
+
+        attribute.InheritAttributes(owner, ATTRTAR_INTERFACE, unpack(info, FLD_IC_STEXT))
+        attribute.ApplyAttributes  (owner, ATTRTAR_INTERFACE, visitor, nil, nil, stack)
+
         environment.SetDefinitionMode(visitor, false)
         _ICBuilderInDefine = savestorage(_ICBuilderInDefine, visitor, nil)
         interface.EndDefinition(owner, stack)
@@ -9264,10 +9278,16 @@ do
         local visitor, env, name, definition, flag, stack  = getFeatureParams(endclass, nil,  ...)
         local owner = visitor and environment.GetNamespace(visitor)
 
-        stack = stack + 1
+        stack       = stack + 1
 
         if not owner or not visitor then error([[Usage: endclass "name" - can't be used here.]], stack) end
         if namespace.GetNamespaceName(owner, true) ~= name then error(strformat("%s's definition isn't finished", tostring(owner)), stack) end
+
+        local info              = _ICBuilderInfo[owner]
+        if not (owner and _ICBuilderInDefine[visitor] and info) then error("The class's definition is finished", stack) end
+
+        attribute.InheritAttributes(owner, ATTRTAR_CLASS, unpack(info, info[FLD_IC_SUPCLS] and FLD_IC_SUPCLS or FLD_IC_STEXT))
+        attribute.ApplyAttributes  (owner, ATTRTAR_CLASS, visitor, nil, nil, stack)
 
         environment.SetDefinitionMode(visitor, false)
         _ICBuilderInDefine = savestorage(_ICBuilderInDefine, visitor, nil)
@@ -9536,7 +9556,7 @@ do
 
         local super             = interface.GetSuperFeature(owner, name)
         if super and event.Validate(super) then attribute.InheritAttributes(evt, ATTRTAR_EVENT, super) end
-        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, owner, name, stack)
+        attribute.ApplyAttributes(evt, ATTRTAR_EVENT, nil, owner, name, stack)
 
         _EventInDefine          = savestorage(_EventInDefine, evt, nil)
 
@@ -9705,7 +9725,7 @@ do
                             attribute.ToggleTarget(delegate, ret)
                             delegate   = ret
                         end
-                        attribute.ApplyAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
+                        attribute.ApplyAttributes(delegate, ATTRTAR_FUNCTION, nil, obj, name, stack)
                         attribute.AttachAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
                     end
                     odel:SetFinalFunction(delegate)
@@ -11342,7 +11362,7 @@ do
             if info[FLD_PROP_GET] then info[FLD_PROP_GETMETHOD] = nil end
             if info[FLD_PROP_SET] then info[FLD_PROP_SETMETHOD] = nil end
 
-            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, owner, name, stack)
+            attribute.ApplyAttributes(self, ATTRTAR_PROPERTY, nil, owner, name, stack)
 
             _PropertyInDefine  = savestorage(_PropertyInDefine, self, nil)
 
@@ -11637,7 +11657,7 @@ do
     -----------------------------------------------------------------------
     __Abstract__ = namespace.SaveNamespace("System.__Abstract__", prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
                     getmetatable(target).SetAbstract(target, parsestack(stack) + 1)
                 elseif class.Validate(owner) or interface.Validate(owner) then
@@ -11681,7 +11701,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__AnonymousClass__",        prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 interface.SetAnonymousClass(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
@@ -11735,7 +11755,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Base__",                  prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 struct.SetBaseStruct(target, self[1], parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_STRUCT,
@@ -11756,7 +11776,7 @@ do
                     definition.default = value
                 end
             end,
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
                 if value       ~= nil then
                     stack       = parsestack(stack) + 1
@@ -11780,7 +11800,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__EventChangeHandler__",    prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
                 if type(value) == "function" then
                     event.SetEventChangeHandler(target, value, parsestack(stack) + 1)
@@ -11800,7 +11820,7 @@ do
     -----------------------------------------------------------------------
     __Final__ = namespace.SaveNamespace("System.__Final__",     prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
                     getmetatable(target).SetFinal(target, parsestack(stack) + 1)
                 elseif class.Validate(owner) or interface.Validate(owner) then
@@ -11915,7 +11935,7 @@ do
 
                 _Cache(cache)
             end,
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 enum.SetFlagsEnum(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM,
@@ -11930,7 +11950,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Get__",                   prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
                 if type(value) == "number" then
                     stack       = parsestack(stack) + 1
@@ -11952,7 +11972,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Indexer__",               prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 property.SetIndexer(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
@@ -11978,7 +11998,7 @@ do
     -----------------------------------------------------------------------
     __NoNilValue__ = namespace.SaveNamespace("System.__NoNilValue__", prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype  == ATTRTAR_CLASS then
                     local on        = self[1]
                     if on == nil then on = true end
@@ -11998,7 +12018,7 @@ do
     -----------------------------------------------------------------------
     __NoRawSet__ = namespace.SaveNamespace("System.__NoRawSet__", prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype  == ATTRTAR_CLASS then
                     local on        = self[1]
                     if on == nil then on = true end
@@ -12018,7 +12038,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__SuperObject__",         prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local on        = self[1]
                 if on == nil then on = true end
                 class.SetSuperObjectStyle(target, on, parsestack(stack) + 1)
@@ -12035,7 +12055,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__ObjectAttr__",           prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 class.SetObjectAttributeEnabled(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
@@ -12051,7 +12071,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__ObjFuncAttr__",           prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 class.SetObjectFunctionAttributeEnabled(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
@@ -12066,7 +12086,7 @@ do
     -----------------------------------------------------------------------
     __ObjectSource__ = namespace.SaveNamespace("System.__ObjectSource__", prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
                     class.SetObjectSourceDebug(target, parsestack(stack) + 1)
                 end
@@ -12084,7 +12104,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Require__",               prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 interface.SetRequireClass(target, self[1], parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
@@ -12099,7 +12119,7 @@ do
     -----------------------------------------------------------------------
     __Sealed__ = namespace.SaveNamespace("System.__Sealed__",   prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 getmetatable(target).SetSealed(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_ENUM + ATTRTAR_STRUCT + ATTRTAR_INTERFACE + ATTRTAR_CLASS,
@@ -12114,7 +12134,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Set__",                   prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
                 if type(value) == "number" then
                     stack       = parsestack(stack) + 1
@@ -12145,7 +12165,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__SingleVer__",             prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 class.SetSingleVersion(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
@@ -12166,7 +12186,7 @@ do
                     getmetatable(owner).SetStaticMethod(owner, name, parsestack(stack) + 1)
                 end
             end,
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 stack           = parsestack(stack) + 1
                 if targettype == ATTRTAR_EVENT then
                     event.SetStatic(target, stack)
@@ -12187,7 +12207,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Super__",                 prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 class.SetSuperClass(target, self[1], parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_CLASS,
@@ -12202,7 +12222,7 @@ do
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__Throwable__",         prototype {
         __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, owner, name, stack)
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 stack           = parsestack(stack) + 1
                 if targettype == ATTRTAR_PROPERTY then
                     property.SetThrowable(target, stack)
@@ -12539,7 +12559,7 @@ do
         GetAttributeTargetOwners    = Attribute.GetAttributeTargetOwners
 
         -----------------------------------------------------------
-        --                       property                       --
+        --                       property                        --
         -----------------------------------------------------------
         --- the attribute target
         __Abstract__() property "AttributeTarget"  { type = AttributeTargets        }
@@ -12579,11 +12599,12 @@ do
         --- apply changes on the target
         -- @param   target                      the target
         -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
         -- @param   owner                       the target's owner
         -- @param   name                        the target's name in the owner
         -- @param   stack                       the stack level
         __Abstract__()
-        function ApplyAttribute(self, target, targettype, owner, name, stack)
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
         end
     end)
 
@@ -13805,7 +13826,7 @@ do
                     Attribute.ToggleTarget(func, ret)
                     func = ret
                 end
-                Attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, owner, name, 2)
+                Attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, nil, owner, name, 2)
                 Attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
             end
 

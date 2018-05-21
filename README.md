@@ -3720,7 +3720,7 @@ the attribute class should extend the **System.IInitAttribute** and define the *
 
 ### System.IApplyAttribute
 
-Those attributes are used to apply changes on the target, normally this is only used by the system attributes, take the `__Sealed__` as an example:
+Those attributes are used to apply changes on the target, this is normally used by the system attributes, take the `__Sealed__` as an example:
 
 ```lua
 class "__Sealed__" (function(_ENV)
@@ -3729,10 +3729,11 @@ class "__Sealed__" (function(_ENV)
 	--- apply changes on the target
 	-- @param   target                      the target
 	-- @param   targettype                  the target type
+	-- @param 	manager 					the definition manager of the target
 	-- @param   owner                       the target's owner
 	-- @param   name                        the target's name in the owner
 	-- @param   stack                       the stack level
-	function ApplyAttribute(self, target, targettype, owner, name, stack)
+	function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
 		if targettype == AttributeTargets.Enum then
 			Enum.SetSealed(target)
 		elseif targettype == AttributeTargets.Struct then
@@ -3749,6 +3750,43 @@ end)
 ```
 
 the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attributes are applied during the define process of the target.
+
+There is a special *manager* parameter, the definition environment of the struct, interface and class'd be passed in as the value, it's a dangerous but useful feature if you want append common type features into the target:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "__Name__" (function(_ENV)
+		extend "IApplyAttribute"
+
+		--- apply changes on the target
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param 	manager 					the definition manager of the target
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+			if manager then
+				Environment.Apply(manager, function(_ENV)
+					property "Name" { type = String }
+				end)
+			end
+		end
+
+		property "AttributeTarget" { default = AttributeTargets.Interface + AttributeTargets.Class }
+	end)
+
+	__Name__()
+	class "A" {}
+
+	A().Name = 123 -- Error: the Name must be string, got number
+end)
+```
+
+It's a dangerous feature, so only use it if needed.
+
 
 ### System.IAttachAttribute
 

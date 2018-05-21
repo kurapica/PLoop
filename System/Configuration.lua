@@ -15,55 +15,27 @@
 PLoop(function(_ENV)
 	namespace "System.Configuration"
 
-	--- The config section used as a container for configurations
-	__Sealed__() class "ConfigSection" (function(_ENV)
-		export { "pairs", Enum, Struct, Interface, Class, Any, ConfigSection }
+	--- The config sections are used as containers for configurations.
+	--
+	-- the configurations are pairs of name and type that'd be registered
+	-- in anywhere with or without special handlers, so we can parse the
+	-- configurations in one place for the whole system.
+	__Sealed__() __NoNilValue__(true) __NoRawSet__(true)
+	class "ConfigSection" (function(_ENV)
+		export { "pairs", "type", "getmetatable", Enum, Struct, Interface, Class, Any, ConfigSection }
+
+        -----------------------------------------------------------
+        --                         event                         --
+        -----------------------------------------------------------
+   		--- When the config is parsed by the config section
+        event "OnParse"
+
+        --- When the config is parsed by the config section's field
+        event "OnFieldParse"
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-		--- Set field with struct type
-		__Arguments__{ String, (StructType + EnumType)/Any, Callable/nil }
-		function SetField(self, name, type, handler)
-			local valid
-			if type ~= Any then
-				if Enum.Validate(type) then
-					valid = Enum.ValidateValue
-				elseif Struct.Validate(type) then
-					valid = Struct.ValidateValue
-				elseif Interface.Validate(type) then
-					valid = Interface.ValidateValue
-				elseif Class.Validate(type) then
-					valid = Class.ValidateValue
-				end
-			end
-			self.__Fields[name] 	= { [0] = valid, type, handler }
-			self.__Sections[name] 	= nil
-
-			if not self.__Order:Contains(name) then self.__Order:Insert(name) end
-		end
-
-		--- Set section
-		__Arguments__{ String, ConfigSection, Callable/nil }
-		function SetSection(self, name, section, handler)
-			self.__Sections[name] 	= { section, handler }
-			self.__Fields[name] 	= nil
-
-			if not self.__Order:Contains(name) then self.__Order:Insert(name) end
-		end
-
-		--- Get the config section of the given name
-		function GetSection(self, name, autocreate)
-			local secset 			= self.__Sections[name]
-			if not secset and autocreate then
-				secset 				= { ConfigSection() }
-				self.__Sections[name] = secset
-
-				if not self.__Order:Contains(name) then self.__Order:Insert(name) end
-			end
-			return secset and secset[1]
-		end
-
 		__Arguments__{ Table, Any * 0 }
 		function ParseConfig(self, config, ...)
 			local msg
@@ -74,32 +46,65 @@ PLoop(function(_ENV)
 				local val 	= config[name]
 
 				if val ~= nil then
-					local fldset 		= fields[name]
-					if fldset then
-						if fldset[0] then
-							val, msg 	= fldset[0](fldset[1], val)
-							if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
-							config[name]= val
-						end
-						if fldset[2] then
-							fldset[2](name, val, ...)
-						end
+					local fldtype 		= fields[name]
+					if fldtype then
+						val, msg 		= getmetatable(fldtype).ValidateValue(fldtype, val)
+
+						if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
+						config[name]	= val
+
+						OnFieldParse(self, name, val, ...)
 					end
 
-					local secset 		= sections[name]
-					if secset then
-						val, msg 		= secset[1]:ParseConfig(val, ...)
+					local subsect 		= sections[name]
+					if subsect then
+						val, msg 		= subsect:ParseConfig(val, ...)
 						if msg then return nil, msg:gsub("%%s", "%%s" .. "." .. name) end
 						config[name] 	= val
-						if secset[2] then
-							secset[2](name, val, ...)
-						end
 					end
 				end
 			end
 
+			OnParse(self, config, ...)
+
 			return config
 		end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The fields of the config section
+        __Indexer__() property "Field" { type = EnumType + StructType,
+        	set 	= function(self, name, type)
+				if not self.__Order:Contains(name) then self.__Order:Insert(name) end
+
+				self.__Fields[name] 	= type or Any
+				self.__Sections[name] 	= nil
+        	end,
+        	get 	= function(self, name)
+        		return self.__Fields[name]
+        	end,
+    	}
+
+        --- The sub-sections of the config section
+        __Indexer__() property "Section" { type = ConfigSection,
+        	set 	= function(self, name, sect)
+				if not self.__Order:Contains(name) then self.__Order:Insert(name) end
+
+				self.__Sections[name] 	= sect
+				self.__Fields[name] 	= nil
+        	end,
+        	get 	= function(self, name)
+				local secset 			= self.__Sections[name]
+				if not secset and not self.__Fields[name] then
+					if not self.__Order:Contains(name) then self.__Order:Insert(name) end
+
+					secset 				= ConfigSection()
+					self.__Sections[name] = secset
+				end
+				return secset
+        	end,
+    	}
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -111,5 +116,123 @@ PLoop(function(_ENV)
 				__Sections 	= {},
 			}
 		end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __index(self, key)
+        	if type(key) ~= "string" then return end
+        	local val = self.__Fields[key]
+        	return val or self.Section[key]
+        end
+	end)
+
+	--- The binder for the config section and handler
+	-- @usage :
+	--		__ConfigSection__( System.Web.ConfigSection.Html.Render, { nolinebreak = Boolean, noindent = Boolean  } )
+	-- 		function HtmlRenderConfig(config, ...)
+	--			print(config.nolinebreak)
+	-- 		end
+	--
+	--		__ConfigField__( System.Web.ConfigSection.Controller, "jsonprovider", -FormatProvider)
+	-- 		function JsonProviderConfig(field, value, ...)
+	-- 			print("The new json provider is " .. value)
+	-- 		end
+	__Sealed__() class "__ConfigSection__" (function(_ENV)
+		extend "IAttachAttribute"
+
+		export {
+			pairs 				= pairs,
+			type 				= type,
+			strformat 			= string.format,
+			isenum 				= Enum.Validate,
+			isstruct 			= Struct.Validate,
+		}
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+        	local section = self[1]
+        	if self[2] then
+        		for k, v in pairs(self[2]) do
+        			if type(k) == "string" and (isenum(v) or isstruct(v)) then
+        				section.Field[k] = v
+        			else
+        				error("The field's type can only be enum or struct", stack + 1)
+        			end
+        		end
+        	end
+        	section.OnParse = section.OnParse + function(self, ...) return target(...) end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ ConfigSection, Table/nil }
+        function __new(_, section, fields)
+        	return { section, fields }, true
+        end
+	end)
+
+	__Sealed__() class "__ConfigField__" (function(_ENV)
+		extend "IAttachAttribute"
+
+		export {
+			pairs 				= pairs,
+			type 				= type,
+			strformat 			= string.format,
+			isenum 				= Enum.Validate,
+			isstruct 			= Struct.Validate,
+		}
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+        	local section = self[1]
+        	local fldname = self[2]
+        	section.Field[fldname] = self[3]
+
+        	section.OnFieldParse = section.OnFieldParse + function(self, fld, val, ...)
+        		if fld == fldname then
+        			return target(fld, val, ...)
+        		end
+        	end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ ConfigSection, NEString, (EnumType + StructType)/Any }
+        function __new(_, section, name, type)
+        	return { section, name, type }, true
+        end
 	end)
 end)

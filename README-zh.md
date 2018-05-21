@@ -3776,6 +3776,7 @@ class "__Sealed__" (function(_ENV)
 	--- apply changes on the target
 	-- @param   target                      the target
 	-- @param   targettype                  the target type
+	-- @param 	manager 					the definition manager of the target
 	-- @param   owner                       the target's owner
 	-- @param   name                        the target's name in the owner
 	-- @param   stack                       the stack level
@@ -3796,6 +3797,43 @@ end)
 ```
 
 这些类型需要扩展**System.IApplyAttribute**，并覆盖**ApplyAttribute**虚方法。这类基本只被系统定义和使用。
+
+对于**ApplyAttribute**方法，它有一个特别的参数*manager*，如果target是struct，interface或者class，那么manager就是它们的定义环境，通过它，我们可以实现一些危险但很有用的功能，比如定义一些通用的类型资源：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "__Name__" (function(_ENV)
+		extend "IApplyAttribute"
+
+		--- apply changes on the target
+		-- @param   target                      the target
+		-- @param   targettype                  the target type
+		-- @param 	manager 					the definition manager of the target
+		-- @param   owner                       the target's owner
+		-- @param   name                        the target's name in the owner
+		-- @param   stack                       the stack level
+		function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+			if manager then
+				Environment.Apply(manager, function(_ENV)
+					property "Name" { type = String }
+				end)
+			end
+		end
+
+		property "AttributeTarget" { default = AttributeTargets.Interface + AttributeTargets.Class }
+	end)
+
+	__Name__()
+	class "A" {}
+
+	A().Name = 123 -- Error: the Name must be string, got number
+end)
+```
+
+这是一个比较危险的机能，请按需使用。
+
 
 ### System.IAttachAttribute 附着特性
 
