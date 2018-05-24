@@ -15,7 +15,7 @@
 	* [Dictionary的创建](#dictionary的创建)
 	* [Dictionary的方法](#dictionary的方法)
 	* [Dictionary的遍历](#dictionary的遍历)
-* [特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
+* [特性(Attribute)和协程池(Thread Pool)](#特性attribute和协程池thread-pool)
 * [拼写错误检查](#拼写错误检查)
 	* [读取不存在的全局变量](#读取不存在的全局变量)
 	* [写非法全局变量](#写非法全局变量)
@@ -85,7 +85,7 @@
 * [模板类](#模板类)
 * [System.Module](#systemmodule)
 	* [child-modules 子模组](#child-modules-子模组)
-* [Attribtue 特性系统](#attribtue-特性系统)
+* [Attribute 特性系统](#attribute-特性系统)
 	* [System.IAttribute](#systemiattribute)
 	* [System.IInitAttribute 初始化特性](#systemiinitattribute-初始化特性)
 	* [System.IApplyAttribute 应用特性](#systemiapplyattribute-应用特性)
@@ -522,7 +522,7 @@ end)
 **List**和**Dictionary**的队列和终止，以及排序方法并非定义在它们内部，而是由接口提供，等了解类和接口后，我们可以创建新的集合类型扩展这些接口，然后直接享受这些方法带来的便利。
 
 
-## 特性(Attribtue)和协程池(Thread Pool)
+## 特性(Attribute)和协程池(Thread Pool)
 
 **List**和**Dictionary**展示了对象的构建和使用，接下来，我们可以来看关于**PLoop**私有环境的一些特殊用法。首先是特性和协程的合用：
 
@@ -3673,7 +3673,7 @@ Module "TestMDL.SubMDL2.SSubMDL.XXXX"
 依照这个模式，整个项目会被保存在一个树状的模组系统中。命名空间用于保存类型，而模组则用来保存代码。
 
 
-## Attribtue 特性系统
+## Attribute 特性系统
 
 在上面的处理中，我们接触到了很多的内置特性，都是用于修改目标的行为。
 
@@ -3905,7 +3905,7 @@ end)
 
 #### `__Async__`
 
-详细信息见[特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
+详细信息见[特性(Attribute)和协程池(Thread Pool)](#特性attribute和协程池thread-pool)
 
 Attribute Targets:
 * System.AttributeTargets.Function
@@ -3995,7 +3995,7 @@ end)
 
 #### `__Iterator__`
 
-详细信息见[特性(Attribtue)和协程池(Thread Pool)](#特性attribtue和协程池thread-pool)
+详细信息见[特性(Attribute)和协程池(Thread Pool)](#特性attribute和协程池thread-pool)
 
 Attribute Targets:
 * System.AttributeTargets.Function
