@@ -2794,6 +2794,7 @@ IsStatic(target)             |该属性是否是静态属性
 IsWeak(target)               |该属性是否将值作为弱引用保存
 IsWritable(target)           |该属性是否可写
 GetDefault(target)           |获取属性的默认值
+GetField(target)             |获取属性的保存字段
 GetType(target)              |获取属性的类型
 Validate(target)             |目标是否是一个属性
 
@@ -3863,7 +3864,7 @@ PLoop(function(_ENV)
 	class "Person" {}
 
 	-- Persons
-	print(IAttribute.GetAttachedData(__DataTable__, Person))
+	print(Attribute.GetAttachedData(__DataTable__, Person))
 end)
 ```
 

@@ -2765,6 +2765,7 @@ IsStatic(target)             |Whether the property is static
 IsWeak(target)               |Whether the property value should kept in a weak table
 IsWritable(target)           |Whether the property is writable
 GetDefault(target)           |Get the property default value
+GetField(target)             |Get the property's field
 GetType(target)              |Get the property type
 Validate(target)             |Wether the target is a property
 
@@ -3816,7 +3817,7 @@ PLoop(function(_ENV)
 	class "Person" {}
 
 	-- Persons
-	print(IAttribute.GetAttachedData(__DataTable__, Person))
+	print(Attribute.GetAttachedData(__DataTable__, Person))
 end)
 ```
 

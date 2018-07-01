@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/05/15                                               --
--- Version      :   1.0.0-beta018                                            --
+-- Update Date  :   2018/06/14                                               --
+-- Version      :   1.0.0-beta020                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -6461,9 +6461,9 @@ do
             tinsert(upval, info[FLD_IC_OBJNEW])
         end
 
-        if info[FLD_IC_FIELD] then
+        if info[FLD_IC_OBJFLD] then
             token   = turnonflags(FLG_IC_FIELD, token)
-            tinsert(upval, info[FLD_IC_FIELD])
+            tinsert(upval, info[FLD_IC_OBJFLD])
         end
 
         if info[FLD_IC_CLINIT] then
@@ -10908,6 +10908,17 @@ do
                 return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET] }
             end;
 
+            --- Get the property field if existed
+            -- @static
+            -- @method  GetField
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  string                      the property's field
+            ["GetField"]        = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_FIELD] or nil
+            end;
+
             --- Whether the property should return a clone copy of the value
             -- @static
             -- @method  IsGetClone
@@ -11228,6 +11239,7 @@ do
         end;
         __index                 = {
             ["GetAccessor"]     = property.GetAccessor;
+            ["GetField"]        = property.GetField;
             ["IsGetClone"]      = property.IsGetClone;
             ["IsGetDeepClone"]  = property.IsGetDeepClone;
             ["IsIndexer"]       = property.IsIndexer;
@@ -11459,12 +11471,13 @@ do
 
         if type(exception) == "string" or not class.IsSubType(getmetatable(exception), Exception) then
             exception = Exception(tostring(exception))
+        elseif exception.StackDataSaved then
+            error(exception)
         end
 
-        local stack             = exception.StackLevel + 1
-        if exception.StackDataSaved then error(exception, stack) end
-
         exception.StackDataSaved= true
+
+        local stack             = exception.StackLevel + 1
 
         if traceback then
             exception.StackTrace= traceback(exception.Message, stack)
@@ -12531,32 +12544,6 @@ do
             tostring        = tostring,
             getmetatable    = getmetatable,
         }
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        --- Get the attached attribute data of the target
-        -- @param   target                      the target
-        -- @param   owner                       the target's owner
-        -- @return  any                         the attached data
-        __Static__()
-        GetAttachedData             = Attribute.GetAttachedData
-
-        --- Get all targets have attached data of the attribute
-        -- @format  ([cache])
-        -- @param   cache                       the cache to save the result
-        -- @rformat (cache)                     the cache that contains the targets
-        -- @rformat (iter, attr)                without the cache parameter, used in generic for
-        __Static__()
-        GetAttributeTargets         = Attribute.GetAttributeTargets
-
-        --- Get all target's owners that have attached data of the attribute
-        -- @format  ([cache])
-        -- @param   cache                       the cache to save the result
-        -- @rformat (cache)                     the cache that contains the targets
-        -- @rformat (iter, attr)                without the cache parameter, used in generic for
-        __Static__()
-        GetAttributeTargetOwners    = Attribute.GetAttributeTargetOwners
 
         -----------------------------------------------------------
         --                       property                        --
