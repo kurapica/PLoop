@@ -33,6 +33,7 @@ PLoop(function(_ENV)
         member "ctxname"    { }
         member "map"        { default = {} }
         member "primary"    { }
+        member "autokey"    { }
         member "unique"     { default = {} }
         member "foreign"    { default = {} }
     end)
@@ -63,8 +64,9 @@ PLoop(function(_ENV)
 
                         local primary           = dfield.primary
                         if primary then
-                            if primary == true then
+                            if primary == true or primary == dfield.name then
                                 schema.primary  = dfield.name
+                                schema.autokey  = dfield.autoincr or false
                             else
                                 schema.primary  = schema.primary or {}
                                 tinsert(schema.primary, dfield.name)
@@ -136,6 +138,8 @@ PLoop(function(_ENV)
 
     --- Represents the connection to a data base
     __Sealed__() interface "IDbConnection" (function(_ENV)
+        extend "IAutoClose"
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -148,17 +152,20 @@ PLoop(function(_ENV)
         --- Begins a database transaction.
         __Abstract__() function BeginTransaction(self, isolation) end
 
-        --- Closes the connection to the database.
-        __Abstract__() function Close(self) end
-
-        --- Opens a database connection with the settings specified by the ConnectionString property of the provider-specific Connection object.
-        __Abstract__() function Open(self) end
-
         --- Sends the query sql and return the result
-        __Abstract__() function Query(self, sql) end
+        __Abstract__() function Query(self, sql, ...) end
+
+        --- Sends the insert sql to the database and return the auto-increased id
+        __Abstract__() function Insert(self, sql, ...) end
+
+        --- Sends the update sql to the database
+        __Abstract__() function Update(self, sql, ...) end
+
+        --- Sends the delete sql to the database
+        __Abstract__() function Delete(self, sql, ...) end
 
         --- Execute the insert sql and return the result
-        __Abstract__() function Execute(self, sql) end
+        __Abstract__() function Execute(self, sql, ...) end
     end)
 
     --- Represents a transaction to be performed at a data source
@@ -228,8 +235,9 @@ PLoop(function(_ENV)
 
     --- Represents the context for a group of DataSets
     __Sealed__() interface "IDataContext" (function (_ENV)
+        extend "IAutoClose"
 
-        export { List, "pairs", "next" }
+        export { List, "pairs", "next", "pcall", "error" }
 
         field {
             [1] = {},   -- the change entities
@@ -248,6 +256,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        function Open(self)
+            self.Connection:Open()
+        end
+
+        function Close(self)
+            self.Connection:Close()
+        end
+
         --- Add changed entity
         function AddChangedEntity(self, entity)
             self[1][entity] = true
@@ -257,32 +273,47 @@ PLoop(function(_ENV)
         function SaveChanges(self)
             if not next(self[1]) then return end
 
-            local trans = self.Connection:BeginTransaction()
+            local trans     = self.Connection:BeginTransaction()
 
-            for entity in pairs(self[1]) do
-                entity:SaveChange()
+            local ok, err   = pcall(function()
+                for entity in pairs(self[1]) do
+                    entity:SaveChange()
+                end
+            end)
+
+            if ok then
+                trans:Commit()
+            else
+                trans:Rollback()
             end
 
-            trans:Commit()
-
             self[1]     = {}
+
+            if not ok then error(err, 0) end
         end
 
         --- Sends the query sql and return the result
-        function Query(self, sql)
-            return List( self.Connection:Query(sql) )
+        function Query(self, ...)
+            local rs = self.Connection:Query(...)
+            if rs then
+                if getmetatable(rs) == nil then
+                    return List(rs)
+                else
+                    return rs
+                end
+            end
         end
 
         --- Execute the insert sql and return the result
-        function Execute(self, sql)
-            return self.Connection:Execute(sql)
+        function Execute(self, ...)
+            return self.Connection:Execute(...)
         end
     end)
 
     --- Represents the data entity
     __Sealed__() interface "IDataEntity" (function (_ENV)
 
-        export { "getDataTableSchema", "getmetatable", "pairs", "ipairs", EntityStatus, DBNull }
+        export { "getDataTableSchema", "getDataTableCollection", "getmetatable", "pairs", "ipairs", EntityStatus, DBNull }
 
         FIELD_DATA              = 0 -- entity data
         FIELD_STATUS            = 1 -- entity status
@@ -363,7 +394,7 @@ PLoop(function(_ENV)
         function SaveChange(self)
             local ctx           = self[FIELD_CONTEXT]
             local status        = self[FIELD_STATUS]
-            if not ctx or status == EntityStatus.UNMODIFIED then return end
+            if not ctx or status== EntityStatus.UNMODIFIED then return end
 
             local reqs          = self[FIELD_REQUIRE]
 
@@ -375,11 +406,16 @@ PLoop(function(_ENV)
                 self[FIELD_REQUIRE] = false
             end
 
-            local schema            = getDataTableSchema(getmetatable(self))
+            local entityCls         = getmetatable(self)
+            local schema            = getDataTableSchema(entityCls)
             local sql
 
             if status == EntityStatus.NEW then
                 sql                 = ctx.SqlBuilder():From(schema.name):Insert(self[FIELD_DATA]):ToSql()
+                local rs            = ctx.Connection:Insert(sql)
+                if schema.autokey and rs then
+                    self[FIELD_DATA][schema.primary] = rs
+                end
             else
                 local where         = {}
                 local primary       = schema.primary
@@ -393,19 +429,21 @@ PLoop(function(_ENV)
                 end
 
                 if status == EntityStatus.DELETED then
-                    ctx:Delete(self)
-                    sql             = ctx.SqlBuilder:From(schema.name):Where(where):Delete():ToSql()
+                    ctx[getDataTableCollection(entityCls)]:Delete(self)
+                    sql             = ctx.SqlBuilder():From(schema.name):Where(where):Delete():ToSql()
                 elseif status == EntityStatus.MODIFIED then
                     local update    = {}
 
                     for name in pairs(self[FIELD_MODIFIED]) do
-                        update[name]= self[FIELD_DATA][name] or DBNull
+                        local val   = self[FIELD_DATA][name]
+                        if val == nil then val = DBNull end
+                        update[name]= val
                     end
 
-                    sql             = ctx.SqlBuilder:From(schema.name):Where(where):Update(update):ToSql()
+                    sql             = ctx.SqlBuilder():From(schema.name):Where(where):Update(update):ToSql()
                 end
+                ctx:Execute(sql)
             end
-            ctx:Execute(sql)
 
             self:SetEntityStatus(EntityStatus.UNMODIFIED)
         end
@@ -434,6 +472,8 @@ PLoop(function(_ENV)
 
         local FIELD_DATA        = 0
 
+        local rawget            = rawget
+        local rawset            = rawset
         local pairs             = pairs
         local ipairs            = ipairs
         local getDataTableCol   = getDataTableCollection
@@ -472,9 +512,7 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  data                        the attribute data to be attached
         function AttachAttribute(self, target, targettype, owner, name, stack)
-            if Class.Validate(owner) then
-                return self[0]
-            end
+            if Class.Validate(owner) then return self[0] end
         end
 
         --- modify the target's definition
@@ -506,6 +544,8 @@ PLoop(function(_ENV)
 
                     local schema    = getDataTableSchema(tarCls)
                     local munique   = schema and schema.unique[mkey]
+                    local foreignfld= "_Foreign_" .. Namespace.GetNamespaceName(tarCls, true) .. "_" .. name
+                    local mainfld   = "_Main_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
 
                     if not munique then
                         error("Usage: __DataField__{ foreign={ map = {fkey = mkey} }} - invalid key map", stack + 1)
@@ -523,12 +563,17 @@ PLoop(function(_ENV)
 
                         definition.type     = tarCls
                         definition.get      = function(self)
+                            local entity    = rawget(self, foreignfld)
+                            if entity then return entity end
+
                             local context   = self:GetDataContext()
                             if context then
-                                self        = self[FIELD_DATA] or nil
-                                local val   = self and self[fkey]
+                                local data  = self[FIELD_DATA] or nil
+                                local val   = data and data[fkey]
                                 if val ~= nil then
-                                    return context[tcol]:Query{ [tprop] = val }:First()
+                                    entity  = context[tcol]:Query{ [tprop] = val }:First()
+                                    rawset(self, foreignfld, entity)
+                                    return entity
                                 end
                             end
                         end
@@ -560,6 +605,8 @@ PLoop(function(_ENV)
                                 self:AddModifiedField(fkey)
                                 self:AddRequireEntity(new)
                             end
+
+                            rawset(self, foreignfld, new)
                         end
                     else
                         -- Multi-unique keys
@@ -588,19 +635,24 @@ PLoop(function(_ENV)
 
                         definition.type     = tarCls
                         definition.get      = function(self)
+                            local entity    = rawget(self, foreignfld)
+                            if entity then return entity end
+
                             local context   = self:GetDataContext()
                             if context then
-                                self        = self[FIELD_DATA]
-                                if self then
+                                local data  = self[FIELD_DATA]
+                                if data then
                                     local query = {}
 
                                     for tprop, fld in pairs(fkeymap) do
-                                        local val = self[fld]
+                                        local val = data[fld]
                                         if val == nil then return end
                                         query[tprop] = val
                                     end
 
-                                    return context[tcol]:Query(query):First()
+                                    entity = context[tcol]:Query(query):First()
+                                    rawset(self, foreignfld, entity)
+                                    return entity
                                 end
                             end
                         end
@@ -639,27 +691,44 @@ PLoop(function(_ENV)
 
                                 self:AddRequireEntity(new)
                             end
+
+                            rawset(self, foreignfld, new)
                         end
                     end
 
                     -- Install ref property to target class
                     if set.foreign.autogen then
-                        local get       = set.unique and function(self)
+                        local pset      = function(self, val)
+                            if val ~= nil then error("The value can only be nil to reset the reference", 2) end
+                            rawset(set, mainfld, nil)
+                        end
+
+                        local pget      = set.unique and function(self)
+                            local entity    = rawget(self, mainfld)
+                            if entity then return entity end
+
                             local context   = self:GetDataContext()
                             if context then
-                                return context[getDataTableCol(owner)]:Query{ [name] = self }:First()
+                                entity      = context[getDataTableCol(owner)]:Query{ [name] = self }:First()
+                                rawset(self, mainfld, entity)
+                                return entity
                             end
                         end or function(self)
+                            local collection= rawget(self, mainfld)
+                            if collection then return collection end
+
                             local context   = self:GetDataContext()
                             if context then
-                                return context[getDataTableCol(owner)]:Query{ [name] = self }
+                                collection  = context[getDataTableCol(owner)]:Query{ [name] = self }
+                                rawset(self, mainfld, collection)
+                                return collection
                             end
                         end
 
                         if tarCls == owner then
-                            Property.Parse(owner, set.foreign.autogen, { set = false, get = get })
+                            Property.Parse(owner, set.foreign.autogen, { set = pset, get = pget })
                         else
-                            class (tarCls, { [set.foreign.autogen] = { set = false, get = get } })
+                            class (tarCls, { [set.foreign.autogen] = { set = pset, get = pget } })
                         end
                     end
                 else
@@ -964,6 +1033,24 @@ PLoop(function(_ENV)
 
             local ctx           = self[0]
             local sql           = ctx.SqlBuilder():From(tabelname):Select(fields):Where(fquery):ToSql()
+
+            if sql then
+                local rs        = ctx:Query(sql)
+
+                if rs then
+                    for i, data in ipairs(rs) do
+                        rs[i]   = addEntityData(self, data)
+                    end
+
+                    return rs
+                end
+            end
+        end
+
+        __Arguments__{ NEString/nil }
+        function Query(self, where)
+            local ctx           = self[0]
+            local sql           = ctx.SqlBuilder():From(tabelname):Select(fields):Where(where):ToSql()
 
             if sql then
                 local rs        = ctx:Query(sql)

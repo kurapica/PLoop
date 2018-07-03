@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/06/14                                               --
--- Version      :   1.0.0-beta020                                            --
+-- Update Date  :   2018/07/02                                               --
+-- Version      :   1.0.0-beta021                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11467,8 +11467,6 @@ end
 -------------------------------------------------------------------------------
 do
     throw                       = function (exception)
-        local visitor, env      = getFeatureParams(throw)
-
         if type(exception) == "string" or not class.IsSubType(getmetatable(exception), Exception) then
             exception = Exception(tostring(exception))
         elseif exception.StackDataSaved then
@@ -11486,11 +11484,11 @@ do
         local func
 
         if debuginfo then
-            local info          = debuginfo(stack, "lSf")
+            local info          = debuginfo(stack, "lSfn")
             if info then
                 exception.Source    = (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
                 func                = info.func
-                exception.TargetSite= visitor and tostring(visitor)
+                exception.TargetSite= info.name
             end
         end
 
@@ -11527,6 +11525,88 @@ do
 end
 
 -------------------------------------------------------------------------------
+-- Since the Lua provide the xpcall instead of the try, the system only provide
+-- a with keyword for object of System.IAutoClose :
+--
+--              local ctx = DBContext()
+--              local input = FileReader("xxxx")
+--
+--              with(ctx, input) (function()
+--                  -- the operations
+--              end, function(err)
+--                  -- the exception handler, if ignored then
+--                  -- the "error" api would be used
+--              end)
+--
+-- The Open and Close method will be automatically used by the with keyword, so
+-- we don't need to worry about those operations.
+--
+-- @keyword     with
+-------------------------------------------------------------------------------
+do
+    with                        = function(...)
+        local n = select("#", ...)
+
+        if n == 0 then error("Usage: with(object[, ...]) (operation[, errorhandler]) - the object must existed", 2) end
+        for i = 1, n do
+            if not class.IsObjectType(select(i, ...), IAutoClose) then
+                error("Usage: with(object[, ...]) (operation[, errorhandler]) - the object must be generated from System.IAutoClose", 2)
+            end
+        end
+
+        if n == 1 then
+            local object        = ...
+            return function (operation, errhandler)
+                if type(operation) ~= "function" then
+                    error("Usage: with(object[, ...]) (operation[, errorhandler]) - the operation must be function", 2)
+                end
+                if errhandler ~= nil and type(errhandler) ~= "function" then
+                    error("Usage: with(object[, ...]) (operation[, errorhandler]) - the errhandler need be function", 2)
+                end
+
+                errhandler      = errhandler or error
+
+                local ok, msg   = pcall(object.Open, object)
+                if not ok then errhandler(msg, 0) end
+
+                ok, msg         = pcall(operation)
+
+                pcall(object.Close, object)
+
+                if not ok then errhandler(msg, 0) end
+            end
+        else
+            local objects       = { ... }
+            return function (operation, errhandler)
+                if type(operation) ~= "function" then
+                    error("Usage: with(object[, ...]) (operation[, errorhandler]) - the operation must be function", 2)
+                end
+                if errhandler ~= nil and type(errhandler) ~= "function" then
+                    error("Usage: with(object[, ...]) (operation[, errorhandler]) - the errhandler need be function", 2)
+                end
+
+                errhandler      = errhandler or error
+
+                local ok, msg
+
+                for _, object in ipairs, objects, 0 do
+                    ok, msg = pcall(object.Open, object)
+                    if not ok then errhandler(msg, 0) end
+                end
+
+                ok, msg         = pcall(operation)
+
+                for _, object in ipairs, objects, 0 do
+                    pcall(object.Close, object)
+                end
+
+                if not ok then errhandler(msg, 0) end
+            end
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
 --                           keyword installation                            --
 -------------------------------------------------------------------------------
 do
@@ -11542,6 +11622,7 @@ do
         class                   = class,
         interface               = interface,
         throw                   = throw,
+        with                    = with,
     }
 
     -----------------------------------------------------------------------
@@ -12672,6 +12753,16 @@ do
         __Abstract__() __tostring = function(self) return tostring(getmetatable(self)) .. (GetObjectSource(self) or "") end
     end)
 
+    --- Represents the interface of open/close resources
+    __Sealed__()
+    IAutoClose = interface "System.IAutoClose" (function(_ENV)
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        __Abstract__() function Open(self) end
+        __Abstract__() function Close(self) end
+    end)
+
     -- Represents a toolset to provide several compatible apis
     __Sealed__() __Final__()
     interface "System.Toolset" {
@@ -13059,8 +13150,8 @@ do
                                 if not _vi_.optional then return onlyvalid or "the _i_ argument can't be nil" end
                                 _ai_ = _vi_.default
                             elseif _vi_.validate then
-                                ret, msg = _vi_.validate(_vi_.type, _ai_, nochange)
-                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
+                                ret, msg = _vi_.validate(_vi_.type, _ai_, onlyvalid)
+                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))) end
                                 _ai_ = ret
                             end
                         ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
@@ -13071,7 +13162,7 @@ do
                                 _ai_ = _vi_.default
                             elseif _vi_.validate then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_)
-                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), stack) end
+                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), stack) end
                                 _ai_ = ret
                             end
                         ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
@@ -13120,8 +13211,8 @@ do
                                 if validateflags(FLG_VAR_LSTVLD, token) then
                                     tinsert(body, (([[
                                             else
-                                                ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -13154,8 +13245,8 @@ do
                                                 if i <= minct then return onlyvalid or ("the " .. parseindex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
-                                                ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                             end
                                         end
                                         return
@@ -13167,8 +13258,8 @@ do
                                                 if i <= minct then return onlyvalid or ("the " .. parseindex(i + _i_) .. " argument can't be nil") end
                                                 break
                                             else
-                                                ret, msg= valid(vtype, ival, nochange)
-                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then return onlyvalid or (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))) end
                                                 vlst[i] = ret
                                             end
                                         end
@@ -13216,8 +13307,8 @@ do
                                 if validateflags(FLG_VAR_LSTVLD, token) then
                                     tinsert(body, (([[
                                             else
-                                                ret, msg= valid(vtype, ival, nochange)
-                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -13249,7 +13340,7 @@ do
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s%.?", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), stack) end
                                             vlst[i] = ret
                                         end
                                     end
