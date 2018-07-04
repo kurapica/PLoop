@@ -19,6 +19,8 @@ PLoop(function(_ENV)
         tinsert             = table.insert,
         safeset             = Toolset.safeset,
         pairs               = pairs,
+        ipairs              = ipairs,
+        type                = type,
 
         Attribute, Namespace, Class, Property
     }
@@ -254,7 +256,7 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
 
-        export { List, "pairs", "next", "pcall", "error" }
+        export { List, "pairs", "next", "pcall", "error", "getmetatable" }
 
         field {
             [1] = {},   -- the change entities
@@ -965,6 +967,7 @@ PLoop(function(_ENV)
             pairs               = pairs,
             error               = error,
             strformat           = string.format,
+            tostring            = tostring,
 
             Class, Property, Any, EntityStatus
         }
