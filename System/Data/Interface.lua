@@ -134,6 +134,23 @@ PLoop(function(_ENV)
         DELETED                 = 3,
     }
 
+    __Sealed__() struct "QueryOrder" {
+        { name = "name",   type = String, require = true },
+        { name = "desc",   type = Boolean },
+    }
+
+    __Sealed__() struct "QueryOrders" {
+        String + QueryOrder,
+
+        __init                  = function(self)
+            for i, order in ipairs(self) do
+                if type(order) == "string" then
+                    self[i]     = { name = order }
+                end
+            end
+        end,
+    }
+
     class "DataCollection" {}
 
     --- Represents the connection to a data base
@@ -301,6 +318,8 @@ PLoop(function(_ENV)
                 else
                     return rs
                 end
+            else
+                return List()
             end
         end
 
@@ -477,11 +496,31 @@ PLoop(function(_ENV)
         local pairs             = pairs
         local ipairs            = ipairs
         local getDataTableCol   = getDataTableCollection
+        local type              = type
+
+        __Sealed__() struct "AutoGen" {
+            { name = "name",    type = String, require = true },
+            { name = "orderby", type = String + QueryOrders },
+
+            __init              = function(self)
+                if type(self.orderby) == "string" then
+                    self.orderby= { { name = self.orderby } }
+                end
+            end,
+        }
 
         __Sealed__() struct "ForeignMap" (function(_ENV)
+            export { "type" }
+
             member "map"        { type = Table, require = true }
             member "target"     { type = ClassType }
-            member "autogen"    { type = String }
+            member "autogen"    { type = String + AutoGen }
+
+            function __init(self)
+                if type(self.autogen) == "string" then
+                    self.autogen = { name = self.autogen }
+                end
+            end
         end)
 
         __Sealed__() struct "FieldSetting" (function(_ENV)
@@ -531,7 +570,7 @@ PLoop(function(_ENV)
                 definition.throwable= true
 
                 if set.foreign then
-                    local tarCls    = set.target or owner
+                    local tarCls    = set.foreign.target or owner
 
                     local map       = set.foreign.map
 
@@ -698,6 +737,7 @@ PLoop(function(_ENV)
 
                     -- Install ref property to target class
                     if set.foreign.autogen then
+                        local autogen   = set.foreign.autogen
                         local pset      = function(self, val)
                             if val ~= nil then error("The value can only be nil to reset the reference", 2) end
                             rawset(set, mainfld, nil)
@@ -719,16 +759,16 @@ PLoop(function(_ENV)
 
                             local context   = self:GetDataContext()
                             if context then
-                                collection  = context[getDataTableCol(owner)]:Query{ [name] = self }
+                                collection  = context[getDataTableCol(owner)]:Query({ [name] = self }, autogen.orderby)
                                 rawset(self, mainfld, collection)
                                 return collection
                             end
                         end
 
                         if tarCls == owner then
-                            Property.Parse(owner, set.foreign.autogen, { set = pset, get = pget })
+                            Property.Parse(owner, autogen.name, { set = pset, get = pget })
                         else
-                            class (tarCls, { [set.foreign.autogen] = { set = pset, get = pget } })
+                            class (tarCls, { [autogen.name] = { set = pset, get = pget } })
                         end
                     end
                 else
@@ -1003,8 +1043,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        __Arguments__{ QueryData }
-        function Query(self, query)
+        __Arguments__{ QueryData, QueryOrders/nil }
+        function Query(self, query, orders)
             local fquery        = {}
 
             for name, val in pairs(query) do
@@ -1032,7 +1072,15 @@ PLoop(function(_ENV)
             end
 
             local ctx           = self[0]
-            local sql           = ctx.SqlBuilder():From(tabelname):Select(fields):Where(fquery):ToSql()
+            local builder       = ctx.SqlBuilder():From(tabelname):Select(fields):Where(fquery)
+
+            if orders then
+                for _, order in ipairs(orders) do
+                    builder:OrderBy(order.name, order.desc)
+                end
+            end
+
+            local sql           = builder:ToSql()
 
             if sql then
                 local rs        = ctx:Query(sql)
@@ -1047,10 +1095,10 @@ PLoop(function(_ENV)
             end
         end
 
-        __Arguments__{ NEString/nil }
-        function Query(self, where)
+        __Arguments__{ NEString/nil, Any * 0 }
+        function Query(self, where, ...)
             local ctx           = self[0]
-            local sql           = ctx.SqlBuilder():From(tabelname):Select(fields):Where(where):ToSql()
+            local sql           = ctx.SqlBuilder():From(tabelname):Select(fields):Where(where, ...):ToSql()
 
             if sql then
                 local rs        = ctx:Query(sql)
