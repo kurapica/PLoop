@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/07/02                                               --
--- Version      :   1.0.0-beta021                                            --
+-- Update Date  :   2018/07/05                                               --
+-- Version      :   1.0.0-beta022                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11589,9 +11589,14 @@ do
 
                 local ok, msg
 
-                for _, object in ipairs, objects, 0 do
+                for i, object in ipairs, objects, 0 do
                     ok, msg = pcall(object.Open, object)
-                    if not ok then errhandler(msg, 0) end
+                    if not ok then
+                        for j = i - 1, 1, -1 do
+                            pcall(objects[j].Close, objects[j])
+                        end
+                        errhandler(msg, 0)
+                    end
                 end
 
                 ok, msg         = pcall(operation)
