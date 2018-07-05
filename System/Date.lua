@@ -20,7 +20,29 @@ PLoop(function(_ENV)
     export {
         strfind             = string.find,
         strgmatch           = string.gmatch,
-        ALLOW_TIMEFORMAT    = { a = true, A = true, b = true, B = true, c = true, C = true, d = true, D = true, e = true, F = true, g = true, G = true, h = true, H = true, I = true, j = true, m = true, M = true, n = true, p = true, r = true, R = true, S = true, t = true, T = true, u = true, U = true, V = true, w = true, W = true, x = true, X = true, y = true, Y = true, z = true, Z = true },
+
+        -- %a  Abbreviated weekday name                                                     Thu
+        -- %A  Full weekday namespace                                                       Thursday
+        -- %b  Abbreviated month name                                                       Aug
+        -- %B  Full month name                                                              August
+        -- %c  Date and time representation                                                 Thu Aug 23 14:55:02 2001
+        -- %d  Day of the month, zero-padded (01-31)                                        23
+        -- %H  Hour in 24h format (00-23)                                                   14
+        -- %I  Hour in 12h format (01-12)                                                   02
+        -- %j  Day of the year (001-366)                                                    235
+        -- %m  Month as a decimal number (01-12)                                            08
+        -- %M  Minute (00-59)                                                               55
+        -- %p  AM or PM designation                                                         PM
+        -- %S  Second (00-61)                                                               02
+        -- %U  Week number with the first Sunday as the first day of week one (00-53)       33
+        -- %w  Weekday as a decimal number with Sunday as 0 (0-6)                           4
+        -- %W  Week number with the first Monday as the first day of week one (00-53)       34
+        -- %x  Date representation                                                          08/23/01
+        -- %X  Time representation                                                          14:55:02
+        -- %y  Year, last two digits (00-99)                                                01
+        -- %Y  Year                                                                         2001
+        -- %Z  Timezone name or abbreviation                                                CDT
+        ALLOW_TIMEFORMAT    = (function() local r = {} ("aAbBcdHIjmMpSUwWxXyYZ"):gsub("%w", function(w) r[w] = true end) return r end)()
     }
 
     --- Represents the time format can be used in date api
@@ -35,7 +57,7 @@ PLoop(function(_ENV)
                     if ALLOW_TIMEFORMAT[s] then
                         hasfmt  = true
                     else
-                        return onlyvalid or "the %s contains invalid time format"
+                        return onlyvalid or "the '" .. s .. "' can't be used as time format"
                     end
                 end
                 if not hasfmt then return "the %s doesn't contains any time formats" end
@@ -57,6 +79,7 @@ PLoop(function(_ENV)
             getmetatable= getmetatable,
             strfind     = strfind,
             rawset      = rawset,
+            tonumber    = tonumber,
         }
 
         local offset    = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
@@ -103,6 +126,86 @@ PLoop(function(_ENV)
         property "Time" { type = Integer, field = "time", handler = r4Time }
 
         -----------------------------------------------------------
+        --                     static method                     --
+        -----------------------------------------------------------
+        --- Parse a string data to Date object
+        __Static__() __Arguments__{ NEString, TimeFormat/"%Y-%m-%d %X", Boolean/false }
+        function Parse(s, format, isutc)
+            local year, month, day, hour, min, sec
+            local fail
+            local index = 1
+
+            -- %d  Day of the month, zero-padded (01-31)                                        23
+            -- %H  Hour in 24h format (00-23)                                                   14
+            -- %m  Month as a decimal number (01-12)                                            08
+            -- %M  Minute (00-59)                                                               55
+            -- %S  Second (00-61)                                                               02
+            -- %X  Time representation                                                          14:55:02
+            -- %Y  Year                                                                         2001
+            local pattern   = format:gsub("%%(.)", function(w)
+                if w == "d" then
+                    day     = index
+                    index   = index + 1
+                    return "(%d%d)"
+                elseif w == "H" then
+                    hour    = index
+                    index   = index + 1
+                    return "(%d%d)"
+                elseif w == "m" then
+                    month   = index
+                    index   = index + 1
+                    return "(%d%d)"
+                elseif w == "M" then
+                    min     = index
+                    index   = index + 1
+                    return "(%d%d)"
+                elseif w == "S" then
+                    sec     = index
+                    index   = index + 1
+                    return "(%d%d)"
+                elseif w == "X" then
+                    hour    = index
+                    index   = index + 1
+
+                    min     = index
+                    index   = index + 1
+
+                    sec     = index
+                    index   = index + 1
+
+                    return "(%d%d):(%d%d):(%d%d)"
+                elseif w == "Y" then
+                    year    = index
+                    index   = index + 1
+                    return "(%d%d%d%d)"
+                else
+                    fail = true
+                end
+            end)
+
+            if fail or not (hour and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
+                error("Usage: Date.Parse(s[, format][,isutc]) - the format isn't valid", 2)
+            end
+
+            local rs        = { s:match(pattern) }
+            year            = tonumber(rs[year])
+            month           = tonumber(rs[month])
+            day             = tonumber(rs[day])
+
+            if hour then
+                hour        = tonumber(rs[hour])
+                min         = tonumber(rs[min])
+                sec         = tonumber(rs[sec])
+            end
+
+            if not (hour and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
+                error("Usage: Date.Parse(s[, format][,isutc]) - the s isn't valid date", 2)
+            end
+
+            return Date(year, month, day, hour, min, sec, isutc)
+        end
+
+        -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Serialize the date
@@ -115,13 +218,13 @@ PLoop(function(_ENV)
         function Diff(self, obj) return diff(self.time, obj.time) end
 
         --- Converts the value of the current DateTime object to its equivalent string representation using the specified format.
-        __Arguments__{ TimeFormat/"%c" }
+        __Arguments__{ TimeFormat/"%Y-%m-%d %X" }
         function ToString(self, fmt)
             return date(fmt, self.time)
         end
 
         --- Converts the value of the current DateTime object to its equivalent UTC string representation using the specified format.
-        __Arguments__{ TimeFormat/"!%c" }
+        __Arguments__{ TimeFormat/"!%Y-%m-%d %X" }
         function ToUTCString(self, fmt)
             if not strfind(fmt, "^!") then fmt = "!" .. fmt end
             return date(fmt, self.time)

@@ -487,7 +487,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataField__" (function(_ENV)
         extend "IAttachAttribute" "IInitAttribute"
 
-        export { Class, IDataEntity, EntityStatus, Property,
+        export { Class, IDataEntity, EntityStatus, Property, Date,
             "getDataTableSchema", "getDataFieldProperty", "next", "error"
         }
 
@@ -533,6 +533,7 @@ PLoop(function(_ENV)
             member "autoincr"   { type = Boolean }
             member "notnull"    { type = Boolean }
             member "foreign"    { type = ForeignMap }
+            member "dateformat" { type = String, default = "%Y-%m-%d %H:%M:%S" }
 
             function __init(self)
                 if self.primary then
@@ -792,18 +793,37 @@ PLoop(function(_ENV)
                     else
                         local ntnull    = set.notnull
 
-                        definition.set  = function(self, value)
-                            local data  = self[FIELD_DATA]
-                            if not data then data = {} self[FIELD_DATA] = data end
-                            local oval  = data[fld]
+                        if definition.type == Date then
+                            local dformat   = set.dateformat
+                            definition.set  = function(self, value)
+                                local data  = self[FIELD_DATA]
+                                if not data then data = {} self[FIELD_DATA] = data end
+                                local oval  = data[fld]
 
-                            if value == oval then return end
-                            if value == nil and ntnull then
-                                throw("The value can't be nil")
+                                value = value and value:ToString(dformat)
+
+                                if value == oval then return end
+                                if value == nil and ntnull then
+                                    throw("The value can't be nil")
+                                end
+
+                                data[fld]   = value
+                                self:AddModifiedField(fld)
                             end
+                        else
+                            definition.set  = function(self, value)
+                                local data  = self[FIELD_DATA]
+                                if not data then data = {} self[FIELD_DATA] = data end
+                                local oval  = data[fld]
 
-                            data[fld]   = value
-                            self:AddModifiedField(fld)
+                                if value == oval then return end
+                                if value == nil and ntnull then
+                                    throw("The value can't be nil")
+                                end
+
+                                data[fld]   = value
+                                self:AddModifiedField(fld)
+                            end
                         end
                     end
                 end
