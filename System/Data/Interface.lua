@@ -1216,6 +1216,8 @@ PLoop(function(_ENV)
                     return rs
                 end
             end
+
+            return List()
         end
 
         __Arguments__{ NEString/nil, Any * 0 }
@@ -1234,6 +1236,8 @@ PLoop(function(_ENV)
                     return rs
                 end
             end
+
+            return List()
         end
 
         --- Get the data context of the data collection
