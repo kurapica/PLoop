@@ -678,7 +678,6 @@ PLoop(function(_ENV)
                 iter(obj, idx, true)
                 return val
             end
-            return false
         end
 
         --- Get the first element of the list, if not existed use the default as result
