@@ -487,8 +487,8 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataField__" (function(_ENV)
         extend "IAttachAttribute" "IInitAttribute"
 
-        export { Class, IDataEntity, EntityStatus, Property, Date,
-            "getDataTableSchema", "getDataFieldProperty", "next", "error"
+        export { Class, Struct, IDataEntity, EntityStatus, Property, Date, AnyType,
+            "getDataTableSchema", "getDataFieldProperty", "next", "error", "tonumber"
         }
 
         local FIELD_DATA        = 0
@@ -499,6 +499,33 @@ PLoop(function(_ENV)
         local ipairs            = ipairs
         local getDataTableCol   = getDataTableCollection
         local type              = type
+        local safeset           = Toolset.safeset
+        local strlower          = string.lower
+
+        local TYPE_CONVERTER    = {
+            [Boolean]           = {
+                fromvalue       = function(value)
+                    return tonumber(value) == 1 or false
+                end,
+                tovalue         = function(object)
+                    return object and 1 or 0
+                end,
+            },
+            [Date]              = {
+                fromvalue       = function(value, format)
+                    return Date.Parse(value, format)
+                end,
+                tovalue         = function(value, format)
+                    return value:ToString(format)
+                end,
+            }
+        }
+
+        __Sealed__() struct "TypeConverter" {
+            { name = "fromvalue",   type = Function, require = true },
+            { name = "tovalue",     type = Function, require = true },
+            { name = "format",      type = Any }
+        }
 
         __Sealed__() struct "AutoGen" {
             { name = "name",    type = String, require = true },
@@ -533,7 +560,8 @@ PLoop(function(_ENV)
             member "autoincr"   { type = Boolean }
             member "notnull"    { type = Boolean }
             member "foreign"    { type = ForeignMap }
-            member "dateformat" { type = String, default = "%Y-%m-%d %H:%M:%S" }
+            member "converter"  { type = TypeConverter }
+            member "format"     { type = Any }
 
             function __init(self)
                 if self.primary then
@@ -599,7 +627,6 @@ PLoop(function(_ENV)
                             error("Usage: __DataField__{ foreign={ map = {fkey = mkey} }} - invalid key map", stack + 1)
                         end
 
-                        local tcol          = schema.ctxname
                         local tprop         = schema.map[mkey]
                         local ntnull        = set.notnull
 
@@ -613,7 +640,7 @@ PLoop(function(_ENV)
                                 local data  = self[FIELD_DATA] or nil
                                 local val   = data and data[fkey]
                                 if val ~= nil then
-                                    entity  = context[tcol]:Query{ [tprop] = val }:First()
+                                    entity  = context[getDataTableCol(tarCls)]:Query{ [tprop] = val }:First()
                                     rawset(self, foreignfld, entity)
                                     return entity
                                 end
@@ -672,7 +699,6 @@ PLoop(function(_ENV)
                             error("Usage: __DataField__{ foreign={ map = {fkey = tkey} }} - invalid key map", stack + 1)
                         end
 
-                        local tcol          = schema.ctxname
                         local ntnull        = set.notnull
 
                         definition.type     = tarCls
@@ -692,7 +718,7 @@ PLoop(function(_ENV)
                                         query[tprop] = val
                                     end
 
-                                    entity = context[tcol]:Query(query):First()
+                                    entity = context[getDataTableCol(tarCls)]:Query(query):First()
                                     rawset(self, foreignfld, entity)
                                     return entity
                                 end
@@ -776,31 +802,70 @@ PLoop(function(_ENV)
                     end
                 else
                     local fld       = set.name
+                    local ptype
 
-                    definition.get  = function(self) self = self[FIELD_DATA] or nil return self and self[fld] end
+                    for k, v in pairs(definition) do if strlower(k) == "type" then ptype = v break end end
 
-                    if set.primary then
-                        definition.set  = function(self, value)
-                            local data  = self[FIELD_DATA]
-                            if not data then data = {} self[FIELD_DATA] = data end
-                            local oval  = data[fld]
-                            if value ~= oval and oval ~= nil then
-                                throw("The primary key can't be changed")
+                    local converter = set.converter or TYPE_CONVERTER[ptype]
+
+                    if converter then
+                        local fromvalue = converter.fromvalue
+                        local tovalue   = converter.tovalue
+                        local format    = set.format or converter.format
+                        local objfld    = "_Object_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
+
+                        definition.get  = function(self)
+                            local val   = rawget(self, objfld)
+                            if val ~= nil then return val end
+
+                            val         = self[FIELD_DATA] or nil
+                            val         = val and val[fld]
+                            if val ~= nil then
+                                val     = fromvalue(val, format)
+                                rawset(self, objfld, val)
                             end
-                            data[fld]   = value
-                            self:AddModifiedField(fld)
-                        end
-                    else
-                        local ntnull    = set.notnull
 
-                        if definition.type == Date then
-                            local dformat   = set.dateformat
-                            definition.set  = function(self, value)
+                            return val
+                        end
+
+                        if set.primary then
+                            definition.set  = function(self, object)
+                                local value = rawget(self, objfld)
+                                if value ~= nil and value == object then return end
+
                                 local data  = self[FIELD_DATA]
                                 if not data then data = {} self[FIELD_DATA] = data end
                                 local oval  = data[fld]
 
-                                value = value and value:ToString(dformat)
+                                if object == nil then
+                                    value   = nil
+                                else
+                                    value   = tovalue(object, format)
+                                end
+
+                                if value ~= oval and oval ~= nil then
+                                    throw("The primary key can't be changed")
+                                end
+                                data[fld]   = value
+                                self:AddModifiedField(fld)
+                                rawset(self, objfld, object)
+                            end
+                        else
+                            local ntnull    = set.notnull
+
+                            definition.set  = function(self, object)
+                                local value = rawget(self, objfld)
+                                if value ~= nil and value == object then return end
+
+                                local data  = self[FIELD_DATA]
+                                if not data then data = {} self[FIELD_DATA] = data end
+                                local oval  = data[fld]
+
+                                if object == nil then
+                                    value   = nil
+                                else
+                                    value   = tovalue(object, format)
+                                end
 
                                 if value == oval then return end
                                 if value == nil and ntnull then
@@ -809,8 +874,26 @@ PLoop(function(_ENV)
 
                                 data[fld]   = value
                                 self:AddModifiedField(fld)
+                                rawset(self, objfld, object)
+                            end
+                        end
+                    else
+                        definition.get  = function(self) self = self[FIELD_DATA] or nil return self and self[fld] end
+
+                        if set.primary then
+                            definition.set  = function(self, value)
+                                local data  = self[FIELD_DATA]
+                                if not data then data = {} self[FIELD_DATA] = data end
+                                local oval  = data[fld]
+                                if value ~= oval and oval ~= nil then
+                                    throw("The primary key can't be changed")
+                                end
+                                data[fld]   = value
+                                self:AddModifiedField(fld)
                             end
                         else
+                            local ntnull    = set.notnull
+
                             definition.set  = function(self, value)
                                 local data  = self[FIELD_DATA]
                                 if not data then data = {} self[FIELD_DATA] = data end
@@ -829,6 +912,23 @@ PLoop(function(_ENV)
                 end
             end
         end
+
+        -----------------------------------------------------------
+        --                    static property                    --
+        -----------------------------------------------------------
+        --- the default type converter
+        __Static__() __Indexer__()
+        property "Converter" {
+            get     = function(self, datatype)
+                return TYPE_CONVERTER[datatype]
+            end,
+            set     = function(self, datatype, converter)
+                if Struct.ValidateValue(AnyType, datatype) and converter then
+                    TYPE_CONVERTER = safeset(TYPE_CONVERTER, datatype, converter)
+                end
+            end,
+            type    = TypeConverter,
+        }
 
         -----------------------------------------------------------
         --                       property                        --
