@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/07/05                                               --
--- Version      :   1.0.0-beta022                                            --
+-- Update Date  :   2018/07/09                                               --
+-- Version      :   1.0.0-beta023                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2511,7 +2511,7 @@ do
                     end
                     target = ns
                 else
-                    target = Validate(target)
+                    target = namespace.Validate(target)
                 end
 
                 if not target then error("Usage: namespace([env, ]path[, noset][, stack]) - the system can't figure out the namespace", stack) end
