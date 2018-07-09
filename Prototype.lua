@@ -12826,11 +12826,13 @@ do
     class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
         extend "IInitAttribute"
 
+        local _OverloadStorage  = newstorage(WEAK_KEY)
+
         export {
             -----------------------------------------------------------
             --                        storage                        --
             -----------------------------------------------------------
-            _OverloadMap        = newstorage(WEAK_KEY),
+            _OverloadMap        = {},
             _ArgValdMap         = {},
 
             -----------------------------------------------------------
@@ -13644,7 +13646,7 @@ do
                 buildUsage(vars, owner, name, true)
                 genArgumentValid(vars, true, owner, name, hasself)
 
-                local overload  = _OverloadMap[owner] and _OverloadMap[owner][name]
+                local overload  = _OverloadStorage[owner] and _OverloadStorage[owner][name]
 
                 if overload then
                     local eidx
@@ -13663,15 +13665,16 @@ do
                     end
 
                     if eidx then
-                        overload= savestorage(overload, eidx, vars)
+                        overload[eidx]          = vars
                     else
-                        overload= savestorage(overload, #overload + 1, vars)
+                        overload[#overload + 1] = vars
                     end
                 else
-                    overload    = { vars }
+                    overload                    = { vars }
                 end
 
-                _OverloadMap    = savestorage(_OverloadMap, owner, savestorage(_OverloadMap[owner] or {}, name, overload))
+                _OverloadStorage[owner]         = _OverloadStorage[owner] or {}
+                _OverloadStorage[owner][name]   = overload
 
                 if #overload == 1 and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
