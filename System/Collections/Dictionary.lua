@@ -21,7 +21,7 @@ PLoop(function(_ENV)
     interface "IDictionary" { Iterable }
 
     --- The default dictionary
-    __Sealed__() __Serializable__() __Template__( Any, Any )
+    __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
     __NoRawSet__(false) __NoNilValue__(false)
     class "Dictionary" (function (_ENV, keytype, valtype)
         extend "IDictionary" "ISerializable"

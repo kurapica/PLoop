@@ -1196,7 +1196,7 @@ PLoop(function(_ENV)
         property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
     end)
 
-    __Sealed__() __Template__( IDataEntity )
+    __Sealed__() __Arguments__{ -IDataEntity }
     class "DataCollection" (function(_ENV, Entity)
 
         if Entity == IDataEntity then return end

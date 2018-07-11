@@ -122,7 +122,6 @@ You also can find useful features for large enterprise development like code org
 		* [`__Static__`](#__static__)
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
-		* [`__Template__`](#__template__)
 		* [`__Throwable__`](#__throwable__)
 * [keyword](#keyword)
 	* [Global keyword](#global-keyword)
@@ -3519,7 +3518,7 @@ We may create several classes with the same behaviors but for different types, s
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Template__ { Any }
+	__Arguments__ { AnyType }
 	class "Array" (function(_ENV, eletype)
 		__Arguments__{ eletype * 0 }
 		function __new(cls, ...)
@@ -3532,7 +3531,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-In the example, we use `__Template__` attribute to declare the **Array** class is a template class, the default type is **System.Any**, that means the real type can be any structs, interfaces or classes.
+In the example, we use `__Arguments__` attribute to declare the **Array** class is a template class, the default type is **System.AnyType**, that means the real type can be any structs, interfaces or classes.
 
 The **Array**'s definition function has one more argument, it's where the real type is passed in.
 
@@ -3544,7 +3543,7 @@ You also can create multi-types template, just like :
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Template__ { Any, Any }
+	__Arguments__ { AnyType, AnyType }
 	class "Dict" (function(_ENV, ktype, vtype)
 		__Arguments__{ ktype, vtype }
 		function Add(self, key, value)
@@ -3559,7 +3558,56 @@ PLoop(function(_ENV)
 end)
 ```
 
-You also can create template interface and template struct. This is an experimental feature, and normally we don't really need a strict type system in a dynamic language, so don't abuse it.
+You also can create template interface and template struct.
+
+We also can pass any non-type arguments to generate the anonymous types:
+
+```
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ Number, Number }
+	struct "FixString" (function(_ENV, min, max)
+		__base = String
+
+		function __valid(val)
+			return (#val > max or #val < min) and "the %s length must between [" .. min .. "," .. max .. "]"
+		end
+	end)
+
+	V1_3 = FixString[{1, 3}]
+
+	-- true, we get the same type with the same arguments
+	print(V1_3 == FixString[{1, 3}])
+
+	-- we can get the prototype and the template parameters
+	-- FixString	1	3
+	print(Struct.GetTemplate(V1_3), Struct.GetTemplateParameters(V1_3))
+
+	-- Error:  the value length must between [1,3]
+	a = V1_3("Hello")
+end)
+```
+
+Those template types can't be used directly since we don't give the default template parameters, but we could do that by add those parameters after the declaration of the `__Arguments__` attribute:
+
+```
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ Number, Number }(1, 4)
+	struct "FixString" (function(_ENV, min, max)
+		__base = String
+
+		function __valid(val)
+			return (#val > max or #val < min) and "the %s length must between [" .. min .. "," .. max .. "]"
+		end
+	end)
+
+	-- Error: the value length must between [1,4]
+	a = FixString("Hello")
+end)
+```
 
 
 ## System.Module
@@ -3851,11 +3899,15 @@ Attribute Targets:
 
 #### `__Arguments__`
 
-See [Overload](#overload) for more details.
+See [Overload](#overload) & [Template class](#template-class) for more details.
 
 Attribute Targets:
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class
 * System.AttributeTargets.Function
 * System.AttributeTargets.Method
+
 
 #### `__Async__`
 
@@ -4213,15 +4265,6 @@ class "A" {}
 __SuperObject__(false)
 class "B" {}
 ```
-
-#### `__Template__`
-
-See [Template class](#template-class) for more details.
-
-Attribute Targets:
-* System.AttributeTargets.Struct
-* System.AttributeTargets.Interface
-* System.AttributeTargets.Class
 
 
 #### `__Throwable__`

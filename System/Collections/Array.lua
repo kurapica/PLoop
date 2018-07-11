@@ -34,8 +34,8 @@ PLoop(function(_ENV)
     --      function ar:OnNameChanged(new, old)
     --          print( ("%s -> %s"):format(old, new)  )
     --      end
-    __ObjFuncAttr__() __Template__( Any ) __SuperObject__(false) __Serializable__()
-    __NoRawSet__(false) __NoNilValue__(false)
+    __ObjFuncAttr__() __SuperObject__(false) __Serializable__()
+    __NoRawSet__(false) __NoNilValue__(false) __Arguments__{ AnyType }( Any )
     class "Array" (function(_ENV, eletype)
         inherit (List[eletype])
 
@@ -49,7 +49,6 @@ PLoop(function(_ENV)
             parseindex      = Toolset.parseindex,
             getErrorMessage = Struct.GetErrorMessage,
         }
-
 
         if Interface.Validate(eletype) or Class.Validate(eletype) then
             export {

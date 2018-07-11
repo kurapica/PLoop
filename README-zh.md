@@ -118,7 +118,6 @@
 		* [`__Static__`](#__static__)
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
-		* [`__Template__`](#__template__)
 		* [`__Throwable__`](#__throwable__)
 * [keyword 关键字](#keyword关键字)
 	* [全局关键字](#全局关键字)
@@ -3566,7 +3565,7 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Template__ { Any }
+	__Arguments__ { AnyType }
 	class "Array" (function(_ENV, eletype)
 		__Arguments__{ eletype * 0 }
 		function __new(cls, ...)
@@ -3579,7 +3578,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-首先我们需要使用`System.__Template__`特性来申明这个**Array**类是一个模板类，它的默认类型是**System.Any**也就是任意的其他类型都可以被使用。
+首先我们需要使用`System.__Arguments__`特性来申明这个**Array**类是一个模板类，它的默认类型是**System.AnyType**也就是任意的其他类型都可以被使用。
 
 同时，**Array**的定义函数需要增加一个额外参数，用于传递模板类型。
 
@@ -3591,7 +3590,7 @@ end)
 require "PLoop"
 
 PLoop(function(_ENV)
-	__Template__ { Any, Any }
+	__Arguments__ { AnyType, AnyType }
 	class "Dict" (function(_ENV, ktype, vtype)
 		__Arguments__{ ktype, vtype }
 		function Add(self, key, value)
@@ -3606,7 +3605,56 @@ PLoop(function(_ENV)
 end)
 ```
 
-因为定义形式一样，也可以为定义接口模板或者结构体模板类型。另外这是一个试验性质的功能，而且我们也并不需要在动态语言中使用严格的类型系统（毕竟没有类型转换），所以请不要滥用它。
+因为定义形式一样，也可以为定义接口(interface)模板或者结构体(struct)模板类型。
+
+因为类型的定义实际是函数，那么我们也可以使用非类型参数来生成模板类型:
+
+```
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ Number, Number }
+	struct "FixString" (function(_ENV, min, max)
+		__base = String
+
+		function __valid(val)
+			return (#val > max or #val < min) and "the %s length must between [" .. min .. "," .. max .. "]"
+		end
+	end)
+
+	V1_3 = FixString[{1, 3}]
+
+	-- true 同样参数的模板类型不会重复生成
+	print(V1_3 == FixString[{1, 3}])
+
+	-- 我们可以获得模板类型的原型和参数
+	-- FixString	1	3
+	print(Struct.GetTemplate(V1_3), Struct.GetTemplateParameters(V1_3))
+
+	-- Error:  the value length must between [1,3]
+	a = V1_3("Hello")
+end)
+```
+
+上面定义的模板类型，必须传入实际类型后才能被正确使用，但如果希望模板类型可被使用的话，也可以在`__Arguments`特性申明后，增加一次调用来传入模板参数:
+
+```
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Arguments__{ Number, Number }(1, 4)
+	struct "FixString" (function(_ENV, min, max)
+		__base = String
+
+		function __valid(val)
+			return (#val > max or #val < min) and "the %s length must between [" .. min .. "," .. max .. "]"
+		end
+	end)
+
+	-- Error: the value length must between [1,4]
+	a = FixString("Hello")
+end)
+```
 
 
 ## System.Module
@@ -3898,11 +3946,15 @@ end)
 
 #### `__Arguments__`
 
-详细信息见[重载](#重载)
+详细信息见[重载](#重载)以及[模板类](#模板类)
 
 特性目标类型:
+* System.AttributeTargets.Struct
+* System.AttributeTargets.Interface
+* System.AttributeTargets.Class
 * System.AttributeTargets.Function
 * System.AttributeTargets.Method
+
 
 #### `__Async__`
 
@@ -4260,15 +4312,6 @@ class "A" {}
 __SuperObject__(false)
 class "B" {}
 ```
-
-#### `__Template__`
-
-详细信息见[模板类](#模板类)
-
-特性目标类型:
-* System.AttributeTargets.Struct
-* System.AttributeTargets.Interface
-* System.AttributeTargets.Class
 
 
 #### `__Throwable__`

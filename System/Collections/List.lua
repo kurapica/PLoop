@@ -33,7 +33,7 @@ PLoop(function(_ENV)
     interface "IIndexedList" { ICountable }
 
     --- The default indexed list
-    __Sealed__() __Serializable__() __Template__( Any )
+    __Sealed__() __Serializable__() __Arguments__{ AnyType }( Any )
     __NoRawSet__(false) __NoNilValue__(false)
     class "List" (function (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
