@@ -3562,7 +3562,8 @@ You also can create template interface and template struct.
 
 We also can pass any non-type arguments to generate the anonymous types:
 
-```
+
+```lua
 require "PLoop"
 
 PLoop(function(_ENV)
@@ -3591,7 +3592,7 @@ end)
 
 Those template types can't be used directly since we don't give the default template parameters, but we could do that by add those parameters after the declaration of the `__Arguments__` attribute:
 
-```
+```lua
 require "PLoop"
 
 PLoop(function(_ENV)

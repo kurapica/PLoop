@@ -3609,7 +3609,8 @@ end)
 
 因为类型的定义实际是函数，那么我们也可以使用非类型参数来生成模板类型:
 
-```
+
+```lua
 require "PLoop"
 
 PLoop(function(_ENV)
@@ -3638,7 +3639,8 @@ end)
 
 上面定义的模板类型，必须传入实际类型后才能被正确使用，但如果希望模板类型可被使用的话，也可以在`__Arguments`特性申明后，增加一次调用来传入模板参数:
 
-```
+
+```lua
 require "PLoop"
 
 PLoop(function(_ENV)
