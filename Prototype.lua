@@ -5759,6 +5759,7 @@ do
 
     -- Meta Datas
     local IC_META_DISPOB        = "Dispose"
+    local IC_META_DISPOSED      = "Disposed"
     local IC_META_EXIST         = "__exist"         -- Existed objecj check
     local IC_META_FIELD         = "__field"         -- Init fields
     local IC_META_NEW           = "__new"           -- New object
@@ -6784,8 +6785,9 @@ do
                 local FLD_IC_STDISP     = dispIdx + 1
                 if FLD_IC_STDISP <= FLD_IC_ENDISP then
                     objmtd[IC_META_DISPOB]  = function(self)
+                        if rawget(self, IC_META_DISPOSED) == true then return end
                         for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
-                        rawset(wipe(self), IC_META_DISPOB, true)
+                        rawset(wipe(self), IC_META_DISPOSED, true)
                     end
                 end
 
