@@ -234,17 +234,21 @@ PLoop(function(_ENV)
             export {
                 GetContext          = Context.GetContextFromStack,
                 fakeobj             = {},
-                ILockManager,
                 error               = error,
                 tostring            = tostring,
+                pcall               = pcall,
+
+                ILockManager,
             }
 
-            local function releaseLock(manager, context, key, obj, ...)
+            local function releaseLock(manager, context, key, obj, result, ...)
                 if context and context[ILockManager] then
                     context[ILockManager][key] = nil
                 end
 
                 local ok, err = manager:Release(obj, key)
+
+                if not result then error(..., 0) end
 
                 if not ok then
                     return error("Usage: ILockManager:Release(lockobj, key) - Release key failed:" .. tostring(err))
@@ -286,7 +290,7 @@ PLoop(function(_ENV)
                     context[ILockManager][key] = true
                 end
 
-                return releaseLock(manager, context, key, lockObj, func(...))
+                return releaseLock(manager, context, key, lockObj, pcall(func, ...))
             end
 
             --- Try lock with a key and process the target function
@@ -311,7 +315,7 @@ PLoop(function(_ENV)
                     context[ILockManager][key] = true
                 end
 
-                return releaseLock(manager, context, key, lockObj, func(...))
+                return releaseLock(manager, context, key, lockObj, pcall(func, ...))
             end
 
             -----------------------------------------------------------------------
