@@ -19,14 +19,13 @@ PLoop(function(_ENV)
     --- Represents a writer that can write a sequential series of characters
     __Abstract__() __Sealed__()
     class "TextWriter" (function (_ENV)
+        extend "IAutoClose"
+
         --- Gets the character encoding in which the output is written.
         __Abstract__() property "Encoding" { type = System.Text.Encoding }
 
         --- Gets or sets the line terminator string used by the current TextWriter.
         __Abstract__() property "NewLine" { type = String, default = "\n" }
-
-        --- Closes the current writer and releases any system resources associated with the writer.
-        __Abstract__() function Close(self) end
 
         --- Clears all buffers for the current writer and causes any buffered data to be written to the underlying device.
         __Abstract__() function Flush(self) end
@@ -41,11 +40,10 @@ PLoop(function(_ENV)
     --- Represents a reader that can read a sequential series of characters
     __Abstract__()  __Sealed__()
     class "TextReader" (function (_ENV)
+        extend "IAutoClose"
+
         --- Gets the character encoding in which the input is read.
         __Abstract__() property "Encoding" { type = System.Text.Encoding }
-
-        --- Closes the current reader and releases any system resources associated with the reader.
-        __Abstract__() function Close(self) end
 
         --- Reads the next character from the text reader and advances the character position by one character.
         __Abstract__() function Read(self) end

@@ -35,38 +35,28 @@ PLoop(function(_ENV)
         }
 
         -- Field
-        field { __file          = false }
+        field {
+            [0]                 = false,
+            [1]                 = false,
+            [2]                 = false,
+        }
 
         -- Method
-        function Write(self, text)
-            if text ~= nil then self.__file:write(text) end
+        function Write(self, text) if text ~= nil then self[0]:write(text) end end
+
+        function Flush(self) self[0]:flush() end
+
+        function Open(self)
+            self[0] = fopen(self[1], self[2]) or false
+            if not self[0] then error("Failed to open the file - " .. self[1], 2) end
         end
 
-        function Flush(self)
-            self.__file:flush()
-        end
-
-        function Close(self)
-            self.__file:close()
-        end
+        function Close(self) self[0]:close() end
 
         -- Constructor
-        __Arguments__{ Userdata }
-        function FileWriter(self, file, mode)
-            if tostring(file):match("^file") then
-                self.__file = file
-            else
-                throw("Usage: System.IO.FileWriter(file) - no file can be written")
-            end
-        end
-
         __Arguments__{ String, FileWriteMode/FileWriteMode.Write }
-        function FileWriter(self, file, mode)
-            self.__file = fopen(file, mode) or false
-
-            if not self.__file then
-                throw("Usage: System.IO.FileWriter(path[, mode]) - open file failed")
-            end
+        function __new(_, file, mode)
+            return { [1] = file, [2] = mode }, false
         end
 
         -- Meta-method
