@@ -44,14 +44,11 @@ PLoop(function(_ENV)
             Runtime.OnTypeDefined   = Runtime.OnTypeDefined + ontypedefined
 
             local func, msg         = loadfile(path)
-
-            if func then
-                func()
-            else
-                error(msg, 0)
-            end
+            if func then func, msg  = pcall(func) end
 
             Runtime.OnTypeDefined   = Runtime.OnTypeDefined - ontypedefined
+
+            if not func then error(msg, 0) end
 
             return type
         end
