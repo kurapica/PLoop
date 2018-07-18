@@ -25,7 +25,7 @@ PLoop(function(_ENV)
             require             = _G.require,
             loadfile            = _G.loadfile,
             pcall               = pcall,
-            Error               = Logger.Default[Logger.LogLevel.Error],
+            error               = error,
 
             Runtime,
         }
@@ -46,10 +46,9 @@ PLoop(function(_ENV)
             local func, msg         = loadfile(path)
 
             if func then
-                local ok, ret       = pcall(func)
-                if not ok then Error(ret) end
+                func()
             else
-                Error(msg)
+                error(msg, 0)
             end
 
             Runtime.OnTypeDefined   = Runtime.OnTypeDefined - ontypedefined
