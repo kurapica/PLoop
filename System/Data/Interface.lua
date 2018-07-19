@@ -394,6 +394,7 @@ PLoop(function(_ENV)
             ipairs              = ipairs,
             parseValue          = Data.ParseValue,
             tonumber            = tonumber,
+            type                = type,
 
             EntityStatus, DBNull
         }
