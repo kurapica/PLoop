@@ -48,6 +48,7 @@ PLoop(function(_ENV)
     --                        helper                         --
     -----------------------------------------------------------
     local _DataTableSchema  = {}
+    local _DataTableFldCnt  = {}
 
     DataTableSchema         = struct (function (_ENV)
         member "name"       { }
@@ -156,6 +157,16 @@ PLoop(function(_ENV)
 
     function getDataFieldProperty(entityCls, field)
         return _DataTableSchema[entityCls].map[field]
+    end
+
+    function getDataTableFieldCount(entityCls)
+        local count      = _DataTableFldCnt[entityCls] or 1
+        _DataTableFldCnt = safeset(_DataTableFldCnt, entityCls, count + 1)
+        return count
+    end
+
+    function clearDataTableFieldCount(entityCls)
+        _DataTableFldCnt = safeset(_DataTableFldCnt, entityCls, nil)
     end
 
     -----------------------------------------------------------
@@ -571,7 +582,7 @@ PLoop(function(_ENV)
 
         export {
             Class, Struct, IDataEntity, EntityStatus, Property, Date, AnyType,
-            "getDataTableSchema", "getDataFieldProperty"
+            "getDataTableSchema", "getDataFieldProperty", "getDataTableFieldCount"
         }
 
         local FIELD_DATA        = 0
@@ -647,6 +658,7 @@ PLoop(function(_ENV)
             { name = "foreign",     type = ForeignMap },
             { name = "converter",   type = TypeConverter },
             { name = "format",      type = Any },
+            { name = "fieldindex",  type = NaturalNumber },
         }
 
         -----------------------------------------------------------
@@ -675,6 +687,7 @@ PLoop(function(_ENV)
             if Class.Validate(owner) then
                 local set           = self[0]
                 if not set.name  then set.name = name end
+                set.fieldindex      = getDataTableFieldCount(owner)
 
                 local ptype
                 for k, v in pairs(definition) do if strlower(k) == "type" then ptype = v break end end
@@ -1079,7 +1092,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataTable__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute"
 
-        export { Namespace, Class, Environment, IDataContext, DataCollection, "saveDataTableSchema" }
+        export { Namespace, Class, Environment, IDataContext, DataCollection, "saveDataTableSchema", "clearDataTableFieldCount" }
 
         struct "DataTableSetting" {
             { name = "name",        type = String },
@@ -1101,6 +1114,7 @@ PLoop(function(_ENV)
             set.name        = set.name or Namespace.GetNamespaceName(target, true)
             set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
             saveDataTableSchema(target, set)
+            clearDataTableFieldCount(target)
             return set
         end
 
