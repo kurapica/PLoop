@@ -1096,6 +1096,7 @@ PLoop(function(_ENV)
 
         struct "DataTableSetting" {
             { name = "name",        type = String },
+            { name = "engine",      type = String },
             { name = "collection",  type = String },
         }
 
