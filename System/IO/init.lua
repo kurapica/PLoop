@@ -7,6 +7,7 @@ require "PLoop.System.IO.File"
 require "PLoop.System.IO.FileWriter"
 require "PLoop.System.IO.FileReader"
 require "PLoop.System.IO.StringReader"
+require "PLoop.System.IO.StringWriter"
 
 -- System.IO.Resource
 require "PLoop.System.IO.Resource.IResourceLoader"

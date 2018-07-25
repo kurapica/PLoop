@@ -34,7 +34,7 @@ PLoop(function(_ENV)
         __Abstract__() function Write(self, data) end
 
         --- Writes the data(could be nil) followed by a line terminator to the text string or stream.
-        __Abstract__() function WriteLine(self, data) end
+        __Abstract__() function WriteLine(self, data) self:Write((data or "") .. self.NewLine) end
     end)
 
     --- Represents a reader that can read a sequential series of characters
