@@ -72,7 +72,7 @@ PLoop(function(_ENV)
         end
 
         for name, ftr in Class.GetFeatures(entityCls) do
-            if Property.Validate(ftr) then
+            if Property.Validate(ftr) and not Property.IsStatic(ftr) then
                 local dfield= Attribute.GetAttachedData(__DataField__, ftr, entityCls)
 
                 if dfield then
