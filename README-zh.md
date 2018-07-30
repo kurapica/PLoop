@@ -92,6 +92,7 @@
 	* [System.IAttachAttribute 附着特性](#systemiattachattribute-附着特性)
 	* [System特性](#system-attributes)
 		* [`__Abstract__`](#__abstract__)
+		* [`__AutoCache__`](#__autocache__)
 		* [`__AnonymousClass__`](#__anonymousclass__)
 		* [`__AutoIndex__`](#__autoindex__)
 		* [`__Arguments__`](#__arguments__)
@@ -3931,6 +3932,31 @@ end)
 * System.AttributeTargets.Method
 * System.AttributeTargets.Event
 * System.AttributeTargets.Property
+
+
+#### `__AutoCache__`
+
+用于标记一个类，它的对象将缓存自身访问到的对象方法，以保证下次访问时无需通过元表进行访问。但如果类开启了超类对象访问并且它覆盖了超类的方法或者资源，那么自动缓存机制不会被加入。同时，因为方法被缓存，对象也无法使用类重定义后的新方法。
+
+特性目标类型:
+* System.AttributeTargets.Class
+
+用法：
+
+```lua
+require "PLoop"
+
+PLoop(function()
+	__AutoCache__()
+	class "A" { Test = function() end}
+
+	o = A()
+	print("GET", rawget(o, "Test")) -- GET	nil
+	o:Test()
+	print("GET", rawget(o, "Test")) -- GET	function: 0x015be630
+end)
+```
+
 
 #### `__AnonymousClass__`
 

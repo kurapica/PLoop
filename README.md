@@ -96,6 +96,7 @@ You also can find useful features for large enterprise development like code org
 	* [System.IAttachAttribute](#systemiattachattribute)
 	* [System Attributes](#system-attributes)
 		* [`__Abstract__`](#__abstract__)
+		* [`__AutoCache__`](#__autocache__)
 		* [`__AnonymousClass__`](#__anonymousclass__)
 		* [`__AutoIndex__`](#__autoindex__)
 		* [`__Arguments__`](#__arguments__)
@@ -3883,6 +3884,31 @@ Attribute Targets:
 * System.AttributeTargets.Method
 * System.AttributeTargets.Event
 * System.AttributeTargets.Property
+
+
+#### `__AutoCache__`
+
+Used to mark a class, so its object will cache the object method it accessed into itself, so it don't need to fetch it again for next accessing. If the class enabled the super object style and it has overridden methods or features, the auto-cache will be disabled. Be careful, if the method is cached, it can't be updated with the re-definition of the class.
+
+Attribute Targets:
+* System.AttributeTargets.Class
+
+Usage:
+
+```lua
+require "PLoop"
+
+PLoop(function()
+	__AutoCache__()
+	class "A" { Test = function() end}
+
+	o = A()
+	print("GET", rawget(o, "Test")) -- GET	nil
+	o:Test()
+	print("GET", rawget(o, "Test")) -- GET	function: 0x015be630
+end)
+```
+
 
 #### `__AnonymousClass__`
 
