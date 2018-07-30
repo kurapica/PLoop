@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/07/12                                               --
--- Version      :   1.0.0-beta024                                            --
+-- Update Date  :   2018/07/30                                               --
+-- Version      :   1.0.0-beta025                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5682,6 +5682,7 @@ do
     local MOD_ANYMOUS_CLS       = newflags()        -- HAS ANONYMOUS CLASS
     local MOD_ATTROBJ_CLS       = newflags()        -- CAN APPLY ATTRIBUTES ON OBJECTS
     local MOD_TEMPLATE_IC       = newflags()        -- AS TEMPLATE INTERFACE/CLASS
+    local MOD_AUTOCACHE_OBJ     = newflags()        -- OBJECT METHOD AUTO-CACHE
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -5748,6 +5749,7 @@ do
     local FLG_IC_NRAWST         = newflags()        -- ENABLE NO RAW SET
     local FLG_IC_NNILVL         = newflags()        -- NO NIL VALUE ACCESS
     local FLG_IC_SUPACC         = newflags()        -- SUPER OBJECT ACCESS
+    local FLG_IC_ATCACH         = newflags()        -- OBJECT METHOD AUTO CACHE
 
     -- Flags for constructor
     local FLG_IC_EXIST          = newflags(FLG_IC_IDXFUN)   -- HAS __exist
@@ -6064,6 +6066,11 @@ do
         if info[FLD_IC_OBJMTD] then
             token   = turnonflags(FLG_IC_OBJMTD, token)
             tinsert(upval, info[FLD_IC_OBJMTD])
+
+            if not validateflags(FLG_IC_SUPACC, token) and validateflags(MOD_AUTOCACHE_OBJ, info[FLD_IC_MOD]) then
+                token = turnonflags(FLG_IC_ATCACH, token)
+                tinsert(upval, rawset)
+            end
         end
 
         if info[FLD_IC_OBJFTR] then
@@ -6129,10 +6136,18 @@ do
 
             if validateflags(FLG_IC_OBJMTD, token) then
                 tinsert(head, "methods")
-                tinsert(body, [[
-                    local mtd = methods[key]
-                    if mtd then return mtd end
-                ]])
+                if validateflags(FLG_IC_ATCACH, token) then
+                    tinsert(head, "rawset")
+                    tinsert(body, [[
+                        local mtd = methods[key]
+                        if mtd then rawset(self, key, mtd) return mtd end
+                    ]])
+                else
+                    tinsert(body, [[
+                        local mtd = methods[key]
+                        if mtd then return mtd end
+                    ]])
+                end
             end
 
             if validateflags(FLG_IC_OBJFTR, token) then
@@ -8253,6 +8268,17 @@ do
             -- @return  function                    the super feature
             ["GetSuperFeature"] = interface.GetSuperFeature;
 
+            --- Whether the class use super object access style like `super[obj].Name = "Ann"`
+            -- @static
+            -- @method  GetSuperObjectStyle
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the class don't use super object access style
+            ["GetSuperObjectStyle"] = function(target)
+                local info      = getICTargetInfo(target)
+                return info and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
+            end;
+
             --- Get the super refer of the target class
             -- @static
             -- @method  GetSuperRefer
@@ -8352,6 +8378,18 @@ do
                 return otype and class.IsSubType(otype, type) or false
             end;
 
+            --- Whether the class' object will try to auto cache the object methods
+            -- @static
+            -- @method  IsMethodAutoCache
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["IsMethodAutoCache"] = function(target, stack)
+                local info      = getICTargetInfo(target)
+                return info and validateflags(MOD_AUTOCACHE_OBJ, info[FLD_IC_MOD]) or false
+            end;
+
             --- Whether the class object don't receive any value assignment excpet existed fields
             -- @static
             -- @method  IsRawSetBlocked
@@ -8361,17 +8399,6 @@ do
             ["IsNilValueBlocked"]   = function(target)
                 local info      = getICTargetInfo(target)
                 return info and validateflags(MOD_NONILVAL_OBJ, info[FLD_IC_MOD]) or false
-            end;
-
-            --- Whether the class use super object access style like `super[obj].Name = "Ann"`
-            -- @static
-            -- @method  GetSuperObjectStyle
-            -- @owner   class
-            -- @param   target                      the target class
-            -- @return  boolean                     true if the class don't use super object access style
-            ["GetSuperObjectStyle"] = function(target)
-                local info      = getICTargetInfo(target)
-                return info and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Whether the class object don't receive any value assignment excpet existed fields
@@ -8546,6 +8573,17 @@ do
                     stack = name
                     setModifiedFlag(class, target, MOD_FINAL_IC, "SetFinal", stack)
                 end
+            end;
+
+            --- Sets the class so it's object will try to auto cache the object methods
+            -- @static
+            -- @method  SetMethodAutoCache
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack                       the stack level
+            ["SetMethodAutoCache"] = function(target, stack)
+                setModifiedFlag(class, target, MOD_AUTOCACHE_OBJ, "SetMethodAutoCache", stack)
             end;
 
             --- Set the class's object exist checker
@@ -11736,6 +11774,21 @@ do
                 interface.SetAnonymousClass(target, parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_INTERFACE,
+        },
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
+    -- Whether the class's objects will auto cache its object method
+    --
+    -- @attribute   System.__AutoCache__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__AutoCache__",         prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
+                class.SetMethodAutoCache(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS,
         },
         __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
