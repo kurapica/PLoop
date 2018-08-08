@@ -227,6 +227,10 @@ PLoop(function(_ENV)
         -- @return self
         __Abstract__() function Select(self, fields) return self end
 
+        --- Lock the query rows
+        -- @return self
+        __Abstract__() function Lock(self) return self end
+
         --- Sets the updating field-value map
         -- @param map       a map for field to value
         -- @return self
@@ -278,8 +282,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        --- Begins a database transaction.
-        __Abstract__() function BeginTransaction(self, isolation) end
+        --- Get a new database transaction.
+        __Abstract__() function NewTransaction(self, isolation) end
 
         --- Sends the query sql and return the result
         __Abstract__() function Query(self, sql, ...) end
@@ -299,6 +303,8 @@ PLoop(function(_ENV)
 
     --- Represents a transaction to be performed at a data source
     __Sealed__() interface "IDbTransaction" (function(_ENV)
+        extend "IAutoClose"
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -309,8 +315,17 @@ PLoop(function(_ENV)
         __Abstract__() property "Isolation" { type = TransactionIsolation, default = TransactionIsolation.REPEATABLE_READ }
 
         -----------------------------------------------------------
+        --                   override  method                    --
+        -----------------------------------------------------------
+        function Open(self) self:Begin() end
+        function Close(self, err) if err then self:Rollback() else self:Commit() end end
+
+        -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        --- Begin the transaction
+        __Abstract__() function Begin(self) end
+
         --- Commits the database transaction
         __Abstract__() function Commit(self) end
 
@@ -335,6 +350,9 @@ PLoop(function(_ENV)
         --- The Connection object to associate with the transaction
         property "Connection"       { type = IDbConnection, field = 0 }
 
+        --- Get a new transaction to process the updatings
+        property "Transaction"      { get = function(self) return self.Connection:NewTransaction() end }
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -355,23 +373,12 @@ PLoop(function(_ENV)
         function SaveChanges(self, stack)
             if not next(self[1]) then return end
             stack           = (tonumber(stack) or 1) + 1
-            local trans     = self.Connection:BeginTransaction()
 
-            local ok, err   = pcall(function()
-                for entity in pairs(self[1]) do
-                    entity:SaveChange(stack + 2)
-                end
-            end)
-
-            if ok then
-                trans:Commit()
-            else
-                trans:Rollback()
+            for entity in pairs(self[1]) do
+                entity:SaveChange(stack)
             end
 
-            self[1]     = {}
-
-            if not ok then error(err, 0) end
+            self[1]         = {}
         end
 
         --- Sends the query sql and return the result
@@ -418,13 +425,15 @@ PLoop(function(_ENV)
         }
 
         FIELD_DATA              = 0 -- entity data
-        FIELD_STATUS            = 1 -- entity status
-        FIELD_CONTEXT           = 2 -- data context
-        FIELD_MODIFIED          = 3 -- modified field
-        FIELD_REQUIRE           = 4 -- requirement field
+        FIELD_FORUPDATE         = 1 -- lock for update
+        FIELD_STATUS            = 2 -- entity status
+        FIELD_CONTEXT           = 3 -- data context
+        FIELD_MODIFIED          = 4 -- modified field
+        FIELD_REQUIRE           = 5 -- requirement field
 
         field {
             [FIELD_DATA]        = false,
+            [FIELD_FORUPDATE]   = false,
             [FIELD_STATUS]      = STATUS_UNMODIFIED,
             [FIELD_CONTEXT]     = false,
             [FIELD_MODIFIED]    = false,
@@ -470,6 +479,10 @@ PLoop(function(_ENV)
                     if ctx then ctx:AddChangedEntity(self) end
                 end
             end
+        end
+
+        function SetLockForUpdate(self)
+            self[FIELD_FORUPDATE] = true
         end
 
         --- Add a modified property
@@ -542,7 +555,7 @@ PLoop(function(_ENV)
                 if status == STATUS_DELETED then
                     ctx[getDataTableCol(entityCls)]:Delete(self)
                     ctx:Execute(ctx.Connection:SqlBuilder():From(schema.name):Where(where):Delete():ToSql())
-                elseif status == STATUS_MODIFIED then
+                elseif status == STATUS_MODIFIED and self[FIELD_FORUPDATE] then
                     local update    = {}
 
                     if not self[FIELD_MODIFIED] then
@@ -572,6 +585,8 @@ PLoop(function(_ENV)
         function Delete(self)
             if self[FIELD_STATUS] ~= STATUS_NEW then
                 self:SetEntityStatus(STATUS_DELETED)
+            else
+                self[FIELD_CONTEXT] = nil
             end
         end
     end)
@@ -1257,48 +1272,6 @@ PLoop(function(_ENV)
         QueryData               = struct(fldmembers)
         fldmembers              = nil
 
-        local addEntityData, removeEntity
-
-        if type(primary) == "table" then
-            function addEntityData(self, data, override)
-                local entitys   = self[1]
-                local key       = ""
-                for i, fld in ipairs(primary) do
-                    key         = key .. "\1" .. tostring(data[fld])
-                end
-                if override or entitys[key] == nil then
-                    local entity= Entity(self[0], data)
-                    entitys[key]= entity
-                end
-                return entitys[key]
-            end
-
-            function removeEntity(self, entity)
-                local entitys   = self[1]
-                local key       = ""
-                local data      = entity[FIELD_DATA]
-                for i, fld in ipairs(primary) do
-                    key         = key .. "\1" .. tostring(data[fld])
-                end
-                entitys[key]    = nil
-            end
-        else
-            function addEntityData(self, data, override)
-                local entitys   = self[1]
-                local key       = data[primary]
-                if override or entitys[key] == nil then
-                    entitys[key]= Entity(self[0], data)
-                end
-                return entitys[key]
-            end
-
-            function removeEntity(self, entity)
-                local entitys   = self[1]
-                local key       = entity[FIELD_DATA][primary]
-                entitys[key]    = nil
-            end
-        end
-
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -1352,7 +1325,68 @@ PLoop(function(_ENV)
 
                 if rs then
                     for i, data in ipairs(rs) do
-                        rs[i]   = addEntityData(self, data)
+                        rs[i]   = Entity(ctx, data)
+                    end
+
+                    return rs
+                end
+            end
+
+            return List()
+        end
+
+        __Arguments__{ QueryData, QueryOrders/nil }
+        function Lock(self, query, orders)
+            local fquery        = {}
+
+            for name, val in pairs(query) do
+                local fld       = props[name]
+
+                if fld then
+                    if converter[fld] then
+                        val     = converter[1].tovalue(val, converter[2])
+                        if val == nil then
+                            error(strformat("The %q isn't valid", name), 2)
+                        end
+                    end
+                    fquery[fld] = val
+                elseif foreign[name] then
+                    local data  = val[FIELD_DATA]
+
+                    if not data then
+                        error(strformat("The %q isn't valid", name), 2)
+                    end
+
+                    for fkey, mkey in pairs(foreign[name]) do
+                        local fval  = data[mkey]
+                        if fval == nil then
+                            error(strformat("The %q isn't valid", name), 2)
+                        end
+                        fquery[fkey]= fval
+                    end
+                else
+                    error(strformat("The %s don't have field property named %q", clsname, name), 2)
+                end
+            end
+
+            local ctx           = self[0]
+            local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(fquery):Lock()
+
+            if orders then
+                for _, order in ipairs(orders) do
+                    builder:OrderBy(order.name, order.desc)
+                end
+            end
+
+            local sql           = builder:ToSql()
+
+            if sql then
+                local rs        = ctx:Query(sql)
+
+                if rs then
+                    for i, data in ipairs(rs) do
+                        rs[i]   = Entity(ctx, data)
+                        rs[i]:SetLockForUpdate()
                     end
 
                     return rs
@@ -1372,7 +1406,7 @@ PLoop(function(_ENV)
 
                 if rs then
                     for i, data in ipairs(rs) do
-                        rs[i]   = addEntityData(self, data)
+                        rs[i]   = Entity(ctx, data)
                     end
 
                     return rs
@@ -1400,7 +1434,6 @@ PLoop(function(_ENV)
 
         function Delete(self, entity)
             entity:Delete()
-            removeEntity(self, entity)
         end
 
         -----------------------------------------------------------
@@ -1408,7 +1441,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IDataContext }
         function __new(cls, context)
-            return { [0] = context, [1] = {} }, true
+            return { [0] = context }, true
         end
     end)
 end)

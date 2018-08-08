@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/07/30                                               --
--- Version      :   1.0.0-beta025                                            --
+-- Update Date  :   2018/08/08                                               --
+-- Version      :   1.0.0-beta026                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11541,7 +11541,7 @@ do
 
                 ok, msg         = pcall(operation)
 
-                pcall(object.Close, object)
+                pcall(object.Close, object, not ok and msg or nil)
 
                 if not ok then errhandler(msg, 0) end
             end
@@ -11563,7 +11563,7 @@ do
                     ok, msg = pcall(object.Open, object)
                     if not ok then
                         for j = i - 1, 1, -1 do
-                            pcall(objects[j].Close, objects[j])
+                            pcall(objects[j].Close, objects[j], msg)
                         end
                         errhandler(msg, 0)
                     end
@@ -11572,7 +11572,7 @@ do
                 ok, msg         = pcall(operation)
 
                 for _, object in ipairs, objects, 0 do
-                    pcall(object.Close, object)
+                    pcall(object.Close, object, not ok and msg or nil)
                 end
 
                 if not ok then errhandler(msg, 0) end
@@ -12750,7 +12750,7 @@ do
         --                        method                         --
         -----------------------------------------------------------
         __Abstract__() function Open(self) end
-        __Abstract__() function Close(self) end
+        __Abstract__() function Close(self, error) end
     end)
 
     -- Represents a toolset to provide several compatible apis
