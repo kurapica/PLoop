@@ -11534,16 +11534,20 @@ do
                     error("Usage: with(object[, ...]) (operation[, errorhandler]) - the errhandler need be function", 2)
                 end
 
-                errhandler      = errhandler or error
-
                 local ok, msg   = pcall(object.Open, object)
                 if not ok then errhandler(msg, 0) end
 
-                ok, msg         = pcall(operation)
+                ok, msg         = pcall(operation, object)
 
                 pcall(object.Close, object, not ok and msg or nil)
 
-                if not ok then errhandler(msg, 0) end
+                if not ok then
+                    if errhandler then
+                        errhandler(msg, object)
+                    else
+                        error(msg, 0)
+                    end
+                end
             end
         else
             local objects       = { ... }
@@ -11554,8 +11558,6 @@ do
                 if errhandler ~= nil and type(errhandler) ~= "function" then
                     error("Usage: with(object[, ...]) (operation[, errorhandler]) - the errhandler need be function", 2)
                 end
-
-                errhandler      = errhandler or error
 
                 local ok, msg
 
@@ -11569,13 +11571,19 @@ do
                     end
                 end
 
-                ok, msg         = pcall(operation)
+                ok, msg         = pcall(operation, unpack(objects))
 
                 for _, object in ipairs, objects, 0 do
                     pcall(object.Close, object, not ok and msg or nil)
                 end
 
-                if not ok then errhandler(msg, 0) end
+                if not ok then
+                    if errhandler then
+                        errhandler(msg, unpack(objects))
+                    else
+                        error(msg, 0)
+                    end
+                end
             end
         end
     end
