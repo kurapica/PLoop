@@ -365,9 +365,12 @@ PLoop(function(_ENV)
 
         export { List, "pairs", "next", "pcall", "error", "getmetatable", "tonumber" }
 
+        FLD_CHANGED_ENTITY      = 1
+        FLD_CURRENT_TRANST      = 2
+
         field {
-            [1] = {},   -- the change entities
-            [2] = {},   -- the requirement between the entities
+            [FLD_CHANGED_ENTITY]= {},           -- the change entities
+            [FLD_CURRENT_TRANST]= false,        -- the current transaction
         }
 
         -----------------------------------------------------------
@@ -377,7 +380,16 @@ PLoop(function(_ENV)
         property "Connection"       { type = IDbConnection, field = 0 }
 
         --- Get a new transaction to process the updatings
-        property "Transaction"      { get = function(self) return self.Connection:NewTransaction() end }
+        property "Transaction"      {
+            get = function(self)
+                local trans     = self[FLD_CURRENT_TRANST]
+                if not (trans and trans.IsTransactionOpen) then
+                    trans       = self.Connection:NewTransaction()
+                    self[FLD_CURRENT_TRANST] = trans
+                end
+                return trans
+            end
+        }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -392,19 +404,19 @@ PLoop(function(_ENV)
 
         --- Add changed entity
         function AddChangedEntity(self, entity)
-            self[1][entity] = true
+            self[FLD_CHANGED_ENTITY][entity] = true
         end
 
         --- Save the data changes in the context
         function SaveChanges(self, stack)
-            if not next(self[1]) then return end
+            if not next(self[FLD_CHANGED_ENTITY]) then return end
             stack           = (tonumber(stack) or 1) + 1
 
-            for entity in pairs(self[1]) do
+            for entity in pairs(self[FLD_CHANGED_ENTITY]) do
                 entity:SaveChange(stack)
             end
 
-            self[1]         = {}
+            self[FLD_CHANGED_ENTITY] = {}
         end
 
         --- Sends the query sql and return the result
