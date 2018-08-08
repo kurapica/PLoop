@@ -305,32 +305,58 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDbTransaction" (function(_ENV)
         extend "IAutoClose"
 
+        export { "getmetatable" }
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         --- The Connection object to associate with the transaction
-        __Abstract__() property "Connection" { type = IDbConnection }
+        __Abstract__() property "Connection"        { type = IDbConnection }
 
         --- The transaction isolation level
-        __Abstract__() property "Isolation" { type = TransactionIsolation, default = TransactionIsolation.REPEATABLE_READ }
+        __Abstract__() property "Isolation"         { type = TransactionIsolation, default = TransactionIsolation.REPEATABLE_READ }
 
-        -----------------------------------------------------------
-        --                   override  method                    --
-        -----------------------------------------------------------
-        function Open(self) self:Begin() end
-        function Close(self, err) if err then self:Rollback() else self:Commit() end end
+        --- Whether the transaction is open
+        __Final__()    property "IsTransactionOpen" { type = Boolean }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        __Final__() function Open(self)
+            self:Begin()
+        end
+
+        __Final__() function Close(self, err)
+            if err then
+                self:Rollback()
+            else
+                self:Commit()
+            end
+        end
+
         --- Begin the transaction
-        __Abstract__() function Begin(self) end
+        __Final__() function Begin(self)
+            if not self.IsTransactionOpen then
+                getmetatable(self).Begin(self)
+                self.IsTransactionOpen = true
+            end
+        end
 
         --- Commits the database transaction
-        __Abstract__() function Commit(self) end
+        __Final__() function Commit(self)
+            if self.IsTransactionOpen then
+                getmetatable(self).Commit(self)
+                self.IsTransactionOpen = false
+            end
+        end
 
         --- Rolls back a transaction from a pending state
-        __Abstract__() function Rollback(self) end
+        __Final__() function Rollback(self)
+            if self.IsTransactionOpen then
+                getmetatable(self).Rollback(self)
+                self.IsTransactionOpen = false
+            end
+        end
     end)
 
     --- Represents the context for a group of DataSets
