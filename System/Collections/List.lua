@@ -544,9 +544,10 @@ PLoop(function(_ENV)
             type                = type,
             rawget              = rawget,
             getobjectclass      = Class.GetObjectClass,
+            isObjectType        = Class.IsObjectType,
         }
 
-        export { ListStreamWorker }
+        export { ListStreamWorker, IIndexedList }
 
         -----------------------------------------------------------
         --                     Queue method                      --
@@ -680,31 +681,30 @@ PLoop(function(_ENV)
             end
         end
 
-        --- Get the first element of the list, if not existed use the default as result
-        __Arguments__{ Variable("default"), Callable, System.Any * 0 }
-        function FirstOrDefault(self, default, chk, ...)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
-            while idx do
+        __Arguments__{ Callable, System.Any * 0 }
+        function Last(self, chk, ...)
+            local last
+
+            for _, val in self:GetIterator() do
                 if chk(val, ...) then
-                    -- Pass true to end iter if it support
-                    iter(obj, idx, true)
-                    return val
+                    last = val
                 end
-                idx, val = iter(obj, idx)
             end
-            return default
+
+            return last
         end
 
-        __Arguments__{ Variable("default") }
-        function FirstOrDefault(self, default)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
-            while idx do
-                iter(obj, idx, true)
-                return val
+        __Arguments__{}
+        function Last(self)
+            if isObjectType(self, IIndexedList) then return self[self.Count] end
+
+            local last
+
+            for _, val in self:GetIterator() do
+                last = val
             end
-            return default
+
+            return last
         end
     end)
 end)
