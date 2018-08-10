@@ -50,109 +50,102 @@ PLoop(function(_ENV)
     local _DataTableSchema  = {}
     local _DataTableFldCnt  = {}
 
-    DataTableSchema         = struct (function (_ENV)
-        member "name"       { }
-        member "colnme"     { }
-        member "map"        { default = {} }
-        member "primary"    { }
-        member "autokey"    { }
-        member "unique"     { default = {} }
-        member "foreign"    { default = {} }
-        member "converter"  { default = {} }
-    end)
+    function isUniqueIndex(entityCls, fields)
+        local schema        = _DataTableSchema[entityCls]
+        if schema.indexes then
+            if type(fields) == "table" then
+                local count = 0
+                for k in pairs(fields) do count = count + 1 end
 
-    function saveDataTableSchema(entityCls, set)
-        local schema        = DataTableSchema()
-
-        set                 = set or Attribute.GetAttachedData(__DataTable__, entityCls)
-
-        if set then
-            schema.name     = set.name
-            schema.colnme   = set.collection
-        end
-
-        for name, ftr in Class.GetFeatures(entityCls) do
-            if Property.Validate(ftr) and not Property.IsStatic(ftr) then
-                local dfield= Attribute.GetAttachedData(__DataField__, ftr, entityCls)
-
-                if dfield then
-                    if dfield.foreign then
-                        schema.foreign[name]    = dfield.foreign.map
-
-                        local primary           = dfield.primary
-
-                        for k, v in pairs(dfield.foreign.map) do
-                            schema.map[k]       = schema.map[k] or name
-
-                            if primary then
-                                if primary == true or primary == k then
-                                    if schema.primary then
-                                        error(("the %s entity class has more than one primary key"):format(tostring(entityCls)))
-                                    end
-                                    schema.primary  = k
-                                else
-                                    schema.primary  = schema.primary or {}
-                                    tinsert(schema.primary, k)
-                                end
-
-                                schema.unique[k]  = primary
-
-                                if primary ~= true and primary ~= k then
-                                    schema.unique[primary]   = schema.unique[primary] or {}
-                                    tinsert(schema.unique[primary], k)
-                                end
-                            end
+                for _, index in ipairs(schema.indexes) do
+                    if index.unique and #index.fields == count then
+                        local match = true
+                        for i, fld in ipairs(index.fields) do
+                            if not fields[fld] then match = false break end
                         end
-                    else
-                        schema.map[dfield.name] = name
-
-                        local primary           = dfield.primary
-                        if primary then
-                            if primary == true or primary == dfield.name then
-                                if schema.primary then
-                                    error(("the %s entity class has more than one primary key"):format(tostring(entityCls)))
-                                end
-                                schema.primary  = dfield.name
-                                schema.autokey  = dfield.autoincr or false
-                            else
-                                schema.primary  = schema.primary or {}
-                                tinsert(schema.primary, dfield.name)
-                            end
-                        end
-
-                        local unique            = primary or dfield.unique
-
-                        if unique then
-                            schema.unique[dfield.name]  = unique
-
-                            if unique ~= true and unique~= dfield.name then
-                                schema.unique[unique]   = schema.unique[unique] or {}
-                                tinsert(schema.unique[unique], dfield.name)
-                            end
-                        end
-
-                        if dfield.converter then
-                            schema.converter[dfield.name] = {
-                                dfield.converter,
-                                dfield.format or dfield.converter.format,
-                            }
-                        end
+                        if match then return true end
+                    end
+                end
+            else
+                for _, index in ipairs(schema.indexes) do
+                    if index.unique and #index.fields == 1 and index.fields[1] == fields then
+                        return true
                     end
                 end
             end
         end
 
-        _DataTableSchema = safeset(_DataTableSchema, entityCls, schema)
+        return false
+    end
 
-        return schema
+    function saveDataTableSchema(entityCls, set)
+        local schema        = {
+            name            = set.name,
+            collection      = set.collection,
+            indexes         = set.indexes,
+            map             = {},
+            primary         = nil,
+            autokey         = nil,
+            unique          = {},
+            foreign         = {},
+            converter       = {},
+        }
+
+        if schema.indexes then
+            for _, index in ipairs(schema.indexes) do
+                if index.primary then
+                    schema.primary = index.fields
+                    if #schema.primary == 1 then
+                        schema.primary = schema.primary[1]
+                    end
+                end
+            end
+        end
+
+        _DataTableSchema    = safeset(_DataTableSchema, entityCls, schema)
+    end
+
+    function saveDataFieldSchema(entityCls, name, set)
+        local schema        = _DataTableSchema[entityCls]
+
+        if set.foreign then
+            schema.foreign[name]    = set.foreign.map
+            local keycount  = 0
+            local key
+            for k, v in pairs(set.foreign.map) do
+                schema.map[k]       = schema.map[k] or name
+                keycount            = keycount + 1
+                key                 = k
+            end
+            if keycount == 1 and set.unique then
+                schema.unique[key]  = true
+            end
+        else
+            schema.map[set.name]    = name
+
+            if set.autoincr and schema.primary == set.name then
+                schema.autokey      = true
+            end
+
+            if set.unique then
+                schema.unique[set.name] = true
+            end
+
+            if set.converter then
+                schema.converter[set.name] = {
+                    set.converter,
+                    set.format or set.converter.format,
+                }
+            end
+        end
     end
 
     function getDataTableSchema(entityCls)
-        return _DataTableSchema[entityCls] or saveDataTableSchema(entityCls)
+        return _DataTableSchema[entityCls]
     end
 
     function getDataTableCollection(entityCls)
-        return _DataTableSchema[entityCls].colnme
+        return _DataTableSchema[entityCls].collection
     end
 
     function getDataFieldProperty(entityCls, field)
@@ -635,7 +628,7 @@ PLoop(function(_ENV)
 
         export {
             Class, Struct, IDataEntity, EntityStatus, Property, Date, AnyType,
-            "getDataTableSchema", "getDataFieldProperty", "getDataTableFieldCount"
+            "getDataTableSchema", "getDataFieldProperty", "getDataTableFieldCount", "saveDataFieldSchema", "isUniqueIndex"
         }
 
         local FIELD_DATA        = 0
@@ -703,9 +696,7 @@ PLoop(function(_ENV)
         __Sealed__() struct "FieldSetting" {
             { name = "name",        type = String },
             { name = "type",        type = String },
-            { name = "primary",     type = String + Boolean },
-            { name = "unique",      type = String + Boolean },
-            { name = "index",       type = String + Boolean },
+            { name = "unique",      type = Boolean },
             { name = "autoincr",    type = Boolean },
             { name = "notnull",     type = Boolean },
             { name = "foreign",     type = ForeignMap },
@@ -742,6 +733,8 @@ PLoop(function(_ENV)
                 if not set.name  then set.name = name end
                 set.fieldindex      = getDataTableFieldCount(owner)
 
+                saveDataFieldSchema(owner, name, set)
+
                 local ptype
                 for k, v in pairs(definition) do if strlower(k) == "type" then ptype = v break end end
 
@@ -751,29 +744,32 @@ PLoop(function(_ENV)
                     end
 
                     local map       = set.foreign.map
+                    local keycount  = 0
+                    local pmap      = {}
+
+                    for k, v in pairs(map) do
+                        keycount    = keycount + 1
+                        pmap[v]     = k
+                    end
 
                     local fkey, mkey
                     if map then fkey, mkey = next(map) end
 
-                    if not fkey then
+                    if keycount == 0 then
                         error("Usage: __DataField__{ foreign={ map = {fkey = mkey} }} - invalid key map", stack + 1)
                     end
 
                     local schema    = getDataTableSchema(ptype)
-                    local munique   = schema and schema.unique[mkey]
+                    local isunique  = keycount == 1 and schema.unique[mkey] or isUniqueIndex(ptype, pmap)
                     local foreignfld= "_Foreign_" .. Namespace.GetNamespaceName(ptype, true) .. "_" .. name
                     local mainfld   = "_Main_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
 
-                    if not munique then
+                    if not isunique then
                         error("Usage: __DataField__{ foreign={ map = {fkey = mkey} }} - invalid key map", stack + 1)
                     end
 
-                    if munique == true or munique == mkey then
+                    if keycount == 1 then
                         -- Single unique key
-                        if next(map, fkey) then
-                            error("Usage: __DataField__{ foreign={ map = {fkey = mkey} }} - invalid key map", stack + 1)
-                        end
-
                         local tprop         = schema.map[mkey]
                         local ntnull        = set.notnull
                         local fromvalue, valformat
@@ -845,27 +841,12 @@ PLoop(function(_ENV)
                     else
                         -- Multi-unique keys
                         local propmap       = {}
-                        local mkeys         = {}
                         local converter     = {}
 
                         for fkey, mkey in pairs(map) do
-                            local prop      = getDataFieldProperty(ptype, mkey)
+                            local prop      = schema.map[mkey]
                             propmap[prop]   = fkey
-                            mkeys[mkey]     = true
-
                             converter[prop] = schema.converter[mkey]
-                        end
-
-                        for _, ukey in ipairs(schema.unique[munique]) do
-                            if mkeys[ukey] then
-                                mkeys[ukey] = nil
-                            else
-                                error("Usage: __DataField__{ foreign={ map = {fkey = tkey} }} - invalid key map", stack + 1)
-                            end
-                        end
-
-                        if next(mkeys) then
-                            error("Usage: __DataField__{ foreign={ map = {fkey = tkey} }} - invalid key map", stack + 1)
                         end
 
                         local ntnull        = set.notnull
@@ -986,9 +967,14 @@ PLoop(function(_ENV)
                         end
                     end
                 else
-                    local fld       = set.name
+                    local fld           = set.name
+                    local schema        = getDataTableSchema(owner)
+                    local converter     = set.converter or TYPE_CONVERTER[ptype]
+                    local isprimary = schema.primary == fld
 
-                    local converter = set.converter or TYPE_CONVERTER[ptype]
+                    if type(schema.primary) == "table" then
+                        for i, v in ipairs(schema.primary) do if v == fld then isprimary = true break end end
+                    end
 
                     if converter then
                         set.converter   = converter
@@ -1012,7 +998,7 @@ PLoop(function(_ENV)
                             return val
                         end
 
-                        if set.primary then
+                        if isprimary then
                             definition.set  = function(self, object)
                                 local value = rawget(self, objfld)
                                 if value ~= nil and value == object then return end
@@ -1064,7 +1050,7 @@ PLoop(function(_ENV)
                     else
                         definition.get  = function(self) self = self[FIELD_DATA] or nil return self and parseValue(self[fld]) end
 
-                        if set.primary then
+                        if isprimary then
                             definition.set  = function(self, value)
                                 local data  = self[FIELD_DATA]
                                 if not data then data = {} self[FIELD_DATA] = data end
@@ -1143,14 +1129,27 @@ PLoop(function(_ENV)
 
     --- The attribute used to bind data table to the class
     __Sealed__() class "__DataTable__" (function(_ENV)
-        extend "IAttachAttribute" "IApplyAttribute"
+        extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
 
         export { Namespace, Class, Environment, IDataContext, DataCollection, "saveDataTableSchema", "clearDataTableFieldCount" }
 
-        struct "DataTableSetting" {
+        __Sealed__() struct "DataTableIndex" {
             { name = "name",        type = String },
-            { name = "engine",      type = String },
+            { name = "unique",      type = Boolean },
+            { name = "fulltext",    type = Boolean },
+            { name = "primary",     type = Boolean },
+            { name = "fields",      type = struct { String } },
+
+            __init = function(val)
+                if val.primary then val.unique = true end
+            end
+        }
+
+        __Sealed__() struct "DataTableSetting" {
+            { name = "name",        type = String },
+            { name = "indexes",     type = struct { DataTableIndex } },
             { name = "collection",  type = String },
+            { name = "engine",      type = String },
         }
 
         -----------------------------------------------------------
@@ -1164,12 +1163,8 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  data                        the attribute data to be attached
         function AttachAttribute(self, target, targettype, owner, name, stack)
-            local set       = self[0]
-            set.name        = set.name or Namespace.GetNamespaceName(target, true)
-            set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
-            saveDataTableSchema(target, set)
             clearDataTableFieldCount(target)
-            return set
+            return self[0]
         end
 
         --- apply changes on the target
@@ -1192,6 +1187,21 @@ PLoop(function(_ENV)
                     if tbl then self:SetEntityData(tbl) end
                 end
             end)
+        end
+
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            local set       = self[0]
+            set.name        = set.name or Namespace.GetNamespaceName(target, true)
+            set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
+            saveDataTableSchema(target, set)
         end
 
         -----------------------------------------------------------
@@ -1277,7 +1287,7 @@ PLoop(function(_ENV)
             strformat           = string.format,
             tostring            = tostring,
 
-            Class, Property, Any, EntityStatus
+            Class, Property, Any, EntityStatus, List
         }
 
         -----------------------------------------------------------
