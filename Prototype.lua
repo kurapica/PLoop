@@ -11535,7 +11535,13 @@ do
                 end
 
                 local ok, msg   = pcall(object.Open, object)
-                if not ok then errhandler(msg, 0) end
+                if not ok then
+                    if errhandler then
+                        errhandler(msg, object)
+                    else
+                        error(msg, 0)
+                    end
+                end
 
                 ok, msg         = pcall(operation, object)
 
@@ -11567,7 +11573,11 @@ do
                         for j = i - 1, 1, -1 do
                             pcall(objects[j].Close, objects[j], msg)
                         end
-                        errhandler(msg, 0)
+                        if errhandler then
+                            errhandler(msg, object)
+                        else
+                            error(msg, 0)
+                        end
                     end
                 end
 
