@@ -326,7 +326,7 @@ do
     savestorage                 = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
                                         local new
                                         if value == nil then
-                                            if self[key] == nil then return end
+                                            if self[key] == nil then return self end
                                             new  = {}
                                         else
                                             if self[key] ~= nil then self[key] = value return self end
