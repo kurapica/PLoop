@@ -356,7 +356,7 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
 
-        export { List, "pairs", "next", "pcall", "error", "getmetatable", "tonumber" }
+        export { List, "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert }
 
         FLD_CHANGED_ENTITY      = 1
         FLD_CURRENT_TRANST      = 2
@@ -397,15 +397,15 @@ PLoop(function(_ENV)
 
         --- Add changed entity
         function AddChangedEntity(self, entity)
-            self[FLD_CHANGED_ENTITY][entity] = true
+            tinsert(self[FLD_CHANGED_ENTITY], entity)
         end
 
         --- Save the data changes in the context
         function SaveChanges(self, stack)
-            if not next(self[FLD_CHANGED_ENTITY]) then return end
+            if self[FLD_CHANGED_ENTITY][1] == nil then return end
             stack           = (tonumber(stack) or 1) + 1
 
-            for entity in pairs(self[FLD_CHANGED_ENTITY]) do
+            for _, entity in ipairs(self[FLD_CHANGED_ENTITY]) do
                 entity:SaveChange(stack)
             end
 
