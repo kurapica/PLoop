@@ -1445,12 +1445,12 @@ PLoop(function(_ENV)
         end
 
         __Arguments__{ NEString/nil, Any * 0 }
-        function Query(self, where, ...)
+        function Query(self, sql, ...)
             local ctx           = self[0]
-            local sql           = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(where, ...):ToSql()
+            --local sql           = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(where, ...):ToSql()
 
-            if sql then
-                local rs        = ctx:Query(sql)
+            if ctx then
+                local rs        = ctx:Query(sql, ...)
 
                 if rs then
                     for i, data in ipairs(rs) do
