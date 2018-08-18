@@ -1444,7 +1444,7 @@ PLoop(function(_ENV)
             return List()
         end
 
-        __Arguments__{ NEString/nil, Any * 0 }
+        __Arguments__{ NEString, Any * 0 }
         function Query(self, sql, ...)
             local ctx           = self[0]
             --local sql           = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(where, ...):ToSql()
