@@ -66,6 +66,13 @@ PLoop(function(_ENV)
 
         --- Whether the file is existed
         __Static__()
-        function Exist(path) local f = fopen(path, "r") if f then f:close() return true end return false  end
+        function Exist(path) local f = fopen(path, "r") if f then f:close() return true end return false end
+
+        --- Delete the file
+        __PipeRead__ (function(path) return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nrm -f \"%s\"", path) end, "", OperationSystemType.MacOS + OperationSystemType.Linux)
+        __PipeRead__ (function(path) return strformat("del /f \"%s\")", path) end, "", OperationSystemType.Windows)
+        __Static__()
+        function Delete(path)
+        end
     end)
 end)

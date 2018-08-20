@@ -107,5 +107,12 @@ PLoop(function(_ENV)
         __Static__()
         function Create(dir)
         end
+
+        --- Delete the file
+        __PipeRead__ (function(dir) if dir:match("^%s*/%s*$") then return end return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nrm -rf \"%s\"", dir) end, "", OperationSystemType.MacOS + OperationSystemType.Linux)
+        __PipeRead__ (function(dir) return strformat("rd /q /s \"%s\")", dir) end, "", OperationSystemType.Windows)
+        __Static__()
+        function Delete(dir)
+        end
     end)
 end)
