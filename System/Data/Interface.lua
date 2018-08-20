@@ -645,6 +645,7 @@ PLoop(function(_ENV)
         local safeset           = Toolset.safeset
         local strlower          = string.lower
         local parseValue        = Data.ParseValue
+        local __NonSerialized__ = System.Serialization.__NonSerialized__
 
         local TYPE_CONVERTER    = {
             [Boolean]           = {
@@ -961,9 +962,13 @@ PLoop(function(_ENV)
                         end
 
                         if ptype == owner then
+                            __NonSerialized__()
                             Property.Parse(owner, link.name, { set = pset, get = pget })
                         else
-                            class (ptype, { [link.name] = { set = pset, get = pget } })
+                            class (ptype, function(_ENV)
+                                __NonSerialized__()
+                                property(link.name) { set = pset, get = pget }
+                            end)
                         end
                     end
                 else
@@ -1125,13 +1130,19 @@ PLoop(function(_ENV)
         function __new(_, set)
             return { [0] = set }, true
         end
+
+        function __ctor(self)
+            if self[0].foreign then
+                __NonSerialized__()
+            end
+        end
     end)
 
     --- The attribute used to bind data table to the class
     __Sealed__() class "__DataTable__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
 
-        export { Namespace, Class, Environment, IDataContext, DataCollection, "saveDataTableSchema", "clearDataTableFieldCount" }
+        export { Namespace, Class, Environment, IDataContext, DataCollection, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
 
         __Sealed__() struct "DataTableIndex" {
             { name = "name",        type = String },
@@ -1226,6 +1237,10 @@ PLoop(function(_ENV)
         __Arguments__{ DataTableSetting }
         function __new(_, set)
             return { [0] = set }, true
+        end
+
+        function __ctor(self)
+            __Serializable__()
         end
     end)
 
