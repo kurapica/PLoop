@@ -356,7 +356,7 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
 
-        export { List, "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert }
+        export { List, "ipairs", "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert }
 
         FLD_CHANGED_ENTITY      = 1
         FLD_CURRENT_TRANST      = 2
