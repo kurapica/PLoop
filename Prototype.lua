@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/08/08                                               --
--- Version      :   1.0.0-beta026                                            --
+-- Update Date  :   2018/08/30                                               --
+-- Version      :   1.0.0-beta027                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -6162,12 +6162,12 @@ do
                 tinsert(head, "_index")
                 if validateflags(FLG_IC_NNILVL, token) then
                     tinsert(body, [[
-                        local val = _index(self, key)
+                        local val = _index(self, key, 2)
                         if val ~= nil then return val end
                     ]])
                 else
                     tinsert(body, [[
-                        local val = _index(self, key)
+                        local val = _index(self, key, 2)
                         return val
                     ]])
                 end
@@ -12859,9 +12859,9 @@ do
                 __ctor          = true,
             },
 
-            WRAP_METHOD         = {
-                __index         = true,
-                __newindex      = true,
+            PASS_STACK_METHOD   = {
+                __index         = 1,
+                __newindex      = 2,
             },
 
             PLOOP_THIS_LOCAL    = "_PLoop_Overload_This",
@@ -12875,12 +12875,14 @@ do
             FLG_VAR_LSTVLD      = newflags(),        -- the list variable has type
             FLG_VAR_THRABL      = newflags(),        -- the target may throw exception
             FLG_VAR_BUILDER     = newflags(),        -- the target should be a type builder
+            FLG_VAR_PSTACK      = newflags(),        -- the __index & __newindex that should pass the stack level
             FLG_VAR_LENGTH      = newflags(),        -- the multiply factor of length
 
             FLG_OVD_SELFIN      = newflags(true),    -- has self
             FLG_OVD_THROW       = newflags(),        -- the constructor, use throw
             FLG_OVD_THIS        = newflags(),        -- need this keyword
             FLG_OVD_ONECNT      = newflags(),        -- only one variable list
+            FLG_OVD_PSTACK      = newflags(),        -- the __index & __newindex that should pass the stack level
 
             -----------------------------------------------------------
             --                        helpers                        --
@@ -13071,7 +13073,7 @@ do
 
             local token         = len * FLG_VAR_LENGTH
             local islist        = false
-            local stack         = WRAP_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and 3 or 2
+            local passStack     = PASS_STACK_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and PASS_STACK_METHOD[name] or false
 
             if ismethod then
                 token           = turnonflags(FLG_VAR_METHOD, token)
@@ -13107,6 +13109,10 @@ do
                 token           = turnonflags(FLG_VAR_THRABL, token)
             end
 
+            if passStack then
+                token           = turnonflags(FLG_VAR_PSTACK, token)
+            end
+
             -- Build the validator generator
             if not _ArgValdMap[token] then
                 local head      = _Cache()
@@ -13123,25 +13129,26 @@ do
                 for i = 1, len do args[i] = "v" .. i end
                 if ismethod then
                     if len == 0 then
-                        tinsert(body, "return function(stack, func)")
+                        tinsert(body, "return function(func)")
                     else
-                        tinsert(body, strformat("return function(stack, func, %s)", tblconcat(args, ", ")))
+                        tinsert(body, strformat("return function(func, %s)", tblconcat(args, ", ")))
                     end
                 else
                     if len == 0 then
-                        tinsert(body, "return function(stack, usage, func)")
+                        tinsert(body, "return function(usage, func)")
                     else
-                        tinsert(body, strformat("return function(stack, usage, func, %s)", tblconcat(args, ", ")))
+                        tinsert(body, strformat("return function(usage, func, %s)", tblconcat(args, ", ")))
                     end
                 end
 
                 for i = 1, len do args[i] = "a" .. i end
-                if islist  then args[len] = nil end
-                if hasself then tinsert(args, 1, "self") end
+                if islist       then args[len] = nil end
+                if passStack    then args[passStack + 1] = "rstack" end  -- no more check
+                if hasself      then tinsert(args, 1, "self") end
 
-                args = tblconcat(args, ", ") or ""
+                args            = tblconcat(args, ", ") or ""
 
-                local alen = #args
+                local alen      = #args
 
                 if ismethod then
                     if islist then
@@ -13177,6 +13184,13 @@ do
                         tinsert(body, [[error = throw]])
                         tinsert(body, [[setfenv(func, getfenv(1))]])
                     end
+                end
+
+                tinsert(body, [[local stack = 2]])
+
+                if passStack then
+                    uinsert(apis, "type")
+                    tinsert(body, [[if type(rstack) == "number" then stack = rstack + 1 end]])
                 end
 
                 tinsert(body, [[local ret, msg]])
@@ -13419,16 +13433,15 @@ do
             end
 
             if ismethod then
-                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](stack, unpack(vars, 0))
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](unpack(vars, 0))
             else
-                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](stack, vars[FLD_VAR_USGMSG], unpack(vars, 0))
+                vars[FLD_VAR_VARVLD] = _ArgValdMap[token](vars[FLD_VAR_USGMSG], unpack(vars, 0))
             end
         end
 
         local function genOverload(overload, owner, name, hasself)
             local token         = 0
-            local stack         = WRAP_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and 3 or 2
-
+            local passStack     = PASS_STACK_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and PASS_STACK_METHOD[name] or false
 
             if hasself then
                 token           = turnonflags(FLG_OVD_SELFIN, token)
@@ -13444,6 +13457,10 @@ do
 
             if #overload == 1 then
                 token           = turnonflags(FLG_OVD_ONECNT, token)
+            end
+
+            if passStack then
+                token           = token + FLG_OVD_PSTACK * passStack
             end
 
             local usages = { "the calling style must be one of the follow:" }
@@ -13466,7 +13483,7 @@ do
 
                 tinsert(body, "")                       -- remain for shareable variables
 
-                tinsert(body, "return function(overload, count, usages, stack)")
+                tinsert(body, "return function(overload, count, usages)")
 
                 if needthis then
                     if hasself then
@@ -13489,6 +13506,17 @@ do
                     else
                         tinsert(body, [[return function(...)]])
                     end
+                end
+
+                tinsert(body, [[local stack = 2]])
+
+                if passStack then
+                    uinsert(apis, "select")
+                    uinsert(apis, "type")
+                    tinsert(body, [[
+                        local rstack = select(]] .. (passStack + 1) ..[[, ...)
+                        if type(rstack) == "number" then stack = rstack + 1 end
+                    ]])
                 end
 
                 if #overload == 1 then
@@ -13603,7 +13631,7 @@ do
                 _Cache(apis)
             end
 
-            return _OverloadMap[token](overload, #overload, usages, stack)
+            return _OverloadMap[token](overload, #overload, usages)
         end
 
         -----------------------------------------------------------
