@@ -4546,14 +4546,20 @@ end)
 
 ```lua
 function RecordLastLogin(id)
-	with(MyDBContext())(function(ctx)         -- 创建DB上下文，打开数据库连接
-		with(ctx.Transaction)(function(trans) -- 启动数据库事务
-			local user = ctx.Users:Lock{ id = id }:First() -- 查询并锁定目标用户数据
+	-- 创建DB上下文，打开数据库连接
+	with(MyDBContext())(function(ctx)
+		-- 启动数据库事务
+		with(ctx.Transaction)(function(trans)
+			-- 查询并锁定目标用户数据
+			local user = ctx.Users:Lock{ id = id }:First()
 			if user then
-				user.LastLogin = Date.Now     -- 存在就修改数据
-				ctx:SaveChanges()             -- 提交修改给数据库
+				user.LastLogin = Date.Now
+
+				-- 提交修改给数据库
+				ctx:SaveChanges()
 			else
-			    trans:Rollback()              -- 取消事务处理
+				-- 取消事务处理
+				trans:Rollback()
 			end
 		end)
 	end)
