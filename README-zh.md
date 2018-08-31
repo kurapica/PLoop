@@ -4540,6 +4540,7 @@ PLoop(function(_ENV)
 		print("Catch error:" .. err)
 	end)
 end)
+```
 
 如例子所示，第二个方法被用于捕获错误，如果不指定，那么将直接使用error方法将错误继续抛出，直到它被处理。下面是来源于实际DB处理的一个例子（参考System.Data系统）:
 
