@@ -1570,6 +1570,7 @@ do
     -- Registered Keywords
     local _ContextKeywords      = {}                -- Keywords for environment type
     local _GlobalKeywords       = {}                -- Global keywords
+    local _RuntimeKeywords      = {}                -- Runtime keywords
     local _GlobalNS             = {}                -- Global namespaces
 
     -- Keyword visitor
@@ -1711,6 +1712,9 @@ do
                 tinsert(head, "_GlobalKeywords")
                 tinsert(upval, _GlobalKeywords)
 
+                tinsert(head, "_RuntimeKeywords")
+                tinsert(upval, _RuntimeKeywords)
+
                 tinsert(head, "_ContextKeywords")
                 tinsert(upval, _ContextKeywords)
 
@@ -1827,6 +1831,10 @@ do
                 -- Check keywords
                 uinsert(apis, "getmetatable")
                 tinsert(body, [[
+                    -- don't register the runtime key
+                    value = _RuntimeKeywords[name]
+                    if value then return value end
+
                     value = _GlobalKeywords[name]
                     if not value then
                         local keys = _ContextKeywords[getmetatable(env)]
@@ -1999,6 +2007,29 @@ do
                 end
             end;
 
+            --- Register runtime keyword that won't register its caller like 'with', 'throw'.
+            -- so it won't cause conflict with global and context keywords
+            -- @static
+            -- @method  RegisterRuntimeKeyword
+            -- @owner   environment
+            -- @format  ([key, ]keyword)
+            -- @param   key:string                  the keyword's name, it'd be applied if the keyword is a function
+            -- @param   keyword                     the keyword entity
+            -- @format  (keywords)
+            -- @param   keywords:table              a collection of the keywords like : { with = with }
+            ["RegisterRuntimeKeyword"] = function(key, keyword)
+                local keywords      = _RuntimeKeywords
+
+                if type(key) == "table" and getmetatable(key) == nil then
+                    for k, v in pairs, key do
+                        if type(k) ~= "string" then k = tostring(v) end
+                        if not keywords[k] and v then keywords[k] = v end
+                    end
+                else
+                    if type(key) ~= "string" then key, keyword = tostring(key), key end
+                    if key and not keywords[key] and keyword then keywords[key] = keyword end
+                end
+            end;
 
             --- Restore the accessed keyword and visitor, should only be used by the system
             -- @static
@@ -11614,6 +11645,12 @@ do
         struct                  = struct,
         class                   = class,
         interface               = interface,
+    }
+
+    -----------------------------------------------------------------------
+    --                         runtime keyword                           --
+    -----------------------------------------------------------------------
+    environment.RegisterRuntimeKeyword {
         throw                   = throw,
         with                    = with,
     }
