@@ -38,7 +38,7 @@ PLoop(function(_ENV)
     class "List" (function (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
-        export { type = type }
+        export { type = type, ipairs = ipairs }
 
         lsttype = lsttype ~= Any and lsttype or nil
 
@@ -101,7 +101,32 @@ PLoop(function(_ENV)
         RemoveByIndex = table.remove
 
         --- Clear the list
-        function Clear(self) for i = self.Count, 1, -1 do self[i] = nil end end
+        function Clear(self)
+            for i = self.Count, 1, -1 do self[i] = nil end
+            return self
+        end
+
+        --- Extend the list
+        __Arguments__{ RawTable }
+        function Extend(self, lst)
+            local ins   = self.Insert
+            for _, item in ipairs(lst) do ins(self, item) end
+            return self
+        end
+
+        __Arguments__{ IList }
+        function Extend(self, lst)
+            local ins   = self.Insert
+            for _, item in lst:GetIterator() do ins(self, item) end
+            return self
+        end
+
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+        function Extend(self, iter, obj, idx)
+            local ins   = self.Insert
+            for _, item in iter, obj, idx do ins(self, item) end
+            return self
+        end
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -192,6 +217,38 @@ PLoop(function(_ENV)
                 return nil
             end
         end
+    end)
+
+    --- The dynamic list
+    __Sealed__() __NoRawSet__(true)
+    class "XList" (function(_ENV)
+        extend "IList"
+        export { yield  = coroutine.yield, unpack = table.unpack or unpack }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        __Iterator__()
+        function GetIterator(self)
+            for i = self[1], self[2], self[3] or 1 do
+                yield(i, i)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{
+            Variable("start", NaturalNumber),
+            Variable("stop", NaturalNumber),
+            Variable("step", Integer, true, 1)
+        }
+        function __new(_, ...) return { ... }, true end
+
+        __Arguments__{
+            Variable("stop", NaturalNumber),
+        }
+        function __new(_, stop) return { 1, stop, 1 }, true end
     end)
 
     --- the list stream worker, used to provide stream filter, map and etc

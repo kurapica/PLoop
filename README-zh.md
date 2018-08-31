@@ -10,6 +10,7 @@
 * [从使用集合开始](#从使用集合开始)
 	* [List的创建](#list的创建)
 	* [List的方法](#list的方法)
+	* [动态列表](#动态列表)
 	* [List的遍历](#list的遍历)
 	* [List的排序](#list的排序)
 	* [Dictionary的创建](#dictionary的创建)
@@ -120,9 +121,10 @@
 		* [`__Super__`](#__super__)
 		* [`__SuperObject__`](#__superobject__)
 		* [`__Throwable__`](#__throwable__)
-* [keyword 关键字](#keyword关键字)
+* [keyword 关键字](#keyword-关键字)
 	* [全局关键字](#全局关键字)
-		* [export 关键字](#export关键字)
+		* [export 关键字](#export-关键字)
+		* [with 关键字](#with-关键字)
 	* [上下文相关的关键字](#上下文相关的关键字)
 	* [`_G`中可用的资源](#_g中可用的资源)
 * [Serialization 序列化](#serialization序列化)
@@ -251,6 +253,9 @@ IndexOf(self, item)                      |返回指定元素的索引
 Insert(self[, index], item)              |插入元素，即table.insert
 Remove(self, item)                       |移除元素
 RemoveByIndex(self[, index])             |按索引移除元素，即table.remove
+Extend(self, table)                      |将table的元素添加到list对象的末尾
+Extend(self, listobject)                 |将其他IList对象的元素添加到list对象的末尾
+Extend(self, iterator[, object[, index]])|将迭代器的返回元素添加到list对象的末尾
 
 ```lua
 require "PLoop"
@@ -261,6 +266,38 @@ PLoop(function(_ENV)
 	print(obj:Remove()) -- 10
 end)
 ```
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- 1,2,3,4,5,6,7,8,9
+	print(table.concat(List{1, 2, 3, 4}:Extend(XList(5, 9)), ","))
+end)
+```
+
+### 动态列表
+
+在上面例子中，使用了XList这一个动态列表来避免构造完整的元素列表，XList仅保留开始，结束和步长，利用迭代器来返回对应的索引值：
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- 开始, 结束[, 步长]
+	XList(5, 10, 2):Each(print)
+
+	-- 步长可以是负数
+	XList(4, 1, -1):Each(print)
+
+	-- 结束
+	-- 开始和步长默认1
+	XList(10):Map("x=>x^2"):Each(print)
+end)
+```
+
+这种方式可以极大的节省内存占用和赋值操作，XList也扩展了**System.Collections.IList**, 我们可以使用Map方法来得到实际值，以及使用其他的链式处理。
+
 
 ### List的遍历
 
@@ -354,8 +391,8 @@ Each(self, func, ...)                    |将所有元素附带...参数传入�
 Each(self, name, ...)                    |如果`element[name]`是方法（函数）, 它将被调用，...参数也会被传入，否则`element[name] = ...` 将被使用
 First(self, func, ...)                   |返回第一个使`func(element, ...)`返回非false值的元素
 First(self)                              |返回列表的第一个元素
-FirstOrDefault(self, default, func, ...) |返回第一个使`func(element, ...)`返回非false值的元素，如果没有，返回default值
-FirstOrDefault(self, default)            |返回列表的第一个元素，如果没有，返回default值
+Last(self, func, ...) 					 |返回最后一个使`func(element, ...)`返回非false值的元素
+Last(self)            					 |返回列表的最后一个元素
 Reduce(self, func[, init])               |用于合并元素，参考上面计算总值的例子
 ToList(self[, listtype])                 |使用迭代返回的元素创建一个新的列表对象，默认列表类型是**List**
 
@@ -472,7 +509,31 @@ end)
 
 ### Dictionary的方法
 
-这些dictionary对象实际就是普通的哈希表，所以我们可以使用**pairs**来遍历它们，也可以直接使用`obj[key] = value`去修改它们，这些操作和普通table是一样的，所以**Dictionary**仅提供**GetIterator**方法, 这个方式实际就是**pairs**.
+这些dictionary对象实际就是普通的哈希表，所以我们可以使用**pairs**来遍历它们，也可以直接使用`obj[key] = value`去修改它们，这些操作和普通table是一样的，所以**Dictionary**的**GetIterator**方法实际就是**pairs**.
+
+字典类仅定义一个方法用于更新自己
+
+方法                                     |描述
+:----------------------------------------|:--------------------------------
+Update(self, table)                      |使用table的键值对更新自己
+Update(self, IDictionary)                |使用自他IDictionary对象的键值对更新自己
+Update(self, iter[, obj[, idx])          |使用迭代器返回的键值对更新自己
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	v = Dictionary(List(5), List(5))
+	v:Update{ [3] = 9, [4] = 16 }
+
+	-- 1   1
+	-- 2   2
+	-- 3   9
+	-- 4   16
+	-- 5   5
+	v:Each(print)
+end)
+```
 
 
 ### Dictionary的遍历
@@ -4364,10 +4425,11 @@ class "B" {}
 * interface  -- 定义新接口类型
 * class      -- 定义新类
 * throw      -- 抛出异常
+* with 	     -- 和System.IAutoClose对象一同使用，用于自动调用对象的Open和Close方法
 
 #### export 关键字
 
-这里有一个未曾使用过的关键字**export**，它是为了多os thread平台设计的：
+关键字**export**是为了多os thread平台设计的：
 
 ```lua
 PLOOP_PLATFORM_SETTINGS = { MULTI_OS_THREAD = true }
@@ -4429,6 +4491,74 @@ PLoop(function(_ENV)
 	end
 end)
 ```
+
+#### with 关键字
+
+**System.IAutoClose**是一个很简单的接口:
+
+```lua
+interface "System.IAutoClose" (function(_ENV)
+    __Abstract__() function Open(self) end
+    __Abstract__() function Close(self, error) end
+end)
+```
+
+它定义了打开和关闭资源的方法，可用于文件，数据库连接等场合。**with**关键字可以接受多个IAutoClose对象，并且自动调用打开和关闭方法，不管是否存在错误:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" { IAutoClose,
+
+		Open = function(self)
+			print( "Open " .. self.name )
+		end,
+
+		Close = function(self, err)
+			print("Close " .. self.name .. (err and (" with " .. err) or " without error"))
+		end,
+	}
+
+	-- Open task
+	-- process task
+	-- Close task without error
+	with(A{ name = "task"})(function(obj)
+		print("process " .. obj.name)
+	end)
+
+	-- Open task
+	-- Open task2
+	-- process task, task2
+	-- Close task with path\test.lua:23: 2333
+	-- Close task2 with path\test.lua:23: 2333
+	-- Catch error:path\test.lua:23: 2333
+	with(A{ name = "task"}, A{ name = "task2"})(function(obj, obj2)
+		print("process " .. obj.name .. ", " .. obj2.name)
+		error("2333")
+	end, function(err)
+		print("Catch error:" .. err)
+	end)
+end)
+
+如例子所示，第二个方法被用于捕获错误，如果不指定，那么将直接使用error方法将错误继续抛出，直到它被处理。下面是来源于实际DB处理的一个例子（参考System.Data系统）:
+
+```lua
+function RecordLastLogin(id)
+	with(MyDBContext())(function(ctx)         -- 创建DB上下文，打开数据库连接
+		with(ctx.Transaction)(function(trans) -- 启动数据库事务
+			local user = ctx:Users:Lock{ id = id }:First() -- 查询并锁定目标用户数据
+			if user then
+				user.LastLogin = Date.Now     -- 存在就修改数据
+				ctx:SaveChanges()             -- 提交修改给数据库
+			else
+			    trans:Rollback()              -- 取消事务处理
+			end
+		end)
+	end)
+end
+```
+
 
 ### 上下文相关的关键字
 
@@ -4766,7 +4896,7 @@ end)
 
 **IList**接口代表数组集合，数组集合仅关心元素，它们的索引在通常操作中可以被无视。它扩展了**Iterable**接口。
 
-特别的，List使用的**Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First**, **FirstOrDefault**这类链式方法都是定义在这个接口中，所以，如果类扩展了这个接口，就可以利用这些方法。
+特别的，List使用的**Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First**这类链式方法都是定义在这个接口中，所以，如果类扩展了这个接口，就可以利用这些方法。
 
 ```lua
 require "PLoop"

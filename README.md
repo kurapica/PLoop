@@ -14,6 +14,7 @@ You also can find useful features for large enterprise development like code org
 * [Start with the Collections](#start-with-the-collections)
 	* [The creation of List](#the-creation-of-list)
 	* [The method of the List](#the-method-of-the-list)
+	* [The dynamic list](#The-dynamic-list)
 	* [The traverse of the List](#the-traverse-of-the-list)
 	* [The sort of the List](#the-sort-of-the-list)
 	* [The creation of the Dictionary](#the-creation-of-the-dictionary)
@@ -126,7 +127,8 @@ You also can find useful features for large enterprise development like code org
 		* [`__Throwable__`](#__throwable__)
 * [keyword](#keyword)
 	* [Global keyword](#global-keyword)
-		* [export](#export)
+		* [export keyword](#export-keyword)
+		* [with keyword](#with-keyword)
 	* [Context keyword](#context-keyword)
 	* [Features can be used in `_G`](#features-can-be-used-in-_g)
 * [Serialization](#serialization)
@@ -255,6 +257,9 @@ IndexOf(self, item)                      |Get the index of an item if it existed
 Insert(self[, index], item)              |Insert an item in the list
 Remove(self, item)                       |Remove an item from the list
 RemoveByIndex(self[, index])             |Remove and item by index or from the tail if index not existed
+Extend(self, table)                      |Extend the list with another index table
+Extend(self, listobject)                 |Extend the list with another IList object
+Extend(self, iterator[, object[, index]])|Extend the list with an iterator
 
 ```lua
 require "PLoop"
@@ -265,6 +270,38 @@ PLoop(function(_ENV)
 	print(obj:Remove()) -- 10
 end)
 ```
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- 1,2,3,4,5,6,7,8,9
+	print(table.concat(List{1, 2, 3, 4}:Extend(XList(5, 9)), ","))
+end)
+```
+
+### The dynamic list
+
+In the previous example, we used the XList to create is a dynamic list that won't store any elements in it. it'd be used like
+
+```lua
+require "PLoop"
+
+PLoop (function(_ENV)
+	-- start, stop[, step]
+	XList(5, 10, 2):Each(print)
+
+	-- step can be negative number
+	XList(4, 1, -1):Each(print)
+
+	-- stop
+	-- start and step will be 1 as default
+	XList(10):Map("x=>x^2"):Each(print)
+end)
+```
+
+It'll avoid the creation of bigger tables, it's a class that extend the **System.Collections.IList**, so you always can use the Map to create the real values.
+
 
 ### The traverse of the List
 
@@ -357,8 +394,8 @@ Each(self, func, ...)                    |call the function with each elements a
 Each(self, name, ...)                    |if the `element[name]` is the element's method(function), the object method will be called with those ... argument, otherwise `element[name] = ...` will be used
 First(self, func, ...)                   |pass the element with ... into the function, if the return value is non-false, return the current element
 First(self)                              |return the first element if existed
-FirstOrDefault(self, default, func, ...) |pass the element with ... into the function, if any return value is non-false, return the current element, otherwise return the default value
-FirstOrDefault(self, default)            |return the first element if existed, otherwise return the default value
+Last(self, func, ...)                    |return the last element that match the func
+Last(self)                               |return the last element
 Reduce(self, func[, init])               |used to combine the elements, you can find the example in the above
 ToList(self[, listtype])                 |save the elements into a new list type object, the default listtype is the **List**
 
@@ -474,7 +511,31 @@ end)
 
 ### The method of the Dictionary
 
-The dictionary are normally hash tables, you can use **pairs** to traverse them or use `obj[key] = value` to modify them, the **Dictionary** only provide the **GetIterator** method, it's just the **pairs**.
+The dictionary are normally hash tables, you can use **pairs** to traverse them or use `obj[key] = value` to modify them, the **Dictionary**'s **GetIterator** method is just the **pairs**.
+
+There are only one method decalred in the Dictionary class:
+
+Method                                   |Description
+:----------------------------------------|:--------------------------------
+Update(self, table)                      |Update the dictionary with the table's value
+Update(self, IDictionary)                |Update the dictionary with the IDictionary object's value
+Update(self, iter[, obj[, idx])          |Update the dictionary with the iterator's key-value pairs
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	v = Dictionary(List(5), List(5))
+	v:Update{ [3] = 9, [4] = 16 }
+
+	-- 1   1
+	-- 2   2
+	-- 3   9
+	-- 4   16
+	-- 5   5
+	v:Each(print)
+end)
+```
 
 
 ### The traverse of the Dictionary
@@ -4316,10 +4377,11 @@ There are two types keywords in the **PLoop**, one is for global, you can use th
 * interface  -- define a new interface type
 * class      -- define a new class type
 * throw      -- throw an exception
+* with 		 -- works with System.IAutoClost objects to auto open and close them
 
-#### export
+#### export keyword
 
-There is only one unknow keyword **export**, the keyword is designed for multi os thread platform:
+The keyword **export** is designed for multi os thread platform:
 
 ```lua
 PLOOP_PLATFORM_SETTINGS = { MULTI_OS_THREAD = true }
@@ -4380,6 +4442,74 @@ PLoop(function(_ENV)
 	end
 end)
 ```
+
+#### with keyword
+
+The **System.IAutoClose** is a very simple interface:
+
+```lua
+interface "System.IAutoClose" (function(_ENV)
+    __Abstract__() function Open(self) end
+    __Abstract__() function Close(self, error) end
+end)
+```
+
+It only declared two method use to open and close the features like file, database connection and etc. The **with** keyword can receive several IAutoClose objects to auto open and close them no matter if there are errors:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" { IAutoClose,
+
+		Open = function(self)
+			print( "Open " .. self.name )
+		end,
+
+		Close = function(self, err)
+			print("Close " .. self.name .. (err and (" with " .. err) or " without error"))
+		end,
+	}
+
+	-- Open task
+	-- process task
+	-- Close task without error
+	with(A{ name = "task"})(function(obj)
+		print("process " .. obj.name)
+	end)
+
+	-- Open task
+	-- Open task2
+	-- process task, task2
+	-- Close task with path\test.lua:23: 2333
+	-- Close task2 with path\test.lua:23: 2333
+	-- Catch error:path\test.lua:23: 2333
+	with(A{ name = "task"}, A{ name = "task2"})(function(obj, obj2)
+		print("process " .. obj.name .. ", " .. obj2.name)
+		error("2333")
+	end, function(err)
+		print("Catch error:" .. err)
+	end)
+end)
+
+So the second function would be used as error handler, if ommit, the *error* api would be used. Here is a real project example for data base operation(see System.Data for more examples):
+
+```lua
+function RecordLastLogin(id)
+	with(MyDBContext())(function(ctx)         -- Open the data base connection
+		with(ctx.Transaction)(function(trans) -- Process a transaction
+			local user = ctx:Users:Lock{ id = id }:First() -- Query and lock the data row
+			if user then
+				user.LastLogin = Date.Now     -- modify the data entity
+				ctx:SaveChanges()             -- save to the data base
+			else
+			    trans:Rollback()              -- cancel the transaction
+			end
+		end)
+	end)
+end
+```
+
 
 ### Context keyword
 
@@ -4717,7 +4847,7 @@ This is the basic interface of the collections, it has only one abstract method 
 
 The **IList** interface represents the list collections that only elements has meanings, the key can be ignored by operations. The is a design goal, there is no rule to enforce it. It extend the **Iterable** interface.
 
-Especially, the List's stream method like **Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First**, **FirstOrDefault** are all defined in the **IList** interface, so if a class extend the IList interface, the class can use them directly.
+Especially, the List's stream method like **Map**, **Filter**, **Range**, **ToList**, **Reduce**, **Each**, **Any**, **All**, **First** are all defined in the **IList** interface, so if a class extend the IList interface, the class can use them directly.
 
 ```lua
 require "PLoop"

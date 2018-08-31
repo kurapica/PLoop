@@ -28,6 +28,7 @@ PLoop(function(_ENV)
 
         export {
             ipairs              = ipairs,
+            pairs               = pairs,
             GetErrorMessage     = Struct.GetErrorMessage,
             tostring            = tostring,
 
@@ -71,6 +72,25 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         GetIterator     = pairs
+
+        --- Update the dictionary
+        __Arguments__{ RawTable }
+        function Update(self, dict)
+            for k, v in pairs(dict) do self[k] = v end
+            return self
+        end
+
+        __Arguments__{ IDictionary }
+        function Update(self, dict)
+            for k, v in dict:GetIterator() do self[k] = v end
+            return self
+        end
+
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+        function Update(self, iter, obj, idx)
+            for k, v in iter, obj, idx do self[k] = v end
+            return self
+        end
 
         -----------------------------------------------------------
         --                      constructor                      --

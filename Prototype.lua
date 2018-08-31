@@ -13661,6 +13661,8 @@ do
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
             stack               = parsestack(stack) + 1
 
+            local passStack     = PASS_STACK_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and PASS_STACK_METHOD[name] or false
+
             if type(definition) ~= "function" then
                 error("Usage: __Arguments__ can only be used on features with function as definition", stack)
             end
@@ -13669,6 +13671,14 @@ do
 
             if len == 0 and (targettype == AttributeTargets.Class or targettype == AttributeTargets.Interface or targettype == AttributeTargets.Struct) then
                 error("Usage: __Arguments__ can't be empty to declare template types", stack)
+            end
+
+            if passStack and len ~= passStack then
+                if len > passStack then
+                    error(strformat("Usage: __Arguments__ can only have %d variable settings for %s", passStack, name), stack)
+                else
+                    error(strformat("Usage: __Arguments__ must have %d variable settings for %s", passStack, name), stack)
+                end
             end
 
             local vars          = {
