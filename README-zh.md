@@ -4548,7 +4548,7 @@ end)
 function RecordLastLogin(id)
 	with(MyDBContext())(function(ctx)         -- 创建DB上下文，打开数据库连接
 		with(ctx.Transaction)(function(trans) -- 启动数据库事务
-			local user = ctx:Users:Lock{ id = id }:First() -- 查询并锁定目标用户数据
+			local user = ctx.Users:Lock{ id = id }:First() -- 查询并锁定目标用户数据
 			if user then
 				user.LastLogin = Date.Now     -- 存在就修改数据
 				ctx:SaveChanges()             -- 提交修改给数据库

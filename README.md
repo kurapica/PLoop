@@ -4497,9 +4497,9 @@ So the second function would be used as error handler, if ommit, the *error* api
 
 ```lua
 function RecordLastLogin(id)
-	with(MyDBContext())(function(ctx)         -- Open the data base connection
+	with(MyDBContext())(function(ctx)         -- New database context and open the connection
 		with(ctx.Transaction)(function(trans) -- Process a transaction
-			local user = ctx:Users:Lock{ id = id }:First() -- Query and lock the data row
+			local user = ctx.Users:Lock{ id = id }:First() -- Query and lock the data row
 			if user then
 				user.LastLogin = Date.Now     -- modify the data entity
 				ctx:SaveChanges()             -- save to the data base
