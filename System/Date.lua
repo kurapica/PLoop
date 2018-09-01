@@ -85,12 +85,16 @@ PLoop(function(_ENV)
         local offset    = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
         local r2Time    = function (self) self.time = time(self) end
         local r4Time    = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
+        local getnow    = time
 
         -----------------------------------------------------------
         --                    static property                    --
         -----------------------------------------------------------
         --- Gets a DateTime object that is set to the current date and time on this computer, expressed as the local time.
-        __Static__() property "Now" { get = function() return Date( time() ) end }
+        __Static__() property "Now" { get = function() return Date() end }
+
+        --- Gets and Sets the function that return the current time value(the total second from 1970/1/1 00:00:00)
+        __Static__() property "GetTimeOfDay" { type = Function, set = function(self, val) getnow = val end, get = function() return getnow end }
 
         -----------------------------------------------------------
         --                       property                        --
@@ -294,7 +298,7 @@ PLoop(function(_ENV)
 
         __Arguments__{ Variable("time", Integer, true) }
         function __new(_, tm)
-            local self = { time = tm or time() }
+            local self = { time = tm or getnow() }
             r4Time(self)
             return self, true
         end
