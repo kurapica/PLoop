@@ -1301,6 +1301,7 @@ PLoop(function(_ENV)
             error               = error,
             strformat           = string.format,
             tostring            = tostring,
+            next                = next,
 
             Class, Property, Any, EntityStatus, List
         }
@@ -1371,6 +1372,8 @@ PLoop(function(_ENV)
                     error(strformat("The %s don't have field property named %q", clsname, name), 2)
                 end
             end
+
+            if not next(fquery) then error("The query data can't be empty", 2) end
 
             local ctx           = self[0]
             local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(fquery)
@@ -1450,6 +1453,34 @@ PLoop(function(_ENV)
                     for i, data in ipairs(rs) do
                         rs[i]   = Entity(ctx, data)
                         rs[i]:SetLockForUpdate()
+                    end
+
+                    return rs
+                end
+            end
+
+            return List()
+        end
+
+        __Arguments__{ QueryOrders/nil }
+        function QueryAll(self, orders)
+            local ctx           = self[0]
+            local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields)
+
+            if orders then
+                for _, order in ipairs(orders) do
+                    builder:OrderBy(order.name, order.desc)
+                end
+            end
+
+            local sql           = builder:ToSql()
+
+            if sql then
+                local rs        = ctx:Query(sql)
+
+                if rs then
+                    for i, data in ipairs(rs) do
+                        rs[i]   = Entity(ctx, data)
                     end
 
                     return rs
