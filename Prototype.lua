@@ -1234,6 +1234,19 @@ do
                 return clone(getAttributeData(aType, target, owner), true, true)
             end;
 
+            --- Whether the target of attached data of the attribute type
+            -- @static
+            -- @method  HasAttachedData
+            -- @owner   attribute
+            -- @format  attributeType, target[, owner]
+            -- @param   attributeType               the attribute type
+            -- @param   target                      the target
+            -- @param   owner                       the target's owner
+            -- @return  boolean                     true if have attached data
+            ["HasAttachedData"] = function(aType, target, owner)
+                return getAttributeData(aType, target, owner) ~= nil
+            end;
+
             --- Get all targets have attached data of the attribute
             -- @static
             -- @method  GetAttributeTargets

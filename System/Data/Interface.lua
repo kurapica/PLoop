@@ -352,6 +352,10 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- Represents the data view
+    __Sealed__() interface "IDataView" (function(_ENV)
+    end)
+
     --- Represents the context for a group of DataSets
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
@@ -414,21 +418,24 @@ PLoop(function(_ENV)
 
         --- Sends the query sql and return the result
         function Query(self, ...)
-            local rs = self.Connection:Query(...)
-            if rs then
-                if getmetatable(rs) == nil then
-                    return List(rs)
-                else
-                    return rs
-                end
-            else
-                return List()
-            end
+            return List(self.Connection:Query(...))
         end
 
         --- Execute the insert sql and return the result
         function Execute(self, ...)
             return self.Connection:Execute(...)
+        end
+
+        --- Send the query sql and return the result wrapped with the view
+        __Arguments__{ IDataView, NEString, Any * 0}
+        function QueryView(self, view, sql, ...)
+            local rs = self.Connection:Query(sql, ...)
+            if rs then
+                for i, dr in ipairs(rs) do
+                    rs[i]   = view(dr)
+                end
+            end
+            return List(rs)
         end
     end)
 
@@ -627,7 +634,7 @@ PLoop(function(_ENV)
         extend "IAttachAttribute" "IInitAttribute"
 
         export {
-            Class, Struct, IDataEntity, EntityStatus, Property, Date, AnyType,
+            Class, Struct, IDataEntity, IDataView, EntityStatus, Property, Date, AnyType,
             "getDataTableSchema", "getDataFieldProperty", "getDataTableFieldCount", "saveDataFieldSchema", "isUniqueIndex"
         }
 
@@ -729,15 +736,18 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  definition                  the new definition
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            if Class.Validate(owner) then
-                local set           = self[0]
-                if not set.name  then set.name = name end
-                set.fieldindex      = getDataTableFieldCount(owner)
+            if not Class.Validate(owner) then return end
+
+            local set           = self[0]
+            if not set.name then set.name = name end
+
+            local ptype
+            for k, v in pairs(definition) do if strlower(k) == "type" then ptype = v break end end
+
+            if Class.IsSubType(owner, IDataEntity) then
+                set.fieldindex  = getDataTableFieldCount(owner)
 
                 saveDataFieldSchema(owner, name, set)
-
-                local ptype
-                for k, v in pairs(definition) do if strlower(k) == "type" then ptype = v break end end
 
                 if set.foreign then
                     if not Class.Validate(ptype) then
@@ -1087,6 +1097,40 @@ PLoop(function(_ENV)
                 end
 
                 definition.throwable= true
+            elseif Class.IsSubType(owner, IDataView) then
+                if set.foreign then
+                    error("The foreign setting can't be applied to properties in a data view class", stack + 1)
+                end
+
+                local fld           = set.name
+                local converter     = set.converter or TYPE_CONVERTER[ptype]
+
+                definition.set      = false
+
+                if converter then
+                    set.converter   = converter
+                    local fromvalue = converter.fromvalue
+                    local tovalue   = converter.tovalue
+                    local format    = set.format or converter.format
+                    local objfld    = "_Object_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
+
+                    definition.get  = function(self)
+                        local val   = rawget(self, objfld)
+                        if val ~= nil then return val end
+
+                        val         = self[FIELD_DATA] or nil
+                        if val == nil then return end
+                        val         = parseValue(val[fld])
+                        if val == nil then return end
+
+                        val     = fromvalue(val, format)
+                        rawset(self, objfld, val)
+
+                        return val
+                    end
+                else
+                    definition.get  = function(self) self = self[FIELD_DATA] or nil return self and parseValue(self[fld]) end
+                end
             end
         end
 
@@ -1142,7 +1186,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataTable__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
 
-        export { Namespace, Class, Environment, IDataContext, DataCollection, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
+        export { Namespace, Class, Environment, IDataContext, IDataEntity, DataCollection, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
 
         __Sealed__() struct "DataTableIndex" {
             { name = "name",        type = String },
@@ -1187,8 +1231,6 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
             Environment.Apply(manager, function(_ENV)
-                extend (System.Data.IDataEntity)
-
                 -----------------------------------------------------------
                 --                      constructor                      --
                 -----------------------------------------------------------
@@ -1209,6 +1251,8 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  definition                  the new definition
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            Class.AddExtend(target, IDataEntity)
+
             local set       = self[0]
             set.name        = set.name or Namespace.GetNamespaceName(target, true)
             set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
@@ -1240,6 +1284,82 @@ PLoop(function(_ENV)
         end
 
         function __ctor(self)
+            __Serializable__()
+        end
+    end)
+
+    --- The data view that binds to a complex query
+    __Sealed__() class "__DataView__" (function(_ENV)
+        extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
+
+        export { Class, Environment, IDataView, System.Serialization.__Serializable__ }
+
+        local FIELD_DATA        = 0
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the sql bind to the view
+        property "Sql"          { type = String }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+            return self.Sql
+        end
+
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+            Environment.Apply(manager, function(_ENV)
+                -----------------------------------------------------------
+                --                      constructor                      --
+                -----------------------------------------------------------
+                __Arguments__{ Table }
+                function __new(self, tbl)
+                    return { [FIELD_DATA] = tbl }, true
+                end
+            end)
+        end
+
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            Class.AddExtend(target, IDataView)
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ String }
+        function __ctor(_, sql)
+            self.Sql = sql
+
             __Serializable__()
         end
     end)
