@@ -13849,7 +13849,7 @@ do
 
                 return genOverload(tblclone(overload, {}), owner, name, hasself)
             else
-                if TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
+                if targettype == AttributeTargets.Function and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
 
                 buildUsage(vars, owner or target, name, targettype)
                 genArgumentValid(vars, false, owner, name, targettype ~= AttributeTargets.Function)
@@ -13940,7 +13940,6 @@ do
             -----------------------------------------------------------
             --                        storage                        --
             -----------------------------------------------------------
-            _ReturnsMap         = {},
             _RetValdMap         = {},
 
             -----------------------------------------------------------
@@ -14335,80 +14334,47 @@ do
         end
 
         local function genReturns(retsets, msghead)
-            local token         = 0
+            local count         = #retsets
 
-            local usages = { msghead .. " should return:" }
+            local usages        = { msghead .. " should return:" }
             for i = 1, #retsets do usages[i + 1] = retsets[i][FLD_VAR_RETMSG] end
-            usages = tblconcat(usages, "\n    ")
+            usages              = tblconcat(usages, "\n    ")
 
-            -- Build the validator generator
-            if not _ReturnsMap[token] then
-                local body      = _Cache()
-                local apis      = _Cache()
-
-                uinsert(apis, "select")
-
-                tinsert(body, "")                       -- remain for shareable variables
-                tinsert(body, "return function(retsets, count, usages)")
-
-                tinsert(body, [[return function(...)]])
-
-                tinsert(body, [[
-                    local argcnt = select("#", ...)
-                    while argcnt > 0 and select(argcnt, ...) == nil do
-                        argcnt   = argcnt - 1
+            return function(...)
+                local argcnt = select("#", ...)
+                while argcnt > 0 and select(argcnt, ...) == nil do
+                    argcnt   = argcnt - 1
+                end
+                if argcnt == 0 then
+                    for i = 1, count do
+                        local vars = retsets[i]
+                        if vars[FLD_VAR_MINARG] == 0 then
+                            if vars[FLD_VAR_IMMTBL] then
+                                return ...
+                            else
+                                return vars[FLD_VAR_VARVLD](nil, ...)
+                            end
+                        end
                     end
-                    if argcnt == 0 then
-                        for i = 1, count do
-                            local vars = retsets[i]
-                            if vars[]] .. FLD_VAR_MINARG .. [[] == 0 then
-                                if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                else
+                    for i = 1, count do
+                        local vars = retsets[i]
+                        if vars[FLD_VAR_MINARG] <= argcnt and argcnt <= vars[FLD_VAR_MAXARG] then
+                            local valid = vars[FLD_VAR_VARVLD]
+
+                            if valid(true, ...) == nil then
+                                if vars[FLD_VAR_IMMTBL] then
                                     return ...
                                 else
-                                    return vars[]] .. FLD_VAR_VARVLD .. [[](nil, ...)
-                                end
-                            end
-                        end
-                    else
-                        for i = 1, count do
-                            local vars = retsets[i]
-                            if vars[]] .. FLD_VAR_MINARG .. [[] <= argcnt and argcnt <= vars[]] .. FLD_VAR_MAXARG .. [[] then
-                                local valid = vars[]] .. FLD_VAR_VARVLD .. [[]
-
-                                if valid(true, ...) == nil then
-                                    if vars[]] .. FLD_VAR_IMMTBL .. [[] then
-                                        return ...
-                                    else
-                                        return valid(nil, ...)
-                                    end
+                                    return valid(nil, ...)
                                 end
                             end
                         end
                     end
-                    -- Raise the usages
-                ]])
-                uinsert(apis, "error")
-                tinsert(body, [[
-                   error(usages, 0)
-                ]])
-
-                tinsert(body, [[
-                        end
-                    end
-                ]])
-
-                if #apis > 0 then
-                    local declare   = tblconcat(apis, ", ")
-                    body[1]         = strformat("local %s = %s", declare, declare)
                 end
-
-                _ReturnsMap[token]  = loadsnippet(tblconcat(body, "\n"), "Returns_Process_" .. token, _ENV)()
-
-                _Cache(body)
-                _Cache(apis)
+                -- Raise the usages
+                error(usages, 0)
             end
-
-            return _ReturnsMap[token](retsets, #retsets, usages)
         end
 
         -----------------------------------------------------------
