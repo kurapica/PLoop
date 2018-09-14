@@ -46,7 +46,7 @@ PLoop(function(_ENV)
             System.Text.UTF8Encoding, IO.Resource.IResourceManager
         }
 
-        local SPECIAL_MAP       = {}
+        local SPECIAL_MAP       = { [System.Data.DBNull] = "" }
 
         -- Need be declared first
         class "HttpContext" {}

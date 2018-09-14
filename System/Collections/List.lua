@@ -602,6 +602,8 @@ PLoop(function(_ENV)
             rawget              = rawget,
             getobjectclass      = Class.GetObjectClass,
             isObjectType        = Class.IsObjectType,
+            tblconcat           = table.concat,
+            tonumber            = tonumber,
         }
 
         export { ListStreamWorker, IIndexedList }
@@ -738,6 +740,7 @@ PLoop(function(_ENV)
             end
         end
 
+        --- Get the last element of the list
         __Arguments__{ Callable, System.Any * 0 }
         function Last(self, chk, ...)
             local last
@@ -762,6 +765,19 @@ PLoop(function(_ENV)
             end
 
             return last
+        end
+
+        --- Get the concatenation of the List
+        __Arguments__{ String/nil }
+        function Join(self, sep)
+            return tblconcat(isObjectType(self, IIndexedList) and self or self:ToList(), sep)
+        end
+
+        --- Get the sum of the list
+        function Sum(self)
+            local sum = 0
+            for _, val in self:GetIterator() do sum = sum + (tonumber(val) or 0) end
+            return sum
         end
     end)
 end)

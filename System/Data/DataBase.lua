@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                                System.Data                                --
+--                           System.Data.DataBase                            --
 --                                                                           --
 --===========================================================================--
 
@@ -8,31 +8,12 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2018/06/02                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2018/09/07                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
-    __Sealed__() __Final__()
-    interface "System.Data" (function(_ENV)
-        export { safeset        = Toolset.safeset }
-
-        local NULL_VALUE        = {}
-
-        --- Add Empty value for ParseString
-        __Arguments__{ Any }
-        __Static__() function AddNullValue(value)
-            NULL_VALUE          = safeset(NULL_VALUE, value, true)
-        end
-
-        --- Parse the value so special null value can be changed to nil
-        __Static__() function ParseValue(val)
-            if val == nil or NULL_VALUE[val] then return nil end
-            return val
-        end
-    end)
-
-    namespace (Data)
+    namespace "System.Data"
 
     export {
         tinsert             = table.insert,
@@ -165,19 +146,6 @@ PLoop(function(_ENV)
     -----------------------------------------------------------
     --                         types                         --
     -----------------------------------------------------------
-    --- The DBNull
-    __Sealed__() struct "DBNull" { function(val) return val ~= DBNull end }
-    Data.AddNullValue(DBNull)
-
-    --- The current state of the dbconnection
-    __Sealed__() enum "ConnectionState" {
-        Closed                  = 0,
-        Open                    = 1,
-        Connecting              = 2,
-        Executing               = 3,
-        Fetching                = 4,
-    }
-
     __Sealed__() enum "TransactionIsolation" {
         REPEATABLE_READ         = 0,
         READ_UNCOMMITTED        = 1,

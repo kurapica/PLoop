@@ -118,6 +118,7 @@ You also can find useful features for large enterprise development like code org
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
+		* [`__Return__`](#__return__)
 		* [`__Sealed__`](#__sealed__)
 		* [`__Set__`](#__set__)
 		* [`__SingleVer__`](#__singlever__)
@@ -4295,6 +4296,80 @@ Set a require class to the target interface, see [the require class of the inter
 
 Attribute Targets:
 * System.AttributeTargets.Interface
+
+
+#### `__Return__`
+
+Bind return formats to the method or functions
+
+Attribute Targets:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
+
+Usage:
+
+If the validation is failed, since the call is finished, the system will try locate the source of the function:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Return__{ String }
+	function Test() return 1 end
+
+	-- Error: The Test@path_to_file:5 Return: System.String - the 1st argument must be string, got number
+	Test()
+end)
+```
+
+We also can bind several return formats to one function:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    __Return__{ String } { Boolean }
+    function Test() return 1 end
+
+    -- lua: The Test@path_to_file:5 should return:
+    --  Return: System.String
+    --  Return: System.Boolean
+    Test()
+end)
+```
+
+Like the `__Arguments__`, we can use optinal and varargs style like :
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    __Return__{ String/"hello", Number * 0 }
+    function Test() return nil, 1, 2, 3 end
+
+    -- hello    1   2   3
+    print(Test())
+end)
+```
+
+In most the case, we require the child classes that extend the interface should declare the methods with fixed type return values:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    interface "IA" (function(_ENV)
+        __Return__{ String, Number * 1 }:Require()
+        __Abstract__() function Test() end
+    end)
+
+    class "A" { IA, Test = function() return "hi" end }
+
+    -- lua: lua: The A.Test@path_to_file:9 Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
+    A():Test()
+end)
+```
+
 
 #### `__Sealed__`
 

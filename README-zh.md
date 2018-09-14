@@ -114,6 +114,7 @@
 		* [`__ObjFuncAttr__`](#__objfuncattr__)
 		* [`__ObjectSource__`](#__objectsource__)
 		* [`__Require__`](#__require__)
+		* [`__Return__`](#__return__)
 		* [`__Sealed__`](#__sealed__)
 		* [`__Set__`](#__set__)
 		* [`__SingleVer__`](#__singlever__)
@@ -4343,6 +4344,80 @@ end)
 
 特性目标类型:
 * System.AttributeTargets.Interface
+
+
+#### `__Return__`
+
+为函数或方法绑定返回值类型进行验证
+
+特性目标类型:
+* System.AttributeTargets.Function
+* System.AttributeTargets.Method
+
+用法：
+
+如果验证失败，因为调用已经完成，系统会尝试定位函数定义位置：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	__Return__{ String }
+	function Test() return 1 end
+
+	-- Error: The Test@path_to_file:5 Return: System.String - the 1st argument must be string, got number
+	Test()
+end)
+```
+
+我们可以依次绑定多种返回值格式:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    __Return__{ String } { Boolean }
+    function Test() return 1 end
+
+    -- lua: The Test@path_to_file:5 should return:
+    --  Return: System.String
+    --  Return: System.Boolean
+    Test()
+end)
+```
+
+类似`__Arguments__`, 我们也可以使用可选和可变参数定义形式:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    __Return__{ String/"hello", Number * 0 }
+    function Test() return nil, 1, 2, 3 end
+
+    -- hello    1   2   3
+    print(Test())
+end)
+```
+
+大多数情况下，我们只要用于需要限定子类申明方法的返回值类型的接口和超类：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+    interface "IA" (function(_ENV)
+        __Return__{ String, Number * 1 }:Require()
+        __Abstract__() function Test() end
+    end)
+
+    class "A" { IA, Test = function() return "hi" end }
+
+    -- lua: lua: The A.Test@path_to_file:9 Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
+    A():Test()
+end)
+```
+
 
 #### `__Sealed__`
 

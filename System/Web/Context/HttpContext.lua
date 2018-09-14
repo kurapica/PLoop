@@ -94,34 +94,10 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The http session
-        __Final__() property "Session"      { type = HttpSession,
-            default = function(self)
-                -- Build Session
-                local manager   = self.Application[ISessionIDManager] or ISessionIDManager.Default
-                local provider  = self.Application[ISessionStorageProvider] or ISessionStorageProvider.Default
+        __Final__() property "Session"      { set = false, field = "__Session", default = HttpSession.GetSession }
 
-                if not manager  then error("No SessionIDManager installed") end
-                if not provider then error("No SessionStorageProvider installed") end
-
-                local id        = manager:GetSessionID(self)
-                local item
-                local timeout   = Date.Now:AddMinutes(manager.TimeOutMinutes)
-                if id then
-                    item        = provider:GetItems(id)
-                    -- Timeout session, re-create it
-                    if not item then id = nil end
-                end
-                -- Create a new session ID
-                if not id then
-                    while not id or provider:Contains(id) do
-                        id      = manager:CreateSessionID(self)
-                    end
-                    item        = provider:CreateItems(id, timeout)
-                end
-
-                return HttpSession(id, item, timeout)
-            end
-        }
+        --- The raw session if existed
+        __Final__() property "RawSession"   { set = false, field = "__Session" }
 
         --- The current process phase
         __Final__() property "ProcessPhase" { type = IHttpContextHandler.ProcessPhase }

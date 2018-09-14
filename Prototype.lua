@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/08/30                                               --
--- Version      :   1.0.0-beta027                                            --
+-- Update Date  :   2018/09/15                                               --
+-- Version      :   1.0.0-beta028                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1582,6 +1582,7 @@ do
     -----------------------------------------------------------------------
     -- Registered Keywords
     local _ContextKeywords      = {}                -- Keywords for environment type
+    local _CtxRuntimeKeywords   = {}                -- Runtime keywords for environment type
     local _GlobalKeywords       = {}                -- Global keywords
     local _RuntimeKeywords      = {}                -- Runtime keywords
     local _GlobalNS             = {}                -- Global namespaces
@@ -1731,6 +1732,9 @@ do
                 tinsert(head, "_ContextKeywords")
                 tinsert(upval, _ContextKeywords)
 
+                tinsert(head, "_CtxRuntimeKeywords")
+                tinsert(upval, _CtxRuntimeKeywords)
+
                 tinsert(head, "_GlobalNS")
                 tinsert(upval, _GlobalNS)
 
@@ -1844,18 +1848,21 @@ do
                 -- Check keywords
                 uinsert(apis, "getmetatable")
                 tinsert(body, [[
-                    -- don't register the runtime key
                     value = _RuntimeKeywords[name]
                     if value then return value end
 
                     value = _GlobalKeywords[name]
-                    if not value then
-                        local keys = _ContextKeywords[getmetatable(env)]
-                        value = keys and keys[name]
-                    end
-                    if value then
-                        return regKeyVisitor(env, value)
-                    end
+                    if value then return regKeyVisitor(env, value) end
+
+                    local envtype = getmetatable(env)
+
+                    local keys = _CtxRuntimeKeywords[envtype]
+                    value = keys and keys[name]
+                    if value then return value end
+
+                    keys = _ContextKeywords[envtype]
+                    value = keys and keys[name]
+                    if value then return regKeyVisitor(env, value) end
                 ]])
 
                 tinsert(body, [[
@@ -1985,6 +1992,34 @@ do
                 end
                 _ContextKeywords[ctxType] = _ContextKeywords[ctxType] or {}
                 local keywords            = _ContextKeywords[ctxType]
+
+                if type(key) == "table" and getmetatable(key) == nil then
+                    for k, v in pairs, key do
+                        if type(k) ~= "string" then k = tostring(v) end
+                        if not keywords[k] and v then keywords[k] = v end
+                    end
+                else
+                    if type(key) ~= "string" then key, keyword= tostring(key), key end
+                    if key and not keywords[key] and keyword then keywords[key] = keyword end
+                end
+            end;
+
+            --- Register a runtime context keyword, like this used for contructors
+            -- @static
+            -- @method  RegisterRuntimeContextKeyword
+            -- @owner   environment
+            -- @format  (ctxType, [key, ]keyword)
+            -- @param   ctxType                     the context environment's type
+            -- @param   key:string                  the keyword's name, it'd be applied if the keyword is a function
+            -- @param   keyword                     the keyword entity
+            -- @format  (ctxType, keywords)
+            -- @param   keywords:table              a collection of the keywords like : { import = import , class, struct }
+            ["RegisterRuntimeContextKeyword"] = function(ctxType, key, keyword)
+                if not ctxType or (type(ctxType) ~= "table" and type(ctxType) ~= "userdata") then
+                    error("Usage: environment.RegisterRuntimeContextKeyword(ctxType, key[, keyword]) - the ctxType isn't valid", 2)
+                end
+                _CtxRuntimeKeywords[ctxType]= _CtxRuntimeKeywords[ctxType] or {}
+                local keywords              = _CtxRuntimeKeywords[ctxType]
 
                 if type(key) == "table" and getmetatable(key) == nil then
                     for k, v in pairs, key do
@@ -11764,6 +11799,43 @@ do
         end
     end
 
+    local serializeData         = function (data)
+        local dtype             = type(data)
+
+        if dtype == "string" then
+            return strformat("%q", data)
+        elseif dtype == "number" or dtype == "boolean" then
+            return tostring(data)
+        else
+            return "(inner)"
+        end
+    end
+
+    serialize                   = function (data, ns)
+        if ns then
+            if enum.Validate(ns) then
+                if enum.IsFlagsEnum(ns) then
+                    local cache = {}
+                    for name in ns(data) do
+                        tinsert(cache, name)
+                    end
+                    return tblconcat(cache, " + ")
+                else
+                    return enum.Parse(ns, data)
+                end
+            elseif struct.Validate(ns) then
+                if struct.GetStructCategory(ns) == StructCategory.CUSTOM then
+                    return serializeData(data)
+                else
+                    return "(inner)"
+                end
+            else
+                return "(inner)"
+            end
+        end
+        return serializeData(data)
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -12440,7 +12512,7 @@ do
 
     --- the struct category
     __Sealed__()
-    enum "System.StructCategory" {
+    StructCategory = enum "System.StructCategory" {
         "MEMBER",
         "ARRAY",
         "CUSTOM"
@@ -12937,6 +13009,7 @@ do
             -----------------------------------------------------------
             --                        helpers                        --
             -----------------------------------------------------------
+            serialize           = serialize,
             parsestack          = parsestack,
             getlocal            = getlocal,
             tblclone            = tblclone,
@@ -12965,6 +13038,8 @@ do
             stackmod            = (LUA_VERSION == 5.1 and not _G.jit) and 1 or 0,
             chkandret           = function (stack, ok, msg, ...) if ok then return msg, ... end error(tostring(msg), stackmod + stack) end,
             pcall               = pcall,
+            getfenv             = getfenv,
+            setfenv             = setfenv,
         }
 
         export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
@@ -13016,43 +13091,6 @@ do
             end
         end or function()
             return overloadstack[#overloadstack]
-        end
-
-        local function serializeData(data)
-            local dtype         = type(data)
-
-            if dtype == "string" then
-                return strformat("%q", data)
-            elseif dtype == "number" or dtype == "boolean" then
-                return tostring(data)
-            else
-                return "(inner)"
-            end
-        end
-
-        local function serialize(data, ns)
-            if ns then
-                if Enum.Validate(ns) then
-                    if Enum.IsFlagsEnum(ns) then
-                        local cache = {}
-                        for name in ns(data) do
-                            tinsert(cache, name)
-                        end
-                        return tblconcat(cache, " + ")
-                    else
-                        return Enum.Parse(ns, data)
-                    end
-                elseif Struct.Validate(ns) then
-                    if Struct.GetStructCategory(ns) == StructCategory.CUSTOM then
-                        return serializeData(data)
-                    else
-                        return "(inner)"
-                    end
-                else
-                    return "(inner)"
-                end
-            end
-            return serializeData(data)
         end
 
         local function buildUsage(vars, owner, name, targettype)
@@ -13824,7 +13862,7 @@ do
                     Struct.SetAsTemplate(target, self.Template, stack)
                 end
 
-                return vars[FLD_VAR_VARVLD]
+                return vars[FLD_VAR_VARVLD] or nil
             end
         end
 
@@ -13881,7 +13919,7 @@ do
         -----------------------------------------------------------
         --                     keyword: this                     --
         -----------------------------------------------------------
-        Environment.RegisterContextKeyword(Class.GetDefinitionContext(), {
+        Environment.RegisterRuntimeContextKeyword(Class.GetDefinitionContext(), {
             this = function(...)
                 local ok, ret   = pcall(getCurrentOverload, 4)
                 if ok and ret then
@@ -13891,6 +13929,633 @@ do
                 end
             end
         })
+    end)
+
+    --- The attribtue used to validate the return values
+    __Sealed__() __Final__()
+    class (_PLoopEnv, "System.__Return__") (function(_ENV)
+        extend "IInitAttribute"
+
+        export {
+            -----------------------------------------------------------
+            --                        storage                        --
+            -----------------------------------------------------------
+            _ReturnsMap         = {},
+            _RetValdMap         = {},
+
+            -----------------------------------------------------------
+            --                        constant                       --
+            -----------------------------------------------------------
+            TYPE_VALD_DISD      = Platform.TYPE_VALIDATION_DISABLED,
+
+            FLD_VAR_MINARG      = -1,
+            FLD_VAR_MAXARG      = -2,
+            FLD_VAR_ISLIST      = -3,
+            FLD_VAR_IMMTBL      = -4,
+            FLD_VAR_RETMSG      = -5,
+            FLD_VAR_VARVLD      = -6,
+
+            FLG_VAR_NOMULT      = newflags(true),    -- no multi format
+            FLG_VAR_IMMTBL      = newflags(),        -- all immutable
+            FLG_VAR_ISLIST      = newflags(),        -- the last variable is list
+            FLG_VAR_IMMLST      = newflags(),        -- the list variable is immutable
+            FLG_VAR_LSTNIL      = newflags(),        -- the list variable is optional
+            FLG_VAR_LSTVLD      = newflags(),        -- the list variable has type
+            FLG_VAR_LENGTH      = newflags(),        -- the multiply factor of length
+
+            -----------------------------------------------------------
+            --                        helpers                        --
+            -----------------------------------------------------------
+            serialize           = serialize,
+            parsestack          = parsestack,
+            getcallline         = getcallline,
+            tblclone            = tblclone,
+            validate            = Struct.ValidateValue,
+            geterrmsg           = Struct.GetErrorMessage,
+            savestorage         = savestorage,
+            ipairs              = ipairs,
+            tinsert             = tinsert,
+            tremove             = tremove,
+            uinsert             = uinsert,
+            tblconcat           = tblconcat,
+            strformat           = strformat,
+            strsub              = strsub,
+            strgsub             = strgsub,
+            type                = type,
+            getmetatable        = getmetatable,
+            tostring            = tostring,
+            loadsnippet         = loadsnippet,
+            _Cache              = _Cache,
+            turnonflags         = turnonflags,
+            validateflags       = validateflags,
+            parseindex          = parseindex,
+            unpack              = unpack,
+            error               = error,
+            select              = select,
+        }
+
+        export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory }
+
+        local function buildReturn(vars)
+            local retmsg        = {}
+
+            tinsert(retmsg, "Return: ")
+
+            if vars[1] then
+                for i, var in ipairs, vars, 0 do
+                    if i > 1 then tinsert(retmsg, ", ") end
+
+                    if var.optional or (var.varargs and var.mincount == 0) then tinsert(retmsg, "[") end
+
+                    if var.name or var.varargs then
+                        tinsert(retmsg, var.varargs and ("..." .. (var.mincount > 1 and (" [*" .. var.mincount .. "]") or "")) or var.name)
+                        if var.type then
+                            tinsert(retmsg, " as ")
+                        end
+                    end
+
+                    if var.type then
+                        if Struct.Validate(var.type) and Struct.GetStructCategory(var.type) == StructCategory.ARRAY then
+                            tinsert(retmsg, "{" .. tostring(Struct.GetArrayElement(var.type)) .. ", ...}")
+                        else
+                            tinsert(retmsg, tostring(var.type))
+                        end
+                    end
+
+                    if var.default ~= nil then
+                        tinsert(retmsg, " = ")
+                        tinsert(retmsg, serialize(var.default, var.type))
+                    end
+
+                    if var.optional or (var.varargs and var.mincount == 0) then tinsert(retmsg, "]") end
+                end
+            else
+                tinsert(retmsg, "nil")
+            end
+
+            vars[FLD_VAR_RETMSG]= tblconcat(retmsg, "")
+        end
+
+        local function genReturnValid(vars, msghead)
+            local len           = #vars
+            if len              == 0 then return end
+
+            local token         = len * FLG_VAR_LENGTH
+            local islist        = false
+
+            if msghead then
+                token           = turnonflags(FLG_VAR_NOMULT, token)
+            end
+
+            if vars[FLD_VAR_IMMTBL] then
+                token           = turnonflags(FLG_VAR_IMMTBL, token)
+            end
+
+            if vars[FLD_VAR_ISLIST] then
+                islist          = true
+                token           = turnonflags(FLG_VAR_ISLIST, token)
+                if vars[len].immutable then
+                    token       = turnonflags(FLG_VAR_IMMLST, token)
+                end
+                if vars[len].validate then
+                    token       = turnonflags(FLG_VAR_LSTVLD, token)
+                end
+                if (vars[len].mincount or 0) == 0 then
+                    token       = turnonflags(FLG_VAR_LSTNIL, token)
+                end
+            end
+
+            -- Build the validator generator
+            if not _RetValdMap[token] then
+                local head      = _Cache()
+                local body      = _Cache()
+                local apis      = _Cache()
+                local args      = _Cache()
+                local tmps      = _Cache()
+
+                uinsert(apis, "type")
+                uinsert(apis, "strgsub")
+                uinsert(apis, "tostring")
+
+                tinsert(body, "")                       -- remain for shareable variables
+
+                for i = 1, len do args[i] = "v" .. i end
+
+                if msghead then
+                    tinsert(body, strformat("return function(usage, %s)", tblconcat(args, ", ")))
+                else
+                    tinsert(body, strformat("return function(%s)", tblconcat(args, ", ")))
+                end
+
+                for i = 1, len do args[i] = "a" .. i end
+                if islist       then args[len] = nil end
+
+                args            = tblconcat(args, ", ") or ""
+
+                local alen      = #args
+
+                if msghead then uinsert(apis, "error") else tinsert(tmps, "onlyvalid") end
+                if alen > 0 then tinsert(tmps, args) end
+                if islist then tinsert(tmps, "...") end
+
+                tinsert(body, strformat([[return function(%s)]], tblconcat(tmps, ", ")))
+
+                tinsert(body, [[local ret, msg]])
+
+                for i = 1, islist and (len - 1) or len do
+                    if msghead then
+                        tinsert(body, (([[
+                            if _ai_ == nil then
+                                if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", 0) end
+                                _ai_ = _vi_.default
+                            elseif _vi_.validate then
+                                ret, msg = _vi_.validate(_vi_.type, _ai_)
+                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 0) end
+                                _ai_ = ret
+                            end
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
+                    else
+                        tinsert(body, (([[
+                            if _ai_ == nil then
+                                if not _vi_.optional then return onlyvalid end
+                                _ai_ = _vi_.default
+                            elseif _vi_.validate then
+                                ret, msg = _vi_.validate(_vi_.type, _ai_, onlyvalid)
+                                if msg then return onlyvalid end
+                                _ai_ = ret
+                            end
+                        ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
+                    end
+                end
+
+                if not islist then
+                    if not msghead then
+                        tinsert(body, [[if onlyvalid then return end]])
+                    end
+                    tinsert(body, strformat([[return %s]], args))
+                else
+                    if not msghead then
+                        if validateflags(FLG_VAR_IMMLST, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
+                                uinsert(apis, "select")
+                                uinsert(apis, "parseindex")
+                                tinsert(body, [[
+                                        local vlen = select("#", ...)
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                        local minct = _vi_.mincount or 0
+                                        if vlen < minct then return onlyvalid end
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
+                                        local vtype = _vi_.type
+                                        local valid = _vi_.validate
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                tinsert(body, [[
+                                        for i = 1, vlen do
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                                if i <= minct then return onlyvalid end
+                                    ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
+                                                break
+                                ]])
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
+                                            else
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then return onlyvalid end
+                                   ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
+                                            end
+                                        end
+                                ]])
+                            end
+
+                            tinsert(body, [[if onlyvalid then return end]])
+                            if alen == 0 then
+                                tinsert(body, [[return ...]])
+                            else
+                                tinsert(body, strformat([[return %s, ...]], args))
+                            end
+                        else
+                            uinsert(apis, "select")
+                            uinsert(apis, "parseindex")
+                            tinsert(body, (([[
+                                local vlen  = select("#", ...)
+                                local minct = _vi_.mincount or 0
+                                if vlen < minct then return onlyvalid end
+                                if vlen > 0 then
+                                    local vtype = _vi_.type
+                                    local valid = _vi_.validate
+
+                                    if onlyvalid then
+                                        for i = 1, vlen do
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                                if i <= minct then return onlyvalid end
+                                                break
+                                            else
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then return onlyvalid end
+                                            end
+                                        end
+                                        return
+                                    else
+                                        local vlst  = { ... }
+                                        for i = 1, vlen do
+                                            local ival = vlst[i]
+                                            if ival == nil then
+                                                break
+                                            else
+                                                vlst[i] = valid(vtype, ival)
+                                            end
+                                        end
+                                        ]] .. alen == 0 and [[return unpack(vlst)]] or [[return _arg_, unpack(vlst)]] .. [[
+                                    end
+                                else
+                                    if onlyvalid then return end
+                                    return _arg_
+                                end
+                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_i_", tostring(len - 1))))
+                        end
+                    else
+                        if validateflags(FLG_VAR_IMMLST, token) then
+                            if not validateflags(FLG_VAR_LSTNIL, token) or validateflags(FLG_VAR_LSTVLD, token) then
+                                uinsert(apis, "select")
+                                uinsert(apis, "parseindex")
+                                tinsert(body, [[
+                                    local vlen = select("#", ...)
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                        local minct = _vi_.mincount or 0
+                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 0) end
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
+                                        local vtype = _vi_.type
+                                        local valid = _vi_.validate
+                                    ]]):gsub("_vi_", "v" .. len)))
+                                end
+                                tinsert(body, [[
+                                        for i = 1, vlen do
+                                            local ival = select(i, ...)
+                                            if ival == nil then
+                                ]])
+                                if not validateflags(FLG_VAR_LSTNIL, token) then
+                                    tinsert(body, (([[
+                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 0) end
+                                    ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
+                                                break
+                                ]])
+                                if validateflags(FLG_VAR_LSTVLD, token) then
+                                    tinsert(body, (([[
+                                            else
+                                                ret, msg= valid(vtype, ival, onlyvalid)
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 0) end
+                                   ]]):gsub("_i_", tostring(len - 1))))
+                                end
+                                tinsert(body, [[
+                                            end
+                                        end
+                                ]])
+                            end
+
+                            if alen == 0 then
+                                tinsert(body, [[return ...]])
+                            else
+                                tinsert(body, strformat([[return %s, ...]], args))
+                            end
+                        else
+                            uinsert(apis, "select")
+                            uinsert(apis, "parseindex")
+                            tinsert(body, (([[
+                                local vlen  = select("#", ...)
+                                local minct = _vi_.mincount or 0
+                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 0) end
+                                if vlen > 0 then
+                                    local vtype = _vi_.type
+                                    local valid = _vi_.validate
+                                    local vlst  = { ... }
+                                    for i = 1, vlen do
+                                        local ival = vlst[i]
+                                        if ival == nil then
+                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 0) end
+                                            break
+                                        else
+                                            ret, msg= valid(vtype, ival)
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 0) end
+                                            vlst[i] = ret
+                                        end
+                                    end
+                                    ]] .. alen == 0 and [[return unpack(vlst)]] or [[return _arg_, unpack(vlst)]] .. [[
+                                else
+                                    return _arg_
+                                end
+                            ]]):gsub("_arg_", args):gsub("_vi_", "v" .. len):gsub("_ai_", "a" .. len):gsub("_i_", tostring(len - 1))))
+                        end
+                    end
+                end
+
+                tinsert(body, [[
+                        end
+                    end
+                ]])
+
+                if #apis > 0 then
+                    local declare   = tblconcat(apis, ", ")
+                    body[1]         = strformat("local %s = %s", declare, declare)
+                end
+
+                _RetValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Return_Validate_" .. token, _ENV)()
+
+                _Cache(head)
+                _Cache(body)
+                _Cache(apis)
+                _Cache(tmps)
+            end
+
+            if msghead then
+                vars[FLD_VAR_VARVLD] = _RetValdMap[token](msghead .. " " .. vars[FLD_VAR_RETMSG], unpack(vars, 1))
+            else
+                vars[FLD_VAR_VARVLD] = _RetValdMap[token](unpack(vars, 1))
+            end
+        end
+
+        local function genReturns(retsets, msghead)
+            local token         = 0
+
+            local usages = { msghead .. " should return:" }
+            for i = 1, #retsets do usages[i + 1] = retsets[i][FLD_VAR_RETMSG] end
+            usages = tblconcat(usages, "\n    ")
+
+            -- Build the validator generator
+            if not _ReturnsMap[token] then
+                local body      = _Cache()
+                local apis      = _Cache()
+
+                uinsert(apis, "select")
+
+                tinsert(body, "")                       -- remain for shareable variables
+                tinsert(body, "return function(retsets, count, usages)")
+
+                tinsert(body, [[return function(...)]])
+
+                tinsert(body, [[
+                    local argcnt = select("#", ...)
+                    while argcnt > 0 and select(argcnt, ...) == nil do
+                        argcnt   = argcnt - 1
+                    end
+                    if argcnt == 0 then
+                        for i = 1, count do
+                            local vars = retsets[i]
+                            if vars[]] .. FLD_VAR_MINARG .. [[] == 0 then
+                                if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                                    return ...
+                                else
+                                    return vars[]] .. FLD_VAR_VARVLD .. [[](nil, ...)
+                                end
+                            end
+                        end
+                    else
+                        for i = 1, count do
+                            local vars = retsets[i]
+                            if vars[]] .. FLD_VAR_MINARG .. [[] <= argcnt and argcnt <= vars[]] .. FLD_VAR_MAXARG .. [[] then
+                                local valid = vars[]] .. FLD_VAR_VARVLD .. [[]
+
+                                if valid(true, ...) == nil then
+                                    if vars[]] .. FLD_VAR_IMMTBL .. [[] then
+                                        return ...
+                                    else
+                                        return valid(nil, ...)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    -- Raise the usages
+                ]])
+                uinsert(apis, "error")
+                tinsert(body, [[
+                   error(usages, 0)
+                ]])
+
+                tinsert(body, [[
+                        end
+                    end
+                ]])
+
+                if #apis > 0 then
+                    local declare   = tblconcat(apis, ", ")
+                    body[1]         = strformat("local %s = %s", declare, declare)
+                end
+
+                _ReturnsMap[token]  = loadsnippet(tblconcat(body, "\n"), "Returns_Process_" .. token, _ENV)()
+
+                _Cache(body)
+                _Cache(apis)
+            end
+
+            return _ReturnsMap[token](retsets, #retsets, usages)
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            stack               = parsestack(stack) + 1
+
+            local retsets       = {}
+            local isAllImmutable= true
+            local defplace      = getcallline(stack) or ""
+            local nomulti       = #self == 1
+            local msghead
+
+            if targettype == AttributeTargets.Method then
+                msghead         = strformat("The %s.%s", tostring(owner), name)
+            elseif targettype == AttributeTargets.Function then
+                msghead         = strformat("The %s", name)
+            end
+
+            for i, varset in ipairs, self, 0 do
+                local len           = #varset
+
+                local vars          = {
+                    [FLD_VAR_MINARG]= len,
+                    [FLD_VAR_MAXARG]= len,
+                    [FLD_VAR_ISLIST]= false,
+                    [FLD_VAR_IMMTBL]= true,
+                    [FLD_VAR_RETMSG]= "",
+                    [FLD_VAR_VARVLD]= false,
+                }
+
+                retsets[i]             = vars
+
+                local minargs
+                local immutable     = true
+
+                for i = 1, len do
+                    local var       = varset[i]
+                    vars[i]         = var
+
+                    if var.optional then
+                        minargs     = minargs or i - 1
+                    end
+
+                    if var.varargs then
+                        vars[FLD_VAR_ISLIST]    = true
+                        vars[FLD_VAR_MAXARG]    = 255
+
+                        if not var.mincount or var.mincount == 0 then
+                            minargs = minargs or i - 1
+                        else
+                            minargs = i + var.mincount - 1
+                        end
+                    end
+
+                    if not var.immutable then
+                        immutable   = false
+                    end
+                end
+
+                vars[FLD_VAR_MINARG]= minargs or vars[FLD_VAR_MINARG]
+                vars[FLD_VAR_IMMTBL]= immutable
+
+                if not immutable then isAllImmutable = false end
+            end
+
+            if TYPE_VALD_DISD and isAllImmutable then return end
+
+            for _, vars in ipairs, retsets, 0 do
+                buildReturn(vars)
+                if nomulti then
+                    genReturnValid(vars, msghead .. defplace)
+                else
+                    genReturnValid(vars)
+                end
+            end
+
+            local validrets     = not nomulti and genReturns(retsets, msghead .. defplace) or retsets[1][FLD_VAR_VARVLD]
+            if validrets then return function(...) return validrets(definition(...)) end end
+        end
+
+        --- Mark the attribute as Inheritable
+        function Require(self)
+            self.Inheritable = true
+            return self
+        end
+
+        -----------------------------------------------------------
+        --                       property                       --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function  }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lowest }
+
+        --- the attribute's sub level of priority
+        property "SubLevel"         { type = Number,            default = -9999 }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        function __new(_, vars, ...)
+            if vars ~= nil then
+                if select("#", ...) > 0 then
+                    vars = { vars, ... }
+                elseif getmetatable(vars) ~= nil then
+                    vars = { vars }
+                end
+
+                local ret, msg  = validate(Variables, vars)
+                if msg then throw("Usage: __Return__{ ... } - " .. geterrmsg(msg, "")) end
+            else
+                vars = {}
+            end
+
+            return { vars }, true
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __call(self, vars, ...)
+            if vars ~= nil then
+                if select("#", ...) > 0 then
+                    vars = { vars, ... }
+                elseif getmetatable(vars) ~= nil then
+                    vars = { vars }
+                end
+
+                local ret, msg  = validate(Variables, vars)
+                if msg then throw("Usage: __Return__{ ... }{...} - " .. geterrmsg(msg, "")) end
+            else
+                vars = {}
+            end
+
+            self[#self + 1] = vars
+        end
     end)
 
     --- Represents containers of several functions as event handlers

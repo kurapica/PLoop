@@ -1,24 +1,11 @@
-PLoop_Web
+PLoop - System.Web
 ====
 
-**PLoop_Web** is a web framework based on [PLoop][]. It is designed to be an abstract layer for web development, it'd provide interfaces and implements that not depends on the web server.
+**System.Web** is a web framework designed to be an abstract layer for web development, it'd provide interfaces and features that not depends on the web server.
 
 The System only support UTF-8 for now.
 
-
-Install & Test
-====
-
-Download the module and [PLoop][], extract them to your **LUA_PATH** (you can use require "PLoop" to see which path the lua is looking for).
-
-Run the `Example/Main.lua`, it'll print the response from a lua server page and a controller. You'll see the result if all works fine. This is only a test since the **PLoop_Web** is not a real web server. You can create test files in the `Example/root/`, you'll find code in `Example/Main.lua` like :
-
-	main( "/index.lsp", FileWriter("output.html") )  -- Generate response to /output.html
-	main( "/index.lsp", DirectWriter() )             -- Direct print out the response
-
-You can change the url to see the result (url args don't supported, you can test it with [PLoop_Nginx][]).
-
-To run it on a server, you should check the [PLoop_Nginx][].
+This is an abstract framework so can't be used in any web server directly, You can find runnable examples in [NgxLua][], it's an implementation based on the [Openresty]().
 
 
 Resource files
@@ -34,11 +21,11 @@ Several resource loaders (extend the **System.IO.IResourceLoader**) are register
 
 The [PLoop][] provide the **System.IO.Resource.LuaLoader** for ".lua" files, used to get features defined in the lua file with the same name of the file.
 
-The [PLoop_Web][] provide several resource loaders to generate classes to answer the http request like **System.Web.LuaServerPageLoader** for ".lsp" files.
+The [PLoop.System.Web][] provide several resource loaders to generate classes to answer the http request like **System.Web.LuaServerPageLoader** for ".lsp" files.
 
 In the web framework, the resource files are used to create classes to generate response. So, a new interface **System.Web.IOutputLoader** is defined to extend the **System.IO.IResourceLoader**, it combined a render engine system to easy the creation of custom resource loaders, so you can create your own file types and custom render rules.
 
-Here are several resource types provided by the [PLoop_Web][] (The .lsp, .master, .helper, .embed all use **System.Web.PageRenderEngine** render engine, so they share the same render rules) :
+Here are several resource types provided by the [PLoop.System.Web][] (The .lsp, .master, .helper, .embed all use **System.Web.PageRenderEngine** render engine, so they share the same render rules) :
 
 
 Lua Server Page (.lsp)
@@ -51,12 +38,12 @@ To create a simple html page like:
 	<html xmlns="http://www.w3.org/1999/xhtml">
 		<head>
 			<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-			<title>PLoop_Web Test Page</title>
+			<title>PLoop.System.Web Test Page</title>
 			<script type="text/javascript" src="/js/jquery-2.1.4.min.js"></script>
 		</head>
 		<body>
 			<p>
-				This is the first PLoop_Web test page.
+				This is the first PLoop.System.Web test page.
 			</p>
 		</body>
 	</html>
@@ -91,12 +78,12 @@ Then the *index.lsp* :
 	@{ master = "mymaster.master" }
 
 	@title{
-		PLoop_Web Test Page
+		PLoop.System.Web Test Page
 	}
 
 	@body{
 		<p>
-			This is the first PLoop_Web test page.
+			This is the first PLoop.System.Web test page.
 		</p>
 	}
 
@@ -116,12 +103,12 @@ So the output result of *index.lsp* would be :
 	<html xmlns="http://www.w3.org/1999/xhtml">
 		<head>
 			<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-			<title>PLoop_Web Test Page</title>
+			<title>PLoop.System.Web Test Page</title>
 			<!-- javascript placeholder -->
 		</head>
 		<body>
 			<p>
-				This is the first PLoop_Web test page.
+				This is the first PLoop.System.Web test page.
 			</p>
 		</body>
 	</html>:
@@ -555,9 +542,9 @@ Configuration
 
 The configuration of the sytem can be found in `Example/config.lua`, in the config file, we'll load lua modules, set log handlers, init the session management, create routers and some context handlers.
 
-* `require "PLoop_Web"` - Load the web framework from the [PLoop][] and [PLoop_Web][] modules.
+* `require "PLoop.System.Web"` - Load the web framework from the [PLoop][] and [PLoop.System.Web][] modules.
 
-	In [PLoop_Nginx][]'s config file, the first line is `require "PLoop_NgxLua"`, it is used to load **PLoop_NgxLua** module which would load the [PLoop][] and [PLoop_Web][]. So, this is where to load lua modules.
+	In [NgxLua][]'s config file, the first line is `require "PLoop_NgxLua"`, it is used to load **PLoop_NgxLua** module which would load the [PLoop][] and [PLoop.System.Web][]. So, this is where to load lua modules.
 
 * `namespace "MyWeb"` - Define a namespace for the _G, any features that loaded from the resource files like *index.lsp* would be defined under the namespace *MyWeb*.
 
@@ -739,7 +726,7 @@ The configuration of the sytem can be found in `Example/config.lua`, in the conf
 MVC
 ====
 
-For now, the [PLoop_Web][] provide the controller and view as :
+For now, the [PLoop.System.Web][] provide the controller and view as :
 
 * View - Use ".view" as suffix, it's use the **System.Web.PageRenderEngine**, so the render rules are the same like lua server pages.
 
@@ -885,7 +872,7 @@ A request object used to get request's information, a response object used to re
 			class "HomeController" { System.Web.Controller, System.Web.ISessionRequired }
 
 * Method :
-	* **ProcessRequest**() - Process the request, normally this is be called by the server to start the process. As an example, in [PLoop_Nginx][]'s `nginx.conf`, the directive is `content_by_lua ' NgxLua.HttpContext():ProcessRequest() ';`, the **NgxLua.HttpContext** is a child context class of the **System.Web.HttpContext**, so the code create a new http context, and call it's *ProcessRequest* method to create response.
+	* **ProcessRequest**() - Process the request, normally this is be called by the server to start the process. As an example, in [NgxLua][]'s `nginx.conf`, the directive is `content_by_lua ' NgxLua.HttpContext():ProcessRequest() ';`, the **NgxLua.HttpContext** is a child context class of the **System.Web.HttpContext**, so the code create a new http context, and call it's *ProcessRequest* method to create response.
 
 
 **System.Web.HttpRequest** - The root class of http request :
@@ -946,7 +933,7 @@ A request object used to get request's information, a response object used to re
 
 	* **Handled** (**System.Boolean**) - Whether the request is handled.
 
-Those properies must be implemented by the class's child classes for specific web servers(For [PLoop_Nginx][], a **NgxLua.HttpRequest** is created based on [ngx_lua][]'s api).
+Those properies must be implemented by the class's child classes for specific web servers(For [NgxLua][], a **NgxLua.HttpRequest** is created based on [Openresty][]'s api).
 
 **System.Web.HttpResponse** - The root class of http response :
 
@@ -1002,7 +989,7 @@ Those properies must be implemented by the class's child classes for specific we
 * Method :
 	* **Redirect**(url[, statuscode=**System.Web.HTTP_STATUS.MOVED**]) - Redirects the client to a new URL.
 
-The **ContentType**, **RedirectLocation**, **Write** and **StatusCode** properties must be implemented by child classes. The Write would be a function or a **System.IO.TextWriter** object(with __call setting), in the example, we used the **System.IO.FileWriter** and a **DirectWriter**. In [PLoop_Nginx][], it's a function based on the `ngx.print`.
+The **ContentType**, **RedirectLocation**, **Write** and **StatusCode** properties must be implemented by child classes. The Write would be a function or a **System.IO.TextWriter** object(with __call setting), in the example, we used the **System.IO.FileWriter** and a **DirectWriter**. In [NgxLua][], it's a function based on the `ngx.print`.
 
 
 Relative Path & Absolute Path
@@ -1109,7 +1096,7 @@ When a request `Get /index.lsp` is send to the sever, the sever create a http co
 			self.Data = DB.LoadFromID( id )
 		end
 
-3. HeadGenerated : In the phase, we could convert the cookie datas to response head, check the changes after **GenerateHead** phase and etc. In the [PLoop_Nginx][], the save cookie handler could be :
+3. HeadGenerated : In the phase, we could convert the cookie datas to response head, check the changes after **GenerateHead** phase and etc. In the [NgxLua][], the save cookie handler could be :
 
 		-- Write cookie to response
 		-- Using Auto anonymous class of interface to create the handler
@@ -1781,7 +1768,6 @@ Don't forget to add a `Route(".*.wf", "r=>r.Url")` in the config.lua, otherwise 
 
 
 [nginx]: https://www.nginx.com/ "Nginx"
-[ngx_lua]: https://github.com/openresty/lua-nginx-module/ "Openresty"
-[PLoop]: https://github.com/kurapica/PLoop/ "Pure Lua Object-Oriented Program"
-[PLoop_Web]: https://github.com/kurapica/PLoop_Web/ "PLoop Web Framework"
-[PLoop_Nginx]: https://github.com/kurapica/PLoop_Nginx/ "PLoop For Nginx Server"
+[Openresty]: https://github.com/openresty/lua-nginx-module/ "Openresty"
+[PLoop]: https://github.com/kurapica/PLoop/ "Prototype Lua Object-Oriented Program"
+[NgxLua]: https://github.com/kurapica/NgxLua/ "An implementation for the Openresty"
