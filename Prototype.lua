@@ -14397,6 +14397,8 @@ do
             local nomulti       = #self == 1
             local msghead
 
+            if defplace ~= "" then defplace = defplace:sub(2, -1) .. ": " end
+
             if targettype == AttributeTargets.Method then
                 msghead         = strformat("The %s.%s", tostring(owner), name)
             elseif targettype == AttributeTargets.Function then
@@ -14455,13 +14457,13 @@ do
             for _, vars in ipairs, retsets, 0 do
                 buildReturn(vars)
                 if nomulti then
-                    genReturnValid(vars, msghead .. defplace)
+                    genReturnValid(vars, defplace .. msghead)
                 else
                     genReturnValid(vars)
                 end
             end
 
-            local validrets     = not nomulti and genReturns(retsets, msghead .. defplace) or retsets[1][FLD_VAR_VARVLD]
+            local validrets     = not nomulti and genReturns(retsets, defplace .. msghead) or retsets[1][FLD_VAR_VARVLD]
             if validrets then return function(...) return validrets(definition(...)) end end
         end
 
