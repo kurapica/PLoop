@@ -4317,7 +4317,7 @@ PLoop(function(_ENV)
 	__Return__{ String }
 	function Test() return 1 end
 
-	-- Error: The Test@path_to_file:5 Return: System.String - the 1st argument must be string, got number
+	-- Error: path_to_file:5: The Test Return: System.String - the 1st argument must be string, got number
 	Test()
 end)
 ```
@@ -4331,7 +4331,7 @@ PLoop(function(_ENV)
     __Return__{ String } { Boolean }
     function Test() return 1 end
 
-    -- lua: The Test@path_to_file:5 should return:
+    -- lua: path_to_file:5: The Test should return:
     --  Return: System.String
     --  Return: System.Boolean
     Test()
@@ -4365,7 +4365,7 @@ PLoop(function(_ENV)
 
     class "A" { IA, Test = function() return "hi" end }
 
-    -- lua: lua: The A.Test@path_to_file:9 Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
+    -- Error: path_to_file:9: The A.Test Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
     A():Test()
 end)
 ```
