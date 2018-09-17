@@ -4,9 +4,9 @@
 
 **PLoop** is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also include the luajit. It's also designed to be used on multi-os thread platforms like the **OpenResty**.
 
-It also provide common useful classes like thread pool, collection, serialization and etc.
+It provide common useful classes like thread pool, collection, serialization and etc.
 
-You also can find useful features for large enterprise development like code organization, type validation and etc.
+You can find useful features for large enterprise development like code organization, type validation and etc.
 
 ## Table of Contents
 
@@ -343,6 +343,11 @@ PLoop(function(_ENV)
 
 	-- print the sum of the numbers
 	print(obj:Reduce(function(x,y) return x+y end))
+	print(obj:Sum())
+
+	-- print the concatenation of the list
+    -- 1,4,9,16
+    print(XList(1, 4):Map("x=>x^2"):Join(","))
 end)
 ```
 
@@ -399,6 +404,8 @@ Last(self, func, ...)                    |return the last element that match the
 Last(self)                               |return the last element
 Reduce(self, func[, init])               |used to combine the elements, you can find the example in the above
 ToList(self[, listtype])                 |save the elements into a new list type object, the default listtype is the **List**
+Sum(self)                                |calculate the sum of the list
+Join(self[, sep])                        |get the concatenation of the List
 
 
 ### The sort of the List
@@ -4317,7 +4324,7 @@ PLoop(function(_ENV)
 	__Return__{ String }
 	function Test() return 1 end
 
-	-- Error: path_to_file:5: The Test Return: System.String - the 1st argument must be string, got number
+	-- Error: path_to_file:5: The Test Return: System.String - the 1st return value must be string, got number
 	Test()
 end)
 ```
@@ -4365,7 +4372,7 @@ PLoop(function(_ENV)
 
     class "A" { IA, Test = function() return "hi" end }
 
-    -- Error: path_to_file:9: The A.Test Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
+    -- Error: path_to_file:9: The A.Test Return: System.String, ... as System.Number - the ... must contains at least 1 return values
     A():Test()
 end)
 ```

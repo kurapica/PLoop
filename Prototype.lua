@@ -13954,7 +13954,7 @@ do
             FLD_VAR_RETMSG      = -5,
             FLD_VAR_VARVLD      = -6,
 
-            FLG_VAR_NOMULT      = newflags(true),    -- no multi format
+            FLG_VAR_SNGFMT      = newflags(true),    -- single format
             FLG_VAR_IMMTBL      = newflags(),        -- all immutable
             FLG_VAR_ISLIST      = newflags(),        -- the last variable is list
             FLG_VAR_IMMLST      = newflags(),        -- the list variable is immutable
@@ -13971,7 +13971,6 @@ do
             tblclone            = tblclone,
             validate            = Struct.ValidateValue,
             geterrmsg           = Struct.GetErrorMessage,
-            savestorage         = savestorage,
             ipairs              = ipairs,
             tinsert             = tinsert,
             tremove             = tremove,
@@ -13996,7 +13995,7 @@ do
         export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory }
 
         local function buildReturn(vars)
-            local retmsg        = {}
+            local retmsg        = _Cache()
 
             tinsert(retmsg, "Return: ")
 
@@ -14033,6 +14032,7 @@ do
             end
 
             vars[FLD_VAR_RETMSG]= tblconcat(retmsg, "")
+            _Cache(retmsg)
         end
 
         local function genReturnValid(vars, msghead)
@@ -14043,7 +14043,7 @@ do
             local islist        = false
 
             if msghead then
-                token           = turnonflags(FLG_VAR_NOMULT, token)
+                token           = turnonflags(FLG_VAR_SNGFMT, token)
             end
 
             if vars[FLD_VAR_IMMTBL] then
@@ -14071,6 +14071,7 @@ do
                 local apis      = _Cache()
                 local args      = _Cache()
                 local tmps      = _Cache()
+                local targs     = args
 
                 uinsert(apis, "type")
                 uinsert(apis, "strgsub")
@@ -14094,8 +14095,8 @@ do
                 local alen      = #args
 
                 if msghead then uinsert(apis, "error") else tinsert(tmps, "onlyvalid") end
-                if alen > 0 then tinsert(tmps, args) end
-                if islist then tinsert(tmps, "...") end
+                if alen >0 then tinsert(tmps, args)  end
+                if islist  then tinsert(tmps, "...") end
 
                 tinsert(body, strformat([[return function(%s)]], tblconcat(tmps, ", ")))
 
@@ -14105,11 +14106,11 @@ do
                     if msghead then
                         tinsert(body, (([[
                             if _ai_ == nil then
-                                if not _vi_.optional then error(usage .. " - the _i_ argument can't be nil", 0) end
+                                if not _vi_.optional then error(usage .. " - the _i_ return value can't be nil", 0) end
                                 _ai_ = _vi_.default
                             elseif _vi_.validate then
                                 ret, msg = _vi_.validate(_vi_.type, _ai_)
-                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", "_i_ argument") or ("the _i_ argument must be " .. tostring(_vi_.type))), 0) end
+                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", "_i_ return value") or ("the _i_ return value must be " .. tostring(_vi_.type))), 0) end
                                 _ai_ = ret
                             end
                         ]]):gsub("_vi_", "v" .. i):gsub("_ai_", "a" .. i):gsub("_i_", parseindex(i))))
@@ -14237,7 +14238,7 @@ do
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
                                         local minct = _vi_.mincount or 0
-                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 0) end
+                                        if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " return values", 0) end
                                     ]]):gsub("_vi_", "v" .. len)))
                                 end
                                 if validateflags(FLG_VAR_LSTVLD, token) then
@@ -14253,7 +14254,7 @@ do
                                 ]])
                                 if not validateflags(FLG_VAR_LSTNIL, token) then
                                     tinsert(body, (([[
-                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 0) end
+                                                if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " return value can't be nil"), 0) end
                                     ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -14263,7 +14264,7 @@ do
                                     tinsert(body, (([[
                                             else
                                                 ret, msg= valid(vtype, ival, onlyvalid)
-                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 0) end
+                                                if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " return value") or ("the " .. parseindex(i + _i_) .. " return value must be " .. tostring(vtype))), 0) end
                                    ]]):gsub("_i_", tostring(len - 1))))
                                 end
                                 tinsert(body, [[
@@ -14283,7 +14284,7 @@ do
                             tinsert(body, (([[
                                 local vlen  = select("#", ...)
                                 local minct = _vi_.mincount or 0
-                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " arguments", 0) end
+                                if vlen < minct then error(usage .. " - " .. "the ... must contains at least " .. minct .. " return values", 0) end
                                 if vlen > 0 then
                                     local vtype = _vi_.type
                                     local valid = _vi_.validate
@@ -14291,11 +14292,11 @@ do
                                     for i = 1, vlen do
                                         local ival = vlst[i]
                                         if ival == nil then
-                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " argument can't be nil"), 0) end
+                                            if i <= minct then error(usage .. " - " .. ("the " .. parseindex(i + _i_) .. " return value can't be nil"), 0) end
                                             break
                                         else
                                             ret, msg= valid(vtype, ival)
-                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " argument") or ("the " .. parseindex(i + _i_) .. " argument must be " .. tostring(vtype))), 0) end
+                                            if msg then error(usage .. " - " .. (type(msg) == "string" and strgsub(msg, "%%s", parseindex(i + _i_) .. " return value") or ("the " .. parseindex(i + _i_) .. " return value must be " .. tostring(vtype))), 0) end
                                             vlst[i] = ret
                                         end
                                     end
@@ -14324,6 +14325,7 @@ do
                 _Cache(body)
                 _Cache(apis)
                 _Cache(tmps)
+                _Cache(targs)
             end
 
             if msghead then

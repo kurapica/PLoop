@@ -338,6 +338,11 @@ PLoop(function(_ENV)
 
 	-- 计算合计
 	print(obj:Reduce(function(x,y) return x+y end))
+	print(obj:Sum())
+
+	-- 打印合并的字符串
+    -- 1,4,9,16
+    print(XList(1, 4):Map("x=>x^2"):Join(","))
 end)
 ```
 
@@ -396,6 +401,8 @@ Last(self, func, ...) 					 |返回最后一个使`func(element, ...)`返回非f
 Last(self)            					 |返回列表的最后一个元素
 Reduce(self, func[, init])               |用于合并元素，参考上面计算总值的例子
 ToList(self[, listtype])                 |使用迭代返回的元素创建一个新的列表对象，默认列表类型是**List**
+Sum(self)                                |返回列表所有元素的和值
+Join(self[, sep])                        |使用分隔符合并列表中的所有字符串
 
 
 ### List的排序
@@ -4365,7 +4372,7 @@ PLoop(function(_ENV)
 	__Return__{ String }
 	function Test() return 1 end
 
-	-- Error: path_to_file:5: The Test Return: System.String - the 1st argument must be string, got number
+	-- Error: path_to_file:5: The Test Return: System.String - the 1st return value must be string, got number
 	Test()
 end)
 ```
@@ -4413,7 +4420,7 @@ PLoop(function(_ENV)
 
     class "A" { IA, Test = function() return "hi" end }
 
-    -- Error: path_to_file:9: The A.Test Return: System.String, ... as System.Number - the ... must contains at least 1 arguments
+    -- Error: path_to_file:9: The A.Test Return: System.String, ... as System.Number - the ... must contains at least 1 return values
     A():Test()
 end)
 ```
