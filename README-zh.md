@@ -3488,7 +3488,7 @@ PLoop (function(_ENV)
 
 	o = Person()
 
-	-- Usage: Person:AddChild([... as System.String]) - the 2nd argument must be System.String
+	-- Usage: Person:AddChild([... as System.String]) - the 2nd argument must be string, got number
 	o:AddChild("Ann", 1)
 end)
 ```
@@ -3512,7 +3512,7 @@ PLoop (function(_ENV)
 
 	o = Person()
 
-	-- Usage: Person:SetInfo([name as System.String = "anonymous"], [age as System.NaturalNumber = 0]) - the 1st argument must be System.String
+	-- Usage: Person:SetInfo([name as System.String = "anonymous"], [age as System.NaturalNumber = 0]) - the 1st argument must be string, got boolean
 	o:SetInfo(true)
 end)
 ```
@@ -3643,7 +3643,7 @@ PLoop(function(_ENV)
 		end
 	end)
 
-	--Error: Usage: Anonymous([... as System.Integer]) - the 4th argument must be System.Integer
+	--Error: Usage: Anonymous([... as System.Integer]) - the 4th argument must be number, got string
 	o = Array[Integer](1, 2, 3, "hi", 5)
 end)
 ```
@@ -3670,7 +3670,7 @@ PLoop(function(_ENV)
 
 	o = Dict[{Integer, String}]()
 
-	-- Error: Usage: Anonymous:Add(System.Integer, System.String) - the 2nd argument must be System.String
+	-- Error: Usage: Anonymous:Add(System.Integer, System.String) - the 2nd argument must be string, got boolean
 	o:Add(1, true)
 end)
 ```
@@ -4414,7 +4414,7 @@ require "PLoop"
 
 PLoop(function(_ENV)
     interface "IA" (function(_ENV)
-        __Return__{ String, Number * 1 }:Require()
+        __Return__{ String, Number * 1 }:AsInheritable()
         __Abstract__() function Test() end
     end)
 
