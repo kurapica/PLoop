@@ -16,6 +16,7 @@
 	* [Dictionary的创建](#dictionary的创建)
 	* [Dictionary的方法](#dictionary的方法)
 	* [Dictionary的遍历](#dictionary的遍历)
+	* [动态字典](#动态字典)
 * [特性(Attribute)和协程池(Thread Pool)](#特性attribute和协程池thread-pool)
 * [拼写错误检查](#拼写错误检查)
 	* [读取不存在的全局变量](#读取不存在的全局变量)
@@ -294,6 +295,13 @@ PLoop (function(_ENV)
 	-- 结束
 	-- 开始和步长默认1
 	XList(10):Map("x=>x^2"):Each(print)
+
+	-- 迭代函数[，列表[，索引]]
+	XList(ipairs{1, 2, 3, 4}):Each(print)
+
+	-- 列表
+	XList{1, 2, 3, 4}:Each(print)
+	XList(List(10):Range(5, 8)):Each(print)
 end)
 ```
 
@@ -491,14 +499,13 @@ Luajit的确很擅长这类重复性工作。
 
 类似**List**，我们同样有多种创建Dictionary对象的方式:
 
-构造方法                         |结果
-:--------------------------------|:--------------------------------
-Dictionary()                     |创建一个空dictionary对象
-Dictionary(table)                |将输入的table转换成一个dictionary对象
-Dictionary(table, table)         |接受两个数组，第一个数组的元素作为键，第二个数组的元素作为值，构建一个新的dictionary对象
-Dictionary(listKey, listValue)   |接受两个列表对象，第一个列表的元素作为键，第二个列表的元素作为值，构建一个新的dictionary对象
-Dictionary(dictionary)           |复制dictionary对象的键值对，创建新的对象
-Dictionary(iter, obj, index)     |使用迭代器产生的键值对创建新的dictionary对象
+构造方法                               |结果
+:-------------------------------------|:--------------------------------
+Dictionary()                          |创建一个空dictionary对象
+Dictionary(table)                     |将输入的table转换成一个dictionary对象
+Dictionary(table|IList, table|IList)  |接受两个数组或列表对象，第一个数组的元素作为键，第二个数组的元素作为值，构建一个新的dictionary对象
+Dictionary(dictionary)                |复制dictionary对象的键值对，创建新的对象
+Dictionary(iter, obj, index)          |使用迭代器产生的键值对创建新的dictionary对象
 
 下面是一些例子:
 
@@ -589,6 +596,26 @@ end)
 ```
 
 **List**和**Dictionary**的队列和终止，以及排序方法并非定义在它们内部，而是由接口提供，等了解类和接口后，我们可以创建新的集合类型扩展这些接口，然后直接享受这些方法带来的便利。
+
+
+### 动态字典
+
+类似动态列表的处理，我们也可以基于字典对象，哈希表，键值对列表来构建动态字典，动态字典不会实际生成字典键值对，在很多场合可以优化处理:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	-- 键值对列表
+	XDictionary(List(4), {"1st", "2nd", "3rd", "4th"}):Each(print)
+
+	-- 字典对象或哈希表
+	XDictionary(_G):Each(print)
+
+	-- 迭代器
+	XDictionary(pairs(_G)):Each(print)
+end)
+```
 
 
 ## 特性(Attribute)和协程池(Thread Pool)
@@ -2775,6 +2802,33 @@ end)
 ```
 
 索引属性的定义table仅接受set, get, getmethod, setmethod, type and static这些设定。
+
+也可以为索引属性的键指定类型:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" (function( _ENV )
+		__Indexer__(String)
+		property "Items" {
+			set = function(self, idx, value)
+				self[idx] = value
+			end,
+			get = function(self, idx)
+				return self[idx]
+			end,
+			type = String,
+		}
+	end)
+
+	o = A()
+
+	-- Error: the Items's key must be string, got number
+	o.Items[1] = "Hello"
+end)
+```
+
 
 ### Get/Set行为修饰
 

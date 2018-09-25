@@ -17,6 +17,11 @@ PLoop(function(_ENV)
 
     import "System.Serialization"
 
+    -- Helpers
+    export { yield = coroutine.yield }
+
+    __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
+
     --- Represents the list collections that only elements has meanings
     interface "IList" { Iterable }
 
@@ -223,15 +228,24 @@ PLoop(function(_ENV)
     __Sealed__() __NoRawSet__(true)
     class "XList" (function(_ENV)
         extend "IList"
-        export { yield  = coroutine.yield, unpack = table.unpack or unpack }
+        export { ipairs = ipairs, type = type, iterforstep = iterforstep }
+
+        XLIST_TYPE_STEP         = 1
+        XLIST_TYPE_ITER         = 2
+        XLIST_TYPE_LIST         = 3
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        __Iterator__()
         function GetIterator(self)
-            for i = self[1], self[2], self[3] or 1 do
-                yield(i, i)
+            local type          = self[1]
+
+            if type == XLIST_TYPE_STEP then
+                return iterforstep(self[2], self[3], self[4])
+            elseif type == XLIST_TYPE_ITER then
+                return self[2], self[3], self[4]
+            else
+                return self[2]:GetIterator()
             end
         end
 
@@ -243,12 +257,21 @@ PLoop(function(_ENV)
             Variable("stop", NaturalNumber),
             Variable("step", Integer, true, 1)
         }
-        function __new(_, ...) return { ... }, true end
+        function __new(_, ...) return { XLIST_TYPE_STEP, ... }, true end
 
         __Arguments__{
             Variable("stop", NaturalNumber),
         }
-        function __new(_, stop) return { 1, stop, 1 }, true end
+        function __new(_, stop) return { XLIST_TYPE_STEP, 1, stop, 1 }, true end
+
+        __Arguments__{ IList }
+        function __new(_, lst) return { XLIST_TYPE_LIST, lst }, true end
+
+        __Arguments__{ RawTable }
+        function __new(_, lst) return { XLIST_TYPE_ITER, ipairs(lst) }, true end
+
+        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+        function __new(_, iter, obj, idx) return { XLIST_TYPE_ITER, iter, obj, idx }, true end
     end)
 
     --- the list stream worker, used to provide stream filter, map and etc

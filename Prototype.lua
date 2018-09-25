@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/09/15                                               --
--- Version      :   1.0.0-beta028                                            --
+-- Update Date  :   2018/09/25                                               --
+-- Version      :   1.0.0-beta030                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -10108,9 +10108,11 @@ do
     local FLD_PROP_HANDLER      = 14
     local FLD_PROP_EVENT        = 15
     local FLD_PROP_STATIC       = 16
-    local FLD_PROP_INDEXERGET   = 17
-    local FLD_PROP_INDEXERSET   = 18
-    local FLD_PROP_INDEXERFLD   = 19
+    local FLD_PROP_INDEXERTYP   = 17
+    local FLD_PROP_INDEXERVLD   = 18
+    local FLD_PROP_INDEXERGET   = 19
+    local FLD_PROP_INDEXERSET   = 20
+    local FLD_PROP_INDEXERFLD   = 21
 
     -- FLAGS FOR PROPERTY BUILDING
     local FLG_PROPGET_DISABLE   = newflags(true)
@@ -10125,6 +10127,7 @@ do
     local FLG_PROPGET_DEEPCLONE = newflags()
     local FLG_PROPGET_STATIC    = newflags()
     local FLG_PROPGET_INDEXER   = newflags()
+    local FLG_PROPGET_INDEXTYP  = newflags()
 
     local FLG_PROPSET_DISABLE   = newflags(true)
     local FLG_PROPSET_TYPE      = newflags()
@@ -10141,6 +10144,7 @@ do
     local FLG_PROPSET_EVENT     = newflags()
     local FLG_PROPSET_STATIC    = newflags()
     local FLG_PROPSET_INDEXER   = newflags()
+    local FLG_PROPSET_INDEXTYP  = newflags()
     local FLG_PROPSET_THROWABLE = newflags()
 
     local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
@@ -10173,7 +10177,8 @@ do
     local globalIndexerSet
     local globalPropertyIndexer = not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and prototype {
                                     __index                 = function(self, idxname)
-                                        return globalIndexerGet(globalIndexerOwner, idxname)
+                                        local val = globalIndexerGet(globalIndexerOwner, idxname)
+                                        return val
                                     end,
                                     __newindex              = function(self, idxname, value)
                                         globalIndexerSet(globalIndexerOwner, idxname, value)
@@ -10237,6 +10242,17 @@ do
             token               = turnonflags(FLG_PROPGET_DISABLE, token)
             usename             = true
         else
+            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPGET_INDEXER, token)
+
+                if info[FLD_PROP_INDEXERVLD] then
+                    usename     = true
+                    token       = turnonflags(FLG_PROPGET_INDEXTYP, token)
+                    tinsert(upval, info[FLD_PROP_INDEXERVLD])
+                    tinsert(upval, info[FLD_PROP_INDEXERTYP])
+                end
+            end
+
             if info[FLD_PROP_DEFAULTFUNC] then
                 token           = turnonflags(FLG_PROPGET_DEFTFUNC, token)
                 tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
@@ -10280,10 +10296,6 @@ do
                     token       = turnonflags(FLG_PROPGET_DEEPCLONE, token)
                 end
             end
-
-            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
-                token           = turnonflags(FLG_PROPGET_INDEXER, token)
-            end
         end
 
         if usename then tinsert(upval, info[FLD_PROP_NAME]) end
@@ -10307,6 +10319,16 @@ do
                 uinsert(apis, "strformat")
                 tinsert(body, [[error(strformat("the %s can't be read", name),2)]])
             else
+                if validateflags(FLG_PROPGET_INDEXTYP, token) then
+                    tinsert(head, "ivalid")
+                    tinsert(head, "ivtype")
+                    tinsert(body, [[
+                        local ret, msg = ivalid(ivtype, idxname)
+                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s key"), 3) end
+                        idxname = ret
+                    ]])
+                end
+
                 if validateflags(FLG_PROPGET_DEFTFUNC, token) then
                     tinsert(head, "defaultFunc")
                 elseif validateflags(FLG_PROPGET_DEFAULT, token) then
@@ -10466,6 +10488,17 @@ do
             token               = turnonflags(FLG_PROPSET_DISABLE, token)
             usename             = true
         else
+            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPSET_INDEXER, token)
+
+                if info[FLD_PROP_INDEXERVLD] then
+                    usename     = true
+                    token       = turnonflags(FLG_PROPSET_INDEXTYP, token)
+                    tinsert(upval, info[FLD_PROP_INDEXERVLD])
+                    tinsert(upval, info[FLD_PROP_INDEXERTYP])
+                end
+            end
+
             if info[FLD_PROP_TYPE] and not (PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED and getobjectvalue(info[FLD_PROP_TYPE], "IsImmutable")) then
                 token           = turnonflags(FLG_PROPSET_TYPE, token)
                 tinsert(upval, info[FLD_PROP_VALID])
@@ -10536,10 +10569,6 @@ do
                     usename     = true
                 end
             end
-
-            if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
-                token           = turnonflags(FLG_PROPSET_INDEXER, token)
-            end
         end
 
         if usename then tinsert(upval, info[FLD_PROP_NAME]) end
@@ -10564,6 +10593,16 @@ do
                 uinsert(apis, "strformat")
                 tinsert(body, [[error(strformat("the %s can't be set", name), 3)]])
             else
+                if validateflags(FLG_PROPSET_INDEXTYP, token) then
+                    tinsert(head, "ivalid")
+                    tinsert(head, "ivtype")
+                    tinsert(body, [[
+                        local ret, msg = ivalid(ivtype, idxname)
+                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s key"), 3) end
+                        idxname = ret
+                    ]])
+                end
+
                 if validateflags(FLG_PROPSET_TYPE, token) or validateflags(FLG_PROPSET_CLONE, token) then
                     tinsert(body, [[
                         if value ~= nil then
@@ -10574,11 +10613,20 @@ do
                         uinsert(apis, "strgsub")
                         tinsert(head, "valid")
                         tinsert(head, "vtype")
-                        tinsert(body, [[
-                            local ret, msg = valid(vtype, value)
-                            if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
-                            value = ret
-                        ]])
+
+                        if validateflags(FLG_PROPSET_INDEXER, token) then
+                            tinsert(body, [[
+                                local ret, msg = valid(vtype, value)
+                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s value"), 3) end
+                                value = ret
+                            ]])
+                        else
+                            tinsert(body, [[
+                                local ret, msg = valid(vtype, value)
+                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
+                                value = ret
+                            ]])
+                        end
                     end
 
                     if validateflags(FLG_PROPSET_CLONE, token) then
@@ -11175,19 +11223,26 @@ do
                 end
             end;
 
-            --- Set the property as an indexer property, used like `obj.prop[xxx] = xxx`
+            --- Set the property as an indexer property, used like `obj.prop[xxx] = xxx`, also can set the type of the key
             -- @static
             -- @method  IsIndexer
             -- @owner   property
-            -- @format  (target[, stack]])
+            -- @format  (target[, type[, stack]])
             -- @param   target                      the target property
             -- @param   stack                       the stack level
-            ["SetIndexer"]      = function(self, stack)
+            ["SetIndexer"]      = function(self, type, stack)
                 if _PropertyInDefine[self] then
+                    local tpValid   = type and getprototypemethod(type, "ValidateValue")
+                    if type and not tpValid then
+                        error("Usage: property:SetIndexer([type[, stack]]) - the type is not valid", parsestack(stack) + 1)
+                    end
+
                     local info  = _PropertyInfo[self]
-                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
+                    info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD])
+                    info[FLD_PROP_INDEXERTYP]   = type
+                    info[FLD_PROP_INDEXERVLD]   = tpValid
                 else
-                    error("Usage: property:SetIndexer([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                    error("Usage: property:SetIndexer([type[, stack]]) - the property's definition is finished", parsestack(stack) + 1)
                 end
             end;
 
@@ -11481,7 +11536,8 @@ do
 
     tindexer                    = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and prototype {
         __index                 = function(self, idxname)
-            return self[FLD_INDEXER_GET](self[FLD_INDEXER_OBJECT], idxname)
+            local val = self[FLD_INDEXER_GET](self[FLD_INDEXER_OBJECT], idxname)
+            return val
         end,
         __newindex              = function(self, idxname, value)
             self[FLD_INDEXER_SET](self[FLD_INDEXER_OBJECT], idxname, value)
@@ -12209,11 +12265,11 @@ do
     namespace.SaveNamespace("System.__Indexer__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
-                property.SetIndexer(target, parsestack(stack) + 1)
+                property.SetIndexer(target, self[1], parsestack(stack) + 1)
             end,
             ["AttributeTarget"] = ATTRTAR_PROPERTY,
         },
-        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
+        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------
@@ -13285,7 +13341,7 @@ do
 
                 local alen      = #args
 
-                if ismulti     then tinsert(tmps, "onlyvalid") end
+                if ismulti      then tinsert(tmps, "onlyvalid") end
                 if alen > 0     then tinsert(tmps, args) end
                 if islist       then tinsert(tmps, "...") end
 

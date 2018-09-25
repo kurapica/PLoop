@@ -17,6 +17,18 @@ PLoop(function(_ENV)
 
     import "System.Serialization"
 
+    -- Helpers
+    export { yield = coroutine.yield, ipairs = ipairs }
+
+    __Iterator__() iterforpair  = function (lstKey, lstValue)
+        local yield = yield
+        local iter, o, idx, value = (lstValue.GetIterator or ipairs)(lstValue)
+        for _, key in (lstValue.GetIterator or ipairs)(lstKey) do
+            idx, value = iter(o, idx)
+            if idx then yield(key, value) else break end
+        end
+    end
+
     --- Represents the key-value pairs collections
     interface "IDictionary" { Iterable }
 
@@ -101,11 +113,11 @@ PLoop(function(_ENV)
         __Arguments__{ RawTable }
         function __new(_, dict) return dict, true end
 
-        __Arguments__{ RawTable, RawTable }
+        __Arguments__{ RawTable + IList, RawTable + IList }
         function __new(_, lstKey, lstValue)
             local dict  = {}
-            local iter, o, idx, value = ipairs(lstValue)
-            for _, key in ipairs(lstKey) do
+            local iter, o, idx, value = (lstValue.GetIterator or ipairs)(lstValue)
+            for _, key in (lstValue.GetIterator or ipairs)(lstKey) do
                 idx, value = iter(o, idx)
                 if idx then
                     dict[key] = value
@@ -121,21 +133,6 @@ PLoop(function(_ENV)
             local dict  = {}
             for key, value in dict:GetIterator() do
                 dict[key] = value
-            end
-            return dict, true
-        end
-
-        __Arguments__{ IList, IList }
-        function __new(_, lstKey, lstValue)
-            local dict  = {}
-            local iter, o, idx, value = lstValue:GetIterator()
-            for _, key in lstKey:GetIterator() do
-                idx, value = iter(o, idx)
-                if idx then
-                    dict[key] = value
-                else
-                    break
-                end
             end
             return dict, true
         end
@@ -187,6 +184,47 @@ PLoop(function(_ENV)
             __Arguments__{ keytype, valtype }
             __newindex = rawset
         end
+    end)
+
+    --- The dynamic dictionary
+    __Sealed__() __NoRawSet__(true)
+    class "XDictionary" (function(_ENV)
+        extend "IDictionary"
+        export { iterforpair = iterforpair, pairs = pairs }
+
+        XDICT_TYPE_ITER         = 1
+        XDICT_TYPE_DICT         = 2
+        XDICT_TYPE_PAIR         = 3
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function GetIterator(self)
+            local type          = self[1]
+
+            if type == XDICT_TYPE_ITER then
+                return self[2], self[3], self[4]
+            elseif type == XDICT_TYPE_DICT then
+                return self[2]:GetIterator()
+            elseif type == XDICT_TYPE_PAIR then
+                return iterforpair(self[2], self[3])
+            end
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ RawTable }
+        function __new(_, dict) return { XDICT_TYPE_ITER, pairs(dict) }, true end
+
+        __Arguments__{ RawTable + IList, RawTable + IList }
+        function __new(_, lstKey, lstValue) return { XDICT_TYPE_PAIR, lstKey, lstValue }, true end
+
+        __Arguments__{ IDictionary }
+        function __new(_, dict) return { XDICT_TYPE_DICT, dict }, true end
+
+        __Arguments__{ Callable, Any/nil, Any/nil }
+        function __new(_, iter, obj, idx) return { XDICT_TYPE_ITER, iter, obj, idx }, true  end
     end)
 
     --- the dictionary stream worker, used to provide stream filter, map and
