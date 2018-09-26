@@ -1962,7 +1962,7 @@ do
             -- @owner   environment
             -- @param   env                         the environment
             ["Initialize"]      = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED and function(env)
-                if type(env) == "table" then rawset(env, ENV_GLOBAL_CACHE, {}) end
+                if type(env) == "table" and type(rawget(env, ENV_GLOBAL_CACHE)) ~= "table" then rawset(env, ENV_GLOBAL_CACHE, {}) end
             end or fakefunc;
 
             --- Register a namespace as global namespace, so it can be accessed
@@ -14972,6 +14972,8 @@ do
                 [FLD_MDL_FULLNAME]  = (fullname and fullname .. "." or "") .. subname,
                 [FLD_MDL_VER]   = false,
             })
+
+            Environment.Initialize(self)
 
             if root ~= cls then
                 Environment.SetParent(self, root)

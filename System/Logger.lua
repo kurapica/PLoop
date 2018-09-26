@@ -51,7 +51,7 @@ PLoop(function(_ENV)
         function Log(self, logLvl, msg, ...)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
-                local tfmt      = self.TimeFormat
+                local tfmt      = self.UseTimeFormat and self.TimeFormat
                 msg             = (tfmt and date and date(tfmt) or "") ..
                                     (self.__Prefix[logLvl] or "") ..
                                     (select("#", ...) > 0 and strformat(msg, ...) or msg)
@@ -102,6 +102,9 @@ PLoop(function(_ENV)
 
         --- if the timeformat is setted, the log message will add a timestamp at the header
         property "TimeFormat"   { type = TimeFormat, default = "[%c]" }
+
+        --- whether use the time format
+        property "UseTimeFormat"{ type = Boolean, default = true }
 
         --- The system default logger
         __Static__()
