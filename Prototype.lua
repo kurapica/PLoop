@@ -281,9 +281,9 @@ do
 
         --- Whether try to save the stack data into the exception object, so
         -- we can have more details about the exception.
-        -- Default false
+        -- Default true
         -- @owner       PLOOP_PLATFORM_SETTINGS
-        EXCEPTION_SAVE_STACK_DATA           = false,
+        EXCEPTION_SAVE_STACK_DATA           = true,
 
         --- The max pool size of the thread pool
         -- Default 40
@@ -11574,9 +11574,9 @@ do
     throw                       = function (exception)
         if type(exception) == "string" or not class.IsSubType(getmetatable(exception), Exception) then
             exception = Exception(tostring(exception))
-        elseif exception.StackDataSaved then
-            error(exception)
         end
+
+        if exception.StackDataSaved then error(exception) end
 
         exception.StackDataSaved= true
 
@@ -15136,6 +15136,7 @@ do
     -----------------------------------------------------------------------
     --                            _G keyword                             --
     -----------------------------------------------------------------------
+    _G.prototype                = _G.prototype  or prototype
     _G.namespace                = _G.namespace  or namespace
     _G.import                   = _G.import     or import
     _G.enum                     = _G.enum       or enum

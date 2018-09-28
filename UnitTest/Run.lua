@@ -11,10 +11,11 @@
 -- Update Date  :   2018/09/26                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
-PLOOP_PLATFORM_SETTINGS = { CORE_LOG_LEVEL = 3, MULTI_OS_THREAD = false, TYPE_VALIDATION_DISABLED = false }
+PLOOP_PLATFORM_SETTINGS = { CORE_LOG_LEVEL = 3, MULTI_OS_THREAD = true, MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = false }
 
 PLOOP_UNITTEST_MODULES 		= {
-	"prototype", "enum", "struct", "interface", "class",
+	"prototype", "environment", "namespace", "enum", "struct", "class",
+	"variables",
 }
 
 require "PLoop"(function(_ENV)
@@ -34,7 +35,7 @@ require "PLoop"(function(_ENV)
 
 	Logger.Default:AddHandler(print)
 
-	local root = Path.CombinePath(Path.GetCurrentPath(), "PLoop")
+	local root = Path.CombinePath(Path.GetCurrentPath(), "Tests")
 
 	for _, name in ipairs(PLOOP_UNITTEST_MODULES) do
 		local func, msg = loadfile(Path.CombinePath(root, name) .. ".lua")

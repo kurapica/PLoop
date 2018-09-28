@@ -17,6 +17,8 @@ PLoop(function(_ENV)
     __Final__() __Sealed__() class "System.UnitTest" (function(_ENV)
         inherit "Module"
 
+        Environment.RegisterGlobalNamespace(UnitTest)
+
         export {
             pcall               = pcall,
             ipairs              = ipairs,
@@ -46,20 +48,47 @@ PLoop(function(_ENV)
             { name = "message", type = String },
         }
 
-        __Sealed__() class "TestFailureException" { Exception }
+        __Sealed__() class "TestFailureException" (function(_ENV)
+            inherit "Exception"
+
+            function __ctor(self, ...)
+                super(self, ...)
+                self.StackLevel = 2
+            end
+        end)
 
         --- A set of assert methods
         __Final__() __Sealed__() interface "Assert" (function(_ENV)
             export {
                 type            = type,
+                getmetatable    = getmetatable,
+                strformat       = string.format,
                 tostring        = tostring,
                 error           = error,
-                Info            = Info,
-                Warn            = Warn,
-                Error           = Error,
+                pairs           = pairs,
+                pcall           = pcall,
 
                 TestState, TestFailureException
             }
+
+            local function checkSame(expected, actual, include)
+                if expected == actual then return true end
+
+                if type(expected) == "table" and type(actual) == "table" and getmetatable(expected) == getmetatable(actual) then
+                    for k, v in pairs(expected) do
+                        if not checkSame(v, actual[k]) then return false end
+                    end
+
+                    if not include then
+                        for k in pairs(actual) do
+                            if expected[k] == nil then return false end
+                        end
+                    end
+
+                    return true
+                end
+                return false
+            end
 
             -----------------------------------------------------------
             --                        method                         --
@@ -91,14 +120,30 @@ PLoop(function(_ENV)
 
             --- Checks that the two values are the same
             __Static__() function Same(expected, actual)
-                local te, ta = type(expected), type(actual)
+                if not checkSame(expected, actual) then throw(TestFailureException("Expected the same value")) end
+            end
 
-                if te ~= ta then throw(TestFailureException("Expected the same value")) end
+            --- Checks that the actual contains all elements of the expected
+            __Static__() function Include(expected, actual)
+                if not checkSame(expected, actual, true) then throw(TestFailureException("Should contain the expected elements")) end
+            end
 
-                if te == "table" then
+            --- Checks that the function should raise an error, the error message will be returned
+            __Static__() function Error(func, ...)
+                local ok, msg = pcall(func, ...)
+                if not ok then return msg end
+                throw(TestFailureException("Should raise an error"))
+            end
 
-                else
-                    if expected ~= actual then throw(TestFailureException("Expected the same value")) end
+            __Static__() function Match(pattern, msg)
+                if type(msg) ~= "string" or not msg:match(pattern) then
+                    throw(TestFailureException("Should match " .. strformat("%q", pattern) .. ", got " .. strformat("%q", msg or "nil")))
+                end
+            end
+
+            __Static__() function Find(pattern, msg)
+                if type(msg) ~= "string" or not msg:find(pattern, 1, true) then
+                    throw(TestFailureException("Should find " .. strformat("%q", pattern) .. ", got " .. strformat("%q", msg or "nil")))
                 end
             end
 
@@ -179,10 +224,11 @@ PLoop(function(_ENV)
                         tcase.state = TestState.Error
                         tcase.message = msg
                     elseif isObjectType(msg, TestFailureException) then
-                        Warn("[UnitTest]%s.%s Failed - %s", tcase.owner._FullName, tcase.name, msg.Message)
+                        local message = msg.Message .. (msg.Source and ("@" .. msg.Source) or "")
+                        Warn("[UnitTest]%s.%s Failed - %s", tcase.owner._FullName, tcase.name, message)
 
                         tcase.state   = TestState.Failed
-                        tcase.message = msg.Message
+                        tcase.message = message
                     end
                 end
 

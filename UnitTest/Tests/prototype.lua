@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                            UnitTest For Struct                            --
+--                          UnitTest For Prototype                           --
 --                                                                           --
 --===========================================================================--
 
@@ -12,4 +12,19 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.Struct" "1.0.0"
+UnitTest "PLoop.PrototypeCase" "1.0.0"
+
+__Test__() function usage()
+	local proxy = prototype {
+	    __index = function(self, key) return rawget(self, "__" .. key) end,
+	    __newindex = function(self, key, value)
+	        rawset(self, "__" .. key, value)
+	    end,
+	}
+
+	obj = prototype.NewObject(proxy)
+	obj.Name = "Test"
+
+	Assert.Equal("Test", obj.__Name)
+	Assert.Equal("Test", obj.Name)
+end

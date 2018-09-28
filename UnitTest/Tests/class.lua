@@ -13,3 +13,28 @@
 --===========================================================================--
 
 UnitTest "PLoop.Class" "1.0.0"
+
+namespace "UnitTest.ClassCase"
+
+__Test__() function usage()
+	interface "IA" (function(_ENV)
+		__Static__() function ifMethodB(self) end
+		__Abstract__() function objMethodA(self) end
+		__Final__() function objMethodB(self) end
+		function objMethodC(self) end
+	end)
+
+	class "A" (function(_ENV)
+		function objMethodB(self) end
+		function objMethodC(self) end
+	end)
+
+	class "C" { IA, A }
+
+	Assert.Nil(C.ifMethodB)
+	Assert.Nil(C.objMethodB)
+
+	local obj = C()
+	Assert.Equal(IA.objMethodB, obj.objMethodB)
+	Assert.Equal(A.objMethodC, obj.objMethodC)
+end
