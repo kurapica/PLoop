@@ -28,7 +28,12 @@ __Test__() function usage()
 	function test3()
 	end
 
-	Assert.Find("variables.lua:34: Usage: test1(System.Number) - the 1st argument must be number, got boolean",
+	__Arguments__{ }:Throwable()
+	function test4()
+		throw("Something error")
+	end
+
+	Assert.Find("variables.lua:39: Usage: test1(System.Number) - the 1st argument must be number, got boolean",
 		Assert.Error(
 			function()
 				test1(true)
@@ -38,10 +43,18 @@ __Test__() function usage()
 
 	Assert.Equal(100, test2())
 
-	Assert.Find("variables.lua:44: Usage: test3(System.String, [... as System.Number]) - the 4th argument must be number, got boolean",
+	Assert.Find("variables.lua:49: Usage: test3(System.String, [... as System.Number]) - the 4th argument must be number, got boolean",
 		Assert.Error(
 			function()
 				test3("hi", 1, 2, true)
+			end
+		)
+	)
+
+	Assert.Find("variables.lua:57: Something error",
+		Assert.Error(
+			function()
+				test4()
 			end
 		)
 	)
@@ -150,7 +163,7 @@ __Test__() function usage()
 		"[ctor]The age is 12",
 	}, collect)
 
-	Assert.Find("variables.lua:156: the calling style must be one of the follow",
+	Assert.Find("variables.lua:169: the calling style must be one of the follow",
 		Assert.Error(
 			function()
 				local obj = Person(true)
@@ -158,7 +171,7 @@ __Test__() function usage()
 		)
 	)
 
-	Assert.Find("variables.lua:164: Usage: UnitTest.VariableCase.Person:__index(System.Number) - the 1st argument must be number, got string",
+	Assert.Find("variables.lua:177: Usage: UnitTest.VariableCase.Person:__index(System.Number) - the 1st argument must be number, got string",
 		Assert.Error(
 			function()
 				local v = obj.name
@@ -166,7 +179,7 @@ __Test__() function usage()
 		)
 	)
 
-	Assert.Find("variables.lua:172: Usage: UnitTest.VariableCase.Person:__newindex(System.String, System.Number) - the 2nd argument must be number, got string",
+	Assert.Find("variables.lua:185: Usage: UnitTest.VariableCase.Person:__newindex(System.String, System.Number) - the 2nd argument must be number, got string",
 		Assert.Error(
 			function()
 				obj.name = "hi"
@@ -176,19 +189,19 @@ __Test__() function usage()
 
     --------------- __Return__ ---------------
     __Return__{ String }
-    function test4() end
-
-    __Return__{ Number/20 }
     function test5() end
 
+    __Return__{ Number/20 }
+    function test6() end
 
-	Assert.Find("variables.lua:179: The test4 Return: System.String - the 1st return value can't be nil",
+
+	Assert.Find("variables.lua:192: The test5 Return: System.String - the 1st return value can't be nil",
 		Assert.Error(
 			function()
-				local v = test4()
+				local v = test5()
 			end
 		)
 	)
 
-	Assert.Equal(20, test5())
+	Assert.Equal(20, test6())
 end
