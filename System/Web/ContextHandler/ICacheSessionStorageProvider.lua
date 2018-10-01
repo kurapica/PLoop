@@ -14,7 +14,7 @@
 
 PLoop(function(_ENV)
     --- A test session storage provider
-    __Sealed__() class "System.Web.ICacheSessionStorageProvider" (function (_ENV)
+    __Sealed__() interface "System.Web.ICacheSessionStorageProvider" (function (_ENV)
         extend "ISessionStorageProvider"
 
         export { with = with }
