@@ -22,7 +22,7 @@ PLoop(function(_ENV)
     -- configurations in one place for the whole system.
     __Sealed__() __NoNilValue__(true) __NoRawSet__(true)
     class "ConfigSection" (function(_ENV)
-        export { "pairs", "type", "getmetatable", Enum, Struct, Interface, Class, Any, ConfigSection }
+        export { "pairs", "type", "getmetatable", Enum, Struct, Interface, Class, Any, ConfigSection, List }
 
         -----------------------------------------------------------
         --                         event                         --

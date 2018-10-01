@@ -10,13 +10,15 @@ require "PLoop.System.Logger"
 require "PLoop.System.Collections"
 require "PLoop.System.Recycle"
 require "PLoop.System.Threading"
-require "PLoop.System.Configuration"
 
 -- System.Collections
 require "PLoop.System.Collections.List"
 require "PLoop.System.Collections.Dictionary"
 require "PLoop.System.Collections.IIndexedListSorter"
 require "PLoop.System.Collections.Array"
+
+-- System Configuration
+require "PLoop.System.Configuration"
 
 -- System.Serialization
 require "PLoop.System.Serialization.LuaFormatProvider"

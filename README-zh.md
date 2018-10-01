@@ -2995,6 +2995,36 @@ PLoop(function(_ENV)
 end)
 ```
 
+关于`__Final__` 特性还有一种特殊用法，我们可以在接口或者抽象类中定义`__Final__`的方法，然后在它的定义中使用对象的类来访问实际的方法：
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "IA" (function(_ENV)
+		local getObjectClass = Class.GetObjectClass
+
+		__Final__() function Test(self)
+			print("Call Test of IA")
+
+			-- 获取对象的类，调用该类中定义的Test方法完成操作
+			getObjectClass(self).Test(self)
+		end
+	end)
+
+	class "A" { IA, Test = function(self) print("Call Test of A") end }
+
+	o = A()
+
+	-- Call Test of IA
+	-- Call Test of A
+	o:Test()
+end)
+```
+
+对象会使用申明为最终的方法，但类会保留它自身定义的版本。
+
+
 ## 使用其他定义形式
 
 ### 使用字符串作为定义体
@@ -4678,7 +4708,25 @@ PLoop(function(_ENV)
 end)
 ```
 
-如例子所示，第二个方法被用于捕获错误，如果不指定，那么将直接使用error方法将错误继续抛出，直到它被处理。下面是来源于实际DB处理的一个例子（参考System.Data系统）:
+如例子所示，第二个方法被用于捕获错误，如果不指定，那么将直接使用error方法将错误继续抛出，直到它被处理。
+
+我们可以获得所有内部处理的返回值:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" { IAutoClose }
+
+	-- 1	2	3	4
+	print(with(A())(function(obj)
+		return 1, 2, 3, 4
+	end))
+end)
+
+```
+
+下面是来源于实际DB处理的一个例子（参考System.Data系统）:
 
 ```lua
 function RecordLastLogin(id)

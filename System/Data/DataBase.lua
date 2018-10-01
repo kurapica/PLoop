@@ -321,14 +321,94 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the data view
-    __Sealed__() interface "IDataView" (function(_ENV)
+    __Sealed__() interface "IDataView" {}
+
+    --- The data view that binds to a complex query
+    __Sealed__() class "__DataView__" (function(_ENV)
+        extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
+
+        export { Class, Environment, IDataView, System.Serialization.__Serializable__ }
+
+        local FIELD_DATA        = 0
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the sql bind to the view
+        property "Sql"          { type = String }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+            return self.Sql
+        end
+
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+            Environment.Apply(manager, function(_ENV)
+                -----------------------------------------------------------
+                --                      constructor                      --
+                -----------------------------------------------------------
+                __Arguments__{ Table }
+                function __new(self, tbl)
+                    return { [FIELD_DATA] = tbl }, true
+                end
+            end)
+        end
+
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            Class.AddExtend(target, IDataView)
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ String }
+        function __ctor(self, sql)
+            self.Sql = sql
+
+            __Serializable__()
+        end
+
+        __Arguments__{ }
+        function __ctor(self)
+            __Serializable__()
+        end
     end)
 
     --- Represents the context for a group of DataSets
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
 
-        export { List, "ipairs", "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert }
+        export { List, __DataView__, "ipairs", "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert, getAttachedData = Attribute.GetAttachedData }
 
         FLD_CHANGED_ENTITY      = 1
         FLD_CURRENT_TRANST      = 2
@@ -395,8 +475,23 @@ PLoop(function(_ENV)
         end
 
         --- Send the query sql and return the result wrapped with the view
-        __Arguments__{ IDataView, NEString, Any * 0}
-        function QueryView(self, view, sql, ...)
+        __Arguments__{ -IDataView, NEString, Any * 0}
+        function QueryAsView(self, view, sql, ...)
+            local rs = self.Connection:Query(sql, ...)
+            if rs then
+                for i, dr in ipairs(rs) do
+                    rs[i]   = view(dr)
+                end
+            end
+            return List(rs)
+        end
+
+        --- Send the query sql and return the result wrapped with the view
+        __Arguments__{ -IDataView, Any * 0}
+        function QueryView(self, view, ...)
+            local sql       = getAttachedData(__DataView__, view)
+            if not sql then error("Usage: IDataContext:QueryView(view, ...) - the view class don't have attached sql", 2) end
+
             local rs = self.Connection:Query(sql, ...)
             if rs then
                 for i, dr in ipairs(rs) do
@@ -1252,82 +1347,6 @@ PLoop(function(_ENV)
         end
 
         function __ctor(self)
-            __Serializable__()
-        end
-    end)
-
-    --- The data view that binds to a complex query
-    __Sealed__() class "__DataView__" (function(_ENV)
-        extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
-
-        export { Class, Environment, IDataView, System.Serialization.__Serializable__ }
-
-        local FIELD_DATA        = 0
-
-        -----------------------------------------------------------
-        --                       property                        --
-        -----------------------------------------------------------
-        --- the sql bind to the view
-        property "Sql"          { type = String }
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        --- attach data on the target
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  data                        the attribute data to be attached
-        function AttachAttribute(self, target, targettype, owner, name, stack)
-            return self.Sql
-        end
-
-        --- apply changes on the target
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   manager                     the definition manager of the target
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
-            Environment.Apply(manager, function(_ENV)
-                -----------------------------------------------------------
-                --                      constructor                      --
-                -----------------------------------------------------------
-                __Arguments__{ Table }
-                function __new(self, tbl)
-                    return { [FIELD_DATA] = tbl }, true
-                end
-            end)
-        end
-
-        --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            Class.AddExtend(target, IDataView)
-        end
-
-        -----------------------------------------------------------
-        --                       property                        --
-        -----------------------------------------------------------
-        --- the attribute target
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        __Arguments__{ String }
-        function __ctor(_, sql)
-            self.Sql = sql
-
             __Serializable__()
         end
     end)

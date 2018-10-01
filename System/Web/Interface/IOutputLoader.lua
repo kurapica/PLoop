@@ -114,7 +114,7 @@ PLoop(function(_ENV)
             IsObjectType        = Class.IsObjectType,
             ApplyEnv            = Environment.Apply,
 
-            RenderConfig, Application
+            RenderConfig, Application, Web
         }
 
         -----------------------------------------------------------------------

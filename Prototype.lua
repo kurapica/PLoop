@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/09/25                                               --
--- Version      :   1.0.0-beta030                                            --
+-- Update Date  :   2018/10/01                                               --
+-- Version      :   1.0.0-beta031                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11649,6 +11649,38 @@ end
 -- @keyword     with
 -------------------------------------------------------------------------------
 do
+    local closeObjectAndRet     = function(object, errhandler, ok, msg, ...)
+        pcall(object.Close, object, not ok and msg or nil)
+
+        if not ok then
+            if errhandler then
+                errhandler(msg, object)
+            else
+                error(msg, 0)
+            end
+            return
+        end
+
+        return msg, ...
+    end
+
+    local closeObjectsAndRet    = function(objects, errhandler, ok, msg, ...)
+        for _, object in ipairs, objects, 0 do
+            pcall(object.Close, object, not ok and msg or nil)
+        end
+
+        if not ok then
+            if errhandler then
+                errhandler(msg, unpack(objects))
+            else
+                error(msg, 0)
+            end
+            return
+        end
+
+        return msg, ...
+    end
+
     with                        = function(...)
         local n = select("#", ...)
 
@@ -11678,17 +11710,7 @@ do
                     end
                 end
 
-                ok, msg         = pcall(operation, object)
-
-                pcall(object.Close, object, not ok and msg or nil)
-
-                if not ok then
-                    if errhandler then
-                        errhandler(msg, object)
-                    else
-                        error(msg, 0)
-                    end
-                end
+                return closeObjectAndRet(object, errhandler, pcall(operation, object))
             end
         else
             local objects       = { ... }
@@ -11716,19 +11738,7 @@ do
                     end
                 end
 
-                ok, msg         = pcall(operation, unpack(objects))
-
-                for _, object in ipairs, objects, 0 do
-                    pcall(object.Close, object, not ok and msg or nil)
-                end
-
-                if not ok then
-                    if errhandler then
-                        errhandler(msg, unpack(objects))
-                    else
-                        error(msg, 0)
-                    end
-                end
+                return closeObjectsAndRet(objects, errhandler, pcall(operation, unpack(objects)))
             end
         end
     end

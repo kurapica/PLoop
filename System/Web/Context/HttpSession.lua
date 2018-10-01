@@ -48,7 +48,7 @@ PLoop(function(_ENV)
             if session then
                 if session.Canceled then
                     return self:RemoveSessionID(context)
-                elseif session.IsNewSession then
+                elseif session.IsNewSession or session.TimeoutChanged then
                     return self:SaveSessionID(context, session)
                 end
             end
@@ -113,6 +113,8 @@ PLoop(function(_ENV)
                     return self:RemoveItems(session.SessionID)
                 elseif session.IsNewSession or session.ItemsChanged then
                     return self:SetItems(session.SessionID, session.RawItems, session.Timeout)
+                elseif session.TimeoutChanged then
+                    return self:ResetItems(session.SessionID, session.Timeout)
                 end
             end
         end
@@ -181,6 +183,7 @@ PLoop(function(_ENV)
                 end
 
                 session     = HttpSession(id)
+                session.IsNewSession = true
                 session.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
             end
 
@@ -194,45 +197,44 @@ PLoop(function(_ENV)
         __Indexer__()
         property "Items"        {
             set = function(self, key, value)
-                if self.__Items[key] ~= value then
+                if self.RawItems[key] ~= value then
                     self.ItemsChanged = true
-                    self.__Items[key] = value
+                    self.RawItems[key] = value
                 end
             end,
             get = function(self, key)
-                return self.__Items[key]
+                return self.RawItems[key]
             end,
         }
 
-        --- The raw item table
-        property "RawItems"     { set = false, field = "__Items" }
-
         --- Gets the unique identifier for the session
-        property "SessionID"    { type = String, set = false, field = "__SessionID" }
+        property "SessionID"        { field = 1, set = false }
+
+        --- The raw item table
+        property "RawItems"         { field = 2, set = false }
 
         --- Gets and sets the date time, allowed the next request access the session
         __Set__ (PropertySet.Clone)
-        property "Timeout"      { type = Date, field = "__Timeout", handler = function(self) self.IsNewSession = not self.Canceled end }
+        property "Timeout"          { field = 3, type = Date, handler = function(self) self.TimeoutChanged = true end }
+
+        --- Whether the time out is changed
+        property "TimeoutChanged"   { field = 4, type = Boolean }
 
         --- Whether the current session is canceled
-        property "Canceled"     { type = Boolean }
+        property "Canceled"         { field = 5, type = Boolean }
 
         --- Gets a value indicating whether the session was created with the current request or its timeout is changed
-        property "IsNewSession" { type = Boolean }
+        property "IsNewSession"     { field = 6, type = Boolean }
 
         --- Whether the session items changed
-        property "ItemsChanged" { type = Boolean }
+        property "ItemsChanged"     { field = 7, type = Boolean }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ String, Table/nil, Date/nil }
         function __new(self, id, item, timeout)
-            return {
-                __SessionID     = id,
-                __Items         = item or {},
-                __Timeout       = timeout and timeout:Clone(),
-            }, true
+            return { id, item or {}, timeout and timeout:Clone() }, true
         end
     end)
 end)

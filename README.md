@@ -2965,6 +2965,37 @@ PLoop(function(_ENV)
 end)
 ```
 
+There is also a special usage of the `__Final__` attribute, we can define the final method in the interface or abstract class, and call the object's own method with a trick:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	interface "IA" (function(_ENV)
+		local getObjectClass = Class.GetObjectClass
+
+		__Final__() function Test(self)
+			print("Call Test of IA")
+
+			-- get the object's class, use the Test defined in the class
+			-- to do the real job
+			getObjectClass(self).Test(self)
+		end
+	end)
+
+	class "A" { IA, Test = function(self) print("Call Test of A") end }
+
+	o = A()
+
+	-- Call Test of IA
+	-- Call Test of A
+	o:Test()
+end)
+```
+
+The object will use the final method, but the class'll keep its own version.
+
+
 ## Use other definition style
 
 ### Use string as definition body
@@ -4628,7 +4659,25 @@ PLoop(function(_ENV)
 end)
 ```
 
-So the second function would be used as error handler, if ommit, the *error* api would be used. Here is a real project example for data base operation(see System.Data for more examples):
+So the second function would be used as error handler, if ommit, the *error* api would be used.
+
+You can get all return values from the inner function:
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	class "A" { IAutoClose }
+
+	-- 1	2	3	4
+	print(with(A())(function(obj)
+		return 1, 2, 3, 4
+	end))
+end)
+
+```
+
+Here is a real project example for data base operation(see System.Data for more examples):
 
 ```lua
 function RecordLastLogin(id)

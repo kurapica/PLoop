@@ -17,41 +17,51 @@ PLoop(function(_ENV)
     __Sealed__() class "System.Web.ICacheSessionStorageProvider" (function (_ENV)
         extend "ISessionStorageProvider"
 
+        export { with = with }
+
+        -----------------------------------------------------------------------
+        --                          abstract method                          --
+        -----------------------------------------------------------------------
+        __Abstract__() __Return__{ ICache }:AsInheritable()
+        function GetCacheObject(self) end
+
         -----------------------------------------------------------------------
         --                          inherit method                           --
         -----------------------------------------------------------------------
+
+        --- Whether the session ID existed in the storage.
         function Contains(self, id)
-            return self.Storage[id] and true or false
+            return (with(self:GetCacheObject())(function(cache)
+                return cache:Exist(id)
+            end)) or false
         end
 
+        --- Get session item
         function GetItems(self, id)
-            local item = self.Storage[id]
-            if item then
-                local timeout = self.Timeout[id]
-                if timeout and timeout.Time < ostime() then
-                    self:RemoveItem(id)
-                else
-                    return item
-                end
-            end
+            return (with(self:GetCacheObject())(function(cache)
+                return cache:Get(id)
+            end))
         end
 
+        --- Remove session item
         function RemoveItems(self, id)
-            self.Storage[id] = nil
-            self.Timeout[id] = nil
+            with(self:GetCacheObject())(function(cache)
+                return cache:Delete(id)
+            end)
         end
 
+        --- Update the item with current session data
         function SetItems(self, id, item, timeout)
-            self.Storage[id] = item
-            if timeout then
-                self.Timeout[id] = timeout
-            end
+            with(self:GetCacheObject())(function(cache)
+                return cache:Set(id, item, timeout)
+            end)
         end
 
+        --- Update the item's timeout
         function ResetItems(self, id, timeout)
-            if timeout and self.Storage[id] then
-                self.Timeout[id] = timeout
-            end
+            with(self:GetCacheObject())(function(cache)
+                return cache:SetExpireTime(id, timeout)
+            end)
         end
     end)
 end)
