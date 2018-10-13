@@ -92,10 +92,7 @@ You can find useful features for large enterprise development like code organiza
 * [System.Module](#systemmodule)
 	* [child-modules](#child-modules)
 * [Attribute System](#attribute-system)
-	* [System.IAttribute](#systemiattribute)
-	* [System.IInitAttribute](#systemiinitattribute)
-	* [System.IApplyAttribute](#systemiapplyattribute)
-	* [System.IAttachAttribute](#systemiattachattribute)
+	* [System.AttributeTargets](#system_attributetargets)
 	* [System Attributes](#system-attributes)
 		* [`__Abstract__`](#__abstract__)
 		* [`__AutoCache__`](#__autocache__)
@@ -3832,199 +3829,26 @@ So the whole project'd be saved to a tree of the modules. The **namespace** is u
 
 ## Attribute System
 
-We have seen many attributes, they are used to modify the target's behaviors.
-
-### System.IAttribute
-
-To define an attribute class, we should extend the **System.IAttribute** interface or its extend interfaces :
-
-* **System.IInitAttribute**     represents the interface to modify the target's definitions
-* **System.IApplyAttribute**    represents the interface to apply changes on the target(like mark a enum as flags)
-* **System.IAttachAttribute**   represents the interface to attach data on the target(binding database table on class)
-
-It's also require several properties if you don't want use the default value:
-
-* AttributeTarget   - the attribute targets, can be combined
-	* System.AttributeTargets.All  (Default)
-	* System.AttributeTargets.Function  - for common lua functions, event handlers
-	* System.AttributeTargets.Namespace - for namespaces
-	* System.AttributeTargets.Enum      - for enumerations
-	* System.AttributeTargets.Struct    - for structures
-	* System.AttributeTargets.Member    - for sturct's member
-	* System.AttributeTargets.Method    - for struct, interface or class methods
-	* System.AttributeTargets.Interface - for interfaces
-	* System.AttributeTargets.Class     - for classes
-	* System.AttributeTargets.Object    - for objects
-	* System.AttributeTargets.Event     - for events
-	* System.AttributeTargets.Property  - for properies
-
-* Inheritable       - whether the attribute is inheritable, default false
-
-* Overridable       - Whether the attribute's attach data is overridable, default true
-
-* Priority          - the attribute's priority, the higher the first be applied
-	* System.AttributePriority.Highest
-	* System.AttributePriority.Higher
-	* System.AttributePriority.Normal  (Default)
-	* System.AttributePriority.Lower
-	* System.AttributePriority.Lowest
-
-* SubLevel          - the attribute priority's sublevel, if two attribute have the same priority, the bigger sublevel will be first applied, default 0
-
-There are three type attributes, the init attributes are called before the definition of the target, the apply attributes are called during the definition of the target and the attach attributes are called after the definition of the target:
-
-### System.IInitAttribute
-
-Those attributes are used to modify the target's definitions, normally used on functions or enums:
-
-```lua
-require "PLoop"
-
-PLoop(function(_ENV)
-	class "__SafeCall__" (function(_ENV)
-		extend "IInitAttribute"
-
-		local function checkret(ok, ...)
-			if ok then return ... end
-		end
-
-		--- modify the target's definition
-		-- @param   target                      the target
-		-- @param   targettype                  the target type
-		-- @param   definition                  the target's definition
-		-- @param   owner                       the target's owner
-		-- @param   name                        the target's name in the owner
-		-- @param   stack                       the stack level
-		-- @return  definition                  the new definition
-		function InitDefinition(self, target, targettype, definition, owner, name, stack)
-			return function(...)
-				return checkret(pcall(definition, ...))
-			end
-		end
-
-		property "AttributeTarget" { default = AttributeTargets.Function + AttributeTargets.Method }
-	end)
-
-	__SafeCall__()
-	function test1()
-		return 1, 2, 3
-	end
-
-	__SafeCall__()
-	function test2(i, j)
-		return i/j
-	end
-
-	print(test1()) -- 1, 2, 3
-	print(test2()) -- nothing
-end)
-```
-
-the attribute class should extend the **System.IInitAttribute** and define the **InitDefinition** method to modify the target's definitions, for a function, the definition is the function itself, if the method return a new definition, the new will be used. And for the enum, the definition is the table that contains the elements. The init attributes are called before the define process of the target.
-
-### System.IApplyAttribute
-
-Those attributes are used to apply changes on the target, this is normally used by the system attributes, take the `__Sealed__` as an example:
-
-```lua
-class "__Sealed__" (function(_ENV)
-	extend "IApplyAttribute"
-
-	--- apply changes on the target
-	-- @param   target                      the target
-	-- @param   targettype                  the target type
-	-- @param 	manager 					the definition manager of the target
-	-- @param   owner                       the target's owner
-	-- @param   name                        the target's name in the owner
-	-- @param   stack                       the stack level
-	function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
-		if targettype == AttributeTargets.Enum then
-			Enum.SetSealed(target)
-		elseif targettype == AttributeTargets.Struct then
-			Struct.SetSealed(target)
-		elseif targettype == AttributeTargets.Interface then
-			Interface.SetSealed(target)
-		elseif targettype == AttributeTargets.Class then
-			Class.SetSealed(target)
-		end
-	end
-
-	property "AttributeTarget" { default = AttributeTargets.Enum + AttributeTargets.Struct + AttributeTargets.Interface + AttributeTargets.Class }
-end)
-```
-
-the attribute should extend the **System.IApplyAttribute** and define the **ApplyAttribute** method. The apply attributes are applied during the define process of the target.
-
-There is a special *manager* parameter, the definition environment of the struct, interface and class'd be passed in as the value, it's a dangerous but useful feature if you want append common type features into the target:
-
-```lua
-require "PLoop"
-
-PLoop(function(_ENV)
-	class "__Name__" (function(_ENV)
-		extend "IApplyAttribute"
-
-		--- apply changes on the target
-		-- @param   target                      the target
-		-- @param   targettype                  the target type
-		-- @param 	manager 					the definition manager of the target
-		-- @param   owner                       the target's owner
-		-- @param   name                        the target's name in the owner
-		-- @param   stack                       the stack level
-		function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
-			if manager then
-				Environment.Apply(manager, function(_ENV)
-					property "Name" { type = String }
-				end)
-			end
-		end
-
-		property "AttributeTarget" { default = AttributeTargets.Interface + AttributeTargets.Class }
-	end)
-
-	__Name__()
-	class "A" {}
-
-	A().Name = 123 -- Error: the Name must be string, got number
-end)
-```
-
-It's a dangerous feature, so only use it if needed.
+We have seen many attributes, they are used to modify the target's behaviors. We can find more details in [docs/002.attribute.md](https://github.com/kurapica/PLoop/blob/master/docs/002.attribute.md)
 
 
-### System.IAttachAttribute
+### System.AttributeTargets
 
-Those attributes are used to attach attribute datas on the target, also can be used to register the final result to other systems.
+The system have provide several pre-defined attribute target types, so we'll know the attribute can be used on what type target features.
 
-```lua
-PLoop(function(_ENV)
-	class "__DataTable__" (function(_ENV)
-		extend "IAttachAttribute"
+* System.AttributeTargets.All		- the attribute type represents all
+* System.AttributeTargets.Function	- the attribute type represents function
+* System.AttributeTargets.Namespace	- the attribute type represents namespace
+* System.AttributeTargets.Enum		- the attribute type represents enum
+* System.AttributeTargets.Struct	- the attribute type represents struct
+* System.AttributeTargets.Member	- the attribute type represents member
+* System.AttributeTargets.Method	- the attribute type represents method
+* System.AttributeTargets.Interface	- the attribute type represents interface
+* System.AttributeTargets.Class		- the attribute type represents class
+* System.AttributeTargets.Object	- the attribute type represents object
+* System.AttributeTargets.Event		- the attribute type represents event
+* System.AttributeTargets.Property	- the attribute type represents property
 
-		--- apply changes on the target
-		-- @param   target                      the target
-		-- @param   targettype                  the target type
-		-- @param   owner                       the target's owner
-		-- @param   name                        the target's name in the owner
-		-- @param   stack                       the stack level
-		function AttachAttribute(self, target, targettype, owner, name, stack)
-			return self.DataTable
-		end
-
-		property "AttributeTarget" { default = AttributeTargets.Class }
-
-		property "DataTable" { type = String }
-	end)
-
-	__DataTable__{ DataTable = "Persons" }
-	class "Person" {}
-
-	-- Persons
-	print(Attribute.GetAttachedData(__DataTable__, Person))
-end)
-```
-
-the attribute should extend the **System.IAttachAttribute** and defined the **AttachAttribute** method, the return value of the method will be saved, so we can check it later.
 
 ### System Attributes
 

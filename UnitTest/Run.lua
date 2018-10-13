@@ -13,19 +13,19 @@
 --===========================================================================--
 PLOOP_PLATFORM_SETTINGS = { CORE_LOG_LEVEL = 3, MULTI_OS_THREAD = true, MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = false }
 
-PLOOP_UNITTEST_MODULES 		= {
-	"prototype", "environment", "namespace", "enum", "struct", "class",
-	"variables",
+PLOOP_UNITTEST_MODULES      = {
+    "prototype", "environment", "namespace", "enum", "struct", "class",
+    "variables",
 }
 
 require "PLoop"(function(_ENV)
-	require "PLoop.System.IO"
-	require "PLoop.System.UnitTest"
+    require "PLoop.System.IO"
+    require "PLoop.System.UnitTest"
 
     export {
         pcall               = pcall,
         ipairs              = ipairs,
-        loadfile 			= loadfile,
+        loadfile            = loadfile,
         Info                = Logger.Default[Logger.LogLevel.Info],
         Warn                = Logger.Default[Logger.LogLevel.Warn],
         Error               = Logger.Default[Logger.LogLevel.Error],
@@ -33,20 +33,20 @@ require "PLoop"(function(_ENV)
         System.IO.Path, UnitTest
     }
 
-	Logger.Default:AddHandler(print)
+    Logger.Default:AddHandler(print)
 
-	local root = Path.CombinePath(Path.GetCurrentPath(), "Tests")
+    local root = Path.CombinePath(Path.GetCurrentPath(), "Tests")
 
-	for _, name in ipairs(PLOOP_UNITTEST_MODULES) do
-		local func, msg = loadfile(Path.CombinePath(root, name) .. ".lua")
-		if not func then
-			Error("[UnitTest]Failed to load test for %s - %s", name, msg)
-		end
-		local ok, msg = pcall(func)
-		if not ok then
-			Error("[UnitTest]Failed to load test for %s - %s", name, msg)
-		end
-	end
+    for _, name in ipairs(PLOOP_UNITTEST_MODULES) do
+        local func, msg = loadfile(Path.CombinePath(root, name) .. ".lua")
+        if not func then
+            Error("[UnitTest]Failed to load test for %s - %s", name, msg)
+        end
+        local ok, msg = pcall(func)
+        if not ok then
+            Error("[UnitTest]Failed to load test for %s - %s", name, msg)
+        end
+    end
 
-	UnitTest("PLoop"):Run()
+    UnitTest("PLoop"):Run()
 end)

@@ -57,5 +57,5 @@ __Test__() function usage()
 
 	Assert.True(System.Enum.ValidateFlags(SUNDAY, day))
 	Assert.False(System.Enum.ValidateFlags(SATURDAY, day))
-	Assert.Same({ SUNDAY = SUNDAY, MONDAY = MONDAY, FRIDAY = FRIDAY }, WeekDay(day, {}))
+	Assert.Same(Dictionary{ SUNDAY = SUNDAY, MONDAY = MONDAY, FRIDAY = FRIDAY }, Dictionary(WeekDay(day)))
 end

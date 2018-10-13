@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/10/01                                               --
--- Version      :   1.0.0-beta031                                            --
+-- Update Date  :   2018/10/07                                               --
+-- Version      :   1.0.0-beta032                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -722,15 +722,13 @@ end
 --
 -- The prototypes are simple userdata generated like:
 --
---      proxy = prototype {
---          __index = function(self, key) return rawget(self, "__" .. key) end,
---          __newindex = function(self, key, value)
---              rawset(self, "__" .. key, value)
---          end,
+--      proxy           = prototype {
+--          __index     = function(self, key) return rawget(self, "__" .. key) end,
+--          __newindex  = function(self, key, value) rawset(self, "__" .. key, value) end,
 --      }
 --
---      obj = prototype.NewObject(proxy)
---      obj.Name = "Test"
+--      obj             = prototype.NewObject(proxy)
+--      obj.Name        = "Test"
 --      print(obj.Name, obj.__Name)
 --
 -- The prototypes are normally userdata created by newproxy if the newproxy API
@@ -740,13 +738,12 @@ end
 -- are two fields whose default value is provided by the prototype system :
 --      * __metatable : if nil, the prototype itself would be used.
 --      * __tostring  : if its value is string, it'll be converted to a function
---              that return the value, if the prototype name is provided and the
---              __tostring is nil, the name would be used.
+--              that return the value.
 --
 -- The prototype system also support a simple inheritance system like :
 --
---      cproxy = prototype (proxy, {
---          __call = function(self, ...) end,
+--      cproxy          = prototype (proxy, {
+--          __call      = function(self, ...) end,
 --      })
 --
 -- The new prototype's meta-table will copy meta-settings from its super except
@@ -754,12 +751,9 @@ end
 --
 -- The complete definition syntaxes are
 --
---      val = prototype ([name][super,]definiton[,nodeepclone][,stack])
+--      val = prototype ([super,]definiton[,nodeepclone][,stack])
 --
 -- The params :
---      * name          : string, the prototype's name, it'd be used in the
---              __tostring, if it's not provided.
---
 --      * super         : prototype, the super prototype whose meta-settings
 --              would be copied to the new one.
 --
@@ -825,33 +819,18 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   prototype
-            -- @format  (prototype[, cache])
             -- @param   prototype                   the target prototype
-            -- @param   cache:(table|boolean)       whether save the result in the cache if it's a table or return a cache table if it's true
-            -- @rformat (iter, prototype)           without the cache parameter, used in generic for
             -- @return  iter:function               the iterator
             -- @return  prototype                   the prototype itself
-            -- @rformat (cache)                     with the cache parameter, return the cache of the methods.
-            -- @return  cache
             -- @usage   for name, func in prototype.GetMethods(class) do print(name) end
-            -- @usage   for name, func in pairs(prototype.GetMethods(class, true)) do print(name) end
-            ["GetMethods"]      = function(self, cache)
-                local meta      = _Prototype[self]
-                if meta and type(meta.__index) == "table" then
-                    local methods = meta.__index
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        for k, v in pairs, methods do if type(v) == "function" then cache[k] = v end end
-                        return cache
-                    else
-                        return function(self, n)
-                            local k, v = next(methods, n)
-                            while k and type(v) ~= "function" do k, v = next(methods, k) end
-                            return k, v
-                        end, self
-                    end
-                elseif cache then
-                    return type(cache) == "table" and cache or nil
+            ["GetMethods"]      = function(self)
+                local methods   = _Prototype[self] and _Prototype[self].__index
+                if methods and type(methods) == "table" then
+                    return function(self, n)
+                        local k, v = next(methods, n)
+                        while k and type(v) ~= "function" do k, v = next(methods, k) end
+                        return k, v
+                    end, self
                 else
                     return fakefunc, self
                 end
@@ -1127,11 +1106,11 @@ do
     attribute                   = prototype {
         __tostring              = "attribute",
         __index                 = {
-            --- Apply the registered attributes to the target before the definition
+            --- Apply the registered attributes to the target before the definition finished
             -- @static
             -- @method  ApplyAttributes
             -- @owner   attribute
-            -- @format  (target, targettype, definition, [owner], [name][, stack])
+            -- @format  (target, targettype, manager, [owner], [name][, stack])
             -- @param   target                      the target, maybe class, method, object and etc
             -- @param   targettype                  the flag value of the target's type
             -- @param   manager                     the definition manager of the target
@@ -1161,7 +1140,7 @@ do
                 Trace("[attribute][ApplyAttributes] <== [%s]%s", _AttrTargetTypes[targettype] or "Unknown", owner and ("[" .. tostring(owner) .. "]" .. name) or tostring(target))
             end;
 
-            --- Attach the registered attributes data to the target after the definition
+            --- Attach the registered attributes data to the target after the definition finished
             -- @static
             -- @method  AttachAttributes
             -- @owner   attribute
@@ -1251,21 +1230,13 @@ do
             -- @static
             -- @method  GetAttributeTargets
             -- @owner   attribute
-            -- @format  attributeType[, cache]
             -- @param   attributeType               the attribute type
-            -- @param   cache                       the cache to save the result
-            -- @rformat (cache)                     the cache that contains the targets
-            -- @rformat (iter, attr)                without the cache parameter, used in generic for
-            ["GetAttributeTargets"] = function(aType, cache)
+            -- @return  iter:function               the iterator
+            -- @return  attributeType               the attribute type
+            ["GetAttributeTargets"] = function(aType)
                 local adata         = _AttrTargetData[aType]
-                if cache then
-                    cache   = type(cache) == "table" and wipe(cache) or {}
-                    if adata then for k in pairs, adata do tinsert(cache, k) end end
-                    return cache
-                elseif adata then
-                    return function(self, n)
-                        return (next(adata, n))
-                    end, aType
+                if adata then
+                    return function(self, n) return (next(adata, n)) end, aType
                 else
                     return fakefunc, aType
                 end
@@ -1275,34 +1246,23 @@ do
             -- @static
             -- @method  GetAttributeTargetOwners
             -- @owner   attribute
-            -- @format  attributeType[, cache]
             -- @param   attributeType               the attribute type
-            -- @param   cache                       the cache to save the result
-            -- @rformat (cache)                     the cache that contains the targets
-            -- @rformat (iter, attr)                without the cache parameter, used in generic for
-            ["GetAttributeTargetOwners"] = function(aType, cache)
+            -- @return  iter:function               the iterator
+            -- @return  attributeType               the attribute type
+            ["GetAttributeTargetOwners"] = function(aType)
                 local adata         = _AttrOwnerSubData[aType]
-                if cache then
-                    cache   = type(cache) == "table" and wipe(cache) or {}
-                    if adata then for k in pairs, adata do tinsert(cache, k) end end
-                    return cache
-                elseif adata then
-                    return function(self, n)
-                        return (next(adata, n))
-                    end, aType
+                if adata then
+                    return function(self, n) return (next(adata, n)) end, aType
                 else
                     return fakefunc, aType
                 end
             end;
 
-            --- Whether there are registered attributes unused
+            --- Whether there are registered attributes
             -- @static
             -- @method  HaveRegisteredAttributes
             -- @owner   attribute
-            -- @format  (target, targettype[, stack])
-            -- @param   target                      the target
-            -- @param   targettype                  the target type
-            -- @param   stack                       the stack level
+            -- @return  hasattr:boolean             true if have registered attributes
             ["HaveRegisteredAttributes"] = function()
                 return #_RegisteredAttrs > 0
             end;
@@ -1710,7 +1670,7 @@ do
             -- @static
             -- @method  GetValue
             -- @owner   environment
-            -- @format  (env, name, [noautocache][, stack])
+            -- @format  (env, name[, noautocache][, stack])
             -- @param   env:table                   the environment
             -- @param   name                        the key of the value
             -- @param   noautocache                 true if don't save the value to the environment, the keyword won't be saved
@@ -2091,7 +2051,6 @@ do
                 end
             end;
 
-
             --- Save the value to the environment, useful to save attributes for functions
             -- @static
             -- @method  SaveValue
@@ -2414,26 +2373,13 @@ do
             -- @static
             -- @method  GetNamespaces
             -- @owner   namespace
-            -- @format  (root[, cache])
             -- @param   root                        the root namespace
-            -- @param   cache                       the table used to save the result
-            -- @rformat (cache)                     the cache
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            ["GetNamespaces"]   = function(target, cache)
+            -- @return  iter:function               the iterator
+            -- @return  root                        the root namespace
+            ["GetNamespaces"]   = function(target)
                 local tree      = _NSTree[target]
                 if tree then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        for k, v in pairs, tree do cache[k] = v end
-                        return cache
-                    else
-                        return function(self, n)
-                            return next(tree, n)
-                        end, target
-                    end
-                end
-                if cache then
-                    return type(cache) == "table" and cache or nil
+                    return function(self, n) return next(tree, n) end, target
                 else
                     return fakefunc, target
                 end
@@ -2448,7 +2394,7 @@ do
             -- @parma   lastOnly                    whether only the last name of the namespace's path
             -- @return  string                      the path of the namespace or the name of it if lastOnly is true
             ["GetNamespaceName"]= function(ns, onlyLast)
-                local name = _NSName[ns]
+                local name      = _NSName[ns]
                 return name and (onlyLast and strmatch(name, "[%P_]+$") or name) or "Anonymous"
             end;
 
@@ -2458,8 +2404,8 @@ do
             -- @owner   namespace
             -- @return  namesapce                   the namespace for next generated type
             ["GetNamespaceForNext"] = function()
-                local ns = _NextNSForType
-                _NextNSForType = nil
+                local ns        = _NextNSForType
+                _NextNSForType  = nil
                 return ns
             end;
 
@@ -2470,8 +2416,7 @@ do
             -- param    ns                          the target namespace
             -- @return  boolean                     true if the target is anonymous namespace
             ["IsAnonymousNamespace"] = function(ns)
-                local name = _NSName[ns]
-                return name == false
+                return _NSName[ns] == false
             end;
 
             --- Save feature to the namespace
@@ -2969,20 +2914,16 @@ do
             -- @static
             -- @method  GetEnumValues
             -- @owner   enum
-            -- @format  (enumeration[, cache])
             -- @param   enumeration                 the enumeration
-            -- @param   cache                       the table used to cache those elements
-            -- @rformat (iter, enum)                If cache is nil, the iterator will be returned
-            -- @rformat (cache)                     the cache table if used
-            ["GetEnumValues"]   = function(target, cache)
+            -- @return  iter:function               the iterator
+            -- @return  enumeration                 the enumeration
+            ["GetEnumValues"]   = function(target)
                 local info      = _EnumInfo[target]
                 if info then
-                    if cache then
-                        return tblclone(info[FLD_ENUM_ITEMS], type(cache) == "table" and wipe(cache) or {})
-                    else
-                        info    = info[FLD_ENUM_ITEMS]
-                        return function(self, key) return next(info, key) end, target
-                    end
+                    info        = info[FLD_ENUM_ITEMS]
+                    return function(self, key) return next(info, key) end, target
+                else
+                    return fakefunc, target
                 end
             end;
 
@@ -3029,39 +2970,23 @@ do
             -- @static
             -- @method  Parse
             -- @owner   enum
-            -- @format  (enumeration, value[, cache])
             -- @param   enumeration                 the enumeration
             -- @param   value                       the value
-            -- @param   cache                       the table used to cache the result, only used when the enumeration is flag enum
             -- @rformat (name)                      only if the enumeration is not flags enum
-            -- @rformat (iter, enum)                If cache is nil and the enumeration is flags enum, the iterator will be returned
-            -- @rformat (cache)                     if the cache existed and the enumeration is flags enum
-            ["Parse"]           = function(target, value, cache)
+            -- @rformat (iter, enum)                If the enumeration is flags enum, the iterator will be returned
+            ["Parse"]           = function(target, value)
                 local info      = _EnumInfo[target]
                 if info then
                     local ecache= info[FLD_ENUM_CACHE]
 
                     if info[FLD_ENUM_MAXVAL] then
-                        if cache then
-                            local ret = type(cache) == "table" and wipe(cache) or {}
-
-                            if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
-                                if value > 0 then
-                                    local ckv = 1
-
-                                    while ckv <= value and ecache[ckv] do
-                                        if validateflags(ckv, value) then ret[ecache[ckv]] = ckv end
-                                        ckv = ckv * 2
-                                    end
-                                elseif value == 0 and ecache[0] then
-                                    ret[ecache[0]] = 0
-                                end
-                            end
-
-                            return ret
-                        elseif type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
+                        if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
                             if value == 0 then
-                                return function(self, key) if not key then return ecache[0], 0 end end, target
+                                if ecache[0] then
+                                    return function(self, key) if not key then return ecache[0], 0 end end, target
+                                else
+                                    return fakefunc, target
+                                end
                             else
                                 local ckv = 1
                                 return function(self, key)
@@ -3070,7 +2995,7 @@ do
                                         ckv = ckv * 2
                                         if validateflags(v, value) then return ecache[v], v end
                                     end
-                                end
+                                end, target
                             end
                         else
                             return fakefunc, target
@@ -4697,31 +4622,18 @@ do
             -- @static
             -- @method  GetMembers
             -- @owner   struct
-            -- @format  (structure[, cache])
             -- @param   structure                   the structure
-            -- @param   cache                       the table used to save the result
-            -- @rformat (cache)                     the cache that contains the member list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            ["GetMembers"]      = function(target, cache)
+            -- @return  iter:function               the iterator
+            -- @return  structure                   the structure
+            ["GetMembers"]      = function(target)
                 local info      = getStructTargetInfo(target)
                 if info then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
-                            tinsert(cache, m[FLD_MEMBER_OBJ])
+                    return function(self, i)
+                        i   = i and (i + 1) or FLD_STRUCT_MEMBERSTART
+                        if info[i] then
+                            return i, info[i][FLD_MEMBER_OBJ]
                         end
-                        return cache
-                    else
-                        return function(self, i)
-                            i   = i and (i + 1) or FLD_STRUCT_MEMBERSTART
-                            if info[i] then
-                                return i, info[i][FLD_MEMBER_OBJ]
-                            end
-                        end, target
-                    end
-                end
-                if cache then
-                    return type(cache) == "table" and cache or nil
+                    end, target
                 else
                     return fakefunc, target
                 end
@@ -4750,34 +4662,24 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   struct
-            -- @format  (structure[, cache])
             -- @param   structure                   the structure
-            -- @param   cache                       the table used to save the result
-            -- @rformat (cache)                     the cache that contains the method list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  structure                   the structure
             -- @usage   for name, func, isstatic in struct.GetMethods(System.Drawing.Color) do
             --              print(name)
             --          end
-            ["GetMethods"]      = function(target, cache)
+            ["GetMethods"]      = function(target)
                 local info      = getStructTargetInfo(target)
                 if info then
                     local typm  = info[FLD_STRUCT_TYPEMETHOD]
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        if typm then for k, v in pairs, typm do cache[k] = v or info[k] end end
-                        return cache
-                    elseif typm then
+                    if typm then
                         return function(self, n)
                             local m, v = next(typm, n)
                             if m then return m, v or info[m], not v end
                         end, target
                     end
                 end
-                if cache then
-                    return type(cache) == "table" and cache or nil
-                else
-                    return fakefunc, target
-                end
+                return fakefunc, target
             end;
 
             --- Get the struct category of the structure
@@ -7509,30 +7411,19 @@ do
             -- @static
             -- @method  GetExtends
             -- @owner   interface
-            -- @format  (target[, cache])
             -- @param   target                      the target interface
-            -- @param   cache                       the table used to save the result
-            -- @rformat (cache)                     the cache that contains the interface list
-            -- @rformat (iter, target)              without the cache parameter, used in generic for
-            ["GetExtends"]      = function(target, cache)
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target interface
+            ["GetExtends"]      = function(target)
                 local info      = getICTargetInfo(target)
                 if info then
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        for i   = #info, FLD_IC_STEXT, -1 do tinsert(cache, info[i]) end
-                        return cache
-                    else
-                        local m = #info
-                        local u = m - FLD_IC_STEXT
-                        return function(self, n)
-                            if type(n) == "number" and n >= 0 and n <= u then
-                                return n + 1, info[m - n]
-                            end
-                        end, target, 0
-                    end
-                end
-                if cache then
-                    return type(cache) == "table" and cache or nil
+                    local m     = #info
+                    local u     = m - FLD_IC_STEXT
+                    return function(self, n)
+                        if type(n) == "number" and n >= 0 and n <= u then
+                            return n + 1, info[m - n]
+                        end
+                    end, target, 0
                 else
                     return fakefunc, target
                 end
@@ -7559,33 +7450,18 @@ do
             -- @static
             -- @method  GetFeatures
             -- @owner   interface
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target interface
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object features
-            -- @rformat (cache)                     the cache that contains the feature list
-            -- @rformat (iter, target)              without the cache parameter, used in generic for
-            ["GetFeatures"]     = function(target, cache, fromobj)
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target interface
+            ["GetFeatures"]     = function(target, fromobj)
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
                     local typftr= info[fromobj and FLD_IC_OBJFTR or FLD_IC_TYPFTR]
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-
-                        if typftr then for k, v in pairs, typftr do cache[k] = v end end
-
-                        return cache
-                    elseif typftr then
-                        return function(self, n)
-                            return next(typftr, n)
-                        end, target
-                    end
+                    if typftr then return function(self, n) return next(typftr, n) end, target end
                 end
-                if cache then
-                    return type(cache) == "table" and cache or nil
-                else
-                    return fakefunc, target
-                end
+                return fakefunc, target
             end;
 
             --- Get a method of the target interface
@@ -7616,35 +7492,26 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   interface
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target interface
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object methods
-            -- @rformat (cache)                     the cache that contains the method list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target interface
             -- @usage   for name, func, isstatic in interface.GetMethods(System.IAttribute) do
             --              print(name)
             --          end
-            ["GetMethods"]      = function(target, cache, fromobj)
+            ["GetMethods"]      = function(target, fromobj)
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
                     local typm  = info[fromobj and FLD_IC_OBJMTD or FLD_IC_TYPMTD]
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        if typm then for k, v in pairs, typm do cache[k] = v or info[k] end end
-                        return cache
-                    elseif typm then
+                    if typm then
                         return function(self, n)
                             local m, v = next(typm, n)
                             if m then return m, v or info[m], not v end
                         end, target
                     end
                 end
-                if cache then
-                    return type(cache) == "table" and cache or nil
-                else
-                    return fakefunc, target
-                end
+                return fakefunc, target
             end;
 
             --- Get a meta-method of the target interface
@@ -7669,22 +7536,16 @@ do
             -- @static
             -- @method  GetMetaMethods
             -- @owner   interface
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target interface
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object meta-methods
-            -- @rformat (cache)                     the cache that contains the method list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
-            ["GetMetaMethods"]      = function(target, cache, fromobj)
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target interface
+            ["GetMetaMethods"]      = function(target, fromobj)
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
                     local typm  = info[fromobj and FLD_IC_OBJMTM or FLD_IC_TYPMTM]
-                    if cache then
-                        cache   = type(cache) == "table" and wipe(cache) or {}
-                        if typm then
-                            for k in pairs, typm do local key = META_KEYS[k] if key then cache[k] = typm[key] end end end
-                        return cache
-                    elseif typm then
+                    if typm then
                         return function(self, n)
                             local m = next(typm, n)
                             while m and not META_KEYS[m] do m = next(typm, m) end
@@ -7692,11 +7553,7 @@ do
                         end, target
                     end
                 end
-                if cache then
-                    return type(cache) == "table" and cache or nil
-                else
-                    return fakefunc, target
-                end
+                return fakefunc, target
             end;
 
             --- Get the require class of the target interface
@@ -8211,11 +8068,9 @@ do
             -- @static
             -- @method  GetExtends
             -- @owner   class
-            -- @format  (target[, cache])
             -- @param   target                      the target class
-            -- @param   cache                       the table used to save the result
-            -- @rformat (cache)                     the cache that contains the interface list
-            -- @rformat (iter, target)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target class
             ["GetExtends"]      = interface.GetExtends;
 
             --- Get a type feature of the target class
@@ -8233,12 +8088,11 @@ do
             -- @static
             -- @method  GetFeatures
             -- @owner   class
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target class
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object features
-            -- @rformat (cache)                     the cache that contains the feature list
-            -- @rformat (iter, target)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target class
             ["GetFeatures"]     = interface.GetFeatures;
 
             --- Get a method of the target class
@@ -8258,12 +8112,11 @@ do
             -- @static
             -- @method  GetMethods
             -- @owner   class
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target class
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object methods
-            -- @rformat (cache)                     the cache that contains the method list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target class
             ["GetMethods"]      = interface.GetMethods;
 
             --- Get a meta-method of the target class
@@ -8281,12 +8134,11 @@ do
             -- @static
             -- @method  GetMetaMethods
             -- @owner   class
-            -- @format  (target[, cache][, fromobject])
+            -- @format  (target[, fromobject])
             -- @param   target                      the target class
-            -- @param   cache                       the table used to save the result
             -- @param   fromobject:boolean          get the object meta-methods
-            -- @rformat (cache)                     the cache that contains the method list
-            -- @rformat (iter, struct)              without the cache parameter, used in generic for
+            -- @return  iter:function               the iterator
+            -- @return  target                      the target class
             ["GetMetaMethods"]  = interface.GetMetaMethods;
 
             --- Get the object class of the object

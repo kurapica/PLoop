@@ -30,6 +30,7 @@ PLoop(function(_ENV)
         next                    = next,
         floor                   = math.floor,
         mhuge                   = math.huge,
+        BIG_NUMBER              = 10^12,
         tinsert                 = table.insert,
         tremove                 = table.remove,
         tblconcat               = table.concat,
@@ -611,6 +612,7 @@ PLoop(function(_ENV)
             self(cache)
             local ret = tonumber(content)
             if not ret then error(_ERR_MSG_NOT_NUMBER:format(content, pos)) end
+            if ret >= BIG_NUMBER or ret <= - BIG_NUMBER then ret = content end
             return 2, prev, ret, jsonIndex
         end
 
@@ -1067,6 +1069,7 @@ PLoop(function(_ENV)
             local ct = strsub(json, startp, nxtp - 1)
             local ret = tonumber(ct)
             if not ret then error(_ERR_MSG_NOT_NUMBER:format(ct, pos)) end
+            if ret >= BIG_NUMBER or ret <= - BIG_NUMBER then ret = ct end
             return 2, nxtp, ret, jsonIndex
         end
 

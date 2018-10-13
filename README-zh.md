@@ -1593,7 +1593,7 @@ end)
 
 **PLoop**的类会根据定义情况自行优化元表。
 
-*Person*类可以直接访问它的对象访问`Person.SetName(Ann, "Ann")` 和 `Ann:SetName("Ann")`是一致的。
+*Person*类可以直接访问它的对象方法`Person.SetName(Ann, "Ann")` 和 `Ann:SetName("Ann")`是一致的。
 
 类也可以有只能自己访问的静态方法，和结构体的静态方法一样，需要使用`System.__Static__`特性:
 
@@ -1862,7 +1862,7 @@ end)
 
 * 析构方法是由系统管理的，所以，类不需要自己调用超类的析构方法。
 
-* 构造体方法需要主动调用`super(self, ...)`来调用超类的构造体方法，因为只有子类知道需要使用那些参数去调用超类构造体。
+* 构造体方法需要主动调用`super(self, ...)`来调用超类的构造体方法，因为只有子类知道需要使用哪些参数去调用超类构造体。
 
 * 对于对象方法和元表方法（包含`__new`和`__exist`），存在两种调用超类对应方法的方式:
 
@@ -3472,7 +3472,7 @@ PLoop (function(_ENV)
 end)
 ```
 
-请不要再其他重载方法中使用**this**关键字，它仅用于这三种构造体方法。
+请不要在其他重载方法中使用**this**关键字，它仅用于这三种构造体方法。
 
 
 ### 使用超类方法处理未处理的参数样式
@@ -3736,7 +3736,7 @@ end)
 
 同时，**Array**的定义函数需要增加一个额外参数，用于传递模板类型。
 
-类型定义之后，我们可以使用**Array[Integer]**这种形式传入真实类型，然后使用被创建的新类型。
+类型定义之后，我们可以使用`Array[Integer]`这种形式传入真实类型，然后使用被创建的新类型。
 
 我们也可以创建多类型的模板类：
 
@@ -4491,7 +4491,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-大多数情况下，我们只要用于需要限定子类申明方法的返回值类型的接口和超类：
+大多数情况下，我们用于需要限定子类申明方法的返回值类型的接口和超类：
 
 ```lua
 require "PLoop"
@@ -4791,11 +4791,11 @@ end
 
 ### 从JSON开始
 
-使用取自[PLoop_Web](https://github.com/kurapica/PLoop_Web)的一个例子：
+使用取自System.Web的一个例子：
 
 
 ```lua
-require "PLoop_Web"
+require "PLoop.System.Web"
 
 PLoop(function(_ENV)
 	import "System.Serialization"
@@ -4846,7 +4846,7 @@ end)
 * Serialize : PLoop object -> lua table -> target format( string, json, xml )
 * Deserialize : target format -> lua table -> PLoop object
 
-**JsonFormatProvider**定义在**System.Web**，由[PLoop_Web](https://github.com/kurapica/PLoop_Web)提供，而**StringFormatProvider**定义在**System.Serialization**，由[PLoop]()提供。
+**JsonFormatProvider**定义在**System.Web**，而**StringFormatProvider**定义在**System.Serialization**。
 
 ### 可序列化类型
 

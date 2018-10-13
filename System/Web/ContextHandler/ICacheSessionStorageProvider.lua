@@ -22,7 +22,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
-        __Abstract__() __Return__{ ICache }:AsInheritable()
+        __Abstract__() __Return__{ System.Data.ICache }:AsInheritable()
         function GetCacheObject(self) end
 
         -----------------------------------------------------------------------

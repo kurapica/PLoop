@@ -194,7 +194,6 @@ __Test__() function usage()
     __Return__{ Number/20 }
     function test6() end
 
-
 	Assert.Find("variables.lua:192: The test5 Return: System.String - the 1st return value can't be nil",
 		Assert.Error(
 			function()
@@ -204,4 +203,32 @@ __Test__() function usage()
 	)
 
 	Assert.Equal(20, test6())
+
+    ------- __Arguments__ & __Return__--------
+    __Arguments__{ Number * 2 } __Return__{ NaturalNumber }
+    function max(m, ...)
+    	for i = 1, select("#", ...) do
+    		local v = select(i, ...)
+    		if m < v then m = v end
+    	end
+    	return m
+    end
+
+    Assert.Equal(10, max(1, 2, 3, 10))
+
+	Assert.Find("variables.lua:222: Usage: max(... [*2] as System.Number) - the 3rd argument must be number, got boolean",
+		Assert.Error(
+			function()
+				local v = max(1, 2, true, 4)
+			end
+		)
+	)
+
+	Assert.Find("variables.lua:209: The max Return: System.NaturalNumber - the 1st return value must be a natural number",
+		Assert.Error(
+			function()
+				local v = max(-100, -90, -10)
+			end
+		)
+	)
 end
