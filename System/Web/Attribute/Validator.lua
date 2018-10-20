@@ -43,15 +43,14 @@ PLoop(function(_ENV)
                         if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
                             if (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(authority, context) then
                                 return definition(context, ...)
-                            else
-                                context.Response.Redirect(apath)
+                            elseif apath then
+                                return context.Response.Redirect(apath)
                             end
+                        end
+                        if context.Request.HttpMethod == HttpMethod_GET then
+                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
-                            if context.Request.HttpMethod == HttpMethod_GET then
-                                context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                            else
-                                context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                            end
+                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
                         end
                     end
                 else
@@ -76,15 +75,14 @@ PLoop(function(_ENV)
                         if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
                             if (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(authority, session) then
                                 return definition(self, context, ...)
-                            else
-                                context.Response.Redirect(apath)
+                            elseif apath then
+                                return context.Response.Redirect(apath)
                             end
+                        end
+                        if context.Request.HttpMethod == HttpMethod_GET then
+                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
-                            if context.Request.HttpMethod == HttpMethod_GET then
-                                context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                            else
-                                context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                            end
+                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
                         end
                     end
                 else
@@ -187,7 +185,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Any, String/"/" }
+        __Arguments__{ Any, String/nil }
         function __new(_, authority, url)
             return { authority, url }
         end

@@ -1251,6 +1251,9 @@ PLoop(function(_ENV)
 
         export { Namespace, Class, Environment, IDataContext, IDataEntity, DataCollection, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
 
+        local setDataContext    = IDataEntity.SetDataContext
+        local setEntityData     = IDataEntity.SetEntityData
+
         __Sealed__() struct "DataTableIndex" {
             { name = "name",        type = String },
             { name = "unique",      type = Boolean },
@@ -1298,10 +1301,15 @@ PLoop(function(_ENV)
                 --                      constructor                      --
                 -----------------------------------------------------------
                 __Arguments__{ IDataContext/nil, Table/nil }
-                function __ctor(self, ctx, tbl)
-                    if ctx then self:SetDataContext(ctx) end
-                    if tbl then self:SetEntityData(tbl) end
+                function __new(_, ctx, tbl)
+                    local self  = {}
+                    if ctx then setDataContext(self, ctx) end
+                    if tbl then setEntityData (self, tbl) end
+                    return self, true
                 end
+
+                __Arguments__{ Table }
+                function __new(_, tbl) return {} end
             end)
         end
 
