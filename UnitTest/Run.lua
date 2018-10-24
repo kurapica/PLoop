@@ -11,7 +11,12 @@
 -- Update Date  :   2018/09/26                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
-PLOOP_PLATFORM_SETTINGS = { CORE_LOG_LEVEL = 3, MULTI_OS_THREAD = true, MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = false }
+PLOOP_PLATFORM_SETTINGS = {
+    OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true,
+    CORE_LOG_LEVEL = 3,
+    MULTI_OS_THREAD = true, MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = false,
+    TYPE_VALIDATION_DISABLED = false,
+}
 
 PLOOP_UNITTEST_MODULES      = {
     "prototype", "environment", "namespace", "enum", "struct", "class",

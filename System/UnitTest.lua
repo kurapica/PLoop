@@ -156,6 +156,7 @@ PLoop(function(_ENV)
             extend "IAttachAttribute"
 
             export {
+                rawget          = rawget,
                 isObjectType    = Class.IsObjectType,
 
                 UnitTest,
@@ -167,7 +168,7 @@ PLoop(function(_ENV)
                         owner= owner,
                         name = name,
                         func = target,
-                        desc = self[1],
+                        desc = rawget(self, 1),
                     }
                 else
                     error("__Test__ can only be applyed to objects of System.UnitTest", stack + 1)
