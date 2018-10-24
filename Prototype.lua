@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/10/07                                               --
--- Version      :   1.0.0-beta032                                            --
+-- Update Date  :   2018/10/24                                               --
+-- Version      :   1.0.0-beta033                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -289,6 +289,11 @@ do
         -- Default 40
         -- @owner       PLOOP_PLATFORM_SETTINGS
         THREAD_POOL_MAX_SIZE                = 40,
+
+        --- Use the Dispose as the __gc, only works for Lua 5.3 and above
+        -- Default true
+        -- @owner       PLOOP_PLATFORM_SETTINGS
+        USE_DISPOSE_AS_META_GC              = true,
     }
 
     -- Special constraint
@@ -5752,6 +5757,7 @@ do
     local IC_META_INDEX         = "__index"
     local IC_META_NEWIDX        = "__newindex"
     local IC_META_TABLE         = "__metatable"
+    local IC_META_GC            = "__gc"
 
     -- Super & This
     local IC_KEYWORD_SUPER      = "super"
@@ -6783,6 +6789,10 @@ do
                         if rawget(self, IC_META_DISPOSED) == true then return end
                         for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
                         rawset(wipe(self), IC_META_DISPOSED, true)
+                    end
+
+                    if not objmeta[IC_META_GC] and PLOOP_PLATFORM_SETTINGS.USE_DISPOSE_AS_META_GC then
+                        objmeta[IC_META_GC] = objmtd[IC_META_DISPOB]
                     end
                 end
 
