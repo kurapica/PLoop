@@ -12624,17 +12624,17 @@ do
             local lst   = false
 
             for i, var in ipairs, vars, 0 do
-                if lst then return onlyvalid or "the %s's list variable must be the last one" end
+                if lst then return onlyvalid or "the list variable must be the last one" end
                 if getmetatable(var) == nil then
                     if var.varargs then
                         lst = true
                     elseif var.optional then
                         opt = true
                     elseif opt then
-                        return onlyvalid or "the %s's non-optional variables must exist before the optional variables"
+                        return onlyvalid or "the non-optional variables must exist before the optional variables"
                     end
                 elseif opt then
-                    return onlyvalid or "the %s's non-optional variables must exist before the optional variables"
+                    return onlyvalid or "the non-optional variables must exist before the optional variables"
                 end
             end
         end,
