@@ -4959,11 +4959,10 @@ do
             -- @static
             -- @method  ValidateValue
             -- @owner   struct
-            -- @format  (structure, value[, onlyValid[, stack]])
+            -- @format  (structure, value[, onlyValid])
             -- @param   structure                   the structure
             -- @param   value                       the value used to validate
             -- @param   onlyValid                   Only validate the value, no value modifiy(The initializer and object methods won't be applied)
-            -- @param   stack                       the stack level
             -- @rfomat  (value[, message])
             -- @return  value                       the validated value
             -- @return  message                     the error message if the validation is failed
