@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/10/24                                               --
--- Version      :   1.0.0-beta033                                            --
+-- Update Date  :   2018/10/30                                               --
+-- Version      :   1.0.0-beta034                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1717,11 +1717,23 @@ do
                         local value
                 ]])
 
+                -- Check keywords
+                uinsert(apis, "getmetatable")
+                tinsert(body, [[
+                    if not isparent then
+                        value = _RuntimeKeywords[name]
+                        if value then return value end
+
+                        local keys = _CtxRuntimeKeywords[getmetatable(env)]
+                        value = keys and keys[name]
+                        if value then return value end
+                ]])
+
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
                     -- Don't cache global variables in the environment to avoid conflict
                     -- The cache should be full-hit during runtime after several operations
                     tinsert(body, [[
-                        if isparent then
+                        else
                             value = rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[")
                             if type(value) == "table" then
                                 value = rawget(value, name)
@@ -1729,9 +1741,12 @@ do
                             else
                                 value = nil
                             end
-                        end
                     ]])
                 end
+
+                tinsert(body, [[
+                    end
+                ]])
 
                 -- Check current namespace
                 tinsert(body, [[
@@ -1813,19 +1828,10 @@ do
                 -- Check keywords
                 uinsert(apis, "getmetatable")
                 tinsert(body, [[
-                    value = _RuntimeKeywords[name]
-                    if value then return value end
-
                     value = _GlobalKeywords[name]
                     if value then return regKeyVisitor(env, value) end
 
-                    local envtype = getmetatable(env)
-
-                    local keys = _CtxRuntimeKeywords[envtype]
-                    value = keys and keys[name]
-                    if value then return value end
-
-                    keys = _ContextKeywords[envtype]
+                    local keys = _ContextKeywords[getmetatable(env)]
                     value = keys and keys[name]
                     if value then return regKeyVisitor(env, value) end
                 ]])
@@ -12693,6 +12699,8 @@ do
             GetObjectSource = Class.GetObjectSource,
             tostring        = tostring,
             getmetatable    = getmetatable,
+
+            Enum, Struct
         }
 
         -----------------------------------------------------------
@@ -12701,6 +12709,13 @@ do
         --- Set the attribute as inheritable
         function AsInheritable(self)
             self.Inheritable = true
+            return self
+        end
+
+        --- Set the priority of the attribute
+        function WithPriority(self, priority, sublevel)
+            self.Priority = Enum.ValidateValue(AttributePriority, priority)
+            self.SubLevel = Struct.ValidateValue(Number, sublevel)
             return self
         end
 
