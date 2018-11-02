@@ -8324,14 +8324,13 @@ do
                 return otype and class.IsSubType(otype, type) or false
             end;
 
-            --- Whether the class' object will try to auto cache the object methods
+            --- Whether the class object will try to auto cache the object methods
             -- @static
             -- @method  IsMethodAutoCache
             -- @owner   class
-            -- @format  (target[, stack])
             -- @param   target                      the target class
-            -- @param   stack                       the stack level
-            ["IsMethodAutoCache"] = function(target, stack)
+            -- @param   boolean                     true if the class object will try to auto cache the object methods
+            ["IsMethodAutoCache"] = function(target)
                 local info      = getICTargetInfo(target)
                 return info and validateflags(MOD_AUTOCACHE_OBJ, info[FLD_IC_MOD]) or false
             end;
