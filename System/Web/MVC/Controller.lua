@@ -192,7 +192,7 @@ PLoop(function(_ENV)
                     res.StatusCode = HTTP_STATUS.NOT_FOUND
                     return
                 end
-                self.res:Redirect(path, nil, raw)
+                res:Redirect(path, nil, raw)
             end
         end
 
