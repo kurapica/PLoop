@@ -17,8 +17,8 @@ PLoop(function(_ENV)
     interface "System.Web.IOutputLoader" {}
 
     __Sealed__()
-    __NoNilValue__{ false, Inheritable = true }
-    __NoRawSet__{ false, Inheritable = true }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__  (false):AsInheritable()
     interface "System.Web.IHttpOutput" (function (_ENV)
         extend (System.Web.IHttpContext)
 

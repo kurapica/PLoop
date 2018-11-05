@@ -61,8 +61,8 @@ PLoop(function(_ENV)
 
     --- the web controller
     __Sealed__()
-    __NoNilValue__{ false, Inheritable = true }
-    __NoRawSet__  { false, Inheritable = true }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__  (false):AsInheritable()
     class "System.Web.Controller" (function (_ENV)
         extend (System.Web.IHttpContextHandler)
         extend (System.Web.IHttpContext)

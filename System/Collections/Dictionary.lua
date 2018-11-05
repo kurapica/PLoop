@@ -34,7 +34,7 @@ PLoop(function(_ENV)
 
     --- The default dictionary
     __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
-    __NoRawSet__(false) __NoNilValue__(false)
+    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
     class "Dictionary" (function (_ENV, keytype, valtype)
         extend "IDictionary" "ISerializable"
 

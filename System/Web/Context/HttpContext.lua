@@ -17,8 +17,8 @@ PLoop(function(_ENV)
 
     --- the http context
     __Sealed__()
-    __NoNilValue__{ false, Inheritable = true }
-    __NoRawSet__  { false, Inheritable = true }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__  (false):AsInheritable()
     class "HttpContext" (function (_ENV)
         inherit "Context"
 
@@ -59,7 +59,7 @@ PLoop(function(_ENV)
         }
 
         --- Inner http context
-        __Sealed__() __NoNilValue__(false) __NoRawSet__  (false)
+        __Sealed__() __NoNilValue__(false) __NoRawSet__(false)
         class "InnerContext" { HttpContext,
             --- This an inner request
             IsInnerRequest      = { set = false, default = true },

@@ -5055,6 +5055,7 @@ do
                         local ninfo = getStructTargetInfo(implement)
                         ninfo[FLD_STRUCT_TEMPPRM] = key
                         ninfo[FLD_STRUCT_TEMPIMP] = self
+                        attribute.InheritAttributes(implement, ATTRTAR_STRUCT, self)
                         bder(info[FLD_STRUCT_TEMPDEF])
                     end)
 
@@ -7147,19 +7148,6 @@ do
         info[FLD_IC_INHRTP][name] = priority
     end
 
-    local copyClassSettings     = function(source, target)
-        if class.IsObjectFunctionAttributeEnabled(source) then
-            class.SetObjectFunctionAttributeEnabled(target)
-        end
-        if class.IsRawSetBlocked(source) then
-            class.SetRawSetBlocked(target)
-        end
-        if class.IsNilValueBlocked(source) then
-            class.SetNilValueBlocked(target)
-        end
-        class.SetSuperObjectStyle(target, class.GetSuperObjectStyle(source))
-    end
-
     -- Buidler helpers
     local setIFBuilderValue     = function (self, key, value, stack, notenvset)
         local owner = environment.GetNamespace(self)
@@ -8792,7 +8780,7 @@ do
                         local ninfo = getICTargetInfo(implement)
                         ninfo[FLD_IC_TEMPPRM] = key
                         ninfo[FLD_IC_TEMPIMP] = self
-                        if ptype == class then copyClassSettings(self, implement) end
+                        attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, self)
                         bder(info[FLD_IC_TEMPDEF])
                     end)
 
@@ -12159,64 +12147,6 @@ do
     })
 
     -----------------------------------------------------------------------
-    -- Set the class's objects so access non-existent fields on them will
-    -- be denied
-    --
-    -- @attribute   System.__NoNilValue__
-    -----------------------------------------------------------------------
-    __NoNilValue__ = namespace.SaveNamespace("System.__NoNilValue__", prototype {
-        __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
-                if targettype  == ATTRTAR_CLASS then
-                    local on        = self[1]
-                    if on == nil then on = true end
-                    class.SetNilValueBlocked(target, on, parsestack(stack) + 1)
-                end
-            end,
-            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
-        },
-        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
-    })
-
-    -----------------------------------------------------------------------
-    -- Set the class's objects so save value to non-existent fields on them
-    --  will be denied
-    --
-    -- @attribute   System.__NoRawSet__
-    -----------------------------------------------------------------------
-    __NoRawSet__ = namespace.SaveNamespace("System.__NoRawSet__", prototype {
-        __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
-                if targettype  == ATTRTAR_CLASS then
-                    local on        = self[1]
-                    if on == nil then on = true end
-                    class.SetRawSetBlocked(target, on, parsestack(stack) + 1)
-                end
-            end,
-            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
-        },
-        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
-    })
-
-    -----------------------------------------------------------------------
-    -- Whether the class's objects use the super object access style like
-    -- `super[self]:Method()`, `super[self].Name = xxx`
-    --
-    -- @attribute   System.__SuperObject__
-    -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__SuperObject__",         prototype {
-        __index                 = {
-            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
-                local on        = self[1]
-                if on == nil then on = true end
-                class.SetSuperObjectStyle(target, on, parsestack(stack) + 1)
-            end,
-            ["AttributeTarget"] = ATTRTAR_CLASS,
-        },
-        __call = regSelfOrValue, __newindex = readonly, __tostring = getAttributeName
-    })
-
-    -----------------------------------------------------------------------
     -- Set the class so the attributes can be applied on its objects
     --
     -- @attribute   System.__ObjectAttr__
@@ -12750,7 +12680,7 @@ do
 
     --- Represents the interface to apply changes on the target
     __Sealed__()
-    interface "System.IApplyAttribute" (function(_ENV)
+    IApplyAttribute     = interface "System.IApplyAttribute" (function(_ENV)
         extend "IAttribute"
 
         -----------------------------------------------------------
@@ -12809,6 +12739,42 @@ do
         end
     end)
 
+    --- Set the class's objects so access non-existent fields on them will be denied
+    __Sealed__()
+    __NoNilValue__      = class "System.__NoNilValue__" { IApplyAttribute,
+        ApplyAttribute  = function (self, target, targettype, manager, owner, name, stack)
+            if targettype == ATTRTAR_CLASS then
+                class.SetNilValueBlocked(target, self[1], stack + 1)
+            end
+        end,
+        AttributeTarget = { set = false, default = ATTRTAR_CLASS + ATTRTAR_INTERFACE },
+        __new           = function (_, flag) return { flag == nil and true or flag } end
+    }
+
+    --- Set the class's objects so save value to non-existent fields on them will be denied
+    __Sealed__()
+    __NoRawSet__        = class "System.__NoRawSet__" { IApplyAttribute,
+        ApplyAttribute  = function (self, target, targettype, manager, owner, name, stack)
+            if targettype == ATTRTAR_CLASS then
+                class.SetRawSetBlocked(target, self[1], stack + 1)
+            end
+        end,
+        AttributeTarget = { set = false, default = ATTRTAR_CLASS + ATTRTAR_INTERFACE },
+        __new           = function (_, flag) return { flag == nil and true or flag } end
+    }
+
+    --- Whether the class's objects use the super object access style like `super[self]:Method()`, `super[self].Name = xxx`
+    __Sealed__()
+    __SuperObject__     = class "System.__SuperObject__" { IApplyAttribute,
+        ApplyAttribute  = function (self, target, targettype, manager, owner, name, stack)
+            if targettype == ATTRTAR_CLASS then
+                class.SetSuperObjectStyle(target, self[1], stack + 1)
+            end
+        end,
+        AttributeTarget = { set = false, default = ATTRTAR_CLASS + ATTRTAR_INTERFACE },
+        __new           = function (_, flag) return { flag == nil and true or flag } end
+    }
+
     --- Represents the interface to of clone
     __Sealed__()
     ICloneable = interface "System.ICloneable" (function(_ENV)
@@ -12823,7 +12789,7 @@ do
 
     --- Represents the interface for code environment
     __Sealed__() __ObjectSource__{ Inheritable = true }
-    __NoNilValue__{ false, Inheritable = true } __NoRawSet__{ false, Inheritable = true }
+    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
     IEnvironment = interface "System.IEnvironment" (function(_ENV)
         export {
             tostring            = tostring,
@@ -12910,7 +12876,7 @@ do
     -----------------------------------------------------------------------
     --- the attribute to build the overload system, also can be used to set
     -- the target struct, class or interface as template
-    __Sealed__() __Final__()
+    __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
         extend "IInitAttribute"
 
@@ -13849,7 +13815,7 @@ do
     end)
 
     --- The attribtue used to validate the return values
-    __Sealed__() __Final__()
+    __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     class (_PLoopEnv, "System.__Return__") (function(_ENV)
         extend "IInitAttribute"
 
@@ -14901,7 +14867,7 @@ do
 
     --- Represents the context object used to process the operations in an
     -- os thread, normally used in multi-os thread platforms
-    __Sealed__() __NoNilValue__{ false, Inheritable = true } __NoRawSet__{ false, Inheritable = true }
+    __Sealed__() __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
     class (_PLoopEnv, "System.Context") (function(_ENV)
         export {
             getlocal            = getlocal,
