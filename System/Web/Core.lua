@@ -618,7 +618,7 @@ PLoop(function(_ENV)
         __Arguments__{ String, Context/nil }
         __Static__() function GetResource(url, context)
             context = context or getcontext()
-            return context and ispathrooted(url) and loadresource(combinepath(context.Request.Root, url))
+            return context and ispathrooted(url) and loadresource(combinepath(context.Request.Root, url), context.Application)
         end
 
         --- Get the relative resource from the target path
@@ -631,7 +631,7 @@ PLoop(function(_ENV)
                 if not context then return end
                 url = combinepath(context.Request.Root, url)
             end
-            return loadresource(url)
+            return loadresource(url, context and context.Application)
         end
     end)
 

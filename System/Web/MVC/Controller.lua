@@ -110,48 +110,48 @@ PLoop(function(_ENV)
         -- @param   index           the iterator index
         function Text(self, text, obj, idx)
             local res       = self.Context.Response
-
-            res.ContentType = "text/plain"
+            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
 
             local write     = res.Write
+            res.ContentType = "text/plain"
 
-            yield()
+            yield() -- finish head sending
 
             if type(text) == "function" then
-                for i, m in text, obj, idx do
-                    write(parseString(m or i))
-                end
+                for i, m in text, obj, idx do write(parseString(m or i)) end
             else
-                text        = parseString(text)
-                write(text)
+                write(parseString(text))
             end
 
-            yield()
+            yield() -- finish body sending
         end
 
         --- Render a page with data as response
         -- @param   path            the response page path
         -- @param   ...             the data that passed to the view
         function View(self, path, ...)
-            local context = self.Context
-            local cls = type(path) == "string" and GetRelativeResource(self, path, context) or path
+            local res       = self.Context.Response
+            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+
+            local context   = self.Context
+            local cls       = type(path) == "string" and GetRelativeResource(self, path, context) or path
 
             if isclass(cls) and issubtype(cls, IHttpOutput) then
-                local view = cls(...)
+                local view  = cls(...)
 
-                context.Response.ContentType = "text/html"
+                res.ContentType = "text/html"
 
-                view.Context = context
+                view.Context= context
                 view:OnLoad(context)
 
                 yield()
 
-                view:SafeRender(context.Response.Write, "")
+                view:SafeRender(res.Write, "")
 
                 yield()
             else
                 Error("%s - the view page file can't be found.", tostring(path))
-                context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
+                res.StatusCode = HTTP_STATUS.NOT_FOUND
             end
         end
 
@@ -159,12 +159,13 @@ PLoop(function(_ENV)
         -- @param   json            the response json
         -- @param   type            the object type to be serialized
         function Json(self, object, oType)
+            local res       = self.Context.Response
+            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+
             local context   = self.Context
             if context.IsInnerRequest and context.RawContext.ProcessPhase == HEAD_PHASE then
                 context:SaveJsonData(object, oType)
             else
-                local res   = self.Context.Response
-
                 res.ContentType = "application/json"
 
                 yield()
@@ -182,19 +183,22 @@ PLoop(function(_ENV)
         --- Redirect to another url
         -- @param   url            the redirected url
         function Redirect(self, path, raw)
+            local res       = self.Context.Response
+            if res.RequestRedirected then return end
+
             if path ~= "" then
                 if not ispathrooted(path) then
                     Error("Only absolute path supported for Controller's Redirect.")
-                    context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
+                    res.StatusCode = HTTP_STATUS.NOT_FOUND
                     return
                 end
-                self.Context.Response:Redirect(path, nil, raw)
+                self.res:Redirect(path, nil, raw)
             end
         end
 
         --- Missing
         function NotFound(self)
-            context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
+            self.Context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
         end
 
         -----------------------------------------------------------------------

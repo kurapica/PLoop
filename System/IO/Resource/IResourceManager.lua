@@ -97,11 +97,11 @@ PLoop(function(_ENV)
                 return requireReload or self.requireReLoad
             end;
 
-            LoadFile            = function (self)
+            LoadFile            = function (self, env)
                 local path      = self.resourcePath
                 local ok, res
                 if self.resource then
-                    res         = loadresource(path, nil, true)
+                    res         = loadresource(path, nil, env, true)
                     if not res then
                         res     = self.resource
                     else
@@ -109,7 +109,7 @@ PLoop(function(_ENV)
                         if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                     end
                 else
-                    res         = loadresource(path)
+                    res         = loadresource(path, nil, env, false)
                     Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
                     if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                 end
@@ -118,7 +118,7 @@ PLoop(function(_ENV)
                 return res
             end;
 
-            Load                = function (self)
+            Load                = function (self, env)
                 local res       = self.resource
 
                 if res ~= nil and self.reloadWhenModified and self:CheckReload() then
@@ -127,7 +127,7 @@ PLoop(function(_ENV)
                 end
 
                 if not res then
-                    res = self:LoadFile()
+                    res = self:LoadFile(env)
                     if res ~= self.resource then
                         -- notify the other files
                         if self.resource and self.notifyFileInfo then
@@ -177,11 +177,11 @@ PLoop(function(_ENV)
         --- Load the resource
         -- @param   context         the http context
         -- @param   path            the resource path
-        -- @param   current         the request current path if the resource path is relative
-        __Static__() function LoadResource(path)
+        -- @param   env             the environment to load the file
+        __Static__() function LoadResource(path, env)
             path                = preparepath(path)
             local info          = _ResourcePathMap[path] or LoadFileInfo(path)
-            return info:Load()
+            return info:Load(env)
         end
 
         --- Get the resource's path

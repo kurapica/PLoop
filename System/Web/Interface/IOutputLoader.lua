@@ -346,23 +346,27 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         --- load the related resource
-        function LoadRelatedResource(self, path)
+        function LoadRelatedResource(self, path, env)
             path = GetPhysicalPath(path) or GetRelativePath(self.Path, path)
             addrelatedpath(self.Path, path)
-            return loadresource(path)
+            return loadresource(path, env)
         end
 
         --- load the file to output handler
-        function Load(self, path, reader)
+        function Load(self, path, reader, env)
             Trace("[System.Web.IOutputLoader] Loading %s", path)
 
-            reader  = reader or FileReader(path)
+            reader              = reader or FileReader(path)
 
             with(reader)(function()
-                self.Path = path
+                self.Path       = path
 
-                local ctx = getContext()
+                local ctx       = getContext()
                 local loadercls = getobjectclass(self)
+
+                if not env or not IsObjectType(env, Application) then
+                    env         = ctx and ctx.Application or nil
+                end
 
                 -- The file's first line would be a configuration
                 -- It can be a comment for that file so it won't cause any problems
@@ -389,7 +393,7 @@ PLoop(function(_ENV)
                 local definition    = { IHttpOutput }
 
                 local webconfig     = loadercls.WebRenderConfig
-                local appconfig     = ctx and loadercls.AppRenderConfig[ctx.Application]
+                local appconfig     = env and loadercls.AppRenderConfig[env]
 
                 -- Generate the config object with default settings
                 if not config then
@@ -405,7 +409,7 @@ PLoop(function(_ENV)
 
                 -- master
                 if config.master and not config.asinterface then
-                    local master = self:LoadRelatedResource(config.master)
+                    local master = self:LoadRelatedResource(config.master, env)
                     assert(isclass(master), "The master page don't existed - " .. config.master)
 
                     tinsert(definition, master)
@@ -414,7 +418,7 @@ PLoop(function(_ENV)
                 -- helper
                 if config.helper then
                     for helper in config.helper:gmatch("[^%s,]+") do
-                        local helper = self:LoadRelatedResource(helper)
+                        local helper = self:LoadRelatedResource(helper, env)
                         assert(isinterface(helper), "The html helper don't existed - " .. config.helper)
 
                         tinsert(definition, helper)
@@ -423,7 +427,7 @@ PLoop(function(_ENV)
 
                 -- code
                 if config.code and not config.asinterface then
-                    local code = self:LoadRelatedResource(config.code)
+                    local code = self:LoadRelatedResource(config.code, env)
                     assert(isclass(code), "The code file don't existed - " .. config.code)
 
                     target = code
@@ -438,7 +442,7 @@ PLoop(function(_ENV)
 
                     target = strgsub(target, "[%p%s]", "_")
 
-                    local ns  = ctx and ctx.Application and getnamespace(ctx.Application)
+                    local ns  = env and getnamespace(env)
                     if ns then __Namespace__( ns ) end
                 end
 
@@ -633,7 +637,7 @@ PLoop(function(_ENV)
                     definition = definition:gsub(([[_PL_write%%(%q%%)]]):format(config.linebreak or "\n"), "")
                 end
 
-                local tempdir   = ctx and IOutputLoader.TemporaryFolder[ctx.Application]
+                local tempdir   = env and IOutputLoader.TemporaryFolder[env]
 
                 if tempdir then
                     -- Save for debug
@@ -648,7 +652,7 @@ PLoop(function(_ENV)
 
                 -- Re-define the target
                 local ok, err = pcall(function()
-                    local def, msg  = loadsnippet("return function(_ENV) " .. definition .. " end", path, ctx.Application)
+                    local def, msg  = loadsnippet("return function(_ENV) " .. definition .. " end", path, env)
                     if def then
                         def, msg    = pcall(def)
                         if def then

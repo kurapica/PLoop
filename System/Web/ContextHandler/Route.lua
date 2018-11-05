@@ -32,19 +32,6 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ String, Callable, HttpMethod/HttpMethod.ALL, Boolean/true }
-        function __new(self, url, routeHandler, httpMethod, caseIgnored)
-            Debug("[System.Web.Route] Add route converter for %s", url)
-            return {
-                UrlPattern     = url,
-                RouteHandler   = routeHandler,
-                ContextHandler = false,
-                HandlerClass   = false,
-                HttpMethod     = httpMethod,
-                CaseIgnored    = caseIgnored,
-            }, true
-        end
-
         __Arguments__{ String, IHttpContextHandler, HttpMethod/HttpMethod.ALL, Boolean/true }
         function __new(self, url, contextHandler, httpMethod, caseIgnored)
             Debug("[System.Web.Route] Add context handler for %s", url)
@@ -52,6 +39,19 @@ PLoop(function(_ENV)
                 UrlPattern     = url,
                 RouteHandler   = false,
                 ContextHandler = contextHandler,
+                HandlerClass   = false,
+                HttpMethod     = httpMethod,
+                CaseIgnored    = caseIgnored,
+            }, true
+        end
+
+        __Arguments__{ String, Callable, HttpMethod/HttpMethod.ALL, Boolean/true }
+        function __new(self, url, routeHandler, httpMethod, caseIgnored)
+            Debug("[System.Web.Route] Add route converter for %s", url)
+            return {
+                UrlPattern     = url,
+                RouteHandler   = routeHandler,
+                ContextHandler = false,
                 HandlerClass   = false,
                 HttpMethod     = httpMethod,
                 CaseIgnored    = caseIgnored,
@@ -295,19 +295,6 @@ PLoop(function(_ENV)
         export { safeset = Toolset.safeset, issubtype = Class.IsSubType, getmetatable = getmetatable }
         export { IHttpContextHandler, AttributeTargets, Class, IHttpContextHandler, Route, RouteManager, Application }
 
-        local contextHandler = {}
-
-        -----------------------------------------------------------
-        --                    static method                      --
-        -----------------------------------------------------------
-        --- register a context handler for a target function, since
-        -- other attribute may wrap the function to a handler
-        -- @param   func                the target function
-        -- @param   handler             the context handler
-        __Static__() function RegisterContextHandler(func, handler)
-            contextHandler = safeset(contextHandler, func, handler)
-        end
-
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -319,23 +306,13 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  data                        the attribute data to be attached
         function AttachAttribute(self, target, targettype, owner, name, stack)
-            local route
-
-            local handler = contextHandler[target]
-            if handler then
-                contextHandler = safeset(contextHandler, target, nil)
-                route = Route(self[1], handler, self[2], self[3])
-            else
-                route = Route(self[1], target, self[2], self[3])
-            end
-
             if owner and issubtype(getmetatable(owner), Application) then
-                owner = owner._Application
+                owner   = owner._Application
             else
-                owner = nil
+                owner   = nil
             end
 
-            RouteManager(owner):RegisterRoute(route)
+            RouteManager(owner):RegisterRoute(Route(self[1], target, self[2], self[3]))
         end
 
         -----------------------------------------------------------
@@ -351,8 +328,6 @@ PLoop(function(_ENV)
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__{ String, HttpMethod/HttpMethod.ALL, Boolean/true }
-        function __new(_, ...)
-            return { ... }, true
-        end
+        function __new(_, ...) return { ... }, true end
     end)
 end)

@@ -179,8 +179,11 @@ PLoop(function(_ENV)
         --- the attribute target
         property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
 
-        --- the attribute's priority
-        property "Priority"         { set = false, default = AttributePriority.Lowest }
+        --- the attribute priority
+        property "Priority"         { set = false, default = AttributePriority.Lower }
+
+        -- the attribute priority sub level
+        property "SubLevel"         { set = false, default = - 2000 }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -415,11 +418,11 @@ PLoop(function(_ENV)
         --- the attribute target
         property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
 
-        --- the attribute's priority
+        --- the attribute priority
         property "Priority"         { set = false, default = AttributePriority.Lower }
 
-        --- the attribute's priority sub level
-        property "SubLevel"         { set = false, default = - 200 }
+        --- the attribute priority sub level
+        property "SubLevel"         { set = false, default = - 1000 }
 
         -----------------------------------------------------------
         --                      constructor                      --
