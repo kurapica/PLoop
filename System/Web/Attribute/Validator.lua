@@ -18,10 +18,11 @@ PLoop(function(_ENV)
     import "System.Configuration"
 
     --- the login & authority validator
-    __Sealed__() class "__Login__" (function(_ENV)
+    __Sealed__() __NoNilValue__(false) class "__Login__" (function(_ENV)
         extend "IInitAttribute"
 
         export {
+            unpack              = unpack,
             UrlEncode           = UrlEncode,
             HttpMethod_GET      = HttpMethod.GET,
             IsObjectType        = Class.IsObjectType,
@@ -33,7 +34,7 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            local authority, apath = self[1], self[2]
+            local authority     = self[1]
 
             if targettype == AttributeTargets.Function then
                 if authority then
@@ -41,10 +42,11 @@ PLoop(function(_ENV)
                         local session = context.Session
                         local settings= context.Application[__Login__]
                         if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
-                            if (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(authority, context) then
+                            local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
+                            if result then
                                 return definition(context, ...)
-                            elseif apath then
-                                return context.Response.Redirect(apath)
+                            elseif path then
+                                return context.Response.Redirect(path)
                             end
                         end
                         if context.Request.HttpMethod == HttpMethod_GET then
@@ -73,10 +75,11 @@ PLoop(function(_ENV)
                         local session = context.Session
                         local settings= context.Application[__Login__]
                         if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
-                            if (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(authority, session) then
+                            local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
+                            if result then
                                 return definition(self, context, ...)
-                            elseif apath then
-                                return context.Response.Redirect(apath)
+                            elseif path then
+                                return context.Response.Redirect(path)
                             end
                         end
                         if context.Request.HttpMethod == HttpMethod_GET then
@@ -106,70 +109,66 @@ PLoop(function(_ENV)
         --                    static property                    --
         -----------------------------------------------------------
         --- the key in the session items for checking
-        __Static__() property "DefaultKey"                      { type = String, default = "userid" }
+        __Static__() property "DefaultKey"              { type = String, default = "user" }
 
         --- the login path
-        __Static__() property "DefaultLoginPage"                { type = String }
+        __Static__() property "DefaultLoginPage"        { type = String }
 
         --- the key to send the request path to the login page
-        __Static__() property "DefaultPathKey"                  { type = String, default = "path"}
+        __Static__() property "DefaultPathKey"          { type = String, default = "path"}
 
         --- the authority checker
-        __Static__() property "DefaultAuthorityChecker"         { type = Function, default = function() return true end }
+        __Static__() property "DefaultAuthorityChecker" { type = Function, default = function() return true end }
 
         --- the key in the session items for checking
-        __Static__() __Indexer__() property "Key"               { type = String,
+        __Indexer__(Application)
+        __Static__() property "Key"                     { type = String,
             set = function(self, app, value)
-                if IsObjectType(app, Application) then
-                    app                 = app._Application
+                app                 = app._Application
 
-                    local settings      = app[__Login__] or {}
-                    settings.Key        = value
+                local settings      = app[__Login__] or {}
+                settings.Key        = value
 
-                    app[__Login__]      = settings
-                end
+                app[__Login__]      = settings
             end,
         }
 
         --- the login path
-        __Static__() __Indexer__() property "LoginPage"         { type = String,
+        __Indexer__(Application)
+        __Static__() property "LoginPage"               { type = String,
             set = function(self, app, value)
-                if IsObjectType(app, Application) then
-                    app                 = app._Application
+                app                 = app._Application
 
-                    local settings      = app[__Login__] or {}
-                    settings.LoginPage  = value
+                local settings      = app[__Login__] or {}
+                settings.LoginPage  = value
 
-                    app[__Login__]      = settings
-                end
+                app[__Login__]      = settings
             end,
         }
 
         --- the key to send the request path to the login page
-        __Static__() __Indexer__() property "PathKey"           { type = String,
+        __Indexer__(Application)
+        __Static__() property "PathKey"                 { type = String,
             set = function(self, app, value)
-                if IsObjectType(app, Application) then
-                    app                 = app._Application
+                app                 = app._Application
 
-                    local settings      = app[__Login__] or {}
-                    settings.PathKey    = value
+                local settings      = app[__Login__] or {}
+                settings.PathKey    = value
 
-                    app[__Login__]      = settings
-                end
+                app[__Login__]      = settings
             end,
         }
 
         --- the authority checker
-        __Static__() __Indexer__() property "AuthorityChecker"  { type = Function,
+        __Indexer__(Application)
+        __Static__() property "AuthorityChecker"        { type = Function,
             set = function(self, app, value)
-                if IsObjectType(app, Application) then
-                    app                 = app._Application
+                app                 = app._Application
 
-                    local settings      = app[__Login__] or {}
-                    settings.AuthorityChecker = value
+                local settings      = app[__Login__] or {}
+                settings.AuthorityChecker = value
 
-                    app[__Login__]      = settings
-                end
+                app[__Login__]      = settings
             end,
         }
 
@@ -188,14 +187,12 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Any, String/nil }
-        function __new(_, authority, url)
-            return { authority, url }
-        end
-
-        __Arguments__{}
-        function __new()
-            return {}
+        function __new(_, val, ...)
+            if val then
+                return { { val, ... } }, true
+            else
+                return {}, true
+            end
         end
     end)
 
