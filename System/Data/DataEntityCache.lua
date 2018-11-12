@@ -50,7 +50,7 @@ PLoop(function(_ENV)
 
         if #primaryflds == 0 then error("The " .. clsEntity .. " has no data table primary index settings") end
 
-        local QueryData         = struct (primaryflds)
+        local QueryData         = struct (Toolset.clone(primaryflds, true))
         local KeyCollection     = set.collection
         props                   = nil
 
