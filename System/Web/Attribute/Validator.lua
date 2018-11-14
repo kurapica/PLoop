@@ -46,7 +46,7 @@ PLoop(function(_ENV)
                             if result then
                                 return definition(context, ...)
                             elseif path then
-                                return context.Response.Redirect(path)
+                                return context.Response:Redirect(path)
                             end
                         end
                         if context.Request.HttpMethod == HttpMethod_GET then
@@ -79,7 +79,7 @@ PLoop(function(_ENV)
                             if result then
                                 return definition(self, context, ...)
                             elseif path then
-                                return context.Response.Redirect(path)
+                                return context.Response:Redirect(path)
                             end
                         end
                         if context.Request.HttpMethod == HttpMethod_GET then

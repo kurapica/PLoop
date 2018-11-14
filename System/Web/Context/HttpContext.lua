@@ -13,14 +13,14 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    namespace "System.Web"
-
     --- the http context
     __Sealed__()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__  (false):AsInheritable()
-    class "HttpContext" (function (_ENV)
-        inherit "Context"
+    class "System.Web.HttpContext" (function (_ENV)
+        inherit "System.Context"
+
+        import "System.Web"
 
         export {
             ProcessHttpRequest  = IHttpContextHandler.ProcessHttpRequest,
@@ -94,16 +94,19 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The http session
-        __Final__() property "Session"      { set = false, field = "__Session", default = HttpSession.GetSession }
+        __Final__()     property "Session"      { set = false, field = "__Session", default = function(self) return self.SessionType(self) end }
 
         --- The raw session if existed
-        __Final__() property "RawSession"   { set = false, field = "__Session" }
+        __Final__()     property "RawSession"   { set = false, field = "__Session" }
 
         --- The current process phase
-        __Final__() property "ProcessPhase" { type = IHttpContextHandler.ProcessPhase }
+        __Final__()     property "ProcessPhase" { type = IHttpContextHandler.ProcessPhase }
 
         --- The current web application
-        __Final__() property "Application"  { type = Application }
+        __Final__()     property "Application"  { type = Application }
+
+        --- The http session type
+        __Abstract__()  property "SessionType"  { type = -HttpSession, default = HttpSession }
 
         -----------------------------------------------------------
         --                        method                         --

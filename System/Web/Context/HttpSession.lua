@@ -150,52 +150,16 @@ PLoop(function(_ENV)
     end)
 
     --- the http session
-    __Sealed__() __Final__()
-    class "System.Web.HttpSession" (function (_ENV)
+    __Sealed__() class "System.Web.HttpSession" (function (_ENV)
 
-        export { ISessionIDManager, ISessionStorageProvider, HttpSession, Date }
-
-        -----------------------------------------------------------------------
-        --                           static method                           --
-        -----------------------------------------------------------------------
-        --- Get or generate the session for a http context
-        __Static__() function GetSession(context)
-            -- Build Session
-            local manager   = context.Application[ISessionIDManager] or ISessionIDManager.Default
-            local provider  = context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default
-
-            if not manager  then error("No SessionIDManager Installed") end
-            if not provider then error("No SessionStorageProvider Installed") end
-
-            local id        = manager:GetSessionID(context)
-            local item      = id and provider:GetItems(id)
-            local session
-
-            if item then
-                session     = HttpSession(id, item)
-                if manager.KeepAlive then
-                    session.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
-                end
-            else
-                id, item    = nil
-                while not id or provider:Contains(id) do
-                    id      = manager:CreateSessionID(context)
-                end
-
-                session     = HttpSession(id)
-                session.IsNewSession = true
-                session.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
-            end
-
-            return session
-        end
+        export { System.Web.ISessionIDManager, System.Web.ISessionStorageProvider, System.Date, "rawset" }
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
         --- Gets a value storage table
         __Indexer__()
-        property "Items"        {
+        __Final__() property "Items"            {
             set = function(self, key, value)
                 if self.RawItems[key] ~= value then
                     self.ItemsChanged = true
@@ -208,33 +172,61 @@ PLoop(function(_ENV)
         }
 
         --- Gets the unique identifier for the session
-        property "SessionID"        { field = 1, set = false }
+        __Final__() property "SessionID"        { field = 1, set = false }
 
         --- The raw item table
-        property "RawItems"         { field = 2, set = false }
+        __Final__() property "RawItems"         { field = 2, set = false, default = function(self) return {} end }
 
         --- Gets and sets the date time, allowed the next request access the session
         __Set__ (PropertySet.Clone)
-        property "Timeout"          { field = 3, type = Date, handler = function(self) self.TimeoutChanged = true end }
+        __Final__() property "Timeout"          { field = 3, type = Date, handler = function(self) self.TimeoutChanged = true end }
 
         --- Whether the time out is changed
-        property "TimeoutChanged"   { field = 4, type = Boolean }
+        __Final__() property "TimeoutChanged"   { field = 4, type = Boolean }
 
         --- Whether the current session is canceled
-        property "Canceled"         { field = 5, type = Boolean }
+        __Final__() property "Canceled"         { field = 5, type = Boolean }
 
         --- Gets a value indicating whether the session was created with the current request or its timeout is changed
-        property "IsNewSession"     { field = 6, type = Boolean }
+        __Final__() property "IsNewSession"     { field = 6, type = Boolean }
 
         --- Whether the session items changed
-        property "ItemsChanged"     { field = 7, type = Boolean }
+        __Final__() property "ItemsChanged"     { field = 7, type = Boolean }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ String, Table/nil, Date/nil }
-        function __new(self, id, item, timeout)
-            return { id, item or {}, timeout and timeout:Clone() }, true
+        --- Get or generate the session for a http context
+        __Arguments__{ System.Web.HttpContext }
+        function __ctor(self, context)
+            -- Build Session
+            local manager   = context.Application[ISessionIDManager]       or ISessionIDManager.Default
+            local provider  = context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default
+
+            if not manager  then throw("No SessionIDManager Installed")       end
+            if not provider then throw("No SessionStorageProvider Installed") end
+
+            local id        = manager:GetSessionID(context)
+            local item      = id and provider:GetItems(id)
+
+            if item then
+                rawset(self, 1, id)
+                rawset(self, 2, item)
+
+                if manager.KeepAlive then
+                    self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
+                end
+            else
+                id, item    = nil
+                while not id or provider:Contains(id) do
+                    id      = manager:CreateSessionID(context)
+                end
+
+                rawset(self, 1, id)
+
+                self.IsNewSession = true
+                self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
+            end
         end
     end)
 end)
