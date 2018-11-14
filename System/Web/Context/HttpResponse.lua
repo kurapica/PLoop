@@ -55,7 +55,7 @@ PLoop(function(_ENV)
         __Abstract__() function ServerRedirect(self) end
 
         --- Redirects the client to a new URL.
-        __Arguments__{ String, HTTP_STATUS/HTTP_STATUS.MOVED, Boolean/false }
+        __Arguments__{ String, HTTP_STATUS/HTTP_STATUS.REDIRECT, Boolean/false }
         function Redirect(self, url, code, raw)
             -- Check the url
             if not ispathrooted(url) then
