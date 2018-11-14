@@ -59,27 +59,47 @@ PLoop(function(_ENV)
         }
 
         --- Inner http context
-        __Sealed__() __NoNilValue__(false) __NoRawSet__(false)
-        class "InnerContext" { HttpContext,
+        __Final__() __Sealed__() __NoNilValue__(false) __NoRawSet__(false)
+        class "InnerContext" (function(_ENV)
+            inherit "HttpContext"
+
+            export {
+                ProcessHttpRequest = IHttpContextHandler.ProcessHttpRequest,
+
+                InnerContext,
+            }
+
+            -----------------------------------------------------------
+            --                       property                        --
+            -----------------------------------------------------------
             --- This an inner request
-            IsInnerRequest      = { set = false, default = true },
+            property "IsInnerRequest"   { set = false, default = true }
 
             --- Get the raw context
-            RawContext          = HttpContext,
+            property "RawContext"       { type = HttpContext }
 
-            Session             = { set = false, default = function(self) return self.RawContext.Session end },
+            --- Proxy session
+            __Final__()
+            property "Session"          { set = false, default = function(self) return self.RawContext.Session end }
 
+            --- The raw session if existed
+            __Final__()
+            property "RawSession"       { set = false, default = function(self) return self.RawContext.RawSession end }
+
+            -----------------------------------------------------------
+            --                        method                         --
+            -----------------------------------------------------------
             --- Save the json data with type for inner request
-            SaveJsonData        = function(self, data, type) self[InnerContext]  = { data, type } end,
+            function SaveJsonData(self, data, type) self[InnerContext]  = { data, type } end
 
-            Process             = function(self)
+            function Process(self)
                 ProcessHttpRequest(self)
 
                 -- So we don't need to serialize and deserialize the json data
                 local json = self[InnerContext]
                 if json then return json[1], json[2] end
-            end,
-        }
+            end
+        end)
 
         -----------------------------------------------------------
         --                   abstract property                   --
