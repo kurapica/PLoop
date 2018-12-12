@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/10/30                                               --
--- Version      :   1.0.0-beta034                                            --
+-- Update Date  :   2018/12/12                                               --
+-- Version      :   1.0.0-beta035                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -4751,11 +4751,13 @@ do
             -- @param   base                        the base structure
             -- @return  boolean                     true if the structure use the target structure as base
             ["IsSubType"]       = function(target, base)
-                if struct.Validate(base) then
+                if getmetatable(base) == struct then
                     while target do
-                        if target == base then return true end
-                        local i = getStructTargetInfo(target)
-                        target  = i and i[FLD_STRUCT_BASE]
+                        if base == target then return true end
+                        local info = getStructTargetInfo(target)
+                        if not info then return false end
+                        if base == info[FLD_STRUCT_TEMPIMP] then return true end
+                        target  = info[FLD_STRUCT_BASE]
                     end
                 end
                 return false
@@ -7718,9 +7720,19 @@ do
             -- @param   extendIF                    the extened interface
             -- @return  boolean                     true if the target interface is a sub-type of another interface
             ["IsSubType"]       = function(target, extendIF)
-                if target == extendIF then return true end
-                local info = getICTargetInfo(target)
-                if info then for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == extendIF then return true end end end
+                if getmetatable(extendIF) == interface then
+                    if target  == extendIF then return true end
+                    local info  = getICTargetInfo(target)
+                    if info then
+                        if info[FLD_IC_TEMPIMP] == extendIF then return true end
+
+                        for _, extif in ipairs, info, FLD_IC_STEXT - 1 do
+                            if extif == extendIF or getICTargetInfo(extif)[FLD_IC_TEMPIMP] == extendIF then
+                                return true
+                            end
+                        end
+                    end
+                end
                 return false
             end;
 
@@ -8384,17 +8396,29 @@ do
             -- @param   superclass                  the super class
             -- @return  boolean                     true if the target class is a sub-type of another interface or class
             ["IsSubType"]       = function(target, supertype)
-                if target == supertype then return true end
-                local info = getICTargetInfo(target)
-                if info then
-                    if getmetatable(supertype) == class then
-                        local sp= info[FLD_IC_SUPCLS]
-                        while sp and sp ~= supertype do
-                            sp  = getICTargetInfo(sp)[FLD_IC_SUPCLS]
+                local meta      = getmetatable(supertype)
+                if meta        == class then
+                    if target  == supertype then return true end
+
+                    local info  = getICTargetInfo(target)
+                    while info do
+                        if info[FLD_IC_TEMPIMP] == supertype then return true end
+                        target  = info[FLD_IC_SUPCLS]
+                        if not target then return false end
+                        if target == supertype then return true end
+                        info    = getICTargetInfo(target)
+                    end
+                elseif meta    == interface then
+                    if target  == supertype then return true end
+
+                    local info  = getICTargetInfo(target)
+                    if info then
+                        if info[FLD_IC_TEMPIMP] == supertype then return true end
+                        for _, extif in ipairs, info, FLD_IC_STEXT - 1 do
+                            if extif == supertype or getICTargetInfo(extif)[FLD_IC_TEMPIMP] == supertype then
+                                return true
+                            end
                         end
-                        return sp and true or false
-                    else
-                        for _, extif in ipairs, info, FLD_IC_STEXT - 1 do if extif == supertype then return true end end
                     end
                 end
                 return false
