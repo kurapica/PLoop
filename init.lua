@@ -14,6 +14,7 @@ require "PLoop.System.Threading"
 -- System.Collections
 require "PLoop.System.Collections.List"
 require "PLoop.System.Collections.Dictionary"
+require "PLoop.System.Collections.Proxy"
 require "PLoop.System.Collections.IIndexedListSorter"
 require "PLoop.System.Collections.Array"
 
