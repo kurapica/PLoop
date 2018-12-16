@@ -1433,7 +1433,7 @@ PLoop(function(_ENV)
         local primary           = schema.primary
         local foreign           = schema.foreign
         local converter         = schema.converter
-        local fields            = Dictionary(map).Keys:ToList()
+        local fields            = XDictionary(map).Keys:ToList()
 
         local props             = {}
         local fldmembers        = {}
