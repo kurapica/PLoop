@@ -112,25 +112,57 @@ PLoop(function(_ENV)
         end
 
         --- Extend the list
-        __Arguments__{ RawTable }
-        function Extend(self, lst)
-            local ins   = self.Insert
-            for _, item in ipairs(lst) do ins(self, item) end
-            return self
-        end
+        if lsttype then
+            __Arguments__{ RawTable }
+            function Extend(self, lst)
+                local ins   = self.Insert
+                for _, item in ipairs(lst) do
+                    local ret, msg = valid(lsttype, item, true)
+                    if not msg then ins(self, item) end
+                end
+                return self
+            end
 
-        __Arguments__{ IList }
-        function Extend(self, lst)
-            local ins   = self.Insert
-            for _, item in lst:GetIterator() do ins(self, item) end
-            return self
-        end
+            __Arguments__{ IList }
+            function Extend(self, lst)
+                local ins   = self.Insert
+                for _, item in lst:GetIterator() do
+                    local ret, msg = valid(lsttype, item, true)
+                    if not msg then ins(self, item) end
+                end
+                return self
+            end
 
-        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-        function Extend(self, iter, obj, idx)
-            local ins   = self.Insert
-            for _, item in iter, obj, idx do ins(self, item) end
-            return self
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Extend(self, iter, obj, idx)
+                local ins   = self.Insert
+                for _, item in iter, obj, idx do
+                    local ret, msg = valid(lsttype, item, true)
+                    if not msg then ins(self, item) end
+                end
+                return self
+            end
+        else
+            __Arguments__{ RawTable }
+            function Extend(self, lst)
+                local ins   = self.Insert
+                for _, item in ipairs(lst) do ins(self, item) end
+                return self
+            end
+
+            __Arguments__{ IList }
+            function Extend(self, lst)
+                local ins   = self.Insert
+                for _, item in lst:GetIterator() do ins(self, item) end
+                return self
+            end
+
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Extend(self, iter, obj, idx)
+                local ins   = self.Insert
+                for _, item in iter, obj, idx do ins(self, item) end
+                return self
+            end
         end
 
         -----------------------------------------------------------

@@ -87,23 +87,133 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         GetIterator     = pairs
 
-        --- Update the dictionary
-        __Arguments__{ RawTable }
-        function Update(self, dict)
-            for k, v in pairs(dict) do self[k] = v end
-            return self
-        end
+        if keytype == Any and valtype == Any then
+            --- Update the dictionary
+            __Arguments__{ RawTable }
+            function Update(self, dict)
+                for k, v in pairs(dict) do self[k] = v end
+                return self
+            end
 
-        __Arguments__{ IDictionary }
-        function Update(self, dict)
-            for k, v in dict:GetIterator() do self[k] = v end
-            return self
-        end
+            __Arguments__{ IDictionary }
+            function Update(self, dict)
+                for k, v in dict:GetIterator() do self[k] = v end
+                return self
+            end
 
-        __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-        function Update(self, iter, obj, idx)
-            for k, v in iter, obj, idx do self[k] = v end
-            return self
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Update(self, iter, obj, idx)
+                for k, v in iter, obj, idx do self[k] = v end
+                return self
+            end
+        elseif keytype == Any and valtype ~= Any then
+            __Arguments__{ RawTable }
+            function Update(self, dict)
+                for k, v in pairs(dict) do
+                    local ret, msg  = vvalid(valtype, v, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ IDictionary }
+            function Update(self, dict)
+                for k, v in dict:GetIterator() do
+                    local ret, msg  = vvalid(valtype, v, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Update(self, iter, obj, idx)
+                for k, v in iter, obj, idx do
+                    local ret, msg  = vvalid(valtype, v, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+        elseif keytype ~= Any and valtype == Any then
+            __Arguments__{ RawTable }
+            function Update(self, dict)
+                for k, v in pairs(dict) do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ IDictionary }
+            function Update(self, dict)
+                for k, v in dict:GetIterator() do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Update(self, iter, obj, idx)
+                for k, v in iter, obj, idx do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        self[k]     = v
+                    end
+                end
+                return self
+            end
+        else
+            __Arguments__{ RawTable }
+            function Update(self, dict)
+                for k, v in pairs(dict) do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        ret, msg    = vvalid(valtype, v, true)
+                        if not msg then
+                            self[k] = v
+                        end
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ IDictionary }
+            function Update(self, dict)
+                for k, v in dict:GetIterator() do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        ret, msg    = vvalid(valtype, v, true)
+                        if not msg then
+                            self[k] = v
+                        end
+                    end
+                end
+                return self
+            end
+
+            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
+            function Update(self, iter, obj, idx)
+                for k, v in iter, obj, idx do
+                    local ret, msg  = kvalid(keytype, k, true)
+                    if not msg then
+                        ret, msg    = vvalid(valtype, v, true)
+                        if not msg then
+                            self[k] = v
+                        end
+                    end
+                end
+                return self
+            end
         end
 
         -----------------------------------------------------------
