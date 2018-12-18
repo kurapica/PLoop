@@ -21,6 +21,8 @@ PLoop(function(_ENV)
     class "System.Collections.Proxy" (function (_ENV, keytype, valtype)
         extend "IDictionary" "ISerializable"
 
+        local RAW_HOLDER        = {}
+
         export {
             ipairs              = ipairs,
             pairs               = pairs,
@@ -67,26 +69,26 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         function GetIterator(self)
-            return pairs(self[0])
+            return pairs(self[RAW_HOLDER])
         end
 
         --- Update the dictionary
         if keytype == Any and valtype == Any then
             __Arguments__{ RawTable }
             function Update(self, dict)
-                for k, v in pairs(dict) do self[0][k] = v end
+                for k, v in pairs(dict) do self[RAW_HOLDER][k] = v end
                 return self
             end
 
             __Arguments__{ IDictionary }
             function Update(self, dict)
-                for k, v in dict:GetIterator() do self[0][k] = v end
+                for k, v in dict:GetIterator() do self[RAW_HOLDER][k] = v end
                 return self
             end
 
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Update(self, iter, obj, idx)
-                for k, v in iter, obj, idx do self[0][k] = v end
+                for k, v in iter, obj, idx do self[RAW_HOLDER][k] = v end
                 return self
             end
         elseif keytype == Any and valtype ~= Any then
@@ -95,7 +97,7 @@ PLoop(function(_ENV)
                 for k, v in pairs(dict) do
                     local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -106,7 +108,7 @@ PLoop(function(_ENV)
                 for k, v in dict:GetIterator() do
                     local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -117,7 +119,7 @@ PLoop(function(_ENV)
                 for k, v in iter, obj, idx do
                     local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -128,7 +130,7 @@ PLoop(function(_ENV)
                 for k, v in pairs(dict) do
                     local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -139,7 +141,7 @@ PLoop(function(_ENV)
                 for k, v in dict:GetIterator() do
                     local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -150,7 +152,7 @@ PLoop(function(_ENV)
                 for k, v in iter, obj, idx do
                     local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[0][k]      = v
+                        self[RAW_HOLDER][k]      = v
                     end
                 end
                 return self
@@ -163,7 +165,7 @@ PLoop(function(_ENV)
                     if not msg then
                         ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[0][k]  = v
+                            self[RAW_HOLDER][k]  = v
                         end
                     end
                 end
@@ -177,7 +179,7 @@ PLoop(function(_ENV)
                     if not msg then
                         ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[0][k]  = v
+                            self[RAW_HOLDER][k]  = v
                         end
                     end
                 end
@@ -191,7 +193,7 @@ PLoop(function(_ENV)
                     if not msg then
                         ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[0][k]  = v
+                            self[RAW_HOLDER][k]  = v
                         end
                     end
                 end
@@ -206,10 +208,10 @@ PLoop(function(_ENV)
         __Indexer__(keytype ~= Any and keytype or nil)
         property "Item" {
             get         = function(self, key)
-                return self[0][key]
+                return self[RAW_HOLDER][key]
             end,
             set         = function(self, key, value)
-                self[0][key] = value
+                self[RAW_HOLDER][key] = value
             end,
             type        = valtype ~= Any and valtype or nil,
         }
@@ -218,10 +220,10 @@ PLoop(function(_ENV)
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__{ }
-        function __new() return { [0] = {} } end
+        function __new() return { [RAW_HOLDER] = {} } end
 
         __Arguments__{ RawTable }
-        function __new(_, dict) return { [0] = dict }, true end
+        function __new(_, dict) return { [RAW_HOLDER] = dict }, true end
 
         __Arguments__{ RawTable + IList, RawTable + IList }
         function __new(_, lstKey, lstValue)
@@ -235,7 +237,7 @@ PLoop(function(_ENV)
                     break
                 end
             end
-            return { [0] = dict }, true
+            return { [RAW_HOLDER] = dict }, true
         end
 
         __Arguments__{ IDictionary }
@@ -244,7 +246,7 @@ PLoop(function(_ENV)
             for key, value in dict:GetIterator() do
                 dict[key] = value
             end
-            return { [0] = dict }, true
+            return { [RAW_HOLDER] = dict }, true
         end
 
         __Arguments__{ Callable, Any/nil, Any/nil }
@@ -253,7 +255,7 @@ PLoop(function(_ENV)
             for key, value in iter, obj, idx do
                 dict[key] = value
             end
-            return { [0] = dict }, true
+            return { [RAW_HOLDER] = dict }, true
         end
 
         if keytype ~= Any and valtype ~= Any then
@@ -294,11 +296,11 @@ PLoop(function(_ENV)
             __Arguments__{ keytype, valtype }
         end
         function __newindex(self, key, val)
-            self[0][key]= val
+            self[RAW_HOLDER][key]= val
         end
 
         function __index(self, key)
-            return self[0][key]
+            return self[RAW_HOLDER][key]
         end
     end)
 end)
