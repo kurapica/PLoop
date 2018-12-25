@@ -266,7 +266,7 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDbTransaction" (function(_ENV)
         extend "IAutoClose"
 
-        export { "getmetatable" }
+        export { "getmetatable", GetNormalMethod = Class.GetNormalMethod }
 
         -----------------------------------------------------------
         --                       property                        --
@@ -298,7 +298,7 @@ PLoop(function(_ENV)
         --- Begin the transaction
         __Final__() function Begin(self)
             if not self.IsTransactionOpen then
-                getmetatable(self).Begin(self)
+                GetNormalMethod(getmetatable(self), "Begin")(self)
                 self.IsTransactionOpen = true
             end
         end
@@ -306,7 +306,7 @@ PLoop(function(_ENV)
         --- Commits the database transaction
         __Final__() function Commit(self)
             if self.IsTransactionOpen then
-                getmetatable(self).Commit(self)
+                GetNormalMethod(getmetatable(self), "Commit")(self)
                 self.IsTransactionOpen = false
             end
         end
@@ -314,7 +314,7 @@ PLoop(function(_ENV)
         --- Rolls back a transaction from a pending state
         __Final__() function Rollback(self)
             if self.IsTransactionOpen then
-                getmetatable(self).Rollback(self)
+                GetNormalMethod(getmetatable(self), "Rollback")(self)
                 self.IsTransactionOpen = false
             end
         end

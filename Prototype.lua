@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/12/12                                               --
--- Version      :   1.0.0-beta035                                            --
+-- Update Date  :   2018/12/25                                               --
+-- Version      :   1.0.0-beta036                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5898,12 +5898,28 @@ do
         end
     end
 
+    local getNormal             = function (info, name, get)
+        local m                 = get(info, name)
+        if m then
+            local priority      = info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
+            if priority == INRT_PRIORITY_NORMAL then return m end
+        end
+
+        for _, sinfo in iterSuperInfo(info) do
+            local m             = get(sinfo, name)
+            if m then
+                local priority  = sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
+                if priority == INRT_PRIORITY_NORMAL then return m end
+            end
+        end
+    end
+
     local getSuperOnPriority    = function (info, name, get)
         local minpriority, norpriority
         for _, sinfo in iterSuperInfo(info) do
-            local m = get(sinfo, name)
+            local m             = get(sinfo, name)
             if m then
-                local priority = sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
+                local priority  = sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
                 if priority == INRT_PRIORITY_FINAL then
                     return m, INRT_PRIORITY_FINAL
                 elseif priority == INRT_PRIORITY_ABSTRACT then
@@ -5925,6 +5941,12 @@ do
     local getTypeFeature        = function (info, name) info = info[FLD_IC_TYPFTR] return info and info[name] end
 
     local getTypeMetaMethod     = function (info, name) info = info[FLD_IC_TYPMTM] return info and info[META_KEYS[name]] end
+
+    local getNormalMethod       = function (info, name) return getNormal(info, name, getTypeMethod) end
+
+    local getNormalFeature      = function (info, name) return getNormal(info, name, getTypeFeature) end
+
+    local getNormalMetaMethod   = function (info, name) return getNormal(info, name, getTypeMetaMethod) end
 
     local getSuperMethod        = function (info, name) return getSuperOnPriority(info, name, getTypeMethod) end
 
@@ -8155,6 +8177,42 @@ do
             -- @return  iter:function               the iterator
             -- @return  target                      the target class
             ["GetMetaMethods"]  = interface.GetMetaMethods;
+
+            --- Get the normal method of the target class with the given name
+            -- @static
+            -- @method  GetNormalMethod
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the method name
+            -- @return  function                    the normal method
+            ["GetNormalMethod"]  = function(target, name)
+                local info      = getICTargetInfo(target)
+                return info and getNormalMethod(info, name)
+            end;
+
+            --- Get the normal meta-method of the target class with the given name
+            -- @static
+            -- @method  GetNormalMetaMethod
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the meta-method name
+            -- @return  function                    the normal meta-method
+            ["GetNormalMetaMethod"] = function(target, name)
+                local info      = _ICInfo[target]
+                return info and getNormalMetaMethod(info, name)
+            end;
+
+            --- Get the normal feature of the target class with the given name
+            -- @static
+            -- @method  GetNormalFeature
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @param   name                        the feature name
+            -- @return  function                    the normal feature
+            ["GetNormalFeature"] = function(target, name)
+                local info      = _ICInfo[target]
+                return info and getNormalFeature(info, name)
+            end;
 
             --- Get the object class of the object
             -- @static
