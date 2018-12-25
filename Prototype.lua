@@ -34,7 +34,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
 -- Update Date  :   2018/12/25                                               --
--- Version      :   1.0.0-beta036                                            --
+-- Version      :   1.0.0-beta037                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5942,18 +5942,6 @@ do
 
     local getTypeMetaMethod     = function (info, name) info = info[FLD_IC_TYPMTM] return info and info[META_KEYS[name]] end
 
-    local getNormalMethod       = function (info, name) return getNormal(info, name, getTypeMethod) end
-
-    local getNormalFeature      = function (info, name) return getNormal(info, name, getTypeFeature) end
-
-    local getNormalMetaMethod   = function (info, name) return getNormal(info, name, getTypeMetaMethod) end
-
-    local getSuperMethod        = function (info, name) return getSuperOnPriority(info, name, getTypeMethod) end
-
-    local getSuperFeature       = function (info, name) return getSuperOnPriority(info, name, getTypeFeature) end
-
-    local getSuperMetaMethod    = function (info, name) return getSuperOnPriority(info, name, getTypeMetaMethod) end
-
     local genSuperOrderList
         genSuperOrderList       = function (info, lst, super)
         if info then
@@ -7002,7 +6990,7 @@ do
         attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
         if not (typmtd and typmtd[name] == false) then
-            attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuperMethod(info, name))
+            attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuperOnPriority(info, name, getTypeMethod))
         end
 
         local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
@@ -7050,7 +7038,7 @@ do
         if tdata == "function" then
             attribute.SaveAttributes(data, ATTRTAR_METHOD, stack)
 
-            attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperMetaMethod(info, name))
+            attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperOnPriority(info, name, getTypeMetaMethod))
 
             local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name, stack)
             if ret ~= data then attribute.ToggleTarget(data, ret) data = ret end
@@ -7603,7 +7591,7 @@ do
             -- @return  function                    the super method
             ["GetSuperMethod"]  = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and getSuperMethod(info, name)
+                return info and getSuperOnPriority(info, name, getTypeMethod)
             end;
 
             --- Get the super meta-method of the target interface with the given name
@@ -7615,7 +7603,7 @@ do
             -- @return  function                    the super meta-method
             ["GetSuperMetaMethod"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getSuperMetaMethod(info, name)
+                return info and getSuperOnPriority(info, name, getTypeMetaMethod)
             end;
 
             --- Get the super feature of the target interface with the given name
@@ -7627,7 +7615,7 @@ do
             -- @return  function                    the super feature
             ["GetSuperFeature"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getSuperFeature(info, name)
+                return info and getSuperOnPriority(info, name, getTypeFeature)
             end;
 
             --- Get the super refer of the target interface
@@ -8187,7 +8175,7 @@ do
             -- @return  function                    the normal method
             ["GetNormalMethod"]  = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and getNormalMethod(info, name)
+                return info and getNormal(info, name, getTypeMethod)
             end;
 
             --- Get the normal meta-method of the target class with the given name
@@ -8199,7 +8187,7 @@ do
             -- @return  function                    the normal meta-method
             ["GetNormalMetaMethod"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getNormalMetaMethod(info, name)
+                return info and getNormal(info, name, getTypeMetaMethod)
             end;
 
             --- Get the normal feature of the target class with the given name
@@ -8211,7 +8199,7 @@ do
             -- @return  function                    the normal feature
             ["GetNormalFeature"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getNormalFeature(info, name)
+                return info and getNormal(info, name, getTypeFeature)
             end;
 
             --- Get the object class of the object
