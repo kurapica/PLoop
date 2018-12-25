@@ -11688,6 +11688,7 @@ do
     --                          global keyword                           --
     -----------------------------------------------------------------------
     environment.RegisterGlobalKeyword {
+        prototype               = prototype,
         namespace               = namespace,
         import                  = import,
         export                  = export,
