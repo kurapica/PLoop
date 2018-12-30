@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/12/25                                               --
--- Version      :   1.0.0-beta037                                            --
+-- Update Date  :   2018/12/30                                               --
+-- Version      :   1.0.0-beta039                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5898,42 +5898,38 @@ do
         end
     end
 
-    local getNormal             = function (info, name, get)
-        local m                 = get(info, name)
-        if m then
-            local priority      = info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
-            if priority == INRT_PRIORITY_NORMAL then return m end
+    local getNormal             = function (info, name, get, onlysuper)
+        if not onlysuper then
+            local m             = get(info, name)
+            if m and (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL) == INRT_PRIORITY_NORMAL then
+                return m, info
+            end
         end
 
         for _, sinfo in iterSuperInfo(info) do
             local m             = get(sinfo, name)
-            if m then
-                local priority  = sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
-                if priority == INRT_PRIORITY_NORMAL then return m end
+            if m and (sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL) == INRT_PRIORITY_NORMAL then
+                return m, sinfo
             end
         end
     end
 
-    local getSuperOnPriority    = function (info, name, get)
-        local minpriority, norpriority
+    local getSuper              = function (info, name, get)
+        local abstract
+
         for _, sinfo in iterSuperInfo(info) do
             local m             = get(sinfo, name)
             if m then
                 local priority  = sinfo[FLD_IC_INHRTP] and sinfo[FLD_IC_INHRTP][name] or INRT_PRIORITY_NORMAL
-                if priority == INRT_PRIORITY_FINAL then
-                    return m, INRT_PRIORITY_FINAL
+                if priority     == INRT_PRIORITY_NORMAL then
+                    return m
                 elseif priority == INRT_PRIORITY_ABSTRACT then
-                    minpriority = minpriority or m
-                else
-                    norpriority = norpriority or m
+                    abstract    = abstract or m
                 end
             end
         end
-        if norpriority then
-            return norpriority, INRT_PRIORITY_NORMAL
-        elseif minpriority then
-            return minpriority, INRT_PRIORITY_ABSTRACT
-        end
+
+        return abstract
     end
 
     local getTypeMethod         = function (info, name) info = info[FLD_IC_TYPMTD] return info and info[name] end
@@ -5942,18 +5938,32 @@ do
 
     local getTypeMetaMethod     = function (info, name) info = info[FLD_IC_TYPMTM] return info and info[META_KEYS[name]] end
 
+    local getFeatureAccessor    = function (target, ftr, existed, stack)
+        if not ftr then return end
+
+        if existed and getobjectvalue(ftr, "IsShareable", true) then
+            return existed
+        else
+            local accessor      = getobjectvalue(ftr, "GetAccessor", true, target) or ftr
+            if type(safeget(accessor, "Get")) ~= "function" or type(safeget(accessor, "Set")) ~= "function" then
+                error(strformat("the feature named %q is not valid", k), stack + 1)
+            end
+            return accessor
+        end
+    end
+
     local genSuperOrderList
         genSuperOrderList       = function (info, lst, super)
         if info then
-            local scls      = info[FLD_IC_SUPCLS]
+            local scls          = info[FLD_IC_SUPCLS]
             if scls then
-                local sinfo = _ICInfo[scls]
+                local sinfo     = _ICInfo[scls]
                 genSuperOrderList(sinfo, lst, super)
                 if super and (sinfo[FLD_IC_SUPFTR] or sinfo[FLD_IC_SUPMTD]) then super[scls] = sinfo end
             end
 
             for i = #info, FLD_IC_STEXT, -1 do
-                local extif = info[i]
+                local extif     = info[i]
                 if not lst[extif] then
                     lst[extif]  = true
 
@@ -5968,41 +5978,73 @@ do
         return lst, super
     end
 
-    local genCacheOnPriority    = function (source, target, objpri, inhrtp, super, ismeta, featuretarget, objfeature, stack)
+    local genMethodCache        = function (source, target, objpri, inhrtp, super, info)
         for k, v in pairs, source do
-            if v and not (ismeta and META_KEYS[k] == nil) and not (featuretarget and getobjectvalue(v, "IsStatic", true)) then
+            if v then
                 local priority  = inhrtp and inhrtp[k] or INRT_PRIORITY_NORMAL
-                if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
-                    if super and target[k] and (objpri[k] or INRT_PRIORITY_NORMAL) > INRT_PRIORITY_ABSTRACT then
-                        -- abstract can't be used as Super
-                        if ismeta and META_KEYS[k] ~= k then
-                            super[k] = target[META_KEYS[k]]
-                        else
-                            super[k] = target[k]
-                        end
-                    end
 
-                    objpri[k]   = priority
-
-                    if featuretarget then
-                        if getobjectvalue(v, "IsShareable", true) and objfeature and objfeature[k] then
-                            target[k]   = objfeature[k]
-                        else
-                            v           = getobjectvalue(v, "GetAccessor", true, featuretarget) or v
-                            if type(safeget(v, "Get")) ~= "function" or type(safeget(v, "Set")) ~= "function" then
-                                error(strformat("the feature named %q is not valid", k), stack + 1)
-                            end
-                            target[k]   = v
-                        end
+                if super and target[k] then
+                    if (objpri[k] or INRT_PRIORITY_NORMAL) == INRT_PRIORITY_NORMAL then
+                        super[k]= target[k]
                     else
-                        target[k]       = v
-                        if ismeta then
-                            local mk    = META_KEYS[k]
-                            if mk ~= k then
-                                target[mk]  = source[mk]
-                            end
+                        super[k]= getNormal(info, k, getTypeMethod, true)
+                    end
+                end
+
+                if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
+                    objpri[k]   = priority
+                    target[k]   = v
+                end
+            end
+        end
+    end
+
+    local genMetaMethodCache    = function (source, target, objpri, inhrtp, super, info)
+        for k, v in pairs, source do
+            if v and META_KEYS[k] ~= nil then
+                local priority  = inhrtp and inhrtp[k] or INRT_PRIORITY_NORMAL
+
+                if super and target[k] then
+                    if (objpri[k] or INRT_PRIORITY_NORMAL) == INRT_PRIORITY_NORMAL then
+                        super[k]= target[META_KEYS[k]]
+                    else
+                        super[k]= getNormal(info, k, getTypeMetaMethod, true)
+                    end
+                end
+
+                if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
+                    objpri[k]   = priority
+                    target[k]   = v
+                    local mk    = META_KEYS[k]
+                    if mk ~= k then
+                        target[mk] = source[mk]
+                    end
+                end
+            end
+        end
+    end
+
+    local genFeatureCache       = function (source, target, objpri, inhrtp, super, info, ftrtarget, objfeature, stack)
+        stack                   = stack + 1
+
+        for k, v in pairs, source do
+            if v and not getobjectvalue(v, "IsStatic", true) then
+                local priority  = inhrtp and inhrtp[k] or INRT_PRIORITY_NORMAL
+
+                if super and target[k] then
+                    if (objpri[k] or INRT_PRIORITY_NORMAL) == INRT_PRIORITY_NORMAL then
+                        super[k]= target[k]
+                    else
+                        local sftr, sinfo = getNormal(info, k, getTypeFeature, true)
+                        if sftr then
+                            super[k]= getFeatureAccessor(ftrtarget, sftr, sinfo[FLD_IC_OBJFTR] and sinfo[FLD_IC_OBJFTR][k], stack)
                         end
                     end
+                end
+
+                if priority >= (objpri[k] or INRT_PRIORITY_ABSTRACT) then
+                    objpri[k]   = priority
+                    target[k]   = getFeatureAccessor(ftrtarget, v, objfeature and objfeature[k], stack)
                 end
             end
         end
@@ -6658,15 +6700,15 @@ do
             local inhrtp    = sinfo[FLD_IC_INHRTP]
 
             if sinfo[FLD_IC_TYPMTD] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, nil, nil, nil, nil, stack)
+                genMethodCache(sinfo[FLD_IC_TYPMTD], objmtd, objpri, inhrtp)
             end
 
             if sinfo[FLD_IC_TYPMTM] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, nil, true, nil, nil, stack)
+                genMetaMethodCache(sinfo[FLD_IC_TYPMTM], objmeta, objpri, inhrtp)
             end
 
             if sinfo[FLD_IC_TYPFTR] then
-                genCacheOnPriority(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, false, target, sinfo[FLD_IC_OBJFTR], stack)
+                genFeatureCache(sinfo[FLD_IC_TYPFTR], objftr, objpri, inhrtp, nil, nil, target, sinfo[FLD_IC_OBJFTR], stack)
             end
 
             if realCls then
@@ -6696,11 +6738,11 @@ do
         local super     = _Cache()
 
         if info[FLD_IC_TYPMTD] then
-            genCacheOnPriority(info[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, super, nil, nil, nil, stack)
+            genMethodCache(info[FLD_IC_TYPMTD], objmtd, objpri, inhrtp, super, info)
         end
 
         if info[FLD_IC_TYPMTM] then
-            genCacheOnPriority(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, true, nil, nil, stack)
+            genMetaMethodCache(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, info)
         end
 
         -- __new, __exist, __ctor
@@ -6711,27 +6753,21 @@ do
         if next(super) then info[FLD_IC_SUPMTD] = super else _Cache(super) end
 
         if info[FLD_IC_TYPFTR] then
-            super       = _Cache()
-            genCacheOnPriority(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, false, target, info[FLD_IC_OBJFTR], stack)
+            super               = _Cache()
+            genFeatureCache(info[FLD_IC_TYPFTR], objftr, objpri, inhrtp, super, info, target, info[FLD_IC_OBJFTR], stack)
             if next(super) then info[FLD_IC_SUPFTR] = super else _Cache(super) end
 
             -- Check static features
-            local staftr= info[FLD_IC_STAFTR]
+            local staftr        = info[FLD_IC_STAFTR] or _Cache()
 
             for name, ftr in pairs, info[FLD_IC_TYPFTR] do
                 if getobjectvalue(ftr, "IsStatic", true) then
-                    if not (staftr and staftr[name] and getobjectvalue(ftr, "IsShareable", true)) then
-                        staftr      = staftr or {}
-
-                        ftr         = getobjectvalue(ftr, "GetAccessor", true, target) or ftr
-                        if type(safeget(ftr, "Get")) ~= "function" or type(safeget(ftr, "Set")) ~= "function" then
-                            error(strformat("the feature named %q is not valid", k), stack + 1)
-                        end
-                        staftr[name]= ftr
-                    end
+                    staftr[name]= getFeatureAccessor(target, ftr, staftr[name], stack)
                 end
             end
-            info[FLD_IC_STAFTR]     = staftr
+
+            if not next(staftr) then _Cache(staftr) staftr = nil end
+            info[FLD_IC_STAFTR] = staftr
         end
 
         if realCls and info[FLD_IC_FIELD] then
@@ -6990,7 +7026,7 @@ do
         attribute.SaveAttributes(func, ATTRTAR_METHOD, stack)
 
         if not (typmtd and typmtd[name] == false) then
-            attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuperOnPriority(info, name, getTypeMethod))
+            attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuper(info, name, getTypeMethod))
         end
 
         local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
@@ -7038,7 +7074,7 @@ do
         if tdata == "function" then
             attribute.SaveAttributes(data, ATTRTAR_METHOD, stack)
 
-            attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuperOnPriority(info, name, getTypeMetaMethod))
+            attribute.InheritAttributes(data, ATTRTAR_METHOD, getSuper(info, name, getTypeMetaMethod))
 
             local ret = attribute.InitDefinition(data, ATTRTAR_METHOD, data, target, name, stack)
             if ret ~= data then attribute.ToggleTarget(data, ret) data = ret end
@@ -7591,7 +7627,7 @@ do
             -- @return  function                    the super method
             ["GetSuperMethod"]  = function(target, name)
                 local info      = getICTargetInfo(target)
-                return info and getSuperOnPriority(info, name, getTypeMethod)
+                return info and getSuper(info, name, getTypeMethod)
             end;
 
             --- Get the super meta-method of the target interface with the given name
@@ -7603,7 +7639,7 @@ do
             -- @return  function                    the super meta-method
             ["GetSuperMetaMethod"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getSuperOnPriority(info, name, getTypeMetaMethod)
+                return info and getSuper(info, name, getTypeMetaMethod)
             end;
 
             --- Get the super feature of the target interface with the given name
@@ -7615,7 +7651,7 @@ do
             -- @return  function                    the super feature
             ["GetSuperFeature"] = function(target, name)
                 local info      = _ICInfo[target]
-                return info and getSuperOnPriority(info, name, getTypeFeature)
+                return info and getSuper(info, name, getTypeFeature)
             end;
 
             --- Get the super refer of the target interface
