@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2018/12/31                                               --
--- Version      :   1.0.0-beta040                                            --
+-- Update Date  :   2019/01/22                                               --
+-- Version      :   1.0.0-beta041                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2120,6 +2120,7 @@ do
                         ]])
                     else
                         uinsert(apis, "strformat")
+                        uinsert(apis, "error")
                         tinsert(body, [[
                             if type(result) == "string" then
                                 error(result, stack)
@@ -2157,7 +2158,7 @@ do
                     body[2]     = strformat("local %s = %s", declare, declare)
                 end
 
-                local func      = loadsnippet(tblconcat(body, "\n"), "environment.GetValue", _PLoopEnv)(unpack(upval))
+                local func      = loadsnippet(tblconcat(body, "\n"), "environment.SaveValue", _PLoopEnv)(unpack(upval))
 
                 _Cache(head)
                 _Cache(body)
@@ -10045,10 +10046,9 @@ do
     local MOD_PROP_GETDEEPCL    = newflags()
 
     local MOD_PROP_AUTOSCAN     = newflags()
-
     local MOD_PROP_INDEXER      = newflags()
-
     local MOD_PROP_THROWABLE    = newflags()
+    local MOD_PROP_REQUIRE      = newflags()
 
     -- PROPERTY FIELDS
     local FLD_PROP_MOD          =  0
@@ -10106,6 +10106,7 @@ do
     local FLG_PROPSET_INDEXER   = newflags()
     local FLG_PROPSET_INDEXTYP  = newflags()
     local FLG_PROPSET_THROWABLE = newflags()
+    local FLG_PROPSET_REQUIRE   = newflags()
 
     local FLD_PROP_META         = "__PLOOP_PROPERTY_META"
     local FLD_PROP_OBJ_WEAK     = "__PLOOP_PROPERTY_WEAK"
@@ -10446,6 +10447,11 @@ do
             token               = turnonflags(FLG_PROPSET_DISABLE, token)
             usename             = true
         else
+            if validateflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD]) then
+                token           = turnonflags(FLG_PROPSET_REQUIRE, token)
+                usename         = true
+            end
+
             if validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) then
                 token           = turnonflags(FLG_PROPSET_INDEXER, token)
 
@@ -10552,6 +10558,9 @@ do
                 tinsert(body, [[error(strformat("the %s can't be set", name), 3)]])
             else
                 if validateflags(FLG_PROPSET_INDEXTYP, token) then
+                    uinsert(apis, "error")
+                    uinsert(apis, "strgsub")
+                    uinsert(apis, "type")
                     tinsert(head, "ivalid")
                     tinsert(head, "ivtype")
                     tinsert(body, [[
@@ -10561,10 +10570,20 @@ do
                     ]])
                 end
 
-                if validateflags(FLG_PROPSET_TYPE, token) or validateflags(FLG_PROPSET_CLONE, token) then
+                if validateflags(FLG_PROPSET_REQUIRE, token) then
+                    uinsert(apis, "error")
+                    uinsert(apis, "strformat")
                     tinsert(body, [[
-                        if value ~= nil then
+                        if value == nil then error(strformat("the %s's value can't be nil", name), 3) end
                     ]])
+                end
+
+                if validateflags(FLG_PROPSET_TYPE, token) or validateflags(FLG_PROPSET_CLONE, token) then
+                    if not validateflags(FLG_PROPSET_REQUIRE, token) then
+                        tinsert(body, [[
+                            if value ~= nil then
+                        ]])
+                    end
                     if validateflags(FLG_PROPSET_TYPE, token) then
                         uinsert(apis, "error")
                         uinsert(apis, "type")
@@ -10596,9 +10615,11 @@ do
                         end
                     end
 
-                    tinsert(body, [[
-                        end
-                    ]])
+                    if not validateflags(FLG_PROPSET_REQUIRE, token) then
+                        tinsert(body, [[
+                            end
+                        ]])
+                    end
                 end
                 if validateflags(FLG_PROPSET_STATIC, token) then
                     uinsert(apis, "fakefunc")
@@ -11081,6 +11102,17 @@ do
                 return info and validateflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property can't take nil value
+            -- @static
+            -- @method  IsValueRequired
+            -- @owner   property
+            -- @param   target
+            -- @return  boolean                     true if the property's value can't be nil
+            ["IsValueRequired"] = function(self)
+                local info      = _PropertyInfo[self]
+                return info and validateflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD]) or false
+            end;
+
             --- Whether the property value should kept in a weak table
             -- @static
             -- @method  IsWeak
@@ -11252,6 +11284,22 @@ do
                 end
             end;
 
+            --- Mark the property so it can't take nil value
+            -- @static
+            -- @method  SetValueRequired
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
+            ["SetValueRequired"] = function(self)
+                if _PropertyInDefine[self] then
+                    local info  = _PropertyInfo[self]
+                    info[FLD_PROP_MOD] = turnonflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetValueRequired([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                end
+            end;
+
             --- Mark the property so its value should be kept in a weak table
             -- @static
             -- @method  SetWeak
@@ -11311,6 +11359,7 @@ do
             ["IsSetDeepClone"]  = property.IsSetDeepClone;
             ["IsShareable"]     = property.IsShareable;
             ["IsStatic"]        = property.IsStatic;
+            ["IsValueRequired"] = property.IsValueRequired;
             ["IsWeak"]          = property.IsWeak;
             ["IsWritable"]      = property.IsWritable;
             ["GetClone"]        = property.GetClone;
@@ -11320,6 +11369,7 @@ do
             ["SetIndexer"]      = property.SetIndexer;
             ["SetRetainObject"] = property.SetRetainObject;
             ["SetStatic"]       = property.SetStatic;
+            ["SetValueRequired"]= property.SetValueRequired;
             ["SetWeak"]         = property.SetWeak;
         },
         __call                  = function(self, definition, stack)
@@ -11415,6 +11465,10 @@ do
                     elseif k == "throwable" then
                         if v then
                             info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_THROWABLE, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "require" then
+                        if v then
+                            info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD])
                         end
                     end
                 end

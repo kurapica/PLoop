@@ -503,7 +503,7 @@ Luajit的确很擅长这类重复性工作。
 :-------------------------------------|:--------------------------------
 Dictionary()                          |创建一个空dictionary对象
 Dictionary(table)                     |将输入的table转换成一个dictionary对象
-Dictionary(table|IList, table|IList)  |接受两个数组或列表对象，第一个数组的元素作为键，第二个数组的元素作为值，构建一个新的dictionary对象
+Dictionary(table:IList, table:IList)  |接受两个数组或列表对象，第一个数组的元素作为键，第二个数组的元素作为值，构建一个新的dictionary对象
 Dictionary(dictionary)                |复制dictionary对象的键值对，创建新的对象
 Dictionary(iter, obj, index)          |使用迭代器产生的键值对创建新的dictionary对象
 
@@ -2528,6 +2528,7 @@ handler         |属性值变更时触发的处理方法，这是类或者接口
 static          |true，如果希望定义为静态属性
 indexer         |true，如果属性是索引属性
 throwable       |true，如果属性的set方法会抛出错误
+require         |true, 如果希望属性值不能为nil
 
 我们依次来看一些使用例子:
 
