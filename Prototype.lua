@@ -5693,11 +5693,9 @@ do
     local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
     local FLD_IC_SUPCLS         =  newindex(0)      -- FIELD SUPER CLASS
     local FLD_IC_MOD            = -newindex()       -- FIELD MODIFIER
-    local FLD_IC_CTOR           = -newindex()       -- FIELD CONSTRUCTOR|INITIALIZER
+    local FLD_IC_INIT           = -newindex()       -- FIELD INITIALIZER
     local FLD_IC_DTOR           = -newindex()       -- FIELD DESTRUCTOR
     local FLD_IC_FIELD          = -newindex()       -- FIELD INIT FIELDS
-    local FLD_IC_EXIST          = -newindex()       -- FIELD EXIST OBJECT CHECK
-    local FLD_IC_NEWOBJ         = -newindex()       -- FIELD NEW OBJECT
     local FLD_IC_TYPMTD         = -newindex()       -- FIELD TYPE METHODS
     local FLD_IC_TYPMTM         = -newindex()       -- FIELD TYPE META-METHODS
     local FLD_IC_TYPFTR         = -newindex()       -- FILED TYPE FEATURES
@@ -5717,8 +5715,6 @@ do
     local FLD_IC_OBJMTM         = -newindex()       -- FIELD OBJECT META-METHODS
     local FLD_IC_OBJFTR         = -newindex()       -- FIELD OBJECT FEATURES
     local FLD_IC_OBJFLD         = -newindex()       -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_OBJEXT         = -newindex()       -- FIELD OBJECT EXIST CHECK
-    local FLD_IC_OBJNEW         = -newindex()       -- FIELD OBJECT NEW OBJECT
     local FLD_IC_ONEABS         = -newindex()       -- FIELD ONE ABSTRACT-METHOD INTERFACE
     local FLD_IC_SUPINFO        = -newindex()       -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
     local FLD_IC_SUPMTD         = -newindex()       -- FIELD SUPER METHOD & META-METHODS
@@ -5726,9 +5722,8 @@ do
 
     -- Ctor & Dispose
     local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
-    local FLD_IC_CLINIT         = FLD_IC_OBCTOR + 1 -- FEILD THE CLASS INITIALIZER
     local FLD_IC_ENDISP         = FLD_IC_OBCTOR - 1 -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
-    local FLD_IC_STINIT         = FLD_IC_CLINIT + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
+    local FLD_IC_STINIT         = FLD_IC_OBCTOR + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
 
     -- Inheritance priority
     local INRT_PRIORITY_FINAL   =  1
@@ -5778,6 +5773,7 @@ do
     local IC_BUILDER_NEWMTD     = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS             = {
+        -- inheritable with priority
         __add                   = "__add",          -- a + b
         __sub                   = "__sub",          -- a - b
         __mul                   = "__mul",          -- a * b
@@ -5806,13 +5802,15 @@ do
         __pairs                 = "__pairs",        -- pairs(a)
 
         -- Special meta keys
+        [IC_META_EXIST]         = IC_META_EXIST,
+        [IC_META_NEW]           = IC_META_NEW,
+        [IC_META_CTOR]          = IC_META_CTOR,
+
+        -- Special meta keys & Non-inheritable
         [IC_META_DISPOB]        = FLD_IC_DTOR,
         [IC_META_DTOR]          = FLD_IC_DTOR,
-        [IC_META_EXIST]         = FLD_IC_EXIST,
         [IC_META_FIELD]         = FLD_IC_FIELD,
-        [IC_META_NEW]           = FLD_IC_NEWOBJ,
-        [IC_META_CTOR]          = FLD_IC_CTOR,
-        [IC_META_INIT]          = FLD_IC_CTOR,
+        [IC_META_INIT]          = FLD_IC_INIT,
     }
 
     -- UNSAFE FIELD
@@ -6072,11 +6070,9 @@ do
             -- STATIC FIELDS
             [FLD_IC_SUPCLS]     = info and info[FLD_IC_SUPCLS],
             [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_CLS or MOD_INITVAL_IF,
-            [FLD_IC_CTOR]       = info and info[FLD_IC_CTOR],
+            [FLD_IC_INIT]       = info and info[FLD_IC_INIT],
             [FLD_IC_DTOR]       = info and info[FLD_IC_DTOR],
             [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD] and tblclone(info[FLD_IC_FIELD], {}),
-            [FLD_IC_EXIST]      = info and info[FLD_IC_EXIST],
-            [FLD_IC_NEWOBJ]     = info and info[FLD_IC_NEWOBJ],
             [FLD_IC_TYPMTD]     = info and info[FLD_IC_TYPMTD] and tblclone(info[FLD_IC_TYPMTD], {}) or false,
             [FLD_IC_TYPMTM]     = info and info[FLD_IC_TYPMTM] and tblclone(info[FLD_IC_TYPMTM], {}),
             [FLD_IC_TYPFTR]     = info and info[FLD_IC_TYPFTR] and tblclone(info[FLD_IC_TYPFTR], {}),
@@ -6471,21 +6467,22 @@ do
 
         local token             = 0
         local upval             = _Cache()
+        local meta              = info[FLD_IC_OBJMTM]
 
-        tinsert(upval, info[FLD_IC_OBJMTM])
+        tinsert(upval, meta)
 
-        if info[FLD_IC_OBJEXT] or info[FLD_IC_OBJNEW] then
+        if meta[IC_META_EXIST] or meta[IC_META_NEW] then
             tinsert(upval, target)
         end
 
-        if info[FLD_IC_OBJEXT] then
+        if meta[IC_META_EXIST] then
             token               = turnonflags(FLG_IC_EXIST, token)
-            tinsert(upval, info[FLD_IC_OBJEXT])
+            tinsert(upval, meta[IC_META_EXIST])
         end
 
-        if info[FLD_IC_OBJNEW] then
+        if meta[IC_META_NEW] then
             token               = turnonflags(FLG_IC_NEWOBJ, token)
-            tinsert(upval, info[FLD_IC_OBJNEW])
+            tinsert(upval, meta[IC_META_NEW])
         end
 
         if info[FLD_IC_OBJFLD] then
@@ -6493,9 +6490,9 @@ do
             tinsert(upval, info[FLD_IC_OBJFLD])
         end
 
-        if info[FLD_IC_CLINIT] then
+        if meta[IC_META_CTOR] then
             token               = turnonflags(FLG_IC_HSCLIN, token)
-            tinsert(upval, info[FLD_IC_CLINIT])
+            tinsert(upval, meta[IC_META_CTOR])
         end
 
         if info[FLD_IC_STINIT] then
@@ -6667,34 +6664,21 @@ do
         -- The init & dispose link for extended interfaces & super classes
         local initIdx           = FLD_IC_STINIT
         local dispIdx           = FLD_IC_ENDISP
-        local supctor, supext, supnew
 
-        -- Save super class's dtor & ctor
-        for _, sinfo, isextIF in iterSuperInfo(info, true) do
-            if not isextIF then
-                if sinfo[FLD_IC_CTOR] then
-                    supctor     = sinfo[FLD_IC_CTOR]
-                end
-
-                if sinfo[FLD_IC_EXIST] then
-                    supext      = sinfo[FLD_IC_EXIST]
-                end
-
-                if sinfo[FLD_IC_NEWOBJ] then
-                    supnew      = sinfo[FLD_IC_NEWOBJ]
-                end
-
-                if sinfo[FLD_IC_DTOR] then
+        if realCls then
+            -- Save super class's dtor
+            for _, sinfo, isextIF in iterSuperInfo(info, true) do
+                if not isextIF and sinfo[FLD_IC_DTOR] then
                     info[dispIdx] = sinfo[FLD_IC_DTOR]
                     dispIdx     = dispIdx - 1
                 end
             end
-        end
 
-        -- Save class's dtor
-        if info[FLD_IC_DTOR] then
-            info[dispIdx]       = info[FLD_IC_DTOR]
-            dispIdx             = dispIdx - 1
+            -- Save class's dtor
+            if info[FLD_IC_DTOR] then
+                info[dispIdx]   = info[FLD_IC_DTOR]
+                dispIdx         = dispIdx - 1
+            end
         end
 
         -- Save super to caches
@@ -6720,9 +6704,9 @@ do
                 end
 
                 if isextIF then
-                    -- Save ctor
-                    if sinfo[FLD_IC_CTOR] then
-                        info[initIdx] = sinfo[FLD_IC_CTOR]
+                    -- Save initializer
+                    if sinfo[FLD_IC_INIT] then
+                        info[initIdx] = sinfo[FLD_IC_INIT]
                         initIdx       = initIdx + 1
                     end
 
@@ -6746,11 +6730,6 @@ do
         if info[FLD_IC_TYPMTM] then
             genMetaMethodCache(info[FLD_IC_TYPMTM], objmeta, objpri, inhrtp, super, info)
         end
-
-        -- __new, __exist, __ctor
-        if info[FLD_IC_CTOR]   and supctor then super[IC_META_CTOR]  = supctor end
-        if info[FLD_IC_EXIST]  and supext  then super[IC_META_EXIST] = supext  end
-        if info[FLD_IC_NEWOBJ] and supnew  then super[IC_META_NEW]   = supnew  end
 
         if next(super) then info[FLD_IC_SUPMTD] = super else _Cache(super) end
 
@@ -6777,8 +6756,7 @@ do
         end
 
         -- Generate super if needed, include the interface
-        if not info[FLD_IC_SUPER] and (info[FLD_IC_SUPFTR] or info[FLD_IC_SUPMTD] or
-            (isclass and info[FLD_IC_CTOR] and info[FLD_IC_SUPCLS] and (_ICInfo[info[FLD_IC_SUPCLS]][FLD_IC_CTOR] or _ICInfo[info[FLD_IC_SUPCLS]][FLD_IC_CLINIT]))) then
+        if not info[FLD_IC_SUPER] and (info[FLD_IC_SUPFTR] or info[FLD_IC_SUPMTD]) then
             info[FLD_IC_SUPER] = prototype.NewProxy(isclass and tsuperclass or tsuperinterface)
             saveSuperMap(info[FLD_IC_SUPER], target)
         end
@@ -6830,7 +6808,6 @@ do
                 _Cache(objmtd)
                 if not next(objftr) then _Cache(objftr) objftr = nil end
 
-                info[FLD_IC_CLINIT]     = nil
                 info[FLD_IC_OBJMTM]     = nil
                 info[FLD_IC_OBJFTR]     = objftr
                 info[FLD_IC_OBJMTD]     = nil
@@ -6844,7 +6821,7 @@ do
                 if FLD_IC_STDISP <= FLD_IC_ENDISP then
                     objmtd[IC_META_DISPOB]  = function(self)
                         if rawget(self, IC_META_DISPOSED) == true then return end
-                        for i   = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
+                        for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
                         rawset(wipe(self), IC_META_DISPOSED, true)
                     end
 
@@ -6865,13 +6842,10 @@ do
                 if not next(spcache)then _Cache(spcache)spcache= nil end
 
                 info[FLD_IC_SUPINFO]    = spcache
-                info[FLD_IC_CLINIT]     = info[FLD_IC_CTOR] or supctor
                 info[FLD_IC_OBJMTM]     = objmeta
                 info[FLD_IC_OBJFTR]     = objftr
                 info[FLD_IC_OBJMTD]     = objmtd or false
                 info[FLD_IC_OBJFLD]     = objfld
-                info[FLD_IC_OBJEXT]     = info[FLD_IC_EXIST] or supext
-                info[FLD_IC_OBJNEW]     = info[FLD_IC_NEWOBJ] or supnew
 
                 genMetaIndex(info)
                 genMetaNewIndex(info)
@@ -7061,7 +7035,7 @@ do
 
         if not META_KEYS[name] then return "the name is not valid", stack end
 
-        local tdata = type(data)
+        local tdata             = type(data)
 
         if name == IC_META_FIELD then
             if tdata ~= "table" then return "the data must be a table", stack end
