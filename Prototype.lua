@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/01/22                                               --
--- Version      :   1.0.0-beta041                                            --
+-- Update Date  :   2019/02/04                                               --
+-- Version      :   1.0.0-beta042                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -315,6 +315,7 @@ do
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
     uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     disposeObj                  = function (obj) obj:Dispose() end
+    newindex                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k + 1 end return k end end)()
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
     parseindex                  = (function() local map = { "1st", "2nd", "3rd" } return function(idx) return map[idx] or (idx .. "th") end end)()
 
@@ -2759,12 +2760,12 @@ do
     local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
 
     -- FIELD INDEX
-    local FLD_ENUM_MOD          = 0                 -- FIELD MODIFIER
-    local FLD_ENUM_ITEMS        = 1                 -- FIELD ENUMERATIONS
-    local FLD_ENUM_CACHE        = 2                 -- FIELD CACHE : VALUE -> NAME
-    local FLD_ENUM_ERRMSG       = 3                 -- FIELD ERROR MESSAGE
-    local FLD_ENUM_MAXVAL       = 4                 -- FIELD MAX VALUE(FOR FLAGS)
-    local FLD_ENUM_DEFAULT      = 5                 -- FIELD DEFAULT
+    local FLD_ENUM_MOD          = newindex(0)       -- FIELD MODIFIER
+    local FLD_ENUM_ITEMS        = newindex()        -- FIELD ENUMERATIONS
+    local FLD_ENUM_CACHE        = newindex()        -- FIELD CACHE : VALUE -> NAME
+    local FLD_ENUM_ERRMSG       = newindex()        -- FIELD ERROR MESSAGE
+    local FLD_ENUM_MAXVAL       = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
+    local FLD_ENUM_DEFAULT      = newindex()        -- FIELD DEFAULT
 
     -- Flags
     local FLG_FLAGS_ENUM        = newflags(true)
@@ -3480,34 +3481,34 @@ do
     local MOD_TEMPLATE_STRUCT   = newflags()        -- AS TEMPLATE
 
     -- FIELD INDEX
-    local FLD_STRUCT_MOD        = -1                -- FIELD MODIFIER
-    local FLD_STRUCT_TYPEMETHOD = -2                -- FIELD OBJECT METHODS
-    local FLD_STRUCT_DEFAULT    = -3                -- FEILD DEFAULT
-    local FLD_STRUCT_BASE       = -4                -- FIELD BASE STRUCT
-    local FLD_STRUCT_VALID      = -5                -- FIELD VALIDATOR
-    local FLD_STRUCT_CTOR       = -6                -- FIELD CONSTRUCTOR
-    local FLD_STRUCT_NAME       = -7                -- FEILD STRUCT NAME
-    local FLD_STRUCT_ERRMSG     = -8                -- FIELD ERROR MESSAGE
-    local FLD_STRUCT_VALIDCACHE = -9                -- FIELD VALIDATOR CACHE
-    local FLD_STRUCT_TEMPPRM    = -10               -- FIELD TEMPLATE PARAMS
-    local FLD_STRUCT_TEMPDEF    = -11               -- FIELD TEMPLATE DEFINITION
-    local FLD_STRUCT_TEMPIMP    = -12               -- FIELD TEMPLATE IMPLEMENTATION
-    local FLD_STRUCT_TEMPENV    = -13               -- FIELD TEMPLATE ENVIRONMENT
+    local FLD_STRUCT_MOD        = -newindex(1)      -- FIELD MODIFIER
+    local FLD_STRUCT_TYPEMETHOD = -newindex()       -- FIELD OBJECT METHODS
+    local FLD_STRUCT_DEFAULT    = -newindex()       -- FEILD DEFAULT
+    local FLD_STRUCT_BASE       = -newindex()       -- FIELD BASE STRUCT
+    local FLD_STRUCT_VALID      = -newindex()       -- FIELD VALIDATOR
+    local FLD_STRUCT_CTOR       = -newindex()       -- FIELD CONSTRUCTOR
+    local FLD_STRUCT_NAME       = -newindex()       -- FEILD STRUCT NAME
+    local FLD_STRUCT_ERRMSG     = -newindex()       -- FIELD ERROR MESSAGE
+    local FLD_STRUCT_VALIDCACHE = -newindex()       -- FIELD VALIDATOR CACHE
+    local FLD_STRUCT_TEMPPRM    = -newindex()       -- FIELD TEMPLATE PARAMS
+    local FLD_STRUCT_TEMPDEF    = -newindex()       -- FIELD TEMPLATE DEFINITION
+    local FLD_STRUCT_TEMPIMP    = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION
+    local FLD_STRUCT_TEMPENV    = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
 
     local FLD_STRUCT_ARRAY      =  0                -- FIELD ARRAY ELEMENT
-    local FLD_STRUCT_ARRVALID   =  2                -- FIELD ARRAY ELEMENT VALIDATOR
     local FLD_STRUCT_MEMBERSTART=  1                -- FIELD START INDEX OF MEMBER
+    local FLD_STRUCT_ARRVALID   =  2                -- FIELD ARRAY ELEMENT VALIDATOR
     local FLD_STRUCT_VALIDSTART =  10000            -- FIELD START INDEX OF VALIDATOR
     local FLD_STRUCT_INITSTART  =  20000            -- FIELD START INDEX OF INITIALIZE
 
     -- MEMBER FIELD INDEX
-    local FLD_MEMBER_OBJ        =  1                -- MEMBER FIELD OBJECT
-    local FLD_MEMBER_NAME       =  2                -- MEMBER FIELD NAME
-    local FLD_MEMBER_TYPE       =  3                -- MEMBER FIELD TYPE
-    local FLD_MEMBER_VALID      =  4                -- MEMBER FIELD TYPE VALIDATOR
-    local FLD_MEMBER_DEFAULT    =  5                -- MEMBER FIELD DEFAULT
-    local FLD_MEMBER_DEFTFACTORY=  6                -- MEMBER FIELD AS DEFAULT FACTORY
-    local FLD_MEMBER_REQUIRE    =  0                -- MEMBER FIELD REQUIRED
+    local FLD_MEMBER_REQUIRE    =  newindex(0)      -- MEMBER FIELD REQUIRED
+    local FLD_MEMBER_OBJ        =  newindex()       -- MEMBER FIELD OBJECT
+    local FLD_MEMBER_NAME       =  newindex()       -- MEMBER FIELD NAME
+    local FLD_MEMBER_TYPE       =  newindex()       -- MEMBER FIELD TYPE
+    local FLD_MEMBER_VALID      =  newindex()       -- MEMBER FIELD TYPE VALIDATOR
+    local FLD_MEMBER_DEFAULT    =  newindex()       -- MEMBER FIELD DEFAULT
+    local FLD_MEMBER_DEFTFACTORY=  newindex()       -- MEMBER FIELD AS DEFAULT FACTORY
 
     -- TYPE FLAGS
     local FLG_CUSTOM_STRUCT     = newflags(true)    -- CUSTOM STRUCT FLAG
@@ -5690,38 +5691,38 @@ do
 
     -- STATIC FIELDS
     local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
-    local FLD_IC_SUPCLS         =  0                -- FIELD SUPER CLASS
-    local FLD_IC_MOD            = -1                -- FIELD MODIFIER
-    local FLD_IC_CTOR           = -2                -- FIELD CONSTRUCTOR|INITIALIZER
-    local FLD_IC_DTOR           = -3                -- FIELD DESTRUCTOR
-    local FLD_IC_FIELD          = -4                -- FIELD INIT FIELDS
-    local FLD_IC_EXIST          = -5                -- FIELD EXIST OBJECT CHECK
-    local FLD_IC_NEWOBJ         = -6                -- FIELD NEW OBJECT
-    local FLD_IC_TYPMTD         = -7                -- FIELD TYPE METHODS
-    local FLD_IC_TYPMTM         = -8                -- FIELD TYPE META-METHODS
-    local FLD_IC_TYPFTR         = -9                -- FILED TYPE FEATURES
-    local FLD_IC_INHRTP         =-10                -- FIELD INHERITANCE PRIORITY
-    local FLD_IC_REQCLS         =-11                -- FIELD REQUIR CLASS FOR INTERFACE
-    local FLD_IC_SUPER          =-12                -- FIELD SUPER
-    local FLD_IC_ANYMSCL        =-13                -- FIELD ANONYMOUS CLASS FOR INTERFACE
-    local FLD_IC_DEBUGSR        =-14                -- FIELD WHETHER DEBUG THE OBJECT SOURCE
-    local FLD_IC_TEMPPRM        =-15                -- FIELD TEMPLATE ARGUMENTS
-    local FLD_IC_TEMPDEF        =-16                -- FIELD TEMPlATE DEFINITION
-    local FLD_IC_TEMPIMP        =-17                -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
-    local FLD_IC_TEMPENV        =-18                -- FIELD TEMPLATE ENVIRONMENT
+    local FLD_IC_SUPCLS         =  newindex(0)      -- FIELD SUPER CLASS
+    local FLD_IC_MOD            = -newindex()       -- FIELD MODIFIER
+    local FLD_IC_CTOR           = -newindex()       -- FIELD CONSTRUCTOR|INITIALIZER
+    local FLD_IC_DTOR           = -newindex()       -- FIELD DESTRUCTOR
+    local FLD_IC_FIELD          = -newindex()       -- FIELD INIT FIELDS
+    local FLD_IC_EXIST          = -newindex()       -- FIELD EXIST OBJECT CHECK
+    local FLD_IC_NEWOBJ         = -newindex()       -- FIELD NEW OBJECT
+    local FLD_IC_TYPMTD         = -newindex()       -- FIELD TYPE METHODS
+    local FLD_IC_TYPMTM         = -newindex()       -- FIELD TYPE META-METHODS
+    local FLD_IC_TYPFTR         = -newindex()       -- FILED TYPE FEATURES
+    local FLD_IC_INHRTP         = -newindex()       -- FIELD INHERITANCE PRIORITY
+    local FLD_IC_REQCLS         = -newindex()       -- FIELD REQUIR CLASS FOR INTERFACE
+    local FLD_IC_SUPER          = -newindex()       -- FIELD SUPER
+    local FLD_IC_ANYMSCL        = -newindex()       -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FLD_IC_DEBUGSR        = -newindex()       -- FIELD WHETHER DEBUG THE OBJECT SOURCE
+    local FLD_IC_TEMPPRM        = -newindex()       -- FIELD TEMPLATE ARGUMENTS
+    local FLD_IC_TEMPDEF        = -newindex()       -- FIELD TEMPlATE DEFINITION
+    local FLD_IC_TEMPIMP        = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
+    local FLD_IC_TEMPENV        = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
 
     -- CACHE FIELDS
-    local FLD_IC_STAFTR         =-20                -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJMTD         =-21                -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM         =-22                -- FIELD OBJECT META-METHODS
-    local FLD_IC_OBJFTR         =-23                -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJFLD         =-24                -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_OBJEXT         =-25                -- FIELD OBJECT EXIST CHECK
-    local FLD_IC_OBJNEW         =-26                -- FIELD OBJECT NEW OBJECT
-    local FLD_IC_ONEABS         =-27                -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO        =-28                -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD         =-29                -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR         =-30                -- FIELD SUPER FEATURE
+    local FLD_IC_STAFTR         = -newindex()       -- FIELD STATIC TYPE FEATURES
+    local FLD_IC_OBJMTD         = -newindex()       -- FIELD OBJECT METHODS
+    local FLD_IC_OBJMTM         = -newindex()       -- FIELD OBJECT META-METHODS
+    local FLD_IC_OBJFTR         = -newindex()       -- FIELD OBJECT FEATURES
+    local FLD_IC_OBJFLD         = -newindex()       -- FIELD OBJECT INIT-FIELDS
+    local FLD_IC_OBJEXT         = -newindex()       -- FIELD OBJECT EXIST CHECK
+    local FLD_IC_OBJNEW         = -newindex()       -- FIELD OBJECT NEW OBJECT
+    local FLD_IC_ONEABS         = -newindex()       -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    local FLD_IC_SUPINFO        = -newindex()       -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPMTD         = -newindex()       -- FIELD SUPER METHOD & META-METHODS
+    local FLD_IC_SUPFTR         = -newindex()       -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
     local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
@@ -9521,12 +9522,12 @@ do
     -----------------------------------------------------------------------
     --                         private constants                         --
     -----------------------------------------------------------------------
-    local FLD_EVENT_HANDLER     = 0
-    local FLD_EVENT_NAME        = 1
-    local FLD_EVENT_FIELD       = 2
-    local FLD_EVENT_OWNER       = 3
-    local FLD_EVENT_STATIC      = 4
-    local FLD_EVENT_DELEGATE    = 5
+    local FLD_EVENT_HANDLER     = newindex(0)
+    local FLD_EVENT_NAME        = newindex()
+    local FLD_EVENT_FIELD       = newindex()
+    local FLD_EVENT_OWNER       = newindex()
+    local FLD_EVENT_STATIC      = newindex()
+    local FLD_EVENT_DELEGATE    = newindex()
 
     local FLD_EVENT_META        = "__PLOOP_EVENT_META"
     local FLD_EVENT_PREFIX      = "__PLOOP_EVENT_"
@@ -10051,28 +10052,28 @@ do
     local MOD_PROP_REQUIRE      = newflags()
 
     -- PROPERTY FIELDS
-    local FLD_PROP_MOD          =  0
-    local FLD_PROP_RAWGET       =  1
-    local FLD_PROP_RAWSET       =  2
-    local FLD_PROP_NAME         =  3
-    local FLD_PROP_OWNER        =  4
-    local FLD_PROP_TYPE         =  5
-    local FLD_PROP_VALID        =  6
-    local FLD_PROP_FIELD        =  7
-    local FLD_PROP_GET          =  8
-    local FLD_PROP_SET          =  9
-    local FLD_PROP_GETMETHOD    = 10
-    local FLD_PROP_SETMETHOD    = 11
-    local FLD_PROP_DEFAULT      = 12
-    local FLD_PROP_DEFAULTFUNC  = 13
-    local FLD_PROP_HANDLER      = 14
-    local FLD_PROP_EVENT        = 15
-    local FLD_PROP_STATIC       = 16
-    local FLD_PROP_INDEXERTYP   = 17
-    local FLD_PROP_INDEXERVLD   = 18
-    local FLD_PROP_INDEXERGET   = 19
-    local FLD_PROP_INDEXERSET   = 20
-    local FLD_PROP_INDEXERFLD   = 21
+    local FLD_PROP_MOD          = newindex(0)
+    local FLD_PROP_RAWGET       = newindex()
+    local FLD_PROP_RAWSET       = newindex()
+    local FLD_PROP_NAME         = newindex()
+    local FLD_PROP_OWNER        = newindex()
+    local FLD_PROP_TYPE         = newindex()
+    local FLD_PROP_VALID        = newindex()
+    local FLD_PROP_FIELD        = newindex()
+    local FLD_PROP_GET          = newindex()
+    local FLD_PROP_SET          = newindex()
+    local FLD_PROP_GETMETHOD    = newindex()
+    local FLD_PROP_SETMETHOD    = newindex()
+    local FLD_PROP_DEFAULT      = newindex()
+    local FLD_PROP_DEFAULTFUNC  = newindex()
+    local FLD_PROP_HANDLER      = newindex()
+    local FLD_PROP_EVENT        = newindex()
+    local FLD_PROP_STATIC       = newindex()
+    local FLD_PROP_INDEXERTYP   = newindex()
+    local FLD_PROP_INDEXERVLD   = newindex()
+    local FLD_PROP_INDEXERGET   = newindex()
+    local FLD_PROP_INDEXERSET   = newindex()
+    local FLD_PROP_INDEXERFLD   = newindex()
 
     -- FLAGS FOR PROPERTY BUILDING
     local FLG_PROPGET_DISABLE   = newflags(true)
