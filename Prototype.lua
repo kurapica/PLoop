@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2018 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2019 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --
@@ -5768,9 +5768,6 @@ do
     -- Super & This
     local IC_KEYWORD_SUPER      = "super"
     local OBJ_SUPER_ACCESS      = "__PLOOP_SUPER_ACCESS"
-
-    -- Type Builder
-    local IC_BUILDER_NEWMTD     = "__PLOOP_BD_NEWMTD"
 
     local META_KEYS             = {
         -- inheritable with priority
