@@ -102,10 +102,10 @@ do
 
             -- Debug lib
             debug               = debug or false,
-            debuginfo           = debug and debug.getinfo or false,
+            debuginfo           = debug and debug.getinfo    or false,
             getupvalue          = debug and debug.getupvalue or false,
-            getlocal            = debug and debug.getlocal or false,
-            traceback           = debug and debug.traceback or false,
+            getlocal            = debug and debug.getlocal   or false,
+            traceback           = debug and debug.traceback  or false,
             setfenv             = setfenv or debug and debug.setfenv or false,
             getfenv             = getfenv or debug and debug.getfenv or false,
             collectgarbage      = collectgarbage,
@@ -134,12 +134,8 @@ do
 
             for k, v in pairs, default do
                 local r         = settings[k]
-                if r ~= nil then
-                    if type(r) ~= type(v) then
-                        Error("The PLOOP_PLATFORM_SETTINGS[%q]'s value must be %s.", k, type(v))
-                    else
-                        default[k] = r
-                    end
+                if type(r) == type(v) then
+                    default[k]  = r
                 end
             end
         end
@@ -5667,18 +5663,18 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_IC         = newflags(true)    -- SEALED TYPE
-    local MOD_FINAL_IC          = newflags()        -- FINAL TYPE
-    local MOD_ABSTRACT_CLS      = newflags()        -- ABSTRACT CLASS
-    local MOD_SINGLEVER_CLS     = newflags()        -- SINGLE VERSION CLASS - NO MULTI VERSION
-    local MOD_ATTRFUNC_OBJ      = newflags()        -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
-    local MOD_NORAWSET_OBJ      = newflags()        -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ      = newflags()        -- NO NIL FIELD ACCESS
-    local MOD_NOSUPER_OBJ       = newflags()        -- OLD SUPER ACCESS STYLE
-    local MOD_ANYMOUS_CLS       = newflags()        -- HAS ANONYMOUS CLASS
-    local MOD_ATTROBJ_CLS       = newflags()        -- CAN APPLY ATTRIBUTES ON OBJECTS
-    local MOD_TEMPLATE_IC       = newflags()        -- AS TEMPLATE INTERFACE/CLASS
-    local MOD_AUTOCACHE_OBJ     = newflags()        -- OBJECT METHOD AUTO-CACHE
+    local MOD_SEALED_IC         = newflags(true)            -- SEALED TYPE
+    local MOD_FINAL_IC          = newflags()                -- FINAL TYPE
+    local MOD_ABSTRACT_CLS      = newflags()                -- ABSTRACT CLASS
+    local MOD_SINGLEVER_CLS     = newflags()                -- SINGLE VERSION CLASS - NO MULTI VERSION
+    local MOD_ATTRFUNC_OBJ      = newflags()                -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
+    local MOD_NORAWSET_OBJ      = newflags()                -- NO RAW SET FOR OBJECTS
+    local MOD_NONILVAL_OBJ      = newflags()                -- NO NIL FIELD ACCESS
+    local MOD_NOSUPER_OBJ       = newflags()                -- OLD SUPER ACCESS STYLE
+    local MOD_ANYMOUS_CLS       = newflags()                -- HAS ANONYMOUS CLASS
+    local MOD_ATTROBJ_CLS       = newflags()                -- CAN APPLY ATTRIBUTES ON OBJECTS
+    local MOD_TEMPLATE_IC       = newflags()                -- AS TEMPLATE INTERFACE/CLASS
+    local MOD_AUTOCACHE_OBJ     = newflags()                -- OBJECT METHOD AUTO-CACHE
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -5690,40 +5686,40 @@ do
     local INI_FLD_DEBUGSR       = PLOOP_PLATFORM_SETTINGS.OBJECT_DEBUG_SOURCE or nil
 
     -- STATIC FIELDS
-    local FLD_IC_STEXT          =  1                -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
-    local FLD_IC_SUPCLS         =  newindex(0)      -- FIELD SUPER CLASS
-    local FLD_IC_MOD            = -newindex()       -- FIELD MODIFIER
-    local FLD_IC_INIT           = -newindex()       -- FIELD INITIALIZER
-    local FLD_IC_DTOR           = -newindex()       -- FIELD DESTRUCTOR
-    local FLD_IC_FIELD          = -newindex()       -- FIELD INIT FIELDS
-    local FLD_IC_TYPMTD         = -newindex()       -- FIELD TYPE METHODS
-    local FLD_IC_TYPMTM         = -newindex()       -- FIELD TYPE META-METHODS
-    local FLD_IC_TYPFTR         = -newindex()       -- FILED TYPE FEATURES
-    local FLD_IC_INHRTP         = -newindex()       -- FIELD INHERITANCE PRIORITY
-    local FLD_IC_REQCLS         = -newindex()       -- FIELD REQUIR CLASS FOR INTERFACE
-    local FLD_IC_SUPER          = -newindex()       -- FIELD SUPER
-    local FLD_IC_ANYMSCL        = -newindex()       -- FIELD ANONYMOUS CLASS FOR INTERFACE
-    local FLD_IC_DEBUGSR        = -newindex()       -- FIELD WHETHER DEBUG THE OBJECT SOURCE
-    local FLD_IC_TEMPPRM        = -newindex()       -- FIELD TEMPLATE ARGUMENTS
-    local FLD_IC_TEMPDEF        = -newindex()       -- FIELD TEMPlATE DEFINITION
-    local FLD_IC_TEMPIMP        = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
-    local FLD_IC_TEMPENV        = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
+    local FLD_IC_STEXT          =  1                        -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
+    local FLD_IC_SUPCLS         =  newindex(0)              -- FIELD SUPER CLASS
+    local FLD_IC_MOD            = -newindex()               -- FIELD MODIFIER
+    local FLD_IC_INIT           = -newindex()               -- FIELD INITIALIZER
+    local FLD_IC_DTOR           = -newindex()               -- FIELD DESTRUCTOR
+    local FLD_IC_FIELD          = -newindex()               -- FIELD INIT FIELDS
+    local FLD_IC_TYPMTD         = -newindex()               -- FIELD TYPE METHODS
+    local FLD_IC_TYPMTM         = -newindex()               -- FIELD TYPE META-METHODS
+    local FLD_IC_TYPFTR         = -newindex()               -- FILED TYPE FEATURES
+    local FLD_IC_INHRTP         = -newindex()               -- FIELD INHERITANCE PRIORITY
+    local FLD_IC_REQCLS         = -newindex()               -- FIELD REQUIR CLASS FOR INTERFACE
+    local FLD_IC_SUPER          = -newindex()               -- FIELD SUPER
+    local FLD_IC_ANYMSCL        = -newindex()               -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    local FLD_IC_DEBUGSR        = -newindex()               -- FIELD WHETHER DEBUG THE OBJECT SOURCE
+    local FLD_IC_TEMPPRM        = -newindex()               -- FIELD TEMPLATE ARGUMENTS
+    local FLD_IC_TEMPDEF        = -newindex()               -- FIELD TEMPlATE DEFINITION
+    local FLD_IC_TEMPIMP        = -newindex()               -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
+    local FLD_IC_TEMPENV        = -newindex()               -- FIELD TEMPLATE ENVIRONMENT
 
     -- CACHE FIELDS
-    local FLD_IC_STAFTR         = -newindex()       -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJMTD         = -newindex()       -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM         = -newindex()       -- FIELD OBJECT META-METHODS
-    local FLD_IC_OBJFTR         = -newindex()       -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJFLD         = -newindex()       -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_ONEABS         = -newindex()       -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO        = -newindex()       -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD         = -newindex()       -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR         = -newindex()       -- FIELD SUPER FEATURE
+    local FLD_IC_STAFTR         = -newindex()               -- FIELD STATIC TYPE FEATURES
+    local FLD_IC_OBJMTD         = -newindex()               -- FIELD OBJECT METHODS
+    local FLD_IC_OBJMTM         = -newindex()               -- FIELD OBJECT META-METHODS
+    local FLD_IC_OBJFTR         = -newindex()               -- FIELD OBJECT FEATURES
+    local FLD_IC_OBJFLD         = -newindex()               -- FIELD OBJECT INIT-FIELDS
+    local FLD_IC_ONEABS         = -newindex()               -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    local FLD_IC_SUPINFO        = -newindex()               -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    local FLD_IC_SUPMTD         = -newindex()               -- FIELD SUPER METHOD & META-METHODS
+    local FLD_IC_SUPFTR         = -newindex()               -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
-    local FLD_IC_OBCTOR         = 10000             -- FIELD THE OBJECT CONSTRUCTOR
-    local FLD_IC_ENDISP         = FLD_IC_OBCTOR - 1 -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
-    local FLD_IC_STINIT         = FLD_IC_OBCTOR + 1 -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
+    local FLD_IC_OBCTOR         = 10000                     -- FIELD THE OBJECT CONSTRUCTOR
+    local FLD_IC_ENDISP         = FLD_IC_OBCTOR - 1         -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
+    local FLD_IC_STINIT         = FLD_IC_OBCTOR + 1         -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
 
     -- Inheritance priority
     local INRT_PRIORITY_FINAL   =  1
@@ -5731,34 +5727,34 @@ do
     local INRT_PRIORITY_ABSTRACT= -1
 
     -- Flags for object accessing
-    local FLG_IC_OBJMTD         = newflags(true)    -- HAS OBJECT METHOD
-    local FLG_IC_OBJFTR         = newflags()        -- HAS OBJECT FEATURE
-    local FLG_IC_IDXFUN         = newflags()        -- HAS INDEX FUNCTION
-    local FLG_IC_IDXTBL         = newflags()        -- HAS INDEX TABLE
-    local FLG_IC_NEWIDX         = newflags()        -- HAS NEW INDEX
-    local FLG_IC_OMDATR         = newflags()        -- ENABLE OBJECT METHOD ATTRIBUTE
-    local FLG_IC_NRAWST         = newflags()        -- ENABLE NO RAW SET
-    local FLG_IC_NNILVL         = newflags()        -- NO NIL VALUE ACCESS
-    local FLG_IC_SUPACC         = newflags()        -- SUPER OBJECT ACCESS
-    local FLG_IC_ATCACH         = newflags()        -- OBJECT METHOD AUTO CACHE
+    local FLG_IC_OBJMTD         = newflags(true)            -- HAS OBJECT METHOD
+    local FLG_IC_OBJFTR         = newflags()                -- HAS OBJECT FEATURE
+    local FLG_IC_IDXFUN         = newflags()                -- HAS INDEX FUNCTION
+    local FLG_IC_IDXTBL         = newflags()                -- HAS INDEX TABLE
+    local FLG_IC_NEWIDX         = newflags()                -- HAS NEW INDEX
+    local FLG_IC_OMDATR         = newflags()                -- ENABLE OBJECT METHOD ATTRIBUTE
+    local FLG_IC_NRAWST         = newflags()                -- ENABLE NO RAW SET
+    local FLG_IC_NNILVL         = newflags()                -- NO NIL VALUE ACCESS
+    local FLG_IC_SUPACC         = newflags()                -- SUPER OBJECT ACCESS
+    local FLG_IC_ATCACH         = newflags()                -- OBJECT METHOD AUTO CACHE
 
     -- Flags for constructor
     local FLG_IC_EXIST          = newflags(FLG_IC_IDXFUN)   -- HAS __exist
-    local FLG_IC_NEWOBJ         = newflags()        -- HAS __new
-    local FLG_IC_FIELD          = newflags()        -- HAS __field
-    local FLG_IC_HSCLIN         = newflags()        -- HAS CLASS INITIALIZER
-    local FLG_IC_HSIFIN         = newflags()        -- NEED CALL INTERFACE'S INITIALIZER
-    local FLG_IC_OBJATR         = newflags()        -- OBJECT ATTRIBUTE
+    local FLG_IC_NEWOBJ         = newflags()                -- HAS __new
+    local FLG_IC_FIELD          = newflags()                -- HAS __field
+    local FLG_IC_HSCLIN         = newflags()                -- HAS CLASS INITIALIZER
+    local FLG_IC_HSIFIN         = newflags()                -- NEED CALL INTERFACE'S INITIALIZER
+    local FLG_IC_OBJATR         = newflags()                -- OBJECT ATTRIBUTE
 
     -- Meta Datas
     local IC_META_DISPOB        = "Dispose"
     local IC_META_DISPOSED      = "Disposed"
-    local IC_META_EXIST         = "__exist"         -- Existed objecj check
-    local IC_META_FIELD         = "__field"         -- Init fields
-    local IC_META_NEW           = "__new"           -- New object
-    local IC_META_CTOR          = "__ctor"          -- Constructor
-    local IC_META_DTOR          = "__dtor"          -- Destructor, short for Dispose
-    local IC_META_INIT          = "__init"          -- Initializer
+    local IC_META_EXIST         = "__exist"                 -- Existed objecj check
+    local IC_META_FIELD         = "__field"                 -- Init fields
+    local IC_META_NEW           = "__new"                   -- New object
+    local IC_META_CTOR          = "__ctor"                  -- Constructor
+    local IC_META_DTOR          = "__dtor"                  -- Destructor, short for Dispose
+    local IC_META_INIT          = "__init"                  -- Initializer
 
     local IC_META_INDEX         = "__index"
     local IC_META_NEWIDX        = "__newindex"
@@ -5771,32 +5767,32 @@ do
 
     local META_KEYS             = {
         -- inheritable with priority
-        __add                   = "__add",          -- a + b
-        __sub                   = "__sub",          -- a - b
-        __mul                   = "__mul",          -- a * b
-        __div                   = "__div",          -- a / b
-        __mod                   = "__mod",          -- a % b
-        __pow                   = "__pow",          -- a ^ b
-        __unm                   = "__unm",          -- - a
-        __idiv                  = "__idiv",         -- // floor division
-        __band                  = "__band",         -- & bitwise and
-        __bor                   = "__bor",          -- | bitwise or
-        __bxor                  = "__bxor",         -- ~ bitwise exclusive or
-        __bnot                  = "__bnot",         -- ~ bitwise unary not
-        __shl                   = "__shl",          -- << bitwise left shift
-        __shr                   = "__shr",          -- >> bitwise right shift
-        __concat                = "__concat",       -- a..b
-        __len                   = "__len",          -- #a
-        __eq                    = "__eq",           -- a == b
-        __lt                    = "__lt",           -- a < b
-        __le                    = "__le",           -- a <= b
-        __index                 = "___index",       -- return a[b]
-        __newindex              = "___newindex",    -- a[b] = v
-        __call                  = "__call",         -- a()
-        __gc                    = "__gc",           -- dispose a
-        __tostring              = "__tostring",     -- tostring(a)
-        __ipairs                = "__ipairs",       -- ipairs(a)
-        __pairs                 = "__pairs",        -- pairs(a)
+        __add                   = "__add",                  -- a + b
+        __sub                   = "__sub",                  -- a - b
+        __mul                   = "__mul",                  -- a * b
+        __div                   = "__div",                  -- a / b
+        __mod                   = "__mod",                  -- a % b
+        __pow                   = "__pow",                  -- a ^ b
+        __unm                   = "__unm",                  -- - a
+        __idiv                  = "__idiv",                 -- // floor division
+        __band                  = "__band",                 -- & bitwise and
+        __bor                   = "__bor",                  -- | bitwise or
+        __bxor                  = "__bxor",                 -- ~ bitwise exclusive or
+        __bnot                  = "__bnot",                 -- ~ bitwise unary not
+        __shl                   = "__shl",                  -- << bitwise left shift
+        __shr                   = "__shr",                  -- >> bitwise right shift
+        __concat                = "__concat",               -- a..b
+        __len                   = "__len",                  -- #a
+        __eq                    = "__eq",                   -- a == b
+        __lt                    = "__lt",                   -- a < b
+        __le                    = "__le",                   -- a <= b
+        __index                 = "___index",               -- return a[b]
+        __newindex              = "___newindex",            -- a[b] = v
+        __call                  = "__call",                 -- a()
+        __gc                    = "__gc",                   -- dispose a
+        __tostring              = "__tostring",             -- tostring(a)
+        __ipairs                = "__ipairs",               -- ipairs(a)
+        __pairs                 = "__pairs",                -- pairs(a)
 
         -- Special meta keys
         [IC_META_EXIST]         = IC_META_EXIST,
@@ -6069,7 +6065,7 @@ do
             [FLD_IC_MOD]        = info and info[FLD_IC_MOD] or isclass and MOD_INITVAL_CLS or MOD_INITVAL_IF,
             [FLD_IC_INIT]       = info and info[FLD_IC_INIT],
             [FLD_IC_DTOR]       = info and info[FLD_IC_DTOR],
-            [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD] and tblclone(info[FLD_IC_FIELD], {}),
+            [FLD_IC_FIELD]      = info and info[FLD_IC_FIELD]  and tblclone(info[FLD_IC_FIELD],  {}),
             [FLD_IC_TYPMTD]     = info and info[FLD_IC_TYPMTD] and tblclone(info[FLD_IC_TYPMTD], {}) or false,
             [FLD_IC_TYPMTM]     = info and info[FLD_IC_TYPMTM] and tblclone(info[FLD_IC_TYPMTM], {}),
             [FLD_IC_TYPFTR]     = info and info[FLD_IC_TYPFTR] and tblclone(info[FLD_IC_TYPFTR], {}),
@@ -6754,7 +6750,7 @@ do
 
         -- Generate super if needed, include the interface
         if not info[FLD_IC_SUPER] and (info[FLD_IC_SUPFTR] or info[FLD_IC_SUPMTD]) then
-            info[FLD_IC_SUPER] = prototype.NewProxy(isclass and tsuperclass or tsuperinterface)
+            info[FLD_IC_SUPER]  = prototype.NewProxy(isclass and tsuperclass or tsuperinterface)
             saveSuperMap(info[FLD_IC_SUPER], target)
         end
 
@@ -6783,20 +6779,20 @@ do
 
             -- Gen anonymous class
             if validateflags(MOD_ANYMOUS_CLS, info[FLD_IC_MOD]) and not info[FLD_IC_ANYMSCL] then
-                local aycls     = prototype.NewProxy(tclass)
-                local ainfo     = getInitICInfo(aycls, true)
+                local aycls             = prototype.NewProxy(tclass)
+                local ainfo             = getInitICInfo(aycls, true)
 
-                ainfo[FLD_IC_MOD]   = turnonflags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
-                ainfo[FLD_IC_STEXT] = target
+                ainfo[FLD_IC_MOD]       = turnonflags(MOD_SEALED_IC, ainfo[FLD_IC_MOD])
+                ainfo[FLD_IC_STEXT]     = target
 
                 -- Register the _ICDependsMap
-                _ICDependsMap[target] = _ICDependsMap[target] or {}
+                _ICDependsMap[target]   = _ICDependsMap[target] or {}
                 tinsert(_ICDependsMap[target], aycls)
 
                 -- Save the anonymous class
                 saveICInfo(aycls, ainfo)
 
-                info[FLD_IC_ANYMSCL] = aycls
+                info[FLD_IC_ANYMSCL]    = aycls
             end
         else
             if not realCls then
@@ -6849,7 +6845,7 @@ do
 
                 -- Copy the metatable if the class is single version
                 if class.IsSingleVersion(target) then
-                    local oinfo = _ICInfo[target]
+                    local oinfo         = _ICInfo[target]
 
                     if oinfo and oinfo[FLD_IC_OBJMTM] then
                         info[FLD_IC_OBJMTM] = tblclone(objmeta, oinfo[FLD_IC_OBJMTM], false, true)
@@ -6954,7 +6950,7 @@ do
                 return strformat("the class must be %s's sub-class", tostring(reqcls)), stack
             end
         elseif interface.IsSubType(extendIF, target) then
-            return "the extendinterface is a sub type of the interface", stack
+            return "the extend interface is a sub type of the interface", stack
         elseif reqcls then
             local rcls          = interface.GetRequireClass(target)
 
@@ -6989,7 +6985,7 @@ do
         if META_KEYS[name] ~= nil then return strformat("the %s can't be used as method name", name), stack end
         if type(func) ~= "function" then return "the func must be a function", stack end
 
-        local typmtd = info[FLD_IC_TYPMTD]
+        local typmtd            = info[FLD_IC_TYPMTD]
         if not def and (typmtd and (typmtd[name] or (typmtd[name] == false and info[name])) or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
             return strformat("The %s can't be overridden", name), stack
         end
@@ -7002,7 +6998,7 @@ do
             attribute.InheritAttributes(func, ATTRTAR_METHOD, getSuper(info, name, getTypeMethod))
         end
 
-        local ret = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
+        local ret               = attribute.InitDefinition(func, ATTRTAR_METHOD, func, target, name, stack)
         if ret ~= func then attribute.ToggleTarget(func, ret) func = ret end
 
         attribute.ApplyAttributes (func, ATTRTAR_METHOD, nil, target, name, stack)
