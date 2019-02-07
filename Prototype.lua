@@ -1826,7 +1826,7 @@ do
                     uinsert(apis, "error")
                     uinsert(apis, "strformat")
                     tinsert(body, [[
-                        if value == nil then error(strformat("The global variable %q can't be nil.", name), (stack or 1) + 1) end
+                        if value == nil then error(strformat("The global variable %q can't be nil", name), (stack or 1) + 1) end
                     ]])
                 end
 
@@ -4082,7 +4082,7 @@ do
                 tinsert(body, [[
                             return ret
                         elseif not fmatch then
-                            error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
+                            error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid"), 3)
                         end
                     end
                 ]])
@@ -4125,7 +4125,7 @@ do
             if validateflags(FLG_MEMBER_STRUCT, token) or validateflags(FLG_ARRAY_STRUCT, token) then
                 uinsert(apis, "type")
                 tinsert(body, [[
-                    error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid."), 3)
+                    error(info[]] .. FLD_STRUCT_ERRMSG .. [[] .. (type(msg) == "string" and strgsub(msg, "%%s%.?", "") or "the value is not valid"), 3)
                 ]])
             else
                 tinsert(body, [[
@@ -6893,9 +6893,9 @@ do
         stack                   = parsestack(stack)
         if not info then return nil, nil, stack, "the target is not valid" end
         if not allowDefined and not def then return nil, nil, stack, strformat("the %s's definition is finished", tostring(target)) end
-        if not name or type(name) ~= "string" then return info, nil, stack, "the name must be a string." end
+        if not name or type(name) ~= "string" then return info, nil, stack, "the name must be a string" end
         name                    = strtrim(name)
-        if name == "" then return info, nil, stack, "the name can't be empty." end
+        if name == "" then return info, nil, stack, "the name can't be empty" end
         return info, name, stack, nil, def
     end
 
