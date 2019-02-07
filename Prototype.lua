@@ -4204,6 +4204,45 @@ do
                                     and function (m, meta) rawset(m, FLD_MEMBER_META, meta) end
                                     or  function (m, meta) _MemberInfo = savestorage(_MemberInfo, m, meta) end
 
+    -- Get template implementation
+    local getStructImplement    = function(self, key, stack)
+        local info              = _StructInfo[self]
+        if info[FLD_STRUCT_TEMPDEF] then
+            local implements    = info[FLD_STRUCT_TEMPIMP]
+            if type(key) ~= "table" or getmetatable(key) ~= nil then
+                key             = { key }
+            end
+
+            local implement     = getTemplateImplement(implements, key)
+            if implement then return implement end
+
+            local ok, err       = pcall(attribute.IndependentCall, function()
+                implement       = struct {}
+                local bder      = struct (info[FLD_STRUCT_TEMPENV], implement, true)
+                struct.SetSealed(implement)
+                local ninfo     = getStructTargetInfo(implement)
+                ninfo[FLD_STRUCT_TEMPPRM] = key
+                ninfo[FLD_STRUCT_TEMPIMP] = self
+                attribute.InheritAttributes(implement, ATTRTAR_STRUCT, self)
+                bder(info[FLD_STRUCT_TEMPDEF])
+            end)
+
+            if not ok then
+                if type(err) == "string" then
+                    error(err, 0)
+                else
+                    error(tostring(err), parsestack(stack) + 1)
+                end
+            end
+
+            info[FLD_STRUCT_TEMPIMP] = saveTemplateImplement(implements, key, implement)
+
+            return implement
+        end
+
+        error("the " .. tostring(self) .. " can't be used as template", parsestack(stack) + 1)
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -5026,50 +5065,23 @@ do
     }
 
     tstruct                     = prototype (tnamespace, {
-        __index                 = function(self, key)
+        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key)
+            if type(key) == "string" then
+                local info      = _StructBuilderInfo[self] or _StructInfo[self]
+                return info and (info[key] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][key]) or namespace.GetNamespace(self, key)
+            else
+                local value     = getStructImplement(self, key, 2)
+                return value
+            end
+        end or function(self, key)
             if type(key) == "string" then
                 local info      = _StructBuilderInfo[self] or _StructInfo[self]
                 local value     = info and (info[key] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][key]) or namespace.GetNamespace(self, key)
                 if value ~= nil then return value end
-                if not PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE then
-                    error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
-                end
+                error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
             else
-                local info      = _StructInfo[self]
-                if info[FLD_STRUCT_TEMPDEF] then
-                    local implements= info[FLD_STRUCT_TEMPIMP]
-                    if type(key) ~= "table" or getmetatable(key) ~= nil then
-                        key     = { key }
-                    end
-
-                    local implement = getTemplateImplement(implements, key)
-                    if implement then return implement end
-
-                    local ok, err = pcall(attribute.IndependentCall, function()
-                        implement = struct {}
-                        local bder = struct (info[FLD_STRUCT_TEMPENV], implement, true)
-                        struct.SetSealed(implement)
-                        local ninfo = getStructTargetInfo(implement)
-                        ninfo[FLD_STRUCT_TEMPPRM] = key
-                        ninfo[FLD_STRUCT_TEMPIMP] = self
-                        attribute.InheritAttributes(implement, ATTRTAR_STRUCT, self)
-                        bder(info[FLD_STRUCT_TEMPDEF])
-                    end)
-
-                    if not ok then
-                        if type(err) == "string" then
-                            error(err, 0)
-                        else
-                            error(tostring(err), 2)
-                        end
-                    end
-
-                    info[FLD_STRUCT_TEMPIMP] = saveTemplateImplement(implements, key, implement)
-
-                    return implement
-                end
-
-                error("the " .. tostring(self) .. " can't be used as template", 2)
+                local value     = getStructImplement(self, key, 2)
+                return value
             end
         end,
         __call                  = function(self, ...)
@@ -7267,6 +7279,46 @@ do
         end
     end
 
+    -- Get template implementation
+    local getICImplement        = function(self, key, stack)
+        local info              = _ICInfo[self]
+        if info[FLD_IC_TEMPDEF] then
+            local implements    = info[FLD_IC_TEMPIMP]
+            if type(key) ~= "table" or getmetatable(key) ~= nil then
+                key             = { key }
+            end
+
+            local implement     = getTemplateImplement(implements, key)
+            if implement then return implement end
+
+            local ok, err       = pcall(attribute.IndependentCall, function()
+                local ptype     = getmetatable(self)
+                implement       = ptype {}
+                local bder      = ptype (info[FLD_IC_TEMPENV], implement, true)
+                ptype.SetSealed(implement)
+                local ninfo     = getICTargetInfo(implement)
+                ninfo[FLD_IC_TEMPPRM] = key
+                ninfo[FLD_IC_TEMPIMP] = self
+                attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, self)
+                bder(info[FLD_IC_TEMPDEF])
+            end)
+
+            if not ok then
+                if type(err) == "string" then
+                    error(err, 0)
+                else
+                    error(tostring(err), parsestack(stack) + 1)
+                end
+            end
+
+            info[FLD_IC_TEMPIMP] = saveTemplateImplement(implements, key, implement)
+
+            return implement
+        end
+
+        error("the " .. tostring(self) .. " can't be used as template", parsestack(stack) + 1)
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -8817,7 +8869,27 @@ do
     }
 
     tinterface                  = prototype (tnamespace, {
-        __index                 = function(self, key)
+        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key)
+            if type(key) == "string" then
+                -- Access methods
+                local info      = _ICBuilderInfo[self] or _ICInfo[self]
+                if info then
+                    -- Static or object methods
+                    local oper  = info[key] or info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][key]
+                    if oper then return oper end
+
+                    -- Static features
+                    oper        = info[FLD_IC_STAFTR] and info[FLD_IC_STAFTR][key]
+                    if oper then return oper:Get(self) end
+                end
+
+                -- Access child-namespaces
+                return namespace.GetNamespace(self, key)
+            else
+                local value     = getICImplement(self, key, 2)
+                return value
+            end
+        end or function(self, key)
             if type(key) == "string" then
                 -- Access methods
                 local info      = _ICBuilderInfo[self] or _ICInfo[self]
@@ -8835,46 +8907,10 @@ do
                 local value     = namespace.GetNamespace(self, key)
                 if value ~= nil then return value end
 
-                if not PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE then
-                    error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
-                end
+                error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
             else
-                local info      = _ICInfo[self]
-                if info[FLD_IC_TEMPDEF] then
-                    local implements= info[FLD_IC_TEMPIMP]
-                    if type(key) ~= "table" or getmetatable(key) ~= nil then
-                        key     = { key }
-                    end
-
-                    local implement = getTemplateImplement(implements, key)
-                    if implement then return implement end
-
-                    local ok, err   = pcall(attribute.IndependentCall, function()
-                        local ptype = getmetatable(self)
-                        implement   = ptype {}
-                        local bder  = ptype (info[FLD_IC_TEMPENV], implement, true)
-                        ptype.SetSealed(implement)
-                        local ninfo = getICTargetInfo(implement)
-                        ninfo[FLD_IC_TEMPPRM] = key
-                        ninfo[FLD_IC_TEMPIMP] = self
-                        attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, self)
-                        bder(info[FLD_IC_TEMPDEF])
-                    end)
-
-                    if not ok then
-                        if type(err) == "string" then
-                            error(err, 0)
-                        else
-                            error(tostring(err), 2)
-                        end
-                    end
-
-                    info[FLD_IC_TEMPIMP] = saveTemplateImplement(implements, key, implement)
-
-                    return implement
-                end
-
-                error("the " .. tostring(self) .. " can't be used as template", 2)
+                local value     = getICImplement(self, key, 2)
+                return value
             end
         end,
         __newindex              = function(self, key, value)
