@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/02/04                                               --
--- Version      :   1.0.0-beta042                                            --
+-- Update Date  :   2019/02/07                                               --
+-- Version      :   1.0.0-beta043                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -144,13 +144,11 @@ do
         --- Whether the attribute system use warning instead of error for
         -- invalid attribute target type.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         ATTR_USE_WARN_INSTEAD_ERROR         = false,
 
         --- Whether the environmet allow global variable be nil, if false,
         -- things like ture(spell error) could trigger error.
         -- Default true
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         ENV_ALLOW_GLOBAL_VAR_BE_NIL         = true,
 
         --- The filter function used to validation the new declared global
@@ -174,7 +172,6 @@ do
         --      endclass "A"
         --
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         TYPE_DEFINITION_WITH_OLD_STYLE      = false,
 
         --- Whether the type validation should be disabled. The value should be
@@ -182,10 +179,13 @@ do
         -- ignore the value valiation in several conditions for speed.
         TYPE_VALIDATION_DISABLED            = false,
 
+        --- Whether allow accessing non-existent value from namespace
+        -- Default true
+        NAMESPACE_NIL_VALUE_ACCESSIBLE      = true,
+
         --- Whether all old objects keep using new features when their
         -- classes or extend interfaces are re-defined.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_NO_MULTI_VERSION_CLASS        = false,
 
         --- Whether all interfaces & classes only use the classic format
@@ -195,30 +195,25 @@ do
         --      super[obj].OnNameChanged = super[obj].OnNameChanged + print
         --      super[obj]:Greet("King")
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         CLASS_NO_SUPER_OBJECT_STYLE         = false,
 
         --- Whether all interfaces has anonymous class, so it can be used
         -- to generate object
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         INTERFACE_ALL_ANONYMOUS_CLASS       = false,
 
         --- Whether all class objects can't save value to fields directly,
         -- So only init fields, properties, events can be set during runtime.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         OBJECT_NO_RAWSEST                   = false,
 
         --- Whether all class objects can't fetch nil value from it, combine it
         -- with @OBJ_NO_RAWSEST will force a strict mode for development.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         OBJECT_NO_NIL_ACCESS                = false,
 
         --- Whether save the creation places (source and line) for all objects
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         OBJECT_DEBUG_SOURCE                 = false,
 
         --- The Log level used in the Prototype core part.
@@ -229,7 +224,6 @@ do
         --          5 : Error
         --          6 : Fatal
         -- Default 3(Info)
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         CORE_LOG_LEVEL                      = 3,
 
         --- The core log handler works like :
@@ -238,20 +232,17 @@ do
         --          -- loglevel : the log message's level
         --      end
         -- Default print
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         CORE_LOG_HANDLER                    = print,
 
         --- Whether the system is used in a platform where multi os threads
         -- share one lua-state, so the access conflict can't be ignore.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD                     = false,
 
         --- Whether the system is used in a platform where multi os threads
         -- share one lua-state, and the lua_lock and lua_unlock apis are
         -- applied, so PLoop don't need to care about the thread conflict.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD_LUA_LOCK_APPLIED    = false,
 
         --- Whether the system send warning messages when the system is used
@@ -261,7 +252,6 @@ do
         -- fetch them by __index meta-call, so it's better to declare local
         -- variables to hold them for best access speed.
         -- Default true
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = true,
 
         --- Whether the system use tables for the types of namespace, class and
@@ -272,23 +262,19 @@ do
         -- system would use a clone-replace mechanism for inner storage, it'd
         -- leave many tables to be collected during the definition time.
         -- Default false
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         UNSAFE_MODE                         = false,
 
         --- Whether try to save the stack data into the exception object, so
         -- we can have more details about the exception.
         -- Default true
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         EXCEPTION_SAVE_STACK_DATA           = true,
 
         --- The max pool size of the thread pool
         -- Default 40
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         THREAD_POOL_MAX_SIZE                = 40,
 
         --- Use the Dispose as the __gc, only works for Lua 5.3 and above
         -- Default true
-        -- @owner       PLOOP_PLATFORM_SETTINGS
         USE_DISPOSE_AS_META_GC              = true,
     }
 
@@ -1706,6 +1692,8 @@ do
                 uinsert(apis, "type")
                 uinsert(apis, "rawget")
 
+                if not PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE then uinsert(apis, "safeget") end
+
                 tinsert(body, "")
                 tinsert(body, "")
                 tinsert(body, [[
@@ -1751,22 +1739,23 @@ do
                     local nsname = namespace.GetNamespaceName
                     local ns = nvalid(rawget(env, "]] .. ENV_NS_OWNER .. [["))
                     if ns then
-                        value = name == nsname(ns, true) and ns or ns[name]
+                        if name == nsname(ns, true) then return ns end
+                        value = ]] .. (PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and "ns[name]" or "safeget(ns, name)") .. [[
+                        if value ~= nil then return value end
                     end
                 ]])
 
                 -- Check imported namespaces
                 uinsert(apis, "ipairs")
                 tinsert(body, [[
-                    if value == nil then
-                        local imp = rawget(env, "]] .. ENV_NS_IMPORTS .. [[")
-                        if type(imp) == "table" then
-                            for _, sns in ipairs, imp, 0 do
-                                sns = nvalid(sns)
-                                if sns then
-                                    value = name == nsname(sns, true) and sns or sns[name]
-                                    if value ~= nil then break end
-                                end
+                    local imp = rawget(env, "]] .. ENV_NS_IMPORTS .. [[")
+                    if type(imp) == "table" then
+                        for _, sns in ipairs, imp, 0 do
+                            sns = nvalid(sns)
+                            if sns then
+                                if name == nsname(sns, true) then return sns end
+                                value = ]] .. (PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and "sns[name]" or "safeget(sns, name)") .. [[
+                                if value ~= nil then return value end
                             end
                         end
                     end
@@ -1775,32 +1764,28 @@ do
                 -- Check global namespaces & root namespaces
                 tinsert(body, [[
                     if not isparent then
-                        if value == nil then
-                            for _, sns in ipairs, _GlobalNS, 0 do
-                                value = name == nsname(sns, true) and sns or sns[name]
-                                if value ~= nil then break end
-                            end
+                        for _, sns in ipairs, _GlobalNS, 0 do
+                            if name == nsname(sns, true) then return sns end
+                            value = ]] .. (PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and "sns[name]" or "safeget(sns, name)") .. [[
+                            if value ~= nil then return value end
                         end
 
-                        if value == nil then
-                            value = namespace.GetNamespace(name)
-                        end
+                        value = namespace.GetNamespace(name)
+                        if value ~= nil then return value end
                     end
                 ]])
 
                 -- Check base environment
                 uinsert(apis, "_G")
                 tinsert(body, [[
-                    if value == nil then
-                        local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[")
-                        if type(parent) == "table" and parent ~= _G then
-                            value = rawget(parent, name)
-                            if value == nil then
-                                value = getenvvalue(parent, name, true)
-                            end
-                        else
-                            value = rawget(_G, name)
+                    local parent = rawget(env, "]] .. ENV_BASE_ENV .. [[")
+                    if type(parent) == "table" and parent ~= _G then
+                        value = rawget(parent, name)
+                        if value == nil then
+                            value = getenvvalue(parent, name, true)
                         end
+                    else
+                        value = rawget(_G, name)
                     end
                 ]])
 
@@ -2581,7 +2566,11 @@ do
 
     -- default type for namespace
     tnamespace                  = prototype {
-        __index                 = namespace.GetNamespace,
+        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and namespace.GetNamespace or function(self, key)
+            local value         = getNamespace(self, key)
+            if value ~= nil then return value end
+            error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), tostring(key)), 2)
+        end,
         __newindex              = readonly,
         __tostring              = namespace.GetNamespaceName,
         __metatable             = namespace,
@@ -3151,7 +3140,11 @@ do
     }
 
     tenum                       = prototype (tnamespace, {
-        __index                 = function(self, key) return _EnumInfo[self][FLD_ENUM_ITEMS][key] end,
+        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key) return _EnumInfo[self][FLD_ENUM_ITEMS][key] end or function(self, key)
+            local value         = _EnumInfo[self][FLD_ENUM_ITEMS][key]
+            if value ~= nil then return value end
+            error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), tostring(key)), 2)
+        end,
         __call                  = enum.Parse,
         __metatable             = enum,
     })
@@ -5036,7 +5029,11 @@ do
         __index                 = function(self, key)
             if type(key) == "string" then
                 local info      = _StructBuilderInfo[self] or _StructInfo[self]
-                return info and (info[key] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][key]) or namespace.GetNamespace(self, key)
+                local value     = info and (info[key] or info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][key]) or namespace.GetNamespace(self, key)
+                if value ~= nil then return value end
+                if not PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE then
+                    error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
+                end
             else
                 local info      = _StructInfo[self]
                 if info[FLD_STRUCT_TEMPDEF] then
@@ -8835,7 +8832,12 @@ do
                 end
 
                 -- Access child-namespaces
-                return namespace.GetNamespace(self, key)
+                local value     = namespace.GetNamespace(self, key)
+                if value ~= nil then return value end
+
+                if not PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE then
+                    error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), key), 2)
+                end
             else
                 local info      = _ICInfo[self]
                 if info[FLD_IC_TEMPDEF] then
