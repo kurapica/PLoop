@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/02/07                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -47,7 +47,7 @@ PLoop(function(_ENV)
         Deserialize             = Serialization.Deserialize,
 
         LUA_VERSION             = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
-        Serialization, List,
+        Serialization, List, IIndexedList,
 
         -- Declare the global variables
         isArray                 = false,
@@ -64,15 +64,15 @@ PLoop(function(_ENV)
     do
         function isArray(data)
             -- Check the data type
-            local objField = data[Serialization.ObjectTypeField]
+            local objField      = data[Serialization.ObjectTypeField]
 
             if objField then
                 data[Serialization.ObjectTypeField] = nil
-                return isListType(objField, List) or (isstruct(objField) and getstructcategory(objField) == "ARRAY")
+                if isListType(objField, IIndexedList) or (isstruct(objField) and getstructcategory(objField) == "ARRAY") then return true end
             end
 
             -- Check the data
-            local count = #data
+            local count         = #data
 
             for k in pairs(data) do
                 if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
@@ -176,9 +176,9 @@ PLoop(function(_ENV)
                         end
                     else
                         if i < count then
-                            write(strformat("%s%q : %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                            write(strformat("%s%s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                         else
-                            write(strformat("%s%q : %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                            write(strformat("%s%s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                         end
                     end
                 end
@@ -283,9 +283,9 @@ PLoop(function(_ENV)
                         end
                     else
                         if i < count then
-                            write(object, strformat("%s%q : %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                            write(object, strformat("%s%s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                         else
-                            write(object, strformat("%s%q : %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                            write(object, strformat("%s%s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                         end
                     end
                 end

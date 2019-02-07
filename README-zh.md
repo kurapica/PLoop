@@ -5209,9 +5209,9 @@ PLoop(function(_ENV)
 
 	o = Serialization.Deserialize( StringFormatProvider(), v)
 
-	-- 	A	08/13/13 12:00:00
-	-- 	B	04/02/17 12:00:00
-	-- 	C	03/14/18 12:00:00
+	-- 	A	2013-08-13 12:00:00
+	-- 	B	2017-04-02 12:00:00
+	-- 	C	2018-03-14 12:00:00
 	o:Each(print)
 end)
 ```
@@ -5298,9 +5298,9 @@ PLoop(function(_ENV)
 
 	o = Serialization.Deserialize( StringFormatProvider(), v, Dictionary[{String, Date}])
 
-	--	A	08/13/13 12:00:00
-	--	B	04/02/17 12:00:00
-	--	C	03/14/18 12:00:00
+	--	A	2013-08-13 12:00:00
+	--	B	2017-04-02 12:00:00
+	--	C	2018-03-14 12:00:00
 	o:Each(print)
 end)
 ```
