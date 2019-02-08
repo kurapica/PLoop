@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/09/23                                               --
--- Update Date  :   2018/09/23                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/02/08                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -67,6 +67,9 @@ PLoop(function(_ENV)
                 error           = error,
                 pairs           = pairs,
                 pcall           = pcall,
+                clone           = Toolset.clone,
+                wipe            = Toolset.wipe,
+                tinsert         = table.insert,
 
                 TestState, TestFailureException
             }
@@ -89,6 +92,8 @@ PLoop(function(_ENV)
                 end
                 return false
             end
+
+            local STEPS         = {}
 
             -----------------------------------------------------------
             --                        method                         --
@@ -149,6 +154,22 @@ PLoop(function(_ENV)
 
             --- Fail the test with message
             __Static__() function Fail(message) throw(TestFailureException(message or "Fail")) end
+
+            --- Record the debug step
+            __Static__() function Step(val)
+                if val == nil then val = #STEPS + 1 end
+                tinsert(STEPS, val)
+            end
+
+            --- Gets the debug steps
+            __Static__() function GetSteps()
+                return clone(STEPS)
+            end
+
+            --- Reset the steps
+            __Static__() function ResetSteps()
+                wipe(STEPS)
+            end
         end)
 
         --- Used to mark a method as test case
@@ -234,6 +255,8 @@ PLoop(function(_ENV)
                 end
 
                 AfterCase(self, tcase)
+
+                Assert.ResetSteps()
 
                 if tcase.state == TestState.Succeed then
                     Info("[UnitTest]%s.%s PASS", tcase.owner._FullName, tcase.name)

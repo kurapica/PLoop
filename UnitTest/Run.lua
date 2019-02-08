@@ -18,11 +18,6 @@ PLOOP_PLATFORM_SETTINGS = {
     TYPE_VALIDATION_DISABLED = false,
 }
 
-PLOOP_UNITTEST_MODULES      = {
-    "prototype", "environment", "namespace", "enum", "struct", "class",
-    "variables",
-}
-
 require "PLoop"(function(_ENV)
     require "PLoop.System.IO"
     require "PLoop.System.UnitTest"
@@ -35,15 +30,15 @@ require "PLoop"(function(_ENV)
         Warn                = Logger.Default[Logger.LogLevel.Warn],
         Error               = Logger.Default[Logger.LogLevel.Error],
 
-        System.IO.Path, UnitTest
+        System.IO.Path, System.IO.Directory, UnitTest
     }
 
     Logger.Default:AddHandler(print)
 
     local root = Path.CombinePath(Path.GetCurrentPath(), "Tests")
 
-    for _, name in ipairs(PLOOP_UNITTEST_MODULES) do
-        local func, msg = loadfile(Path.CombinePath(root, name) .. ".lua")
+    for name in Directory.GetFiles(root) do
+        local func, msg = loadfile(Path.CombinePath(root, name))
         if not func then
             Error("[UnitTest]Failed to load test for %s - %s", name, msg)
         end
