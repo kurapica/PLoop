@@ -13136,6 +13136,7 @@ do
             pcall               = pcall,
             getfenv             = getfenv,
             setfenv             = setfenv,
+            throw               = throw,
         }
 
         export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
@@ -15106,11 +15107,7 @@ do
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
-        if Platform.MULTI_OS_THREAD then
-            __Final__() property "Context" { type = Context }
-        else
-            __Final__() property "Context" { set = false, default = Context() }
-        end
+        __Final__() property "Context" { type = Context }
 
         -----------------------------------------------------------
         --                      initializer                      --
