@@ -8,13 +8,15 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/09/26                                               --
--- Update Date  :   2018/09/26                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/02/09                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.Class" "1.0.0"
+_ENV = UnitTest "PLoop.Class" "1.1.0"
 
 namespace "UnitTest.ClassCase"
+
+
 
 __Test__() function usage()
 	interface "IA" (function(_ENV)

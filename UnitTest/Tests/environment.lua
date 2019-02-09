@@ -12,26 +12,43 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.Environment" "1.0.0"
+_ENV = UnitTest "PLoop.Environment" "1.0.0"
 
-__Test__() function usage()
-	local method
+__Test__() function isolate()
+    Test            = 233
+    PLoop(function(_ENV)
+        Test        = 123
+    end)
 
-	PLoop(function(_ENV)
-		local func = print
+    Assert.Equal(233, Test)
+end
 
-		Assert.Equal(func, print)
-		Assert.Nil(rawget(_ENV, "print"))
+__Test__() function globalaccess()
+    Assert.Equal(_G.print, print)
+    Assert.NotNil(List)
+    Assert.Equal(List, System.Collections.List)
+    if not Platform.MULTI_OS_THREAD then
+        Assert.NotNil(rawget(_M, "List"))
+    end
+end
 
-		method = function()
-			local v = print
-			if Platform.MULTI_OS_THREAD then
-				Assert.Nil(rawget(_ENV, "print"))
-			else
-				Assert.Equal(func, rawget(_ENV, "print"))
-			end
-		end
-	end)
+__Test__() function exportvalue()
+    export "print"
+    export { "math", "pairs", List }
+    export { ipairs = ipairs }
+    export {
+        "select",
+        abs = math.abs,
+        Dictionary,
+    }
 
-	method()
+    Assert.Equal(_G.select, rawget(_ENV, "select"))
+end
+
+__Test__() function importns()
+    Assert.Nil(StringFormatProvider)
+
+    import "System.Serialization"
+
+    Assert.NotNil(StringFormatProvider)
 end

@@ -12,11 +12,11 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.Enum" "1.0.0"
+_ENV = UnitTest "PLoop.Enum" "1.0.0"
 
-__Test__() function usage()
-	namespace "UnitTest.EnumCase"
+namespace "UnitTest.EnumCase"
 
+__Test__() function enumeration()
 	enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
 
 	Assert.Equal(1, North)
@@ -24,6 +24,9 @@ __Test__() function usage()
 	Assert.Nil(Direction.north)
 	Assert.Equal("North", Direction(1))
 	Assert.Nil(Direction(5))
+end
+
+__Test__() function autoindex()
 
 	__AutoIndex__{ North = 1, South = 5 }
 	enum "Direction" {
@@ -36,7 +39,9 @@ __Test__() function usage()
 	Assert.Equal(1, Direction.North)
 	Assert.Equal(6, Direction.West)
 	Assert.Equal("South", Direction(5))
+end
 
+__Test__() function flagsenum()
 	__Flags__()
 	enum "WeekDay" {
 		All = 0,

@@ -8,11 +8,11 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/09/26                                               --
--- Update Date  :   2018/09/26                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/02/08                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.PrototypeCase" "1.0.0"
+_ENV = UnitTest "PLoop.Prototype" "1.1.0"
 
 __Test__() function creation()
     local proxy     = prototype {

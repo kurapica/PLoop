@@ -12,9 +12,9 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 PLOOP_PLATFORM_SETTINGS = {
-    OBJECT_NO_RAWSEST = true, OBJECT_NO_NIL_ACCESS = true,
-    CORE_LOG_LEVEL = 3,
-    MULTI_OS_THREAD = true, MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN = false,
+    OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS = true,
+    CORE_LOG_LEVEL      = 3,
+    MULTI_OS_THREAD     = false,
     TYPE_VALIDATION_DISABLED = false,
 }
 
@@ -23,19 +23,18 @@ require "PLoop"(function(_ENV)
     require "PLoop.System.UnitTest"
 
     export {
-        pcall               = pcall,
-        ipairs              = ipairs,
-        loadfile            = loadfile,
-        Info                = Logger.Default[Logger.LogLevel.Info],
-        Warn                = Logger.Default[Logger.LogLevel.Warn],
-        Error               = Logger.Default[Logger.LogLevel.Error],
+        pcall           = pcall,
+        loadfile        = loadfile,
+        Info            = Logger.Default[Logger.LogLevel.Info],
+        Warn            = Logger.Default[Logger.LogLevel.Warn],
+        Error           = Logger.Default[Logger.LogLevel.Error],
 
         System.IO.Path, System.IO.Directory, UnitTest
     }
 
     Logger.Default:AddHandler(print)
 
-    local root = Path.CombinePath(Path.GetCurrentPath(), "Tests")
+    local root          = Path.CombinePath(Path.GetCurrentPath(), "Tests")
 
     for name in Directory.GetFiles(root) do
         local func, msg = loadfile(Path.CombinePath(root, name))

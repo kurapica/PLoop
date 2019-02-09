@@ -12,7 +12,7 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
-UnitTest "PLoop.Namespace" "1.0.0"
+_ENV = UnitTest "PLoop.Namespace" "1.0.0"
 
 __Test__() function usage()
 	PLoop(function(_ENV)
