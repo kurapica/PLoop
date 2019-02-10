@@ -259,3 +259,87 @@ __Test__() function event()
     obj:Fire()
     Assert.Same(Assert.GetSteps(), { "Change OnTest", "Change OnTest", "Stack", "Final" })
 end
+
+__Test__() function property()
+    class "Char" (function(_ENV)
+        enum "Class" { "Warrior", "Mage", "Thief" }
+
+        field { __name = "anonymous" }
+
+        function getAge(self)
+            return self.__age or 0
+        end
+
+        function setAge(self, age)
+            self.__age = age
+        end
+
+        function setClass(self, cls)
+            self.__cls = cls
+        end
+
+        function getClass(self)
+            return self.__cls or Char.DefaultClass
+        end
+
+        __Static__() property "DefaultClass" { type = Class, default = Class.Warrior }
+
+        property "Name" {
+            get = function(self) return self.__name end,
+            set = function(self, name) self.__name = name end,
+        }
+
+        property "Age" { get = "getAge", set = "setAge" }
+
+        property "Class" { type = Class, auto = true }
+
+        property "Level" { type = NaturalNumber, default = 1, handler = function(self, lvl) Assert.Step("Level " .. lvl) end, event = "OnLevelUp" }
+
+        property "GUID" { type = Guid, default = function(self) return Guid.New() end }
+
+        __Indexer__(NEString) property "Data" {
+            get = function(self, key) return self["__" .. key] end,
+            set = function(self, key, val) self["__" .. key] = val end,
+        }
+
+        __Set__(PropertySet.Clone + PropertySet.Retain)
+        __Get__(PropertySet.Clone)
+        property "Cache" { type = Table }
+    end)
+
+    class "NPC" (function(_ENV)
+        inherit "Char"
+
+        property "Level" { get = function(self) return super[self].Level end, set = function(self, lvl) Assert.Step("NPC Level " .. lvl) super[self].Level = lvl end }
+    end)
+
+    local obj = NPC()
+
+    Assert.Equal(0, obj.Age)
+    Assert.Equal(Char.Class.Warrior, obj.Class)
+    Char.DefaultClass = Char.Class.Thief
+    Assert.Equal(Char.Class.Thief, obj.Class)
+
+    obj.Name = "Ann"
+    Assert.Equal("Ann", obj.__name)
+    Assert.Equal("Ann", obj.Data.name)
+    Assert.Equal(36, #obj.GUID)
+
+    obj.OnLevelUp = function(self, lvl) Assert.Step("Levelup " .. lvl) end
+    obj.Level= 10
+
+    Assert.Same(Assert.GetSteps(), { "NPC Level 10", "Level 10", "Levelup 10" })
+
+    local cache = { 100 }
+    obj.Cache = cache
+    cache[1] = 200
+    Assert.Equal(100, obj.Cache[1])
+
+    Assert.Find("class.lua:341: the Data's key must be string, got number",
+        Assert.Error(
+            function()
+                obj.Data[1] = 100
+            end
+        )
+    )
+end

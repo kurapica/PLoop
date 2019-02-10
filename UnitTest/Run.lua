@@ -12,7 +12,7 @@
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 PLOOP_PLATFORM_SETTINGS = {
-    OBJECT_NO_RAWSEST   = true, OBJECT_NO_NIL_ACCESS = true,
+    OBJECT_NO_RAWSEST   = false, OBJECT_NO_NIL_ACCESS = false,
     CORE_LOG_LEVEL      = 3,
     MULTI_OS_THREAD     = false,
     TYPE_VALIDATION_DISABLED = false,
