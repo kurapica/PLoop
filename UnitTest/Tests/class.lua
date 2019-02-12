@@ -343,3 +343,36 @@ __Test__() function property()
         )
     )
 end
+
+__Test__() function template()
+    __Arguments__ { AnyType }
+    class "Array" (function(_ENV, eletype)
+        __Arguments__{ eletype * 0 }
+        function __new(cls, ...)
+            return { ... }, true
+        end
+    end)
+
+    class "NumberArray" { Array[Number] }
+
+    __Arguments__ { AnyType } (AnyType)
+    class "Queue" (function(_ENV, eletype)
+        inherit (Array[eletype])
+    end)
+
+    Assert.Find("class.lua:366: Usage: Anonymous([... as System.Number]) - the 4th argument must be number, got string",
+        Assert.Error(
+            function()
+                local o = NumberArray(1, 2, 3, "hi", 5)
+            end
+        )
+    )
+
+    Assert.Find("class.lua:374: the 3rd must be string, got number",
+        Assert.Error(
+            function()
+                local o = Queue[String]("hi", "1", 2)
+            end
+        )
+    )
+end
