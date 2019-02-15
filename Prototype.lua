@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/02/07                                               --
--- Version      :   1.0.0-beta043                                            --
+-- Update Date  :   2019/02/15                                               --
+-- Version      :   1.0.0-beta044                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -12593,6 +12593,12 @@ do
     --- Represents table value without meta-table
     __Sealed__() struct "System.RawTable"           { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
 
+    --- Represents the positive number
+    __Sealed__() struct "System.PositiveNumber"     { __base = Number, function(val, onlyvalid) return val <= 0 and (onlyvalid or "the %s must be a positive number") or nil end }
+
+    --- Represents the negative number
+    __Sealed__() struct "System.NegativeNumber"     { __base = Number, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative number") or nil end }
+
     --- Represents integer value
     __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
 
@@ -12600,7 +12606,7 @@ do
     __Sealed__() struct "System.NaturalNumber"      { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
 
     --- Represents negative integer value
-    __Sealed__() struct "System.NegativeInteger"     { __base = Integer, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative number") or nil end }
+    __Sealed__() struct "System.NegativeInteger"     { __base = Integer, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative integer") or nil end }
 
     --- Represents namespace type
     __Sealed__() struct "System.NamespaceType"      { genTypeValidator(namespace)   }
