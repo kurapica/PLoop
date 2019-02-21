@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/02/15                                               --
--- Version      :   1.0.0-beta044                                            --
+-- Update Date  :   2019/02/20                                               --
+-- Version      :   1.0.0-beta045                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2274,8 +2274,6 @@ do
     local _NSName               = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and setmetatable({}, {__index = function(_, ns) if type(ns) == "table" then return rawget(ns, FLD_NS_NAME) end end})
                                     or  newstorage(WEAK_KEY)
-    local _ValidTypeCombine     = newstorage(WEAK_KEY)
-    local _UnmSubTypeMap        = newstorage(WEAK_ALL)
     local _NextNSForType
 
     -----------------------------------------------------------------------
@@ -2585,117 +2583,6 @@ do
                 return env
             end
         end,
-        __add                   = function(a, b)
-            local comb          = _ValidTypeCombine[a] and _ValidTypeCombine[a][b] or _ValidTypeCombine[b] and _ValidTypeCombine[b][a]
-            if comb then return comb end
-
-            local valida        = getprototypemethod(a, "ValidateValue")
-            local validb        = getprototypemethod(b, "ValidateValue")
-
-            if not valida or not validb then
-                error("the both value of the addition must be validation type", 2)
-            end
-
-            local isimmua       = getobjectvalue(a, "IsImmutable")
-            local isimmub       = getobjectvalue(b, "IsImmutable")
-            local isseala       = getobjectvalue(a, "IsSealed")
-            local issealb       = getobjectvalue(b, "IsSealed")
-            local aname         = _NSName[a]
-            local bname         = _NSName[b]
-            local cname         = false
-            local msg           = "the %s don't meet the requirement"
-
-            if aname and bname then
-                if aname:match("^%-") then aname = "(" .. aname .. ")" end
-                if bname:match("^%-") then bname = "(" .. bname .. ")" end
-                cname           = aname .. " | " .. bname
-                msg             = "the %s must be value of " .. cname
-            end
-
-            local strt
-
-            attribute.IndependentCall(function()
-                __Sealed__()
-                strt            = struct {
-                    function (val, onlyvalid)
-                        local _, err = valida(a, val, true)
-                        if not err then return end
-                        _, err  = validb(b, val, true)
-                        if not err then return end
-                        return onlyvalid or msg
-                    end,
-                    __init      = not (isimmua and isimmub and isseala and issealb) and function(val)
-                        local ret, err = valida(a, val)
-                        if not err then return ret end
-                        ret, err= validb(b, val)
-                        if not err then return ret end
-                    end or nil,
-                }
-            end)
-
-            local comb          = _ValidTypeCombine[a] or newstorage(WEAK_ALL)
-            comb[b]             = strt
-            _ValidTypeCombine[a]= comb
-
-            saveNamespaceName(strt, cname)
-
-            return strt
-        end,
-        __unm                   = function(self)
-            local issubtype     = getprototypemethod(self, "IsSubType")
-            if not issubtype then
-                error("the type's prototype don't support 'IsSubType' check")
-            end
-
-            if _UnmSubTypeMap[self] then return _UnmSubTypeMap[self] end
-
-            local sname         = _NSName[self]
-            local msg           = sname and ("the %s must be a sub type of " .. sname) or "the %s don't meet the requirement"
-
-            attribute.IndependentCall(function()
-                __Sealed__()
-                _UnmSubTypeMap[self]= struct {
-                    function (val, onlyvalid)
-                        return not issubtype(val, self) and (onlyvalid or msg) or nil
-                    end
-                }
-            end)
-
-            saveNamespaceName(_UnmSubTypeMap[self], sname and ("-" .. sname) or false)
-
-            return _UnmSubTypeMap[self]
-        end,
-        __div                   = function(self, default)
-            local valid         = getprototypemethod(self, "ValidateValue")
-
-            if not valid then
-                error(("The %s is not a validation type"):format(tostring(self)), 2)
-            end
-
-            if default ~= nil then
-                local ret, msg  = valid(self, default)
-                if not msg then
-                    default     = ret
-                else
-                    error(struct.GetErrorMessage(msg, "default in (type/default)"), 2)
-                end
-            end
-
-            return Variable.Optional(self, default)
-        end,
-        __mul                   = function(self, mincount)
-            local valid         = getprototypemethod(self, "ValidateValue")
-
-            if not valid then
-                error(("The %s is not a validation type"):format(tostring(self)), 2)
-            end
-
-            if mincount ~= nil and (type(mincount) ~= "number" or mincount < 0) then
-                error("The mincount in (type * mincount) must a nature number", 2)
-            end
-
-            return Variable.Rest(self, mincount)
-        end,
     }
 
     -----------------------------------------------------------------------
@@ -2703,489 +2590,6 @@ do
     -----------------------------------------------------------------------
     ROOT_NAMESPACE              = prototype.NewProxy(tnamespace)
     namespace.SaveAnonymousNamespace(ROOT_NAMESPACE)
-end
-
--------------------------------------------------------------------------------
--- An enumeration is a data type consisting of a set of named values called
--- elements, The enumerator names are usually identifiers that behave as
--- constants.
---
--- To define an enum within the PLoop, the syntax is
---
---      enum "Name" { -- key-value pairs }
---
--- In the table, for each key-value pair, if the key is string, the key would
--- be used as the element's name and the value is the element's value. If the
--- key is a number and the value is string, the value would be used as both the
--- element's name and value, othwise the key-value pair will be ignored.
---
--- Use enumeration[elementname] to fetch the enum element's value, also can use
--- enumeration(value) to fetch the element name from value. Here is an example :
---
---      enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
---      print(Direction.South) -- 3
---      print(Direction.NoDir) -- nil
---
---      print(Direction(3))    -- South
---
--- @prototype   enum
--------------------------------------------------------------------------------
-do
-    -----------------------------------------------------------------------
-    --                         attribute targets                         --
-    -----------------------------------------------------------------------
-    ATTRTAR_ENUM                = attribute.RegisterTargetType("Enum")
-
-    -----------------------------------------------------------------------
-    --                         private constants                         --
-    -----------------------------------------------------------------------
-    -- FEATURE MODIFIER
-    local MOD_SEALED_ENUM       = newflags(true)    -- SEALED
-    local MOD_FLAGS_ENUM        = newflags()        -- FLAGS
-    local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
-
-    -- FIELD INDEX
-    local FLD_ENUM_MOD          = newindex(0)       -- FIELD MODIFIER
-    local FLD_ENUM_ITEMS        = newindex()        -- FIELD ENUMERATIONS
-    local FLD_ENUM_CACHE        = newindex()        -- FIELD CACHE : VALUE -> NAME
-    local FLD_ENUM_ERRMSG       = newindex()        -- FIELD ERROR MESSAGE
-    local FLD_ENUM_MAXVAL       = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
-    local FLD_ENUM_DEFAULT      = newindex()        -- FIELD DEFAULT
-
-    -- Flags
-    local FLG_FLAGS_ENUM        = newflags(true)
-
-    -- UNSAFE FIELD
-    local FLD_ENUM_META         = "__PLOOP_ENUM_META"
-
-    -----------------------------------------------------------------------
-    --                          private storage                          --
-    -----------------------------------------------------------------------
-    local _EnumInfo             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and setmetatable({}, {__index = function(_, e) return type(e) == "table" and rawget(e, FLD_ENUM_META) or nil end})
-                                    or  newstorage(WEAK_KEY)
-
-    -- BUILD CACHE
-    local _EnumBuilderInfo      = newstorage(WEAK_KEY)
-    local _EnumValidMap         = {}
-
-    -----------------------------------------------------------------------
-    --                          private helpers                          --
-    -----------------------------------------------------------------------
-    local getEnumTargetInfo     = function (target)
-        local info              = _EnumBuilderInfo[target]
-        if info then return info, true else return _EnumInfo[target], false end
-    end
-
-    local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function (e, meta) rawset(e, FLD_ENUM_META, meta) end
-                                    or  function (e, meta) _EnumInfo = savestorage(_EnumInfo, e, meta) end
-
-    -----------------------------------------------------------------------
-    --                             prototype                             --
-    -----------------------------------------------------------------------
-    enum                        = prototype {
-        __tostring              = "enum",
-        __index                 = {
-            --- Add key-value pair to the enumeration
-            -- @static
-            -- @method  AddElement
-            -- @owner   enum
-            -- @format  (enumeration, key, value[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   key                         the element name
-            -- @param   value                       the element value
-            -- @param   stack                       the stack level
-            ["AddElement"]      = function(target, key, value, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack           = parsestack(stack) + 1
-
-                if info then
-                    if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                    if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack) end
-
-                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
-                        if k == key then
-                            if v == value then return end
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack)
-                        elseif v == value then
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack)
-                        end
-                    end
-
-                    info[FLD_ENUM_ITEMS][key] = value
-                else
-                    error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
-                end
-            end;
-
-            --- Begin the enumeration's definition
-            -- @static
-            -- @method  BeginDefinition
-            -- @owner   enum
-            -- @format  (enumeration[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   stack                       the stack level
-            ["BeginDefinition"] = function(target, stack)
-                stack           = parsestack(stack) + 1
-                target          = enum.Validate(target)
-                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
-
-                local info      = _EnumInfo[target]
-
-                -- if info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
-                -- if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
-
-                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
-                    [FLD_ENUM_MOD    ]  = 0,
-                    [FLD_ENUM_ITEMS  ]  = {},
-                    [FLD_ENUM_CACHE  ]  = {},
-                    [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
-                    [FLD_ENUM_MAXVAL ]  = false,
-                    [FLD_ENUM_DEFAULT]  = nil,
-                })
-
-                attribute.SaveAttributes(target, ATTRTAR_ENUM, stack)
-            end;
-
-            --- End the enumeration's definition
-            -- @static
-            -- @method  EndDefinition
-            -- @owner   enum
-            -- @format  (enumeration[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   stack                       the stack level
-            ["EndDefinition"]   = function(target, stack)
-                local ninfo     = _EnumBuilderInfo[target]
-                if not ninfo then return end
-
-                stack           = parsestack(stack) + 1
-
-                _EnumBuilderInfo= savestorage(_EnumBuilderInfo, target, nil)
-
-                local enums     = ninfo[FLD_ENUM_ITEMS]
-                local cache     = wipe(ninfo[FLD_ENUM_CACHE])
-
-                for k, v in pairs, enums do cache[v] = k end
-
-                -- Check Flags Enumeration
-                if validateflags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
-                    -- Mark the max value
-                    local max   = 1
-                    for k, v in pairs, enums do
-                        while type(v) == "number" and v >= max do max = max * 2 end
-                    end
-
-                    ninfo[FLD_ENUM_MAXVAL]  = max - 1
-                else
-                    ninfo[FLD_ENUM_MAXVAL]  = false
-                    ninfo[FLD_ENUM_MOD]     = turnonflags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
-                end
-
-                -- Save as new enumeration's info
-                saveEnumMeta(target, ninfo)
-
-                -- Check Default
-                if ninfo[FLD_ENUM_DEFAULT] ~= nil then
-                    ninfo[FLD_ENUM_DEFAULT] = enum.ValidateValue(target, ninfo[FLD_ENUM_DEFAULT]) or enums[ninfo[FLD_ENUM_DEFAULT]]
-                end
-
-                attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
-
-                newenum(target)
-
-                return target
-            end;
-
-            --- Get the default value from the enumeration
-            -- @static
-            -- @method  GetDefault
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  default                     the default value
-            ["GetDefault"]      = function(target)
-                local info      = getEnumTargetInfo(target)
-                return info and info[FLD_ENUM_DEFAULT]
-            end;
-
-            --- Get the elements from the enumeration
-            -- @static
-            -- @method  GetEnumValues
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  iter:function               the iterator
-            -- @return  enumeration                 the enumeration
-            ["GetEnumValues"]   = function(target)
-                local info      = _EnumInfo[target]
-                if info then
-                    info        = info[FLD_ENUM_ITEMS]
-                    return function(self, key) return next(info, key) end, target
-                else
-                    return fakefunc, target
-                end
-            end;
-
-            --- Whether the enumeration element values only are flags
-            -- @static
-            -- @method  IsFlagsEnum
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  boolean                     true if the enumeration element values only are flags
-            ["IsFlagsEnum"]     = function(target)
-                local info      = getEnumTargetInfo(target)
-                return info and validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
-            end;
-
-            --- Whether the enum's value is immutable through the validation, always true.
-            -- @static
-            -- @method  IsImmutable
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  true
-            ["IsImmutable"]     = function(target) return true end;
-
-            --- Whether the enumeration is sealed, so can't be re-defined
-            -- @static
-            -- @method  IsSealed
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  boolean                     true if the enumeration is sealed
-            ["IsSealed"]        = function(target)
-                local info      = getEnumTargetInfo(target)
-                return info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
-            end;
-
-            --- Whether the enumeration is sub-type of others, always false, needed by struct system
-            -- @static
-            -- @method  IsSubType
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @param   super                       the super type
-            -- @return  false
-            ["IsSubType"]       = function() return false end;
-
-            --- Parse the element value to element name
-            -- @static
-            -- @method  Parse
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @param   value                       the value
-            -- @rformat (name)                      only if the enumeration is not flags enum
-            -- @rformat (iter, enum)                If the enumeration is flags enum, the iterator will be returned
-            ["Parse"]           = function(target, value)
-                local info      = _EnumInfo[target]
-                if info then
-                    local ecache= info[FLD_ENUM_CACHE]
-
-                    if info[FLD_ENUM_MAXVAL] then
-                        if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
-                            if value == 0 then
-                                if ecache[0] then
-                                    return function(self, key) if not key then return ecache[0], 0 end end, target
-                                else
-                                    return fakefunc, target
-                                end
-                            else
-                                local ckv = 1
-                                return function(self, key)
-                                    while ckv <= value and ecache[ckv] do
-                                        local v = ckv
-                                        ckv = ckv * 2
-                                        if validateflags(v, value) then return ecache[v], v end
-                                    end
-                                end, target
-                            end
-                        else
-                            return fakefunc, target
-                        end
-                    else
-                        return ecache[value]
-                    end
-                end
-            end;
-
-            --- Set the enumeration's default value
-            -- @static
-            -- @method  SetDefault
-            -- @owner   enum
-            -- @format  (enumeration, default[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   default                     the default value or name
-            -- @param   stack                       the stack level
-            ["SetDefault"]      = function(target, default, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack           = parsestack(stack) + 1
-
-                if info then
-                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                    info[FLD_ENUM_DEFAULT] = default
-                else
-                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
-                end
-            end;
-
-            --- Set the enumeration as flags enum
-            -- @static
-            -- @method  SetFlagsEnum
-            -- @owner   enum
-            -- @format  (enumeration[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   stack                       the stack level
-            ["SetFlagsEnum"]    = function(target, stack)
-                local info, def = getEnumTargetInfo(target)
-                stack           = parsestack(stack) + 1
-
-                if info then
-                    if not validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
-                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
-                        if validateflags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
-                        info[FLD_ENUM_MOD] = turnonflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
-                    end
-                else
-                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
-                end
-            end;
-
-            --- Seal the enumeration, so it can't be re-defined
-            -- @static
-            -- @method  SetSealed
-            -- @owner   enum
-            -- @format  (enumeration[, stack])
-            -- @param   enumeration                 the enumeration
-            -- @param   stack                       the stack level
-            ["SetSealed"]       = function(target, stack)
-                local info      = getEnumTargetInfo(target)
-
-                if info then
-                    if not validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
-                        info[FLD_ENUM_MOD] = turnonflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
-                    end
-                else
-                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", parsestack(stack) + 1)
-                end
-            end;
-
-            --- Whether the check value contains the target flag value
-            -- @static
-            -- @method  ValidateFlags
-            -- @owner   enum
-            -- @param   target                      the target value only should be 2^n
-            -- @param   check                       the check value
-            -- @param   boolean                     true if the check value contains the target value
-            -- @usage   print(enum.ValidateFlags(4, 7)) -- true : 7 = 1 + 2 + 4
-            ["ValidateFlags"]   = validateflags;
-
-            --- Whether the value is the enumeration's element's name or value
-            -- @static
-            -- @method  ValidateValue
-            -- @owner   enum
-            -- @format  (enumeration, value[, onlyvalid])
-            -- @param   enumeration                 the enumeration
-            -- @param   value                       the value
-            -- @param   onlyvalid                   if true use true instead of the error message
-            -- @return  value                       the element value, nil if not pass the validation
-            -- @return  errormessage                the error message if not pass
-            ["ValidateValue"]   = function(target, value, onlyvalid)
-                local info      = _EnumInfo[target]
-                if info then
-                    if info[FLD_ENUM_CACHE][value] then return value end
-
-                    local maxv  = info[FLD_ENUM_MAXVAL]
-                    if maxv and type(value) == "number" and floor(value) == value and value > 0 and value <= maxv then
-                        return value
-                    end
-
-                    return nil, onlyvalid or info[FLD_ENUM_ERRMSG]
-                else
-                    error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
-                end
-            end;
-
-            --- Whether the value is an enumeration
-            -- @static
-            -- @method  Validate
-            -- @owner   enum
-            -- @param   enumeration                 the enumeration
-            -- @return  enumeration                 nil if not pass the validation
-            ["Validate"]        = function(target)
-                return getmetatable(target) == enum and target or nil
-            end;
-        },
-        __newindex              = readonly,
-        __call                  = function(self, ...)
-            local visitor, env, target, definition, flag, stack  = getTypeParams(enum, tenum, ...)
-            if not target then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack + 1)
-            elseif definition ~= nil and type(definition) ~= "table" then
-                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack + 1)
-            end
-
-            stack               = stack + 1
-
-            enum.BeginDefinition(target, stack)
-
-            Debug("[enum] %s created", stack, tostring(target))
-
-            local builder       = prototype.NewObject(enumbuilder)
-            environment.SetNamespace(builder, target)
-            environment.SetParent   (builder, visitor)
-
-            if definition then
-                builder(definition, stack)
-                return target
-            else
-                return builder
-            end
-        end,
-    }
-
-    tenum                       = prototype (tnamespace, {
-        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key) return _EnumInfo[self][FLD_ENUM_ITEMS][key] end or function(self, key)
-            local value         = _EnumInfo[self][FLD_ENUM_ITEMS][key]
-            if value ~= nil then return value end
-            error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), tostring(key)), 2)
-        end,
-        __call                  = enum.Parse,
-        __metatable             = enum,
-    })
-
-    enumbuilder                 = prototype {
-        __index                 = writeonly,
-        __newindex              = readonly,
-        __call                  = function(self, definition, stack)
-            stack               = parsestack(stack) + 1
-            if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
-
-            local owner         = environment.GetNamespace(self)
-            if not owner then error("The enumeration can't be found", stack) end
-            if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
-
-            local final = attribute.InitDefinition(owner, ATTRTAR_ENUM, definition, nil, nil, stack)
-
-            if type(final) == "table" then
-                definition      = final
-            end
-
-            for k, v in pairs, definition do
-                if type(k) == "string" then
-                    enum.AddElement(owner, k, v, stack)
-                elseif type(v) == "string" then
-                    enum.AddElement(owner, v, v, stack)
-                end
-            end
-
-            attribute.ApplyAttributes(owner, ATTRTAR_ENUM, self, nil, nil, stack)
-
-            enum.EndDefinition(owner, stack)
-
-            local visitor       = environment.GetParent(self)
-            if visitor then
-                environment.ImportNamespace(visitor, owner)
-            end
-
-            return owner
-        end,
-    }
 end
 
 -------------------------------------------------------------------------------
@@ -3483,6 +2887,9 @@ do
     local FLD_STRUCT_TEMPDEF    = -newindex()       -- FIELD TEMPLATE DEFINITION
     local FLD_STRUCT_TEMPIMP    = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION
     local FLD_STRUCT_TEMPENV    = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
+    local FLD_STRUCT_MAINTYPE   = -newindex()       -- FIELD MAIN TYPE
+    local FLD_STRUCT_COMBTYPE1  = -newindex()       -- FIELD COMBO TYPE
+    local FLD_STRUCT_COMBTYPE2  = -newindex()       -- FIELD COMBO TYPE
 
     local FLD_STRUCT_ARRAY      =  0                -- FIELD ARRAY ELEMENT
     local FLD_STRUCT_MEMBERSTART=  1                -- FIELD START INDEX OF MEMBER
@@ -3545,11 +2952,14 @@ do
     local _MemberAccessOwner
     local _MemberAccessName
 
+    local _ValidTypeCombine     = newstorage(WEAK_KEY)
+    local _UnmSubTypeMap        = newstorage(WEAK_ALL)
+
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
     local getStructTargetInfo   = function (target)
-        local info  = _StructBuilderInfo[target]
+        local info              = _StructBuilderInfo[target]
         if info then return info, true else return _StructInfo[target], false end
     end
 
@@ -3779,11 +3189,9 @@ do
                 uinsert(apis, "type")
                 uinsert(apis, "strgsub")
                 uinsert(apis, "tostring")
-                uinsert(apis, "getmetatable")
 
                 tinsert(body, [[
-                    if type(value)         ~= "table" then return nil, onlyValid or "the %s must be a table" end
-                    if getmetatable(value) ~= nil     then return nil, onlyValid or "the %s must be a table without meta-table" end
+                    if type(value) ~= "table" then return nil, onlyValid or "the %s must be a table" end
                 ]])
 
                 if validateflags(FLG_STRUCT_VALIDCACHE, token) then
@@ -4025,13 +3433,12 @@ do
             if validateflags(FLG_MEMBER_STRUCT, token) then
                 uinsert(apis, "select")
                 uinsert(apis, "type")
-                uinsert(apis, "getmetatable")
 
                 tinsert(body, [[
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
                         local ret, msg
-                        if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
+                        if select("#", ...) == 0 and type(first) == "table" then
                 ]])
 
                 tinsert(head, "count")
@@ -4613,6 +4020,17 @@ do
                 return info and info[FLD_STRUCT_BASE]
             end;
 
+            --- Get the combo types of the target
+            -- @static
+            -- @method  GetComboTypes
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  ...                         the combo types
+            ["GetComboTypes"]   = function(target)
+                local info      = getStructTargetInfo(target)
+                if info and info[FLD_STRUCT_COMBTYPE1] then return info[FLD_STRUCT_COMBTYPE1], info[FLD_STRUCT_COMBTYPE2] end
+            end;
+
             --- Get the custom structure's default value
             -- @static
             -- @method  GetDefault
@@ -4639,6 +4057,17 @@ do
             -- @return  string                      the error message
             ["GetErrorMessage"] = function(template, target)
                 return strgsub(template, "%%s%.?", target)
+            end;
+
+            --- Get the master type of the struct
+            -- @static
+            -- @method  GetMainType
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  type                        the main type
+            ["GetMainType"]     = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_MAINTYPE]
             end;
 
             --- Get the member of the structure with given name
@@ -4768,9 +4197,13 @@ do
             -- @owner   struct
             -- @param   structure                   the structure
             -- @return  boolean                     true if the value should be immutable
+            -- @return  boolean                     true if the value should be always immutable
             ["IsImmutable"]     = function(target)
                 local info      = getStructTargetInfo(target)
-                return info and validateflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD]) or false
+                if info then
+                    local flag  = validateflags(MOD_IMMUTABLE_STRUCT, info[FLD_STRUCT_MOD])
+                    return flag, flag and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD])
+                end
             end;
 
             --- Whether a structure use the other as its base structure
@@ -5064,7 +4497,118 @@ do
         end,
     }
 
-    tstruct                     = prototype (tnamespace, {
+    validatetype                = prototype (tnamespace, {
+        __add                   = function(a, b)
+            local comb          = _ValidTypeCombine[a] and _ValidTypeCombine[a][b] or _ValidTypeCombine[b] and _ValidTypeCombine[b][a]
+            if comb then return comb end
+
+            local valida        = getprototypemethod(a, "ValidateValue")
+            local validb        = getprototypemethod(b, "ValidateValue")
+
+            if not valida or not validb then
+                error("the both value of the addition must be validation type", 2)
+            end
+
+            local strt          =  prototype.NewProxy(tstruct)
+            namespace.SaveAnonymousNamespace(strt)
+            struct.BeginDefinition(strt, 2)
+
+            local info          = _StructBuilderInfo[strt]
+
+            info[FLD_STRUCT_COMBTYPE1] = a
+            info[FLD_STRUCT_COMBTYPE2] = b
+
+            local msg           = "the %s must be value of " .. tostring(strt)
+
+            struct.SetValidator(strt, function (val, onlyvalid)
+                local _, err    = valida(a, val, true)
+                if not err then return end
+                _, err          = validb(b, val, true)
+                if not err then return end
+                return onlyvalid or msg
+            end, 2)
+
+            local _, isalimtbla = getobjectvalue(a, "IsImmutable")
+            local _, isalimtblb = getobjectvalue(b, "IsImmutable")
+
+            if not (isalimtbla and isalimtblb) then
+                struct.SetInitializer(strt, function(val)
+                    local ret, err = valida(a, val)
+                    if not err then return ret end
+                    ret, err    = validb(b, val)
+                    if not err then return ret end
+                end, 2)
+            end
+
+            struct.SetSealed(strt, 2)
+            struct.EndDefinition(strt, 2)
+
+            _ValidTypeCombine   = savestorage(_ValidTypeCombine, a, savestorage(_ValidTypeCombine[a] or {}, b, strt))
+
+            return strt
+        end,
+        __unm                   = function(self)
+            local issubtype     = getprototypemethod(self, "IsSubType")
+            if not issubtype then
+                error("the type's prototype don't support 'IsSubType' check")
+            end
+
+            if _UnmSubTypeMap[self] then return _UnmSubTypeMap[self] end
+
+            local msg           = "the %s must be a sub type of " .. tostring(self)
+            local strt          =  prototype.NewProxy(tstruct)
+            namespace.SaveAnonymousNamespace(strt)
+            struct.BeginDefinition(strt, 2)
+
+            local info          = _StructBuilderInfo[strt]
+
+            info[FLD_STRUCT_MAINTYPE] = self
+
+            struct.SetValidator(strt, function (val, onlyvalid)
+                return not issubtype(val, self) and (onlyvalid or msg) or nil
+            end, 2)
+
+            struct.SetSealed(strt, 2)
+            struct.EndDefinition(strt, 2)
+
+            _UnmSubTypeMap      = savestorage(_UnmSubTypeMap, self, strt)
+
+            return strt
+        end,
+        __div                   = function(self, default)
+            local valid         = getprototypemethod(self, "ValidateValue")
+
+            if not valid then
+                error(("The %s is not a validation type"):format(tostring(self)), 2)
+            end
+
+            if default ~= nil then
+                local ret, msg  = valid(self, default)
+                if not msg then
+                    default     = ret
+                else
+                    error(struct.GetErrorMessage(msg, "default in (type/default)"), 2)
+                end
+            end
+
+            return Variable.Optional(self, default)
+        end,
+        __mul                   = function(self, mincount)
+            local valid         = getprototypemethod(self, "ValidateValue")
+
+            if not valid then
+                error(("The %s is not a validation type"):format(tostring(self)), 2)
+            end
+
+            if mincount ~= nil and (type(mincount) ~= "number" or mincount < 0) then
+                error("The mincount in (type * mincount) must a nature number", 2)
+            end
+
+            return Variable.Rest(self, mincount)
+        end,
+    })
+
+    tstruct                     = prototype (validatetype, {
         __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key)
             if type(key) == "string" then
                 local info      = _StructBuilderInfo[self] or _StructInfo[self]
@@ -5083,6 +4627,18 @@ do
                 local value     = getStructImplement(self, key, 2)
                 return value
             end
+        end,
+        __tostring              = function(self)
+            local info          = _StructBuilderInfo[self] or _StructInfo[self]
+            if info then
+                if info[FLD_STRUCT_COMBTYPE1] then
+                    return tostring(info[FLD_STRUCT_COMBTYPE1]) .. " | " .. tostring(info[FLD_STRUCT_COMBTYPE2])
+                elseif info[FLD_STRUCT_MAINTYPE] then
+                    return "-" .. namespace.GetNamespaceName(info[FLD_STRUCT_MAINTYPE])
+                end
+            end
+
+            return namespace.GetNamespaceName(self)
         end,
         __call                  = function(self, ...)
             local info          = _StructInfo[self]
@@ -5293,6 +4849,490 @@ do
 
         return baseEnv
     end or nil
+end
+
+-------------------------------------------------------------------------------
+-- An enumeration is a data type consisting of a set of named values called
+-- elements, The enumerator names are usually identifiers that behave as
+-- constants.
+--
+-- To define an enum within the PLoop, the syntax is
+--
+--      enum "Name" { -- key-value pairs }
+--
+-- In the table, for each key-value pair, if the key is string, the key would
+-- be used as the element's name and the value is the element's value. If the
+-- key is a number and the value is string, the value would be used as both the
+-- element's name and value, othwise the key-value pair will be ignored.
+--
+-- Use enumeration[elementname] to fetch the enum element's value, also can use
+-- enumeration(value) to fetch the element name from value. Here is an example :
+--
+--      enum "Direction" { North = 1, East = 2, South = 3, West = 4 }
+--      print(Direction.South) -- 3
+--      print(Direction.NoDir) -- nil
+--
+--      print(Direction(3))    -- South
+--
+-- @prototype   enum
+-------------------------------------------------------------------------------
+do
+    -----------------------------------------------------------------------
+    --                         attribute targets                         --
+    -----------------------------------------------------------------------
+    ATTRTAR_ENUM                = attribute.RegisterTargetType("Enum")
+
+    -----------------------------------------------------------------------
+    --                         private constants                         --
+    -----------------------------------------------------------------------
+    -- FEATURE MODIFIER
+    local MOD_SEALED_ENUM       = newflags(true)    -- SEALED
+    local MOD_FLAGS_ENUM        = newflags()        -- FLAGS
+    local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
+
+    -- FIELD INDEX
+    local FLD_ENUM_MOD          = newindex(0)       -- FIELD MODIFIER
+    local FLD_ENUM_ITEMS        = newindex()        -- FIELD ENUMERATIONS
+    local FLD_ENUM_CACHE        = newindex()        -- FIELD CACHE : VALUE -> NAME
+    local FLD_ENUM_ERRMSG       = newindex()        -- FIELD ERROR MESSAGE
+    local FLD_ENUM_MAXVAL       = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
+    local FLD_ENUM_DEFAULT      = newindex()        -- FIELD DEFAULT
+
+    -- Flags
+    local FLG_FLAGS_ENUM        = newflags(true)
+
+    -- UNSAFE FIELD
+    local FLD_ENUM_META         = "__PLOOP_ENUM_META"
+
+    -----------------------------------------------------------------------
+    --                          private storage                          --
+    -----------------------------------------------------------------------
+    local _EnumInfo             = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and setmetatable({}, {__index = function(_, e) return type(e) == "table" and rawget(e, FLD_ENUM_META) or nil end})
+                                    or  newstorage(WEAK_KEY)
+
+    -- BUILD CACHE
+    local _EnumBuilderInfo      = newstorage(WEAK_KEY)
+    local _EnumValidMap         = {}
+
+    -----------------------------------------------------------------------
+    --                          private helpers                          --
+    -----------------------------------------------------------------------
+    local getEnumTargetInfo     = function (target)
+        local info              = _EnumBuilderInfo[target]
+        if info then return info, true else return _EnumInfo[target], false end
+    end
+
+    local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
+                                    and function (e, meta) rawset(e, FLD_ENUM_META, meta) end
+                                    or  function (e, meta) _EnumInfo = savestorage(_EnumInfo, e, meta) end
+
+    -----------------------------------------------------------------------
+    --                             prototype                             --
+    -----------------------------------------------------------------------
+    enum                        = prototype {
+        __tostring              = "enum",
+        __index                 = {
+            --- Add key-value pair to the enumeration
+            -- @static
+            -- @method  AddElement
+            -- @owner   enum
+            -- @format  (enumeration, key, value[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   key                         the element name
+            -- @param   value                       the element value
+            -- @param   stack                       the stack level
+            ["AddElement"]      = function(target, key, value, stack)
+                local info, def = getEnumTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack) end
+
+                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
+                        if k == key then
+                            if v == value then return end
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack)
+                        elseif v == value then
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack)
+                        end
+                    end
+
+                    info[FLD_ENUM_ITEMS][key] = value
+                else
+                    error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The enumeration is not valid", stack)
+                end
+            end;
+
+            --- Begin the enumeration's definition
+            -- @static
+            -- @method  BeginDefinition
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   stack                       the stack level
+            ["BeginDefinition"] = function(target, stack)
+                stack           = parsestack(stack) + 1
+                target          = enum.Validate(target)
+                if not target then error("Usage: enum.BeginDefinition(enumeration[, stack]) - the enumeration not existed", stack) end
+
+                local info      = _EnumInfo[target]
+
+                -- if info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
+                -- if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
+
+                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
+                    [FLD_ENUM_MOD    ]  = 0,
+                    [FLD_ENUM_ITEMS  ]  = {},
+                    [FLD_ENUM_CACHE  ]  = {},
+                    [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
+                    [FLD_ENUM_MAXVAL ]  = false,
+                    [FLD_ENUM_DEFAULT]  = nil,
+                })
+
+                attribute.SaveAttributes(target, ATTRTAR_ENUM, stack)
+            end;
+
+            --- End the enumeration's definition
+            -- @static
+            -- @method  EndDefinition
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   stack                       the stack level
+            ["EndDefinition"]   = function(target, stack)
+                local ninfo     = _EnumBuilderInfo[target]
+                if not ninfo then return end
+
+                stack           = parsestack(stack) + 1
+
+                _EnumBuilderInfo= savestorage(_EnumBuilderInfo, target, nil)
+
+                local enums     = ninfo[FLD_ENUM_ITEMS]
+                local cache     = wipe(ninfo[FLD_ENUM_CACHE])
+
+                for k, v in pairs, enums do cache[v] = k end
+
+                -- Check Flags Enumeration
+                if validateflags(MOD_FLAGS_ENUM, ninfo[FLD_ENUM_MOD]) then
+                    -- Mark the max value
+                    local max   = 1
+                    for k, v in pairs, enums do
+                        while type(v) == "number" and v >= max do max = max * 2 end
+                    end
+
+                    ninfo[FLD_ENUM_MAXVAL]  = max - 1
+                else
+                    ninfo[FLD_ENUM_MAXVAL]  = false
+                    ninfo[FLD_ENUM_MOD]     = turnonflags(MOD_NOT_FLAGS, ninfo[FLD_ENUM_MOD])
+                end
+
+                -- Save as new enumeration's info
+                saveEnumMeta(target, ninfo)
+
+                -- Check Default
+                if ninfo[FLD_ENUM_DEFAULT] ~= nil then
+                    ninfo[FLD_ENUM_DEFAULT] = enum.ValidateValue(target, ninfo[FLD_ENUM_DEFAULT]) or enums[ninfo[FLD_ENUM_DEFAULT]]
+                end
+
+                attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
+
+                newenum(target)
+
+                return target
+            end;
+
+            --- Get the default value from the enumeration
+            -- @static
+            -- @method  GetDefault
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  default                     the default value
+            ["GetDefault"]      = function(target)
+                local info      = getEnumTargetInfo(target)
+                return info and info[FLD_ENUM_DEFAULT]
+            end;
+
+            --- Get the elements from the enumeration
+            -- @static
+            -- @method  GetEnumValues
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  iter:function               the iterator
+            -- @return  enumeration                 the enumeration
+            ["GetEnumValues"]   = function(target)
+                local info      = _EnumInfo[target]
+                if info then
+                    info        = info[FLD_ENUM_ITEMS]
+                    return function(self, key) return next(info, key) end, target
+                else
+                    return fakefunc, target
+                end
+            end;
+
+            --- Whether the enumeration element values only are flags
+            -- @static
+            -- @method  IsFlagsEnum
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  boolean                     true if the enumeration element values only are flags
+            ["IsFlagsEnum"]     = function(target)
+                local info      = getEnumTargetInfo(target)
+                return info and validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) or false
+            end;
+
+            --- Whether the enum's value is immutable through the validation, always true.
+            -- @static
+            -- @method  IsImmutable
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  true
+            -- @return  true
+            ["IsImmutable"]     = function(target) return true, true end;
+
+            --- Whether the enumeration is sealed, so can't be re-defined
+            -- @static
+            -- @method  IsSealed
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  boolean                     true if the enumeration is sealed
+            ["IsSealed"]        = function(target)
+                local info      = getEnumTargetInfo(target)
+                return info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
+            end;
+
+            --- Whether the enumeration is sub-type of others, always false, needed by struct system
+            -- @static
+            -- @method  IsSubType
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @param   super                       the super type
+            -- @return  false
+            ["IsSubType"]       = function() return false end;
+
+            --- Parse the element value to element name
+            -- @static
+            -- @method  Parse
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @param   value                       the value
+            -- @rformat (name)                      only if the enumeration is not flags enum
+            -- @rformat (iter, enum)                If the enumeration is flags enum, the iterator will be returned
+            ["Parse"]           = function(target, value)
+                local info      = _EnumInfo[target]
+                if info then
+                    local ecache= info[FLD_ENUM_CACHE]
+
+                    if info[FLD_ENUM_MAXVAL] then
+                        if type(value) == "number" and floor(value) == value and value >= 0 and value <= info[FLD_ENUM_MAXVAL] then
+                            if value == 0 then
+                                if ecache[0] then
+                                    return function(self, key) if not key then return ecache[0], 0 end end, target
+                                else
+                                    return fakefunc, target
+                                end
+                            else
+                                local ckv = 1
+                                return function(self, key)
+                                    while ckv <= value and ecache[ckv] do
+                                        local v = ckv
+                                        ckv = ckv * 2
+                                        if validateflags(v, value) then return ecache[v], v end
+                                    end
+                                end, target
+                            end
+                        else
+                            return fakefunc, target
+                        end
+                    else
+                        return ecache[value]
+                    end
+                end
+            end;
+
+            --- Set the enumeration's default value
+            -- @static
+            -- @method  SetDefault
+            -- @owner   enum
+            -- @format  (enumeration, default[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   default                     the default value or name
+            -- @param   stack                       the stack level
+            ["SetDefault"]      = function(target, default, stack)
+                local info, def = getEnumTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: enum.SetDefault(enumeration, default[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    info[FLD_ENUM_DEFAULT] = default
+                else
+                    error("Usage: enum.SetDefault(enumeration, default[, stack]) - The enumeration is not valid", stack)
+                end
+            end;
+
+            --- Set the enumeration as flags enum
+            -- @static
+            -- @method  SetFlagsEnum
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   stack                       the stack level
+            ["SetFlagsEnum"]    = function(target, stack)
+                local info, def = getEnumTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not validateflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD]) then
+                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                        if validateflags(MOD_NOT_FLAGS, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s is defined as non-flags enumeration", tostring(target)), stack) end
+                        info[FLD_ENUM_MOD] = turnonflags(MOD_FLAGS_ENUM, info[FLD_ENUM_MOD])
+                    end
+                else
+                    error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
+                end
+            end;
+
+            --- Seal the enumeration, so it can't be re-defined
+            -- @static
+            -- @method  SetSealed
+            -- @owner   enum
+            -- @format  (enumeration[, stack])
+            -- @param   enumeration                 the enumeration
+            -- @param   stack                       the stack level
+            ["SetSealed"]       = function(target, stack)
+                local info      = getEnumTargetInfo(target)
+
+                if info then
+                    if not validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then
+                        info[FLD_ENUM_MOD] = turnonflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD])
+                    end
+                else
+                    error("Usage: enum.SetSealed(enumeration[, stack]) - The enumeration is not valid", parsestack(stack) + 1)
+                end
+            end;
+
+            --- Whether the check value contains the target flag value
+            -- @static
+            -- @method  ValidateFlags
+            -- @owner   enum
+            -- @param   target                      the target value only should be 2^n
+            -- @param   check                       the check value
+            -- @param   boolean                     true if the check value contains the target value
+            -- @usage   print(enum.ValidateFlags(4, 7)) -- true : 7 = 1 + 2 + 4
+            ["ValidateFlags"]   = validateflags;
+
+            --- Whether the value is the enumeration's element's name or value
+            -- @static
+            -- @method  ValidateValue
+            -- @owner   enum
+            -- @format  (enumeration, value[, onlyvalid])
+            -- @param   enumeration                 the enumeration
+            -- @param   value                       the value
+            -- @param   onlyvalid                   if true use true instead of the error message
+            -- @return  value                       the element value, nil if not pass the validation
+            -- @return  errormessage                the error message if not pass
+            ["ValidateValue"]   = function(target, value, onlyvalid)
+                local info      = _EnumInfo[target]
+                if info then
+                    if info[FLD_ENUM_CACHE][value] then return value end
+
+                    local maxv  = info[FLD_ENUM_MAXVAL]
+                    if maxv and type(value) == "number" and floor(value) == value and value > 0 and value <= maxv then
+                        return value
+                    end
+
+                    return nil, onlyvalid or info[FLD_ENUM_ERRMSG]
+                else
+                    error("Usage: enum.ValidateValue(enumeration, value) - The enumeration is not valid", 2)
+                end
+            end;
+
+            --- Whether the value is an enumeration
+            -- @static
+            -- @method  Validate
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  enumeration                 nil if not pass the validation
+            ["Validate"]        = function(target)
+                return getmetatable(target) == enum and target or nil
+            end;
+        },
+        __newindex              = readonly,
+        __call                  = function(self, ...)
+            local visitor, env, target, definition, flag, stack  = getTypeParams(enum, tenum, ...)
+            if not target then
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack + 1)
+            elseif definition ~= nil and type(definition) ~= "table" then
+                error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack + 1)
+            end
+
+            stack               = stack + 1
+
+            enum.BeginDefinition(target, stack)
+
+            Debug("[enum] %s created", stack, tostring(target))
+
+            local builder       = prototype.NewObject(enumbuilder)
+            environment.SetNamespace(builder, target)
+            environment.SetParent   (builder, visitor)
+
+            if definition then
+                builder(definition, stack)
+                return target
+            else
+                return builder
+            end
+        end,
+    }
+
+    tenum                       = prototype (validatetype, {
+        __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key) return _EnumInfo[self][FLD_ENUM_ITEMS][key] end or function(self, key)
+            local value         = _EnumInfo[self][FLD_ENUM_ITEMS][key]
+            if value ~= nil then return value end
+            error(strformat("The %s.%s is not existed", namespace.GetNamespaceName(self), tostring(key)), 2)
+        end,
+        __call                  = enum.Parse,
+        __metatable             = enum,
+    })
+
+    enumbuilder                 = prototype {
+        __index                 = writeonly,
+        __newindex              = readonly,
+        __call                  = function(self, definition, stack)
+            stack               = parsestack(stack) + 1
+            if type(definition) ~= "table" then error("Usage: enum([env, ][name, ][stack]) {...} - The definition table is missing", stack) end
+
+            local owner         = environment.GetNamespace(self)
+            if not owner then error("The enumeration can't be found", stack) end
+            if not _EnumBuilderInfo[owner] then error(strformat("The %s's definition is finished", tostring(owner)), stack) end
+
+            local final = attribute.InitDefinition(owner, ATTRTAR_ENUM, definition, nil, nil, stack)
+
+            if type(final) == "table" then
+                definition      = final
+            end
+
+            for k, v in pairs, definition do
+                if type(k) == "string" then
+                    enum.AddElement(owner, k, v, stack)
+                elseif type(v) == "string" then
+                    enum.AddElement(owner, v, v, stack)
+                end
+            end
+
+            attribute.ApplyAttributes(owner, ATTRTAR_ENUM, self, nil, nil, stack)
+
+            enum.EndDefinition(owner, stack)
+
+            local visitor       = environment.GetParent(self)
+            if visitor then
+                environment.ImportNamespace(visitor, owner)
+            end
+
+            return owner
+        end,
+    }
 end
 
 -------------------------------------------------------------------------------
@@ -7749,9 +7789,8 @@ do
             -- @owner   interface
             -- @param   target                      the target interface
             -- @return  boolean                     true if the value should be immutable
-            ["IsImmutable"]     = function(target)
-                return true
-            end;
+            -- @return  boolean                     true if the value should be always immutable
+            ["IsImmutable"]     = function(target) return true, true end;
 
             --- Whether the interface is sealed, can't be re-defined
             -- @static
@@ -8377,6 +8416,7 @@ do
             -- @owner   class
             -- @param   target                      the target class
             -- @return  boolean                     true if the value should be immutable
+            -- @return  boolean                     true if the value should be always immutable
             ["IsImmutable"]     = interface.IsImmutable;
 
             --- Whether the attributes can be applied on the class's objects
@@ -8868,7 +8908,7 @@ do
         end,
     }
 
-    tinterface                  = prototype (tnamespace, {
+    tinterface                  = prototype (validatetype, {
         __index                 = PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and function(self, key)
             if type(key) == "string" then
                 -- Access methods
@@ -11940,8 +11980,9 @@ do
     namespace.SaveNamespace("System.Attribute",   prototype (attribute,   { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Environment", prototype (environment, { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Namespace",   prototype (namespace,   { __tostring = namespace.GetNamespaceName }))
-    namespace.SaveNamespace("System.Enum",        prototype (enum,        { __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.ValidateType", validatetype)
     namespace.SaveNamespace("System.Struct",      prototype (struct,      { __tostring = namespace.GetNamespaceName }))
+    namespace.SaveNamespace("System.Enum",        prototype (enum,        { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Member",      prototype (member,      { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Interface",   prototype (interface,   { __tostring = namespace.GetNamespaceName }))
     namespace.SaveNamespace("System.Class",       prototype (class,       { __tostring = namespace.GetNamespaceName }))
