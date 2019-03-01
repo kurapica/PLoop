@@ -257,9 +257,9 @@ PLoop(function(_ENV)
         --- Whether ignore the object's type for serialization
         property "ObjectTypeIgnored"{ type = Boolean, default = false }
 
-        -----------------------------------
-        -- Method
-        -----------------------------------
+        -----------------------------------------------------------------------
+        --                              Method                               --
+        -----------------------------------------------------------------------
         __Arguments__{ Any }
         function Serialize(self, data)
             if type(data) == "table" then

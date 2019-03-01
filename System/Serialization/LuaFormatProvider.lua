@@ -19,7 +19,30 @@ PLoop(function(_ENV)
     class "LuaFormatProvider" (function(_ENV)
         inherit "FormatProvider"
 
+        export { "type", "pairs", Serialization }
+
+        local function removeObjType(data, fld)
+            data[fld]           = nil
+            for k, v in pairs(data) do
+                if type(v) == "table" then
+                    removeObjType(data, fld)
+                end
+            end
+        end
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- Whether ignore the object's type for serialization
+        property "ObjectTypeIgnored" { type = Boolean, default = false }
+
+        -----------------------------------------------------------------------
+        --                              Method                               --
+        -----------------------------------------------------------------------
         function Serialize(self, data)
+            if self.ObjectTypeIgnored and type(data) == "table" then
+                removeObjType(data, Serialization.ObjectTypeField)
+            end
             return data
         end
 

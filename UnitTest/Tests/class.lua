@@ -264,10 +264,10 @@ __Test__() function property()
     class "Char" (function(_ENV)
         enum "Class" { "Warrior", "Mage", "Thief" }
 
-        field { __name = "anonymous" }
+        field { __name = "anonymous", __age = 0, __cls = false }
 
         function getAge(self)
-            return self.__age or 0
+            return self.__age
         end
 
         function setAge(self, age)
@@ -275,7 +275,7 @@ __Test__() function property()
         end
 
         function setClass(self, cls)
-            self.__cls = cls
+            self.__cls = cls or false
         end
 
         function getClass(self)

@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
--- Update Date  :   2018/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/02/28                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -26,8 +26,7 @@ PLoop(function(_ENV)
         isstruct            = Struct.Validate,
         isenum              = Enum.Validate,
         issubtype           = Class.IsSubType,
-        issealclass         = Class.IsSealed,
-        issealstruct        = Struct.IsSealed,
+        isselfreferenced    = Struct.IsSelfReferenced,
         getarrayelement     = Struct.GetArrayElement,
         getmembers          = Struct.GetMembers,
         getfeatures         = Class.GetFeatures,
@@ -35,17 +34,22 @@ PLoop(function(_ENV)
         MEMBER              = StructCategory.MEMBER,
         CUSTOM              = StructCategory.CUSTOM,
         ARRAY               = StructCategory.ARRAY,
-        getnamespace        = Namespace.GetNamespace,
+        getnamespace        = Namespace.Validate,
         validenum           = Enum.ValidateValue,
         validstruct         = Struct.ValidateValue,
         validprop           = Property.Validate,
         gettemplate         = Class.GetTemplate,
+        gettemplatepars     = Class.GetTemplateParameters,
+        getstructtemplate   = Struct.GetTemplate,
+        getstrcuttemppars   = Struct.GetTemplateParameters,
+        getbasestruct       = Struct.GetBaseStruct,
     }
     export { Enum, Struct, Class, Property }
 
     -----------------------------------------------------------
     --                        storage                        --
     -----------------------------------------------------------
+    local _SerializableType     = {}
     local _SerializeInfo        = {}
     local _NonSerializableInfo  = {}
 
@@ -55,6 +59,7 @@ PLoop(function(_ENV)
     export {
         savenonserializable = false,
         regSerializableType = false,
+        saveTypeInfo        = false,
         isSerializable      = false,
         isSerializableType  = false,
         serialize           = false,
@@ -63,16 +68,21 @@ PLoop(function(_ENV)
 
     savenonserializable     = function(smem) _NonSerializableInfo = safeset(_NonSerializableInfo, smem, true) end
 
-    function regSerializableType(stype)
-        if not _SerializeInfo[stype] then
-            _SerializeInfo  = safeset(_SerializeInfo, stype, true)
-        end
+    -- Reset the cache if re-defined
+    Runtime.OnTypeDefined   = Runtime.OnTypeDefined + function(type, target) if _SerializeInfo[target] then _SerializeInfo[target] = false end end
+
+    function regSerializableType(type)
+        _SerializableType   = safeset(_SerializableType, type, true)
+    end
+
+    function saveTypeInfo(type)
+        _SerializeInfo      = safeset(_SerializeInfo, type, true)
 
         -- Cache the field info for quick access
-        if isclass(stype) and issealclass(stype) and not issubtype(stype, ISerializable) then
+        if isclass(type) and not issubtype(type, ISerializable) then
             local fieldInfo = {}
 
-            for name, prop in getfeatures(stype) do
+            for name, prop in getfeatures(type) do
                 if validprop(prop) and not _NonSerializableInfo[prop] and prop:IsReadable() and prop:IsWritable() then
                     local ptype = prop:GetType()
                     if not ptype then
@@ -83,11 +93,11 @@ PLoop(function(_ENV)
                 end
             end
 
-            _SerializeInfo  = safeset(_SerializeInfo, stype, fieldInfo)
-        elseif isstruct(stype) and issealstruct(stype) and getstructcategory(stype) == MEMBER then
+            _SerializeInfo  = safeset(_SerializeInfo, type, fieldInfo)
+        elseif isstruct(type) and getstructcategory(type) == MEMBER then
             local fieldInfo = {}
 
-            for _, mem in getmembers(stype) do
+            for _, mem in getmembers(type) do
                 if not _NonSerializableInfo[mem] then
                     local mtype = mem:GetType()
                     if not mtype then
@@ -98,8 +108,64 @@ PLoop(function(_ENV)
                 end
             end
 
-            _SerializeInfo  = safeset(_SerializeInfo, stype, fieldInfo)
+            _SerializeInfo  = safeset(_SerializeInfo, type, fieldInfo)
         end
+    end
+
+    function chkSerializableType(type, cache)
+        if isenum (type)       then return true end
+        if isclass(type)       then
+            local template      = gettemplate(type)
+            if template and isSerializableType(template) then
+                for _,  par in ipairs{ gettemplatepars(type) } do if getnamespace(par) and not isSerializableType(par) then return false end end
+                return true
+            end
+            return false
+        end
+        if not isstruct(type)  then return false end
+
+        local category          = getstructcategory(type)
+
+        if category == CUSTOM then
+            local base          = getbasestruct(type)
+            if base and isSerializableType(base) then return true end
+            local template      = getstructtemplate(type)
+            if template and isSerializableType(template) then
+                for _,  par in ipairs{ getstrcuttemppars(type) } do if getnamespace(par) and not isSerializableType(par) then return false end end
+                return true
+            end
+        elseif category == ARRAY then
+            cache               = cache or isselfreferenced(type) and {}
+            if cache then cache[type] = true end
+            if isSerializableType(getarrayelement(type), cache) then
+                return true
+            end
+        elseif category == MEMBER then
+            cache               = cache or isselfreferenced(type) and {}
+            if cache then cache[type] = true end
+            for _, member in getmembers(type) do
+                if not _NonSerializableInfo[member] then
+                    local mtype = member:GetType()
+                    if mtype and not isSerializableType(mtype, cache) then return false end
+                end
+            end
+            return true
+        end
+
+        return false
+    end
+
+    function isSerializableType(type, cache)
+        if not type             then return false end
+        if _SerializeInfo[type] then return true  end
+        if cache and cache[type]then return true  end
+
+        if _SerializableType[type] or chkSerializableType(type, cache) then
+            saveTypeInfo(type)
+            return true
+        end
+
+        return false
     end
 
     function isSerializable(obj)
@@ -110,43 +176,6 @@ PLoop(function(_ENV)
         else
             return otype == "string" or otype == "number" or otype == "boolean"
         end
-    end
-
-    function isSerializableType(stype)
-        if not stype then return false end
-        if _SerializeInfo[stype]then return true end
-        if isenum(stype)        then return true end
-        if isclass(stype)       then
-            local template      = gettemplate(stype)
-            if template and _SerializeInfo[template] then
-                if issealclass(stype) then
-                    regSerializableType(stype)
-                end
-                return true
-            end
-        end
-        if not isstruct(stype)then return false end
-
-        local category          = getstructcategory(stype)
-        local issealed          = issealstruct(stype)
-
-        if category == CUSTOM then
-            if not isSerializableType(Struct.GetBaseStruct(stype)) then return false end
-        elseif category == ARRAY then
-            if not isSerializableType(Struct.GetArrayElement(stype)) then return false end
-        elseif category == MEMBER then
-            for _, member in getmembers(stype) do
-                if not _NonSerializableInfo[member] then
-                    local mtype     = member:GetType()
-                    if mtype and not isSerializableType(mtype) then return false end
-                end
-            end
-        else
-            return false
-        end
-
-        if issealed then regSerializableType(stype) end
-        return true
     end
 
     function serialize(object, otype, cache)
@@ -509,6 +538,8 @@ PLoop(function(_ENV)
     regSerializableType(Number)
     regSerializableType(AnyBool)
     regSerializableType(NEString)
+    regSerializableType(PositiveNumber)
+    regSerializableType(NegativeNumber)
     regSerializableType(Integer)
     regSerializableType(NaturalNumber)
     regSerializableType(NegativeInteger)

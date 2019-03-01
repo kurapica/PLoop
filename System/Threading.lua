@@ -143,7 +143,7 @@ PLoop(function(_ENV)
             -- thread should be processed under the thread pool
             -- @param  func                 the target function
             -- @return wrap                 the wrap function or thread
-            __Arguments__{ Function }
+            __Arguments__{ Function, Boolean/nil }
             GetThread = newpoolthread
 
             --- call the function with arguments in a recyclable coroutine

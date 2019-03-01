@@ -4565,12 +4565,15 @@ Only the **PLoop** must existed in the `_G`, others won't override the existed i
 
 ## Serialization
 
+With the **System.Serialization**, we can serialize objects to data of target format, or deserialize the data to objects.
+
 ### Start with JSON
 
-Task an example from the [PLoop_Web](https://github.com/kurapica/PLoop_Web):
+To use the JSON format, we need load **PLoop.System.Web** besides the **PLoop**.
 
 ```lua
-require "PLoop_Web"
+require "PLoop"
+require "PLoop.System.Web"
 
 PLoop(function(_ENV)
 	import "System.Serialization"

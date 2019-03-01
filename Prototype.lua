@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/02/20                                               --
--- Version      :   1.0.0-beta045                                            --
+-- Update Date  :   2019/03/01                                               --
+-- Version      :   1.0.0-beta046                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -302,10 +302,10 @@ do
     parseindex                  = (function() local map = { "1st", "2nd", "3rd" } return function(idx) return map[idx] or (idx .. "th") end end)()
 
     --- new type events
-    newenum                     = fakefunc
-    newstruct                   = fakefunc
-    newclass                    = fakefunc
-    newinterface                = fakefunc
+    enumdefined                 = fakefunc
+    structdefined               = fakefunc
+    classdefined                = fakefunc
+    interfacedefined            = fakefunc
 
     -----------------------------------------------------------------------
     --                              storage                              --
@@ -3594,6 +3594,8 @@ do
                         genStructConstructor(info)
 
                         updateStructDepends (t, cache)
+
+                        structdefined(t)
                     end
                 end
             end
@@ -3993,7 +3995,7 @@ do
                     _Cache(cache)
                 end
 
-                newstruct(target)
+                structdefined(target)
 
                 return target
             end;
@@ -4235,6 +4237,17 @@ do
             ["IsSealed"]        = function(target)
                 local info      = getStructTargetInfo(target)
                 return info and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) or false
+            end;
+
+            --- Whether the structure type value may contain self reference
+            -- @static
+            -- @method  IsSelfReferenced
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  boolean                     true if the structure type value may contain self reference
+            ["IsSelfReferenced"] = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_VALIDCACHE] and true or false
             end;
 
             --- Whether the structure's given name method is static
@@ -5038,7 +5051,7 @@ do
 
                 attribute.AttachAttributes(target, ATTRTAR_ENUM, nil, nil, stack)
 
-                newenum(target)
+                enumdefined(target)
 
                 return target
             end;
@@ -7479,7 +7492,7 @@ do
 
                 reDefineChildren(target, stack)
 
-                newinterface(target)
+                interfacedefined(target)
 
                 return target
             end;
@@ -7506,6 +7519,8 @@ do
                 saveICInfo(target, ninfo)
 
                 reDefineChildren(target, stack)
+
+                interfacedefined(target)
 
                 return target
             end;
@@ -8171,7 +8186,7 @@ do
 
                 reDefineChildren(target, stack)
 
-                newclass(target)
+                classdefined(target)
 
                 return target
             end;
@@ -8289,7 +8304,7 @@ do
             -- @owner   class
             -- @param   target                      the target class
             -- @param   name                        the feature name
-            -- @return  function                    the normal feature
+            -- @return  feature                     the normal feature
             ["GetNormalFeature"] = function(target, name)
                 local info      = _ICInfo[target]
                 return info and getNormal(info, name, getTypeFeature)
@@ -8587,6 +8602,8 @@ do
                 saveICInfo(target, ninfo)
 
                 reDefineChildren(target, stack)
+
+                classdefined(target)
 
                 return target
             end;
@@ -15182,10 +15199,10 @@ do
         --- Fired when a new type is generated
         __Static__() event "OnTypeDefined"
 
-        _PLoopEnv.newenum       = function(target) OnTypeDefined(Enum, target) end
-        _PLoopEnv.newstruct     = function(target) OnTypeDefined(Struct, target) end
-        _PLoopEnv.newinterface  = function(target) OnTypeDefined(Interface, target) end
-        _PLoopEnv.newclass      = function(target) OnTypeDefined(Class, target) end
+        _PLoopEnv.enumdefined       = function(target) OnTypeDefined(Enum, target) end
+        _PLoopEnv.structdefined     = function(target) OnTypeDefined(Struct, target) end
+        _PLoopEnv.interfacedefined  = function(target) OnTypeDefined(Interface, target) end
+        _PLoopEnv.classdefined      = function(target) OnTypeDefined(Class, target) end
     end)
 end
 
