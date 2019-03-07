@@ -240,6 +240,8 @@ PLoop(function(_ENV)
             SerializeDataWithWrite          = SerializeDataWithWrite,
             SerializeDataWithWriteNoIndent  = SerializeDataWithWriteNoIndent,
             SerializeSimpleData             = SerializeSimpleData,
+
+            List,
         }
 
         -----------------------------------------------------------------------
@@ -310,13 +312,16 @@ PLoop(function(_ENV)
         __Arguments__{ System.IO.TextReader }
         function Deserialize(self, reader)
             local data = reader:ReadToEnd()
-
-            if data then
-                return loadsnippet("return " .. data)()
-            end
+            if data then return loadsnippet("return " .. data)() end
         end
 
-        __Arguments__{ Any }
+        __Arguments__{ Function }
+        function Deserialize(self, read)
+            local data = List(read):Join()
+            if data then return loadsnippet("return " .. data)() end
+        end
+
+        __Arguments__{ String }
         function Deserialize(self, data)
             return loadsnippet("return " .. data)()
         end

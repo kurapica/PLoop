@@ -507,12 +507,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                           static method                           --
         -----------------------------------------------------------------------
-        __Arguments__{ FormatProvider, Any + System.IO.TextReader }
-        __Static__() function Deserialize(provider, reader)
-            return deserialize(provider:Deserialize(reader))
-        end
-
-        __Arguments__{ FormatProvider, Any + System.IO.TextReader, SerializableType }
+        __Arguments__{ FormatProvider, Any + Function + System.IO.TextReader, SerializableType/nil }
         __Static__() function Deserialize(provider, reader, otype)
             return deserialize(provider:Deserialize(reader), otype)
         end

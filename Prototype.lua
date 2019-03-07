@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/03/01                                               --
--- Version      :   1.0.0-beta046                                            --
+-- Update Date  :   2019/03/07                                               --
+-- Version      :   1.0.0-beta047                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2872,6 +2872,7 @@ do
     local MOD_SEALED_STRUCT     = newflags(true)    -- SEALED
     local MOD_IMMUTABLE_STRUCT  = newflags()        -- IMMUTABLE
     local MOD_TEMPLATE_STRUCT   = newflags()        -- AS TEMPLATE
+    local MOD_ALLOWOBJ_STRUCT   = newflags()        -- ALLOW OBJECT PASS VALIDATION
 
     -- FIELD INDEX
     local FLD_STRUCT_MOD        = -newindex(1)      -- FIELD MODIFIER
@@ -2919,6 +2920,7 @@ do
     local FLG_STRUCT_MULTI_REQ  = newflags()        -- MULTI  FIELD  REQUIRE FLAG
     local FLG_STRUCT_FIRST_TYPE = newflags()        -- FIRST  MEMBER TYPE    FLAG
     local FLG_STRUCT_IMMUTABLE  = newflags()        -- IMMUTABLE     FLAG
+    local FLG_STRUCT_ALLOW_OBJ  = newflags()        -- ALLOW  OBjECT FLAG
 
     local STRUCT_KEYWORD_ARRAY  = "__array"
     local STRUCT_KEYWORD_BASE   = "__base"
@@ -3135,8 +3137,13 @@ do
             local i             = FLD_STRUCT_MEMBERSTART
             while info[i + 1] do i = i + 1 end
             tinsert(upval, i)
+
+            if validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD]) then
+                token           = turnonflags(FLG_STRUCT_ALLOW_OBJ, token)
+            end
         elseif info[FLD_STRUCT_ARRAY] then
             token               = turnonflags(FLG_ARRAY_STRUCT, token)
+            token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token) -- Always allow the object as array
         else
             token               = turnonflags(FLG_CUSTOM_STRUCT, token)
         end
@@ -3193,6 +3200,13 @@ do
                 tinsert(body, [[
                     if type(value) ~= "table" then return nil, onlyValid or "the %s must be a table" end
                 ]])
+
+                if not validateflags(FLG_STRUCT_ALLOW_OBJ, token) then
+                    uinsert(apis, "getmetatable")
+                    tinsert(body, [[
+                        if getmetatable(value) ~= nil then return nil, onlyValid or "the %s must be raw table without meta-table" end
+                    ]])
+                end
 
                 if validateflags(FLG_STRUCT_VALIDCACHE, token) then
                     uinsert(apis, "_Cache")
@@ -3408,8 +3422,13 @@ do
                     tinsert(upval, getobjectvalue(ftype, "IsImmutable") or false)
                 end
             end
+
+            if validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD]) then
+                token           = turnonflags(FLG_STRUCT_ALLOW_OBJ, token)
+            end
         elseif info[FLD_STRUCT_ARRAY] then
             token               = turnonflags(FLG_ARRAY_STRUCT, token)
+            token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token)
         else
             token               = turnonflags(FLG_CUSTOM_STRUCT, token)
         end
@@ -3438,8 +3457,18 @@ do
                     return function(info, first, ...)
                         local ivalid = info[]].. FLD_STRUCT_VALID .. [[]
                         local ret, msg
-                        if select("#", ...) == 0 and type(first) == "table" then
                 ]])
+
+                if validateflags(FLG_STRUCT_ALLOW_OBJ, token) then
+                    tinsert(body, [[
+                        if select("#", ...) == 0 and type(first) == "table" then
+                    ]])
+                else
+                    uinsert(apis, "getmetatable")
+                    tinsert(body, [[
+                        if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
+                    ]])
+                end
 
                 tinsert(head, "count")
                 if not validateflags(FLG_STRUCT_MULTI_REQ, token) then
@@ -4208,6 +4237,17 @@ do
                 end
             end;
 
+            --- Whether the structure allow objects instead of raw table
+            -- @static
+            -- @method  IsObjectAllowed
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  boolean                     true if the structure allow objects
+            ["IsObjectAllowed"] = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD]) or false
+            end;
+
             --- Whether a structure use the other as its base structure
             -- @static
             -- @method  IsSubType
@@ -4285,6 +4325,26 @@ do
                     info[FLD_STRUCT_ARRVALID]   = tpValid
                 else
                     error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid", stack)
+                end
+            end;
+
+            --- Set the structure so it allow objects pass its validation
+            -- @static
+            -- @method  SetObjectAllowed
+            -- @owner   struct
+            -- @format  (structure[, stack])
+            -- @param   structure                   the structure
+            -- @param   stack                       the stack level
+            ["SetObjectAllowed"]= function(target, stack)
+                local info      = getStructTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD]) then
+                        info[FLD_STRUCT_MOD] = turnonflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD])
+                    end
+                else
+                    error("Usage: struct.SetObjectAllowed(structure[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -12367,6 +12427,19 @@ do
     namespace.SaveNamespace("System.__Namespace__",             prototype {
         __call                  = function(self, value) namespace.SetNamespaceForNext(value) end,
         __index = writeonly, __newindex = readonly, __tostring = namespace.GetNamespaceName
+    })
+
+    -----------------------------------------------------------------------
+    -- Make the target struct allow objects to pass its validation
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__ObjectAllowed__",     prototype {
+        __index                 = {
+            ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
+                struct.SetObjectAllowed(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_STRUCT,
+        },
+        __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
 
     -----------------------------------------------------------------------

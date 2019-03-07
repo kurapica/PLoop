@@ -229,7 +229,7 @@ PLoop(function(_ENV)
         function __new(_, lstKey, lstValue)
             local dict  = {}
             local iter, o, idx, value = (lstValue.GetIterator or ipairs)(lstValue)
-            for _, key in (lstValue.GetIterator or ipairs)(lstKey) do
+            for _, key in (lstKey.GetIterator or ipairs)(lstKey) do
                 idx, value = iter(o, idx)
                 if idx then
                     dict[key] = value
