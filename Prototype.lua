@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/03/07                                               --
--- Version      :   1.0.0-beta047                                            --
+-- Update Date  :   2019/03/09                                               --
+-- Version      :   1.0.0-beta048                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -343,8 +343,18 @@ do
 
         for k, v in pairs, src do
             if override or tar[k] == nil then
-                if type(v) == "table" and getmetatable(v) == nil then
-                    tar[k]      = cache and cache[v] or deepClone(v, {}, override, cache)
+                if cache and cache[v] then
+                    tar[k]      = cache[v]
+                elseif type(v) == "table" then
+                    local cls   = getmetatable(v)
+                    if cls == nil then
+                        tar[k]  = deepClone(v, {}, override, cache)
+                    else
+                        local c = getprototypemethod(cls, "Clone")
+                        c       = c and c(v, cls) or v
+                        if cache then cache[v] = c end
+                        tar[k]  = c
+                    end
                 else
                     tar[k]      = v
                 end
@@ -375,10 +385,9 @@ do
             local cls           = getmetatable(src)
             if cls == nil then
                 return tblclone(src, {}, deep, true, safe)
-            elseif class.IsSubType(cls, ICloneable) then
-                return src:Clone()
             else
-                return src
+                local clone     = getprototypemethod(cls, "Clone")
+                return clone and clone(src, cls) or src
             end
         else
             return src
@@ -635,14 +644,16 @@ do
                 local full      = path:find("[^%P_]+")
                 local root      = full and ROOT_NAMESPACE or namespace.GetNamespaceForNext() or environment.GetNamespace(visitor or env)
                 target          = namespace.GetNamespace(root, path)
-                if not target then
+                if target then
+                    if not nType.Validate(target) then
+                        target  = nil
+                    end
+                else
                     target      = prototype.NewProxy(ptype)
                     namespace.SaveNamespace(root, path, target, stack + 2)
                 end
 
-                if not nType.Validate(target) then
-                    target      = nil
-                else
+                if target then
                     if visitor then rawset(visitor, namespace.GetNamespaceName(target, true), target) end
                     if env and env ~= visitor then rawset(env, namespace.GetNamespaceName(target, true), target) end
                 end
@@ -3633,6 +3644,13 @@ do
         end
     end
 
+    local initStructInfo        = function (target)
+        return {
+            [FLD_STRUCT_MOD ]   = 0,
+            [FLD_STRUCT_NAME]   = tostring(target),
+        }
+    end
+
     -- Save Meta
     local saveStructMeta        = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end
@@ -3854,10 +3872,7 @@ do
                 if info and validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]) then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 -- if _StructBuilderInfo[target] then error(strformat("Usage: struct.BeginDefinition(structure[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _StructBuilderInfo      = savestorage(_StructBuilderInfo, target, {
-                    [FLD_STRUCT_MOD ]   = 0,
-                    [FLD_STRUCT_NAME]   = tostring(target),
-                })
+                _StructBuilderInfo      = savestorage(_StructBuilderInfo, target, initStructInfo(target))
 
                 attribute.SaveAttributes(target, ATTRTAR_STRUCT, stack)
             end;
@@ -4538,13 +4553,17 @@ do
             -- @param   value                       the value used to validate
             -- @return  value                       return the value if it's a struct type, otherwise nil will be return
             ["Validate"]        = function(target)
-                return getmetatable(target) == struct and target or nil
+                return getStructTargetInfo(target) and target or nil
             end;
         },
         __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack  = getTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
+
+            if not _StructInfo[target] then
+                saveStructMeta(target, initStructInfo(target))
+            end
 
             stack               = stack + 1
 
@@ -4584,6 +4603,7 @@ do
 
             local strt          =  prototype.NewProxy(tstruct)
             namespace.SaveAnonymousNamespace(strt)
+            saveStructMeta(strt, initStructInfo(strt))
             struct.BeginDefinition(strt, 2)
 
             local info          = _StructBuilderInfo[strt]
@@ -4631,6 +4651,7 @@ do
             local msg           = "the %s must be a sub type of " .. tostring(self)
             local strt          =  prototype.NewProxy(tstruct)
             namespace.SaveAnonymousNamespace(strt)
+            saveStructMeta(strt, initStructInfo(strt))
             struct.BeginDefinition(strt, 2)
 
             local info          = _StructBuilderInfo[strt]
@@ -4996,6 +5017,17 @@ do
         if info then return info, true else return _EnumInfo[target], false end
     end
 
+    local initEnumInfo          = function (target)
+        return {
+            [FLD_ENUM_MOD    ]  = 0,
+            [FLD_ENUM_ITEMS  ]  = {},
+            [FLD_ENUM_CACHE  ]  = {},
+            [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
+            [FLD_ENUM_MAXVAL ]  = false,
+            [FLD_ENUM_DEFAULT]  = nil,
+        }
+    end
+
     local saveEnumMeta          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function (e, meta) rawset(e, FLD_ENUM_META, meta) end
                                     or  function (e, meta) _EnumInfo = savestorage(_EnumInfo, e, meta) end
@@ -5055,14 +5087,7 @@ do
                 -- if info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s is sealed, can't be re-defined", tostring(target)), stack) end
                 -- if _EnumBuilderInfo[target] then error(strformat("Usage: enum.BeginDefinition(enumeration[, stack]) - The %s's definition has already begun", tostring(target)), stack) end
 
-                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or {
-                    [FLD_ENUM_MOD    ]  = 0,
-                    [FLD_ENUM_ITEMS  ]  = {},
-                    [FLD_ENUM_CACHE  ]  = {},
-                    [FLD_ENUM_ERRMSG ]  = "%s must be a value of [" .. tostring(target) .."]",
-                    [FLD_ENUM_MAXVAL ]  = false,
-                    [FLD_ENUM_DEFAULT]  = nil,
-                })
+                _EnumBuilderInfo = savestorage(_EnumBuilderInfo, target, info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) and tblclone(info, {}, true, true) or initEnumInfo(target))
 
                 attribute.SaveAttributes(target, ATTRTAR_ENUM, stack)
             end;
@@ -5328,7 +5353,7 @@ do
             -- @param   enumeration                 the enumeration
             -- @return  enumeration                 nil if not pass the validation
             ["Validate"]        = function(target)
-                return getmetatable(target) == enum and target or nil
+                return getEnumTargetInfo(target) and target or nil
             end;
         },
         __newindex              = readonly,
@@ -5338,6 +5363,10 @@ do
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the enumeration type can't be created", stack + 1)
             elseif definition ~= nil and type(definition) ~= "table" then
                 error("Usage: enum([env, ][name, ][definition][, stack]) - the definition should be a table", stack + 1)
+            end
+
+            if not _EnumInfo[target] then
+                saveEnumMeta(target, initEnumInfo(target))
             end
 
             stack               = stack + 1
@@ -8082,13 +8111,18 @@ do
             -- @param   target                      the target interface
             -- @return  target                      return the target if it's an interface, otherwise nil
             ["Validate"]        = function(target)
-                return getmetatable(target) == interface and target or nil
+                local info      = getICTargetInfo(target)
+                return info and getmetatable(target) == interface and target or nil
             end;
         },
         __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack = getTypeParams(interface, tinterface, ...)
             if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][stack]) - the interface type can't be created", stack) end
+
+            if not _ICInfo[target] then
+                saveICInfo(target, getInitICInfo(target, false))
+            end
 
             stack               = stack + 1
 
@@ -8218,6 +8252,19 @@ do
                 _ICBuilderInfo  = savestorage(_ICBuilderInfo, target, getInitICInfo(target, true))
 
                 attribute.SaveAttributes(target, ATTRTAR_CLASS, stack)
+            end;
+
+            --- Get the clone of an object with class
+            -- @static
+            -- @method  Clone
+            -- @owner   class
+            -- @param   object                      the object to be cloned
+            -- @return  clone                       clone if the class is ICloneable
+            ["Clone"]           = function(object, cls)
+                cls             = class.GetObjectClass(object)
+                if cls and class.IsSubType(cls, ICloneable) then
+                    return object:Clone()
+                end
             end;
 
             --- Finish the class's definition
@@ -8953,13 +9000,18 @@ do
             -- @param   target                      the target class
             -- @return  target                      return the target if it's a class, otherwise nil
             ["Validate"]        = function(target)
-                return getmetatable(target) == class and target or nil
+                local info      = getICTargetInfo(target)
+                return info and getmetatable(target) == class and target or nil
             end;
         },
         __newindex              = readonly,
         __call                  = function(self, ...)
             local visitor, env, target, definition, keepenv, stack = getTypeParams(class, tclass, ...)
             if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][stack]) - the class type can't be created", stack) end
+
+            if not _ICInfo[target] then
+                saveICInfo(target, getInitICInfo(target, true))
+            end
 
             stack               = stack + 1
 
@@ -13941,7 +13993,7 @@ do
             local vars          = {
                 [FLD_VAR_FUNCTN]= definition,
                 [FLD_VAR_MINARG]= len,
-                [FLD_VAR_MAXARG]= len,
+                [FLD_VAR_MAXARG]= len + (passStack and 1 or 0),
                 [FLD_VAR_IMMTBL]= true,
                 [FLD_VAR_USGMSG]= "",
                 [FLD_VAR_VARVLD]= false,

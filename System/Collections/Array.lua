@@ -42,7 +42,6 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        helper                         --
         -----------------------------------------------------------
-        local insert            = List.Insert
         local addeventlistener  = function() end
 
         export {
@@ -66,7 +65,7 @@ PLoop(function(_ENV)
             function addeventlistener(self, obj)
                 local evts      = rawget(self, ARRAY_EVENT)
                 if evts then
-                    for k, v in pairs(obj) do
+                    for k, v in pairs(evts) do
                         obj[k]  = v
                     end
                 end
@@ -96,7 +95,7 @@ PLoop(function(_ENV)
         if Interface.Validate(eletype) or Class.Validate(eletype) then
             __Arguments__{ String, Callable }
             function __newindex(self, key, value)
-                local evt = getfeature(eletype, key)
+                local evt       = getfeature(eletype, key)
                 if evt and validevent(evt) then
                     local evts  = rawget(self, ARRAY_EVENT) or {}
                     rawset(self, ARRAY_EVENT, evts)
@@ -107,10 +106,17 @@ PLoop(function(_ENV)
                     error("The " .. tostring(eletype) .. " don't have an event named " .. tostring(key), 2)
                 end
             end
+
+            __Arguments__{ Number, eletype }
+            __newindex          = rawset
         else
+            __Arguments__{ String, Callable }
             function __newindex(self, key)
                 error("The " .. tostring(eletype) .. " don't have an event named " .. tostring(key), 2)
             end
+
+            __Arguments__{ Number, eletype }
+            __newindex          = rawset
         end
     end)
 end)
