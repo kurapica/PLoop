@@ -14,7 +14,7 @@
 PLoop(function(_ENV)
     namespace "System"
 
-    --- Logger is used to keep and distribute log message.
+    --- Logger is used to distribute log message.
     -- Logger object can use 'logObject(logLevel, logMessage, ...)' for short to send out log messages.
     __Sealed__()
     class "Logger" (function(_ENV)
@@ -33,7 +33,7 @@ PLoop(function(_ENV)
         export { Logger }
 
         --- Represents the log levels
-        __Sealed__() __AutoIndex__()
+        __Sealed__() __AutoIndex__{ Trace = 0 }
         enum "LogLevel" { "Trace", "Debug", "Info", "Warn", "Error", "Fatal" }
 
         local date              = _G.os and os.date or _G.date
@@ -98,7 +98,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- the log level
-        property "LogLevel"     { type = LogLevel }
+        property "LogLevel"     { type = LogLevel, default = LogLevel.Info }
 
         --- if the timeformat is setted, the log message will add a timestamp at the header
         property "TimeFormat"   { type = TimeFormat, default = "[%c]" }
