@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/03/09                                               --
--- Version      :   1.0.0-beta048                                            --
+-- Update Date  :   2019/03/10                                               --
+-- Version      :   1.0.0-beta049                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11788,27 +11788,31 @@ do
             if getlocal then
                 local index     = 1
                 local k, v      = getlocal(stack, index)
-                local vars      = k and {}
-                while k do
-                    vars[k]     = v
+                if k then
+                    local vars  = {}
+                    while k do
+                        vars[k] = v
 
-                    index       = index + 1
-                    k, v        = getlocal(stack, index)
+                        index   = index + 1
+                        k, v    = getlocal(stack, index)
+                    end
+                    exception.LocalVariables = vars
                 end
-                if next(vars) then exception.LocalVariables = vars end
             end
 
             if getupvalue and func then
                 local index     = 1
                 local k, v      = getupvalue(func, index)
-                local vars      = k and {}
-                while k do
-                    vars[k]     = v
+                if k then
+                    local vars  = {}
+                    while k do
+                        vars[k] = v
 
-                    index       = index + 1
-                    k, v        = getupvalue(func, index)
+                        index   = index + 1
+                        k, v    = getupvalue(func, index)
+                    end
+                    exception.Upvalues = vars
                 end
-                if next(vars) then exception.Upvalues = vars end
             end
         end
 
