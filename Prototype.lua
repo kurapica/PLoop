@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/03/10                                               --
--- Version      :   1.0.0-beta049                                            --
+-- Update Date  :   2019/03/11                                               --
+-- Version      :   1.0.0-beta050                                            --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -268,6 +268,10 @@ do
         -- we can have more details about the exception.
         -- Default true
         EXCEPTION_SAVE_STACK_DATA           = true,
+
+        --- Whether alwasy try to save local variables and upvalues for exception
+        -- Default false
+        EXCEPTION_SAVE_VARIABLES            = false,
 
         --- The max pool size of the thread pool
         -- Default 40
@@ -14957,7 +14961,7 @@ do
         property "StackLevel"       { type = NaturalNumber, default = 1 }
 
         --- whether save the local variables and the upvalues for the exception
-        property "SaveVariables"    { type = Boolean,       default = false }
+        property "SaveVariables"    { type = Boolean,       default = Platform.EXCEPTION_SAVE_VARIABLES }
 
         -----------------------------------------------------------
         --                      constructor                      --
