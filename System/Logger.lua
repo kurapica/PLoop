@@ -33,7 +33,7 @@ PLoop(function(_ENV)
         export { Logger }
 
         --- Represents the log levels
-        __Sealed__() __AutoIndex__{ Trace = 0 }
+        __Sealed__() __AutoIndex__()
         enum "LogLevel" { "Trace", "Debug", "Info", "Warn", "Error", "Fatal" }
 
         local date              = _G.os and os.date or _G.date
