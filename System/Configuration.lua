@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/05/11                                               --
--- Update Date  :   2018/05/11                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/12                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -22,7 +22,7 @@ PLoop(function(_ENV)
     -- configurations in one place for the whole system.
     __Sealed__() __NoNilValue__(true) __NoRawSet__(true)
     class "ConfigSection" (function(_ENV)
-        export { "pairs", "type", "getmetatable", Enum, Struct, Interface, Class, Any, ConfigSection, List }
+        export { "pairs", "type", "getmetatable", yield = coroutine.yield, Enum, Struct, Interface, Class, Any, ConfigSection, List }
 
         -----------------------------------------------------------
         --                         event                         --
@@ -36,6 +36,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        --- Parse the config settings with arguments to be distributed
         __Arguments__{ Table, Any * 0 }
         function ParseConfig(self, config, ...)
             local msg
@@ -68,6 +69,24 @@ PLoop(function(_ENV)
             OnParse(self, config, ...)
 
             return config
+        end
+
+        --- Gets all fields with orders
+        __Iterator__() function GetFields(self)
+            local fields        = self.__Fields
+            for _, name in self.__Order:GetIterator() do
+                local type      = fields[name]
+                if type then yield(name, type) end
+            end
+        end
+
+        --- Gets all sections with orders
+        __Iterator__() function GetSections(self)
+            local sections      = self.__Sections
+            for _, name in self.__Order:GetIterator() do
+                local sect      = sections[name]
+                if sect then yield(name, sect) end
+            end
         end
 
         -----------------------------------------------------------
