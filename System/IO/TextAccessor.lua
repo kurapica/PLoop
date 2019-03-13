@@ -34,7 +34,7 @@ PLoop(function(_ENV)
         __Abstract__() function Write(self, data) end
 
         --- Writes the data(could be nil) followed by a line terminator to the text string or stream.
-        __Abstract__() function WriteLine(self, data) self:Write((data or "") .. self.NewLine) end
+        __Abstract__() function WriteLine(self, data) if data then self:Write(data) end self:Write(self.NewLine) end
     end)
 
     --- Represents a reader that can read a sequential series of characters
@@ -44,6 +44,9 @@ PLoop(function(_ENV)
 
         --- Gets the character encoding in which the input is read.
         __Abstract__() property "Encoding" { type = System.Text.Encoding }
+
+        --- Gets or Sets the operation position
+        __Abstract__() property "Position" { type = Number }
 
         --- Reads the next character from the text reader and advances the character position by one character.
         __Abstract__() function Read(self) end
@@ -59,8 +62,5 @@ PLoop(function(_ENV)
 
         --- Reads all characters from the current position to the end of the text reader and returns them as one string.
         __Abstract__() function ReadToEnd(self) end
-
-        --- Gets or Sets the operation position
-        __Abstract__() property "Position" { type = Number }
     end)
 end)

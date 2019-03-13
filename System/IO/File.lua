@@ -1,4 +1,4 @@
---===========================================================================--
+###--===========================================================================--
 --                                                                           --
 --                              System.IO.File                               --
 --                                                                           --
@@ -70,7 +70,7 @@ PLoop(function(_ENV)
 
         --- Delete the file
         __PipeRead__ (function(path) return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nrm -f \"%s\"", path) end, "", OperationSystemType.MacOS + OperationSystemType.Linux)
-        __PipeRead__ (function(path) return strformat("del /f \"%s\")", path) end, "", OperationSystemType.Windows)
+        __PipeRead__ (function(path) return strformat("del /f \"%s\"", path) end, "", OperationSystemType.Windows)
         __Static__()
         function Delete(path)
         end

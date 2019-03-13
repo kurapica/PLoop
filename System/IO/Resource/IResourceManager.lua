@@ -203,10 +203,10 @@ PLoop(function(_ENV)
         end
 
         --- Mark the path reload when modified
-        __Static__() function SetReloadWhenModified(path)
+        __Static__() function SetReloadWhenModified(path, flag)
             path                = preparepath(path)
             local info          = _ResourcePathMap[path] or LoadFileInfo(path)
-            info.reloadWhenModified = true
+            info.reloadWhenModified = (flag ~= false)
         end
 
         -----------------------------------------------------------------------

@@ -42,7 +42,7 @@ PLoop(function(_ENV)
 
         --- Get the directory of the path, if the path is a root, empty string would be returned.
         __Static__()
-        function GetDirectory(path) return strgsub(strsub(path, 1, -2), "[^\\/]*$", "") end
+        function GetDirectory(path) return (strgsub(strsub(path, 1, -2), "[^\\/]*$", "")) end
 
         --- Combine the paths
         __Static__()
