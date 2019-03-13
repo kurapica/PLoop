@@ -24,6 +24,7 @@ PLoop(function(_ENV)
             getname             = Namespace.GetNamespaceName,
             require             = _G.require,
             loadfile            = _G.loadfile,
+            setfenv             = _G.setfenv or false,
             loadsnippet         = Toolset.loadsnippet,
             pcall               = pcall,
             error               = error,
@@ -47,12 +48,14 @@ PLoop(function(_ENV)
             local func, msg
 
             if reader then
-                local code              = reader:ReadToEnd()
-                func, msg               = loadsnippet(code, path, env)
+                func, msg               = loadsnippet(reader:ReadToEnd(), path, env)
                 if func then func, msg  = pcall(func) end
             else
-                func, msg               = loadfile(path)
-                if func then func, msg  = pcall(func) end
+                func, msg               = loadfile(path, nil, env)
+                if func then
+                    if setfenv and env then setfenv(func, env) end
+                    func, msg           = pcall(func)
+                end
             end
 
             Runtime.OnTypeDefined   = Runtime.OnTypeDefined - ontypedefined
