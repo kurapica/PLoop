@@ -524,11 +524,11 @@ PLoop(function(_ENV)
         --- Encodes a string to be displayed in a browser
         __Arguments__{ String, System.Text.Encoding/nil }
         __Static__() function HtmlEncode(text, encode)
-            local iter, tar, idx= (encode or UTF8Encoding).Decode(text)
+            local iter, tar, idx= (encode or UTF8Encoding).Decodes(text)
             local byte
             local prev          = idx or 1
 
-            idx, byte = iter(tar, idx)
+            idx, byte           = iter(tar, idx)
 
             -- Check whether need encode
             while idx do
