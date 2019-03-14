@@ -13231,6 +13231,12 @@ do
         -- @param   targetvalue     the target value
         -- @return  targetvalue     the target value don't contains the check value
         turnoffflags            = turnoffflags,
+
+        --- A readonly function used by meta-table
+        readonly                = readonly,
+
+        --- A writeonly function used by metaw-table
+        writeonly               = writeonly,
     }
 
     -----------------------------------------------------------------------

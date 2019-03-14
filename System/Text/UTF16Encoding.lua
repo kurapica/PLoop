@@ -37,21 +37,21 @@ PLoop(function(_ENV)
 
     -- Default
     function decodeLE(str, startp)
-        if not startp then return nil end
+        startp                  = startp or 1
 
-        local sbyte, obyte = strbyte(str, startp, startp + 1)
+        local sbyte, obyte      = strbyte(str, startp, startp + 1)
         if not obyte or not sbyte then return nil end
 
         if obyte <= 0xD7 or obyte >= 0xE0 then
             -- two bytes
-            return startp + 2, obyte * 0x100 + sbyte
+            return obyte * 0x100 + sbyte, 2
         elseif obyte >= 0xD8 and obyte <= 0xDB then
             -- four byte
-            local fbyte, tbyte = strbyte(str, startp + 2, startp + 3)
-            if not tbyte or not fbyte then return false end
+            local fbyte, tbyte  = strbyte(str, startp + 2, startp + 3)
+            if not tbyte or not fbyte then return nil end
 
             if tbyte >= 0xDC and tbyte <= 0xDF then
-                return startp + 4, ((obyte - 0xD8) * 0x100 + sbyte) * 0x400 + ((tbyte - 0xDC) * 0x100 + fbyte) + 0x10000
+                return ((obyte - 0xD8) * 0x100 + sbyte) * 0x400 + ((tbyte - 0xDC) * 0x100 + fbyte) + 0x10000, 4
             else
                 return nil
             end
@@ -72,9 +72,9 @@ PLoop(function(_ENV)
 
             -- 4 surrogate pairs
             if code >= 0x10000 and code <= 0x10FFFF then
-                code = code - 0x10000
-                local high = floor(code / 0x400)
-                local low = code % 0x400
+                code            = code - 0x10000
+                local high      = floor(code / 0x400)
+                local low       = code % 0x400
                 return strchar(
                     high % 0x100,
                     0xD8 + floor(high / 0x100),
@@ -84,25 +84,25 @@ PLoop(function(_ENV)
             end
         end
 
-        error(("%s is not a valid unicode."):format(code))
+        error(("%s is not a valid unicode."):format(code), 2)
     end
 
     function decodeBE(str, startp)
-        if not startp then return nil end
+        startp                  = startp or 1
 
-        local obyte, sbyte = strbyte(str, startp, startp + 1)
+        local obyte, sbyte      = strbyte(str, startp, startp + 1)
         if not obyte or not sbyte then return nil end
 
         if obyte <= 0xD7 or obyte >= 0xE0 then
             -- two bytes
-            return startp + 2, obyte * 0x100 + sbyte
+            return obyte * 0x100 + sbyte, 2
         elseif obyte >= 0xD8 and obyte <= 0xDB then
             -- four byte
-            local tbyte, fbyte = strbyte(str, startp + 2, startp + 3)
-            if not tbyte or not fbyte then return false end
+            local tbyte, fbyte  = strbyte(str, startp + 2, startp + 3)
+            if not tbyte or not fbyte then return nil end
 
             if tbyte >= 0xDC and tbyte <= 0xDF then
-                return startp + 4, ((obyte - 0xD8) * 0x100 + sbyte) * 0x400 + ((tbyte - 0xDC) * 0x100 + fbyte) + 0x10000
+                return ((obyte - 0xD8) * 0x100 + sbyte) * 0x400 + ((tbyte - 0xDC) * 0x100 + fbyte) + 0x10000, 4
             else
                 return nil
             end
@@ -123,9 +123,9 @@ PLoop(function(_ENV)
 
             -- 4 surrogate pairs
             if code >= 0x10000 and code <= 0x10FFFF then
-                code = code - 0x10000
-                local high = floor(code / 0x400)
-                local low = code % 0x400
+                code            = code - 0x10000
+                local high      = floor(code / 0x400)
+                local low       = code % 0x400
                 return strchar(
                     0xD8 + floor(high / 0x100),
                     high % 0x100,
@@ -135,7 +135,7 @@ PLoop(function(_ENV)
             end
         end
 
-        error(("%s is not a valid unicode."):format(code))
+        error(("%s is not a valid unicode."):format(code), 2)
     end
 
     -- Lua 5.3 - bitwise oper
@@ -143,21 +143,21 @@ PLoop(function(_ENV)
         -- Use load since 5.1 & 5.2 can't read the bitwise oper
         decodeLE, encodeLE, decodeBE, encodeBE = loadsnippet([[
             return function (str, startp)
-                if not startp then return nil end
+                startp              = startp or 1
 
-                local sbyte, obyte = strbyte(str, startp, startp + 1)
+                local sbyte, obyte  = strbyte(str, startp, startp + 1)
                 if not obyte or not sbyte then return nil end
 
                 if obyte <= 0xD7 or obyte >= 0xE0 then
                     -- two bytes
-                    return startp + 2, (obyte << 8) + sbyte
+                    return (obyte << 8) + sbyte, 2
                 elseif obyte >= 0xD8 and obyte <= 0xDB then
                     -- four byte
                     local fbyte, tbyte = strbyte(str, startp + 2, startp + 3)
-                    if not tbyte or not fbyte then return false end
+                    if not tbyte or not fbyte then return nil end
 
                     if tbyte >= 0xDC and tbyte <= 0xDF then
-                        return startp + 4, ((((obyte - 0xD8) << 8) + sbyte) << 10) + (((tbyte - 0xDC) << 8) + fbyte) + 0x10000
+                        return ((((obyte - 0xD8) << 8) + sbyte) << 10) + (((tbyte - 0xDC) << 8) + fbyte) + 0x10000, 4
                     else
                         return nil
                     end
@@ -178,9 +178,9 @@ PLoop(function(_ENV)
 
                     -- 4 surrogate pairs
                     if code >= 0x10000 and code <= 0x10FFFF then
-                        code = code - 0x10000
-                        local high = code >> 10
-                        local low = code & 0x3ff
+                        code        = code - 0x10000
+                        local high  = code >> 10
+                        local low   = code & 0x3ff
                         return strchar(
                             high & 0xff,
                             0xD8 + high >> 8,
@@ -190,25 +190,25 @@ PLoop(function(_ENV)
                     end
                 end
 
-                error(("%s is not a valid unicode."):format(code))
+                error(("%s is not a valid unicode."):format(code), 2)
             end,
 
             function (str, startp)
-                if not startp then return nil end
+                startp              = startp or 1
 
-                local obyte, sbyte = strbyte(str, startp, startp + 1)
+                local obyte, sbyte  = strbyte(str, startp, startp + 1)
                 if not obyte or not sbyte then return nil end
 
                 if obyte <= 0xD7 or obyte >= 0xE0 then
                     -- two bytes
-                    return startp + 2, (obyte << 8) + sbyte
+                    return (obyte << 8) + sbyte, 2
                 elseif obyte >= 0xD8 and obyte <= 0xDB then
                     -- four byte
                     local tbyte, fbyte = strbyte(str, startp + 2, startp + 3)
-                    if not tbyte or not fbyte then return false end
+                    if not tbyte or not fbyte then return nil end
 
                     if tbyte >= 0xDC and tbyte <= 0xDF then
-                        return startp + 4, ((((obyte - 0xD8) << 8) + sbyte) << 10) + (((tbyte - 0xDC) << 8) + fbyte) + 0x10000
+                        return ((((obyte - 0xD8) << 8) + sbyte) << 10) + (((tbyte - 0xDC) << 8) + fbyte) + 0x10000, 4
                     else
                         return nil
                     end
@@ -229,9 +229,9 @@ PLoop(function(_ENV)
 
                     -- 4 surrogate pairs
                     if code >= 0x10000 and code <= 0x10FFFF then
-                        code = code - 0x10000
-                        local high = code >> 10
-                        local low = code & 0x3ff
+                        code        = code - 0x10000
+                        local high  = code >> 10
+                        local low   = code & 0x3ff
                         return strchar(
                             0xD8 + high >> 8,
                             high & 0xff,
@@ -241,7 +241,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                error(("%s is not a valid unicode."):format(code))
+                error(("%s is not a valid unicode."):format(code), 2)
             end
         ]], "UTF16_ENCODE_DECODE", _ENV)()
     end
@@ -249,27 +249,27 @@ PLoop(function(_ENV)
     -- Lua 5.2 - bit32 lib or luajit bit lib
     if (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
         export {
-            band    = _G.bit32 and bit32.band or bit.band,
-            lshift  = _G.bit32 and bit32.lshift or bit.lshift,
-            rshift  = _G.bit32 and bit32.rshift or bit.rshift,
+            band                = _G.bit32 and bit32.band or bit.band,
+            lshift              = _G.bit32 and bit32.lshift or bit.lshift,
+            rshift              = _G.bit32 and bit32.rshift or bit.rshift,
         }
 
         function decodeLE(str, startp)
-            if not startp then return nil end
+            startp              = startp or 1
 
-            local sbyte, obyte = strbyte(str, startp, startp + 1)
+            local sbyte, obyte  = strbyte(str, startp, startp + 1)
             if not obyte or not sbyte then return nil end
 
             if obyte <= 0xD7 or obyte >= 0xE0 then
                 -- two bytes
-                return startp + 2, lshift(obyte, 8) + sbyte
+                return lshift(obyte, 8) + sbyte, 2
             elseif obyte >= 0xD8 and obyte <= 0xDB then
                 -- four byte
                 local fbyte, tbyte = strbyte(str, startp + 2, startp + 3)
-                if not tbyte or not fbyte then return false end
+                if not tbyte or not fbyte then return nil end
 
                 if tbyte >= 0xDC and tbyte <= 0xDF then
-                    return startp + 4, lshift((lshift((obyte - 0xD8), 8) + sbyte), 10) + (lshift((tbyte - 0xDC), 8) + fbyte) + 0x10000
+                    return lshift((lshift((obyte - 0xD8), 8) + sbyte), 10) + (lshift((tbyte - 0xDC), 8) + fbyte) + 0x10000, 4
                 else
                     return nil
                 end
@@ -290,9 +290,9 @@ PLoop(function(_ENV)
 
                 -- 4 surrogate pairs
                 if code >= 0x10000 and code <= 0x10FFFF then
-                    code = code - 0x10000
-                    local high = rshift(code, 10)
-                    local low = band(code, 0x3ff)
+                    code        = code - 0x10000
+                    local high  = rshift(code, 10)
+                    local low   = band(code, 0x3ff)
                     return strchar(
                         band(high, 0xff),
                         0xD8 + rshift(high, 8),
@@ -302,25 +302,25 @@ PLoop(function(_ENV)
                 end
             end
 
-            error(("%s is not a valid unicode."):format(code))
+            error(("%s is not a valid unicode."):format(code), 2)
         end
 
         function decodeBE(str, startp)
-            if not startp then return nil end
+            startp              = startp or 1
 
-            local obyte, sbyte = strbyte(str, startp, startp + 1)
+            local obyte, sbyte  = strbyte(str, startp, startp + 1)
             if not obyte or not sbyte then return nil end
 
             if obyte <= 0xD7 or obyte >= 0xE0 then
                 -- two bytes
-                return startp + 2, lshift(obyte, 8) + sbyte
+                return lshift(obyte, 8) + sbyte, 2
             elseif obyte >= 0xD8 and obyte <= 0xDB then
                 -- four byte
                 local tbyte, fbyte = strbyte(str, startp + 2, startp + 3)
-                if not tbyte or not fbyte then return false end
+                if not tbyte or not fbyte then return nil end
 
                 if tbyte >= 0xDC and tbyte <= 0xDF then
-                    return startp + 4, lshift((lshift((obyte - 0xD8), 8) + sbyte), 10) + (lshift((tbyte - 0xDC), 8) + fbyte) + 0x10000
+                    return lshift((lshift((obyte - 0xD8), 8) + sbyte), 10) + (lshift((tbyte - 0xDC), 8) + fbyte) + 0x10000, 4
                 else
                     return nil
                 end
@@ -341,9 +341,9 @@ PLoop(function(_ENV)
 
                 -- 4 surrogate pairs
                 if code >= 0x10000 and code <= 0x10FFFF then
-                    code = code - 0x10000
-                    local high = rshift(code, 10)
-                    local low = band(code, 0x3ff)
+                    code        = code - 0x10000
+                    local high  = rshift(code, 10)
+                    local low   = band(code, 0x3ff)
                     return strchar(
                         0xD8 + rshift(high, 8),
                         band(high, 0xff),
@@ -353,79 +353,19 @@ PLoop(function(_ENV)
                 end
             end
 
-            error(("%s is not a valid unicode."):format(code))
+            error(("%s is not a valid unicode."):format(code), 2)
         end
     end
 
    --- Represents the utf-16 encoding with little-endian.
-    __Abstract__() class "UTF16EncodingLE" (function(_ENV)
-        inherit "Encoding"
-
-        export { type = type, ipairs = ipairs, encodeLE = encodeLE, decodeLE = decodeLE, tinsert = table.insert, tconcat = table.concat }
-
-        __Static__()
-        property "EncodingName" { Set = false, Default = "UTF-16LE" }
-
-       --- Decode to the unicode code points
-        function Decode(str, startp) return decodeLE, str, startp or 1 end
-
-       --- Encode the unicode code points
-        function Encode(codes, arg1, arg2)
-            if type(codes) == "number" then
-                return encodeLE(codes)
-            elseif type(codes) == "table" then
-                local cache = {}
-
-                for _, code in ipairs(codes) do
-                    tinsert(cache, encodeLE(code))
-                end
-
-                return tconcat(cache)
-            elseif type(codes) == "function" then
-                local cache = {}
-
-                for _, code in codes, arg1, arg2 do
-                    tinsert(cache, encodeLE(code))
-                end
-
-                return tconcat(cache)
-            end
-        end
-    end)
+    System.Text.Encoding "UTF16EncodingLE" {
+        encode                  = encodeLE,
+        decode                  = decodeLE,
+    }
 
    --- Represents the utf-16 encoding with big-endian.
-    __Abstract__() class "UTF16EncodingBE" (function(_ENV)
-        inherit "Encoding"
-
-        export { type = type, ipairs = ipairs, encodeBE = encodeBE, decodeBE = decodeBE, tinsert = table.insert, tconcat = table.concat }
-
-        __Static__()
-        property "EncodingName" { Set = false, Default = "UTF-16BE" }
-
-       --- Decode to the unicode code points
-        function Decode(str, startp) return decodeBE, str, startp or 1 end
-
-       --- Encode the unicode code points
-        function Encode(codes, arg1, arg2)
-            if type(codes) == "number" then
-                return encodeBE(codes)
-            elseif type(codes) == "table" then
-                local cache = {}
-
-                for _, code in ipairs(codes) do
-                    tinsert(cache, encodeBE(code))
-                end
-
-                return tconcat(cache)
-            elseif type(codes) == "function" then
-                local cache = {}
-
-                for _, code in codes, arg1, arg2 do
-                    tinsert(cache, encodeBE(code))
-                end
-
-                return tconcat(cache)
-            end
-        end
-    end)
+    System.Text.Encoding "UTF16EncodingBE" {
+        encode                  = encodeBE,
+        decode                  = decodeBE,
+    }
 end)

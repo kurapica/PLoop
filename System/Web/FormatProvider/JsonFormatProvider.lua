@@ -86,7 +86,7 @@ PLoop(function(_ENV)
         function SerializeSimpleData(data)
             if data == nil then return "null" end
 
-            local dtType = type(data)
+            local dtType        = type(data)
 
             if dtType == "string" then
                 -- For simple condition
@@ -114,7 +114,7 @@ PLoop(function(_ENV)
             if isArray(data) then
                 write("[")
 
-                local count = #data
+                local count     = #data
 
                 for i, v in ipairs(data) do
                     if type(v) == "table" and getmetatable(v) == nil then
@@ -133,11 +133,11 @@ PLoop(function(_ENV)
             else
                 write("{")
 
-                local k, v = next(data)
+                local k, v      = next(data)
                 local nk, nv
 
                 while k do
-                    nk, nv = next(data, k)
+                    nk, nv      = next(data, k)
 
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(strformat("%q:", k))
@@ -151,7 +151,7 @@ PLoop(function(_ENV)
                         end
                     end
 
-                    k, v = nk, nv
+                    k, v        = nk, nv
                 end
 
                 write("}")
@@ -163,7 +163,7 @@ PLoop(function(_ENV)
                 write("[" .. lineBreak)
 
                 local subIndentChar = preIndentChar .. indentChar
-                local count = #data
+                local count     = #data
 
                 for i, v in ipairs(data) do
                     if type(v) == "table" and getmetatable(v) == nil then
@@ -187,12 +187,12 @@ PLoop(function(_ENV)
             else
                 write("{" .. lineBreak)
 
-                local k, v = next(data)
+                local k, v      = next(data)
                 local nk, nv
                 local subIndentChar = preIndentChar .. indentChar
 
                 while k do
-                    nk, nv = next(data, k)
+                    nk, nv      = next(data, k)
 
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(strformat("%s%q : ", subIndentChar, k))
@@ -210,7 +210,7 @@ PLoop(function(_ENV)
                         end
                     end
 
-                    k, v = nk, nv
+                    k, v        = nk, nv
                 end
 
                 write(preIndentChar .. "}")
@@ -221,7 +221,7 @@ PLoop(function(_ENV)
             if isArray(data) then
                 write(object, "[")
 
-                local count = #data
+                local count     = #data
 
                 for i, v in ipairs(data) do
                     if type(v) == "table" and getmetatable(v) == nil then
@@ -240,11 +240,11 @@ PLoop(function(_ENV)
             else
                 write(object, "{")
 
-                local k, v = next(data)
+                local k, v      = next(data)
                 local nk, nv
 
                 while k do
-                    nk, nv = next(data, k)
+                    nk, nv      = next(data, k)
 
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(object, strformat("%q:", k))
@@ -258,7 +258,7 @@ PLoop(function(_ENV)
                         end
                     end
 
-                    k, v = nk, nv
+                    k, v        = nk, nv
                 end
 
                 write(object, "}")
@@ -270,7 +270,7 @@ PLoop(function(_ENV)
                 write(object, "[" .. lineBreak)
 
                 local subIndentChar = preIndentChar .. indentChar
-                local count = #data
+                local count     = #data
 
                 for i, v in ipairs(data) do
                     if type(v) == "table" and getmetatable(v) == nil then
@@ -294,12 +294,12 @@ PLoop(function(_ENV)
             else
                 write(object, "{" .. lineBreak)
 
-                local k, v = next(data)
+                local k, v      = next(data)
                 local nk, nv
                 local subIndentChar = preIndentChar .. indentChar
 
                 while k do
-                    nk, nv = next(data, k)
+                    nk, nv      = next(data, k)
 
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(object, strformat("%s%q : ", subIndentChar, k))
@@ -317,7 +317,7 @@ PLoop(function(_ENV)
                         end
                     end
 
-                    k, v = nk, nv
+                    k, v        = nk, nv
                 end
 
                 write(object, preIndentChar .. "}")
@@ -331,139 +331,138 @@ PLoop(function(_ENV)
     do
         -- Use UTF-8 as the output encode
         export {
-            EncodeData              = UTF8Encoding.Encode,
-            UTF16LEDecode           = UTF16EncodingLE.Decode,
-            UTF16BEDecode           = UTF16EncodingBE.Decode,
-            UTF8Decode              = UTF8Encoding.Decode,
+            EncodeData          = UTF8Encoding.Encode,
+            UTF16LEDecodes      = UTF16EncodingLE.Decodes,
+            UTF16BEDecodes      = UTF16EncodingBE.Decodes,
 
-            _ESCAPE_CHAR            = {
-                [ 0x22 ]            = strchar( 0x22 ), -- " quotation mark
-                [ 0x5C ]            = strchar( 0x5C ), -- \ reverse solidus
-                [ 0x2F ]            = strchar( 0x2F ), -- / solidus
-                [ 0x62 ]            = strchar( 0x08 ), -- b backspace
-                [ 0x66 ]            = strchar( 0x0C ), -- f form feed
-                [ 0x6E ]            = strchar( 0x0A ), -- n line feed
-                [ 0x72 ]            = strchar( 0x0D ), -- r carriage return
-                [ 0x74 ]            = strchar( 0x09 ), -- t tab
+            _ESCAPE_CHAR        = {
+                [ 0x22 ]        = strchar( 0x22 ), -- " quotation mark
+                [ 0x5C ]        = strchar( 0x5C ), -- \ reverse solidus
+                [ 0x2F ]        = strchar( 0x2F ), -- / solidus
+                [ 0x62 ]        = strchar( 0x08 ), -- b backspace
+                [ 0x66 ]        = strchar( 0x0C ), -- f form feed
+                [ 0x6E ]        = strchar( 0x0A ), -- n line feed
+                [ 0x72 ]        = strchar( 0x0D ), -- r carriage return
+                [ 0x74 ]        = strchar( 0x09 ), -- t tab
             },
 
-            _NumberCode = {
-                [0x65] = true,
-                [0x45] = true,
-                [0x2b] = true,
-                [0x2d] = true,
-                [0x2e] = true,
-                [0x30] = true,
-                [0x31] = true,
-                [0x32] = true,
-                [0x33] = true,
-                [0x34] = true,
-                [0x35] = true,
-                [0x36] = true,
-                [0x37] = true,
-                [0x38] = true,
-                [0x39] = true,
+            _NumberCode         = {
+                [0x65]          = true,
+                [0x45]          = true,
+                [0x2b]          = true,
+                [0x2d]          = true,
+                [0x2e]          = true,
+                [0x30]          = true,
+                [0x31]          = true,
+                [0x32]          = true,
+                [0x33]          = true,
+                [0x34]          = true,
+                [0x35]          = true,
+                [0x36]          = true,
+                [0x37]          = true,
+                [0x38]          = true,
+                [0x39]          = true,
             },
 
-            _ERR_MSG_NOTFINISHED    = "Unfinished json data.",
-            _ERR_MSG_UNEXPECTED     = "Unexpected char found at %d of the json.",
-            _ERR_MSG_NOT_NUMBER     = "%q is not a valid number at %d of the json.",
-            _ERR_MSG_TRUE           = "true is expected at %d of the json.",
-            _ERR_MSG_FALSE          = "false is expected at %d of the json.",
-            _ERR_MSG_NULL           = "null is expected at %d of the json.",
+            ERR_MSG_NOTFINISHED = "Unfinished json data.",
+            ERR_MSG_UNEXPECTED  = "Unexpected char found at %d of the json.",
+            ERR_MSG_NOT_NUMBER  = "%q is not a valid number at %d of the json.",
+            ERR_MSG_TRUE        = "true is expected at %d of the json.",
+            ERR_MSG_FALSE       = "false is expected at %d of the json.",
+            ERR_MSG_NULL        = "null is expected at %d of the json.",
 
-            _ERR_MSG_CLOSE_ARR      = "']' is expected to close the array started at %d of the json.",
-            _ERR_MSG_EXPECT_VALUE   = "A value is expected at %d of the json.",
-            _ERR_MSG_EXPECT_COMMA   = "',' is expected at %d of the json.",
+            ERR_MSG_CLOSE_ARR   = "']' is expected to close the array started at %d of the json.",
+            ERR_MSG_EXPECT_VALUE= "A value is expected at %d of the json.",
+            ERR_MSG_EXPECT_COMMA= "',' is expected at %d of the json.",
 
-            _ERR_MSG_CLOSE_OBJ      = "'}' is expected to close the object started at %d of the json.",
-            _ERR_MSG_END            = "object is not well closed at %d of the json.",
-            _ERR_MSG_EXPECT_KEY     = "A string name is expected at %d of the json.",
-            _ERR_MSG_EXPECT_COLON   = "':' is expected at %d of the json.",
-            _ERR_MSG_STRING_POS     = "The string value can't be used at %d of the json.",
-            _ERR_MSG_VALUE_POS      = "The value can't be used at %d of the json.",
+            ERR_MSG_CLOSE_OBJ   = "'}' is expected to close the object started at %d of the json.",
+            ERR_MSG_END         = "object is not well closed at %d of the json.",
+            ERR_MSG_EXPECT_KEY  = "A string name is expected at %d of the json.",
+            ERR_MSG_EXPECT_COLON= "':' is expected at %d of the json.",
+            ERR_MSG_STRING_POS  = "The string value can't be used at %d of the json.",
+            ERR_MSG_VALUE_POS   = "The value can't be used at %d of the json.",
 
-            _ERR_MSG_ESCAPE_CHAR    = "Unexpected escape char at %d of the json.",
+            ERR_MSG_ESCAPE_CHAR = "Unexpected escape char at %d of the json.",
 
-            _ERR_MSG_CLOSE_STR      = "'\"' is expected to close the string started at %d of the json.",
+            ERR_MSG_CLOSE_STR   = "'\"' is expected to close the string started at %d of the json.",
 
             -- Declare global variables
-            LoadJsonObject          = false,
-            LoadJsonArray           = false,
-            LoadJsonString          = false,
-            LoadJsonNumber          = false,
-            LoadJsonBoolean         = false,
-            LoadJsonData            = false,
-            DecodeUTF8              = false,
-            LoadJsonObjectUTF8      = false,
-            LoadJsonArrayUTF8       = false,
-            LoadJsonStringUTF8      = false,
-            LoadJsonNumberUTF8      = false,
-            LoadJsonBooleanUTF8     = false,
-            LoadJsonDataUTF8        = false,
-            LoadJson                = false,
+            LoadJsonObject      = false,
+            LoadJsonArray       = false,
+            LoadJsonString      = false,
+            LoadJsonNumber      = false,
+            LoadJsonBoolean     = false,
+            LoadJsonData        = false,
+            DecodeUTF8          = false,
+            LoadJsonObjectUTF8  = false,
+            LoadJsonArrayUTF8   = false,
+            LoadJsonStringUTF8  = false,
+            LoadJsonNumberUTF8  = false,
+            LoadJsonBooleanUTF8 = false,
+            LoadJsonDataUTF8    = false,
+            LoadJson            = false,
         }
 
         ------------------------------
         -- Load Json For Any Encoding
         ------------------------------
         function LoadJsonObject(self, iter, json, nxtp, code, jsonIndex)
-            local obj = {}
+            local obj           = {}
             local startIndex, token, prevToken, key, value
-            local pos = jsonIndex
+            local pos           = jsonIndex
 
             -- 0 : DEFAULT - "key" -> 1
             -- 1 : KEY - ":" -> 2
             -- 2 : SEP - 123 -> 3
             -- 3 : VALUE - , -> 0
-            prevToken = 0
+            prevToken           = 0
 
             startIndex, token, nxtp, value, jsonIndex = LoadJsonData(self, iter, json, nxtp, jsonIndex)
 
             while token do
                 if token == 4 then
                     if value == 0x7d then
-                        if not(prevToken == 0 or prevToken == 3) then error(_ERR_MSG_END:format(startIndex)) end
+                        if not(prevToken == 0 or prevToken == 3) then error(ERR_MSG_END:format(startIndex)) end
                         return 2, nxtp, obj, jsonIndex
                     elseif value == 0x3a then
-                        if prevToken ~= 1 then error(_ERR_MSG_EXPECT_KEY:format(startIndex)) end
-                        prevToken = 2
+                        if prevToken ~= 1 then error(ERR_MSG_EXPECT_KEY:format(startIndex)) end
+                        prevToken   = 2
                     elseif value == 0x2c then
-                        if prevToken ~= 3 then error(_ERR_MSG_EXPECT_VALUE:format(startIndex)) end
-                        prevToken = 0
+                        if prevToken ~= 3 then error(ERR_MSG_EXPECT_VALUE:format(startIndex)) end
+                        prevToken   = 0
                     else
-                        error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                        error(ERR_MSG_UNEXPECTED:format(startIndex))
                     end
                 elseif token == 3 then
                     if prevToken == 0 then
-                        prevToken = 1
-                        key = value
+                        prevToken   = 1
+                        key         = value
                     elseif prevToken == 2 then
-                        prevToken = 3
-                        obj[key] = value
+                        prevToken   = 3
+                        obj[key]    = value
                     else
-                        error(_ERR_MSG_STRING_POS:format(startIndex))
+                        error(ERR_MSG_STRING_POS:format(startIndex))
                     end
                 elseif token == 2 then
-                    if prevToken ~= 2 then error(_ERR_MSG_EXPECT_COLON:format(startIndex)) end
-                    prevToken = 3
-                    obj[key] = value
+                    if prevToken ~= 2 then error(ERR_MSG_EXPECT_COLON:format(startIndex)) end
+                    prevToken       = 3
+                    obj[key]        = value
                 end
 
                 startIndex, token, nxtp, value, jsonIndex = LoadJsonData(self, iter, json, nxtp, jsonIndex)
             end
 
-            error(_ERR_MSG_CLOSE_OBJ:format(pos))
+            error(ERR_MSG_CLOSE_OBJ:format(pos))
         end
 
         function LoadJsonArray(self, iter, json, nxtp, code, jsonIndex)
-            local arr = {}
+            local arr           = {}
             local startIndex, token, prevToken, value
-            local pos = jsonIndex
+            local pos           = jsonIndex
 
             -- 0 : DEFAULT - 123 -> 1
             -- 1 : VALUE - , -> 0
-            prevToken = 0
+            prevToken           = 0
 
             startIndex, token, nxtp, value, jsonIndex = LoadJsonData(self, iter, json, nxtp, jsonIndex)
 
@@ -472,113 +471,113 @@ PLoop(function(_ENV)
                     if value == 0x5d then
                         return 2, nxtp, arr, jsonIndex
                     elseif value == 0x2c then
-                        if prevToken ~= 1 then error(_ERR_MSG_EXPECT_VALUE:format(startIndex)) end
-                        prevToken = 0
+                        if prevToken ~= 1 then error(ERR_MSG_EXPECT_VALUE:format(startIndex)) end
+                        prevToken   = 0
                     else
-                        error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                        error(ERR_MSG_UNEXPECTED:format(startIndex))
                     end
                 elseif token == 3 or token == 2 then
-                    if prevToken ~= 0 then error(_ERR_MSG_EXPECT_COMMA:format(startIndex)) end
-                    prevToken = 1
+                    if prevToken ~= 0 then error(ERR_MSG_EXPECT_COMMA:format(startIndex)) end
+                    prevToken       = 1
                     if value ~= nil then tinsert(arr, value) end
                 else
-                    error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                    error(ERR_MSG_UNEXPECTED:format(startIndex))
                 end
 
                 startIndex, token, nxtp, value, jsonIndex = LoadJsonData(self, iter, json, nxtp, jsonIndex)
             end
 
-            error(_ERR_MSG_CLOSE_ARR:format(pos))
+            error(ERR_MSG_CLOSE_ARR:format(pos))
         end
 
         function LoadJsonString(self, iter, json, nxtp, code, jsonIndex)
-            local cache = self()
-            local pos = jsonIndex
+            local cache         = self()
+            local pos           = jsonIndex
 
-            nxtp, code = iter(json, nxtp)
-            jsonIndex = jsonIndex + 1
+            nxtp, code          = iter(json, nxtp)
+            jsonIndex           = jsonIndex + 1
 
             while code do
                 if code == 0x22 then
-                    local ret = tblconcat(cache)
+                    local ret   = tblconcat(cache)
                     self(cache)
                     return 3, nxtp, ret, jsonIndex
                 elseif code == 0x5c then
-                    nxtp, code = iter(json, nxtp)
-                    jsonIndex = jsonIndex + 1
+                    nxtp, code  = iter(json, nxtp)
+                    jsonIndex   = jsonIndex + 1
 
-                    local chr = _ESCAPE_CHAR[code]
+                    local chr   = _ESCAPE_CHAR[code]
                     if chr then
                         tinsert(cache, chr)
                     elseif code == 0x75 then
                         -- Unicode codepoint
-                        local high = ""
+                        local high  = ""
                         local savep = nxtp
                         local savei = jsonIndex
 
                         for i = 1, 4 do
-                            nxtp, code = iter(json, nxtp)
-                            jsonIndex = jsonIndex + 1
+                            nxtp, code  = iter(json, nxtp)
+                            jsonIndex   = jsonIndex + 1
 
-                            high = high .. EncodeData(code)
+                            high        = high .. EncodeData(code)
                         end
 
                         local codePoint = tonumber(high, 16)
                         if codePoint then
                             if codePoint >= 0xD800 and codePoint <= 0xDBFF then
-                                nxtp, code = iter(json, nxtp)
-                                jsonIndex = jsonIndex + 1
-                                savep = nxtp
-                                savei = jsonIndex
+                                nxtp, code  = iter(json, nxtp)
+                                jsonIndex   = jsonIndex + 1
+                                savep       = nxtp
+                                savei       = jsonIndex
 
                                 if code == 0x5c then
-                                    nxtp, code = iter(json, nxtp)
-                                    jsonIndex = jsonIndex + 1
+                                    nxtp, code          = iter(json, nxtp)
+                                    jsonIndex           = jsonIndex + 1
 
                                     if code == 0x75 then
-                                        local low = ""
+                                        local low       = ""
 
                                         for i = 1, 4 do
-                                            nxtp, code = iter(json, nxtp)
-                                            jsonIndex = jsonIndex + 1
+                                            nxtp, code  = iter(json, nxtp)
+                                            jsonIndex   = jsonIndex + 1
 
-                                            low = low .. EncodeData(code)
+                                            low         = low .. EncodeData(code)
                                         end
 
-                                        local lowCp = tonumber(low, 16)
+                                        local lowCp     = tonumber(low, 16)
                                         if lowCp and lowCp >= 0xDC00 and lowCp <= 0xDFFF then
-                                            codePoint = 0x2400 + (codePoint - 0xD800) * 0x400 + lowCp
+                                            codePoint   = 0x2400 + (codePoint - 0xD800) * 0x400 + lowCp
 
                                             tinsert(cache, EncodeData(codePoint))
                                         else
                                             tinsert(cache, "\\u")
                                             tinsert(cache, high)
 
-                                            nxtp = savep
-                                            jsonIndex = savei
+                                            nxtp        = savep
+                                            jsonIndex   = savei
                                         end
                                     else
                                         tinsert(cache, "\\u")
                                         tinsert(cache, high)
 
-                                        nxtp = savep
-                                        jsonIndex = savei
+                                        nxtp            = savep
+                                        jsonIndex       = savei
                                     end
                                 else
                                     tinsert(cache, "\\u")
                                     tinsert(cache, high)
 
                                     -- roll back
-                                    nxtp = savep
-                                    jsonIndex = savei
+                                    nxtp                = savep
+                                    jsonIndex           = savei
                                 end
                             else
                                 tinsert(cache, EncodeData(codePoint))
                             end
                         else
                             tinsert(cache, "\\u")
-                            nxtp = savep
-                            jsonIndex = savei
+                            nxtp        = savep
+                            jsonIndex   = savei
                         end
                     else
                         tinsert(cache, "\\")
@@ -588,141 +587,141 @@ PLoop(function(_ENV)
                     tinsert(cache, EncodeData(code))
                 end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
             end
 
-            error(_ERR_MSG_CLOSE_STR:format(pos))
+            error(ERR_MSG_CLOSE_STR:format(pos))
         end
 
         function LoadJsonNumber(self, iter, json, nxtp, code, jsonIndex)
-            local cache = self()
-            local prev = nxtp
-            local pos = jsonIndex
+            local cache         = self()
+            local prev          = nxtp
+            local pos           = jsonIndex
 
             while _NumberCode[code] do
                 tinsert(cache, EncodeData(code))
 
-                prev = nxtp
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
+                prev            = nxtp
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
             end
 
-            local content = tblconcat(cache)
+            local content       = tblconcat(cache)
             self(cache)
-            local ret = tonumber(content)
-            if not ret then error(_ERR_MSG_NOT_NUMBER:format(content, pos)) end
+            local ret           = tonumber(content)
+            if not ret then error(ERR_MSG_NOT_NUMBER:format(content, pos)) end
             if ret >= BIG_NUMBER or ret <= - BIG_NUMBER then ret = content end
             return 2, prev, ret, jsonIndex
         end
 
         function LoadJsonBoolean(self, iter, json, nxtp, code, jsonIndex)
-            local pos = jsonIndex
+            local pos           = jsonIndex
 
             if code == 0x74 then
                 -- true
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x72 then error(_ERR_MSG_TRUE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x72 then error(ERR_MSG_TRUE:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x75 then error(_ERR_MSG_TRUE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x75 then error(ERR_MSG_TRUE:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x65 then error(_ERR_MSG_TRUE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x65 then error(ERR_MSG_TRUE:format(pos)) end
 
                 return 2, nxtp, true, jsonIndex
             elseif code == 0x66 then
                 -- false
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x61 then error(_ERR_MSG_FALSE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x61 then error(ERR_MSG_FALSE:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x6c then error(_ERR_MSG_FALSE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x6c then error(ERR_MSG_FALSE:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x73 then error(_ERR_MSG_FALSE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x73 then error(ERR_MSG_FALSE:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x65 then error(_ERR_MSG_FALSE:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x65 then error(ERR_MSG_FALSE:format(pos)) end
 
                 return 2, nxtp, false, jsonIndex
             elseif code == 0x6e then
                 -- null
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x75 then error(_ERR_MSG_NULL:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x75 then error(ERR_MSG_NULL:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x6c then error(_ERR_MSG_NULL:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x6c then error(ERR_MSG_NULL:format(pos)) end
 
-                nxtp, code = iter(json, nxtp)
-                jsonIndex = jsonIndex + 1
-                if code ~= 0x6c then error(_ERR_MSG_NULL:format(pos)) end
+                nxtp, code      = iter(json, nxtp)
+                jsonIndex       = jsonIndex + 1
+                if code ~= 0x6c then error(ERR_MSG_NULL:format(pos)) end
 
                 return 2, nxtp, nil, jsonIndex
             end
 
-            error(_ERR_MSG_UNEXPECTED:format(pos))
+            error(ERR_MSG_UNEXPECTED:format(pos))
         end
 
         export {
-            _TokenMap  = {
-                [0x20] = 1,
-                [0x09] = 1,
-                [0x0a] = 1,
-                [0x0d] = 1,
+            _TokenMap           = {
+                [0x20]          = 1,
+                [0x09]          = 1,
+                [0x0a]          = 1,
+                [0x0d]          = 1,
 
-                [0x2c] = 4,
-                [0x3a] = 4,
-                [0x5d] = 4,
-                [0x7d] = 4,
+                [0x2c]          = 4,
+                [0x3a]          = 4,
+                [0x5d]          = 4,
+                [0x7d]          = 4,
 
-                [0x74] = LoadJsonBoolean,
-                [0x66] = LoadJsonBoolean,
-                [0x6e] = LoadJsonBoolean,
+                [0x74]          = LoadJsonBoolean,
+                [0x66]          = LoadJsonBoolean,
+                [0x6e]          = LoadJsonBoolean,
 
-                [0x22] = LoadJsonString,
+                [0x22]          = LoadJsonString,
 
-                [0x7b] = LoadJsonObject,
+                [0x7b]          = LoadJsonObject,
 
-                [0x5b] = LoadJsonArray,
+                [0x5b]          = LoadJsonArray,
 
-                [0x2d] = LoadJsonNumber,
-                [0x30] = LoadJsonNumber,
-                [0x31] = LoadJsonNumber,
-                [0x32] = LoadJsonNumber,
-                [0x33] = LoadJsonNumber,
-                [0x34] = LoadJsonNumber,
-                [0x35] = LoadJsonNumber,
-                [0x36] = LoadJsonNumber,
-                [0x37] = LoadJsonNumber,
-                [0x38] = LoadJsonNumber,
-                [0x39] = LoadJsonNumber,
+                [0x2d]          = LoadJsonNumber,
+                [0x30]          = LoadJsonNumber,
+                [0x31]          = LoadJsonNumber,
+                [0x32]          = LoadJsonNumber,
+                [0x33]          = LoadJsonNumber,
+                [0x34]          = LoadJsonNumber,
+                [0x35]          = LoadJsonNumber,
+                [0x36]          = LoadJsonNumber,
+                [0x37]          = LoadJsonNumber,
+                [0x38]          = LoadJsonNumber,
+                [0x39]          = LoadJsonNumber,
             }
         }
 
         function LoadJsonData(self, iter, json, nxtp, jsonIndex)
             local code
 
-            nxtp, code = iter(json, nxtp)
-            jsonIndex = jsonIndex + 1
+            nxtp, code          = iter(json, nxtp)
+            jsonIndex           = jsonIndex + 1
 
             while true do
-                local token = _TokenMap[code]
+                local token     = _TokenMap[code]
 
-                if not token then error(_ERR_MSG_UNEXPECTED:format(jsonIndex)) end
+                if not token then error(ERR_MSG_UNEXPECTED:format(jsonIndex)) end
 
                 if token == 1 then
-                    nxtp, code = iter(json, nxtp)
-                    jsonIndex = jsonIndex + 1
+                    nxtp, code  = iter(json, nxtp)
+                    jsonIndex   = jsonIndex + 1
                 elseif token == 4 then
                     return jsonIndex, token, nxtp, code, jsonIndex
                 else
@@ -736,7 +735,7 @@ PLoop(function(_ENV)
         ------------------------------
         do  -- DecodeUTF8
             function DecodeUTF8(json, nxtp)
-                local byte = strbyte(json, nxtp)
+                local byte      = strbyte(json, nxtp)
                 if not byte then return nil end
 
                 if byte < 0xC2 then
@@ -776,10 +775,10 @@ PLoop(function(_ENV)
             -- Lua 5.3 - bitwise oper
             if LUA_VERSION >= 5.3 then
                 -- Use load since 5.1 & 5.2 can't read the bitwise oper
-                DecodeUTF8 = load[[
-                    local strbyte = ...
+                DecodeUTF8      = load[[
+                    local strbyte   = ...
                     return function (json, nxtp)
-                        local byte = strbyte(json, nxtp)
+                        local byte  = strbyte(json, nxtp)
                         if not byte then return nil end
 
                         if byte < 0x80 then
@@ -823,7 +822,7 @@ PLoop(function(_ENV)
                 local rshift    = _G.bit32 and bit32.rshift or bit.rshift
 
                 function DecodeUTF8(json, nxtp)
-                    local byte = strbyte(json, nxtp)
+                    local byte  = strbyte(json, nxtp)
                     if not byte then return nil end
 
                     if byte < 0x80 then
@@ -864,62 +863,62 @@ PLoop(function(_ENV)
         end
 
         function LoadJsonObjectUTF8(self, json, nxtp, code, jsonIndex)
-            local obj = {}
+            local obj           = {}
             local startIndex, token, prevToken, key, value
-            local pos = jsonIndex
+            local pos           = jsonIndex
 
             -- 0 : DEFAULT - "key" -> 1
             -- 1 : KEY - ":" -> 2
             -- 2 : SEP - 123 -> 3
             -- 3 : VALUE - , -> 0
-            prevToken = 0
+            prevToken           = 0
 
             startIndex, token, nxtp, value, jsonIndex = LoadJsonDataUTF8(self, json, nxtp, jsonIndex)
 
             while token do
                 if token == 4 then
                     if value == 0x7d then
-                        if not(prevToken == 0 or prevToken == 3) then error(_ERR_MSG_END:format(startIndex)) end
+                        if not(prevToken == 0 or prevToken == 3) then error(ERR_MSG_END:format(startIndex)) end
                         return 2, nxtp, obj, jsonIndex
                     elseif value == 0x3a then
-                        if prevToken ~= 1 then error(_ERR_MSG_EXPECT_KEY:format(startIndex)) end
-                        prevToken = 2
+                        if prevToken ~= 1 then error(ERR_MSG_EXPECT_KEY:format(startIndex)) end
+                        prevToken   = 2
                     elseif value == 0x2c then
-                        if prevToken ~= 3 then error(_ERR_MSG_EXPECT_VALUE:format(startIndex)) end
-                        prevToken = 0
+                        if prevToken ~= 3 then error(ERR_MSG_EXPECT_VALUE:format(startIndex)) end
+                        prevToken   = 0
                     else
-                        error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                        error(ERR_MSG_UNEXPECTED:format(startIndex))
                     end
                 elseif token == 3 then
                     if prevToken == 0 then
-                        prevToken = 1
-                        key = value
+                        prevToken   = 1
+                        key         = value
                     elseif prevToken == 2 then
-                        prevToken = 3
-                        obj[key] = value
+                        prevToken   = 3
+                        obj[key]    = value
                     else
-                        error(_ERR_MSG_STRING_POS:format(startIndex))
+                        error(ERR_MSG_STRING_POS:format(startIndex))
                     end
                 elseif token == 2 then
-                    if prevToken ~= 2 then error(_ERR_MSG_EXPECT_COLON:format(startIndex)) end
-                    prevToken = 3
-                    obj[key] = value
+                    if prevToken ~= 2 then error(ERR_MSG_EXPECT_COLON:format(startIndex)) end
+                    prevToken       = 3
+                    obj[key]        = value
                 end
 
                 startIndex, token, nxtp, value, jsonIndex = LoadJsonDataUTF8(self, json, nxtp, jsonIndex)
             end
 
-            error(_ERR_MSG_CLOSE_OBJ:format(pos))
+            error(ERR_MSG_CLOSE_OBJ:format(pos))
         end
 
         function LoadJsonArrayUTF8(self, json, nxtp, code, jsonIndex)
-            local arr = {}
+            local arr           = {}
             local startIndex, token, prevToken, value
-            local pos = jsonIndex
+            local pos           = jsonIndex
 
             -- 0 : DEFAULT - 123 -> 1
             -- 1 : VALUE - , -> 0
-            prevToken = 0
+            prevToken           = 0
 
             startIndex, token, nxtp, value, jsonIndex = LoadJsonDataUTF8(self, json, nxtp, jsonIndex)
 
@@ -928,34 +927,34 @@ PLoop(function(_ENV)
                     if value == 0x5d then
                         return 2, nxtp, arr, jsonIndex
                     elseif value == 0x2c then
-                        if prevToken ~= 1 then error(_ERR_MSG_EXPECT_VALUE:format(startIndex)) end
-                        prevToken = 0
+                        if prevToken ~= 1 then error(ERR_MSG_EXPECT_VALUE:format(startIndex)) end
+                        prevToken   = 0
                     else
-                        error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                        error(ERR_MSG_UNEXPECTED:format(startIndex))
                     end
                 elseif token == 3 or token == 2 then
-                    if prevToken ~= 0 then error(_ERR_MSG_EXPECT_COMMA:format(startIndex)) end
-                    prevToken = 1
+                    if prevToken ~= 0 then error(ERR_MSG_EXPECT_COMMA:format(startIndex)) end
+                    prevToken       = 1
                     if value ~= nil then tinsert(arr, value) end
                 else
-                    error(_ERR_MSG_UNEXPECTED:format(startIndex))
+                    error(ERR_MSG_UNEXPECTED:format(startIndex))
                 end
 
                 startIndex, token, nxtp, value, jsonIndex = LoadJsonDataUTF8(self, json, nxtp, jsonIndex)
             end
 
-            error(_ERR_MSG_CLOSE_ARR:format(pos))
+            error(ERR_MSG_CLOSE_ARR:format(pos))
         end
 
         function LoadJsonStringUTF8(self, json, nxtp, code, jsonIndex)
             local cache
             local step
-            local pos       = jsonIndex
-            local startp    = nxtp
+            local pos           = jsonIndex
+            local startp        = nxtp
 
-            step, code      = DecodeUTF8(json, nxtp)
-            nxtp = nxtp + step
-            jsonIndex       = jsonIndex + 1
+            step, code          = DecodeUTF8(json, nxtp)
+            nxtp                = nxtp + step
+            jsonIndex           = jsonIndex + 1
 
             while code do
                 if step > 1 then
@@ -964,111 +963,111 @@ PLoop(function(_ENV)
                     if cache then
                         tinsert(cache, strsub(json, startp, nxtp - 2))
 
-                        local ret = tblconcat(cache)
+                        local ret   = tblconcat(cache)
                         self(cache)
                         return 3, nxtp, ret, jsonIndex
                     else
                         return 3, nxtp, strsub(json, startp, nxtp - 2), jsonIndex
                     end
                 elseif code == 0x5c then
-                    cache = cache or self()
+                    cache           = cache or self()
                     tinsert(cache, strsub(json, startp, nxtp - 2))
 
-                    step, code = DecodeUTF8(json, nxtp)
+                    step, code      = DecodeUTF8(json, nxtp)
 
-                    local chr = _ESCAPE_CHAR[code]
+                    local chr       = _ESCAPE_CHAR[code]
                     if chr then
-                        nxtp = nxtp + step
-                        jsonIndex = jsonIndex + 1
+                        nxtp        = nxtp + step
+                        jsonIndex   = jsonIndex + 1
 
                         tinsert(cache, chr)
-                        startp = nxtp
+                        startp      = nxtp
                     elseif code == 0x75 then
                         -- Unicode codepoint
-                        local high = strsub(json, nxtp + 1, nxtp + 4)
+                        local high  = strsub(json, nxtp + 1, nxtp + 4)
 
                         local codePoint = #high == 4 and tonumber(high, 16)
                         if codePoint then
-                            nxtp = nxtp + 5
-                            jsonIndex = jsonIndex + 5
+                            nxtp        = nxtp + 5
+                            jsonIndex   = jsonIndex + 5
 
                             if codePoint >= 0xD800 and codePoint <= 0xDBFF then
-                                step, code = DecodeUTF8(json, nxtp)
+                                step, code          = DecodeUTF8(json, nxtp)
 
                                 if code == 0x5c then
-                                    step, code = DecodeUTF8(json, nxtp + 1)
+                                    step, code      = DecodeUTF8(json, nxtp + 1)
 
                                     if code == 0x75 then
-                                        local low = strsub(json, nxtp + 2, nxtp + 5)
+                                        local low   = strsub(json, nxtp + 2, nxtp + 5)
 
                                         local lowCp = #low == 4 and tonumber(low, 16)
                                         if lowCp and lowCp >= 0xDC00 and lowCp <= 0xDFFF then
-                                            codePoint = 0x2400 + (codePoint - 0xD800) * 0x400 + lowCp
+                                            codePoint   = 0x2400 + (codePoint - 0xD800) * 0x400 + lowCp
 
-                                            nxtp = nxtp + 6
-                                            jsonIndex = jsonIndex + 6
+                                            nxtp        = nxtp + 6
+                                            jsonIndex   = jsonIndex + 6
 
                                             tinsert(cache, EncodeData(codePoint))
-                                            startp = nxtp
+                                            startp      = nxtp
                                         else
                                             tinsert(cache, "\\u")
                                             tinsert(cache, high)
 
-                                            startp = nxtp
+                                            startp      = nxtp
                                         end
                                     else
                                         tinsert(cache, "\\u")
                                         tinsert(cache, high)
 
-                                        startp = nxtp
+                                        startp      = nxtp
                                     end
                                 else
                                     tinsert(cache, "\\u")
                                     tinsert(cache, high)
 
-                                    startp = nxtp
+                                    startp          = nxtp
                                 end
                             else
                                 tinsert(cache, EncodeData(codePoint))
-                                startp = nxtp
+                                startp  = nxtp
                             end
                         else
-                            nxtp = nxtp + step
-                            jsonIndex = jsonIndex + 1
+                            nxtp        = nxtp + step
+                            jsonIndex   = jsonIndex + 1
 
                             tinsert(cache, "\\u")
-                            startp = nxtp
+                            startp      = nxtp
                         end
                     else
                         tinsert(cache, "\\")
-                        startp = nxtp
+                        startp  = nxtp
                     end
                 end
 
-                step, code = DecodeUTF8(json, nxtp)
-                nxtp = nxtp + step
-                jsonIndex = jsonIndex + 1
+                step, code      = DecodeUTF8(json, nxtp)
+                nxtp            = nxtp + step
+                jsonIndex       = jsonIndex + 1
             end
 
-            error(_ERR_MSG_CLOSE_STR:format(pos))
+            error(ERR_MSG_CLOSE_STR:format(pos))
         end
 
         function LoadJsonNumberUTF8(self, json, nxtp, code, jsonIndex)
-            local pos = jsonIndex
-            local startp = nxtp - 1
+            local pos           = jsonIndex
+            local startp        = nxtp - 1
 
             while _NumberCode[code] do
-                code = strbyte(json, nxtp)
-                nxtp = nxtp + 1
-                jsonIndex = jsonIndex + 1
+                code            = strbyte(json, nxtp)
+                nxtp            = nxtp + 1
+                jsonIndex       = jsonIndex + 1
             end
 
-            nxtp = nxtp - 1
-            jsonIndex = jsonIndex - 1
+            nxtp                = nxtp - 1
+            jsonIndex           = jsonIndex - 1
 
-            local ct = strsub(json, startp, nxtp - 1)
-            local ret = tonumber(ct)
-            if not ret then error(_ERR_MSG_NOT_NUMBER:format(ct, pos)) end
+            local ct            = strsub(json, startp, nxtp - 1)
+            local ret           = tonumber(ct)
+            if not ret then error(ERR_MSG_NOT_NUMBER:format(ct, pos)) end
             if ret >= BIG_NUMBER or ret <= - BIG_NUMBER then ret = ct end
             return 2, nxtp, ret, jsonIndex
         end
@@ -1079,78 +1078,78 @@ PLoop(function(_ENV)
                 if strsub(json, nxtp, nxtp + 2) == "rue" then
                     return 2, nxtp + 3, true, jsonIndex + 3
                 else
-                    error(_ERR_MSG_TRUE:format(jsonIndex))
+                    error(ERR_MSG_TRUE:format(jsonIndex))
                 end
             elseif code == 0x66 then
                 -- false
                 if strsub(json, nxtp, nxtp + 3) == "alse" then
                     return 2, nxtp + 4, false, jsonIndex + 4
                 else
-                    error(_ERR_MSG_FALSE:format(jsonIndex))
+                    error(ERR_MSG_FALSE:format(jsonIndex))
                 end
             elseif code == 0x6e then
                 -- null
                 if strsub(json, nxtp, nxtp + 2) == "ull" then
                     return 2, nxtp + 3, nil, jsonIndex + 3
                 else
-                    error(_ERR_MSG_NULL:format(jsonIndex))
+                    error(ERR_MSG_NULL:format(jsonIndex))
                 end
             end
 
-            error(_ERR_MSG_UNEXPECTED:format(jsonIndex))
+            error(ERR_MSG_UNEXPECTED:format(jsonIndex))
         end
 
         export {
-            _TokenMapUTF8 = {
-                [0x20] = 1,
-                [0x09] = 1,
-                [0x0a] = 1,
-                [0x0d] = 1,
+            _TokenMapUTF8       = {
+                [0x20]          = 1,
+                [0x09]          = 1,
+                [0x0a]          = 1,
+                [0x0d]          = 1,
 
-                [0x2c] = 4,
-                [0x3a] = 4,
-                [0x5d] = 4,
-                [0x7d] = 4,
+                [0x2c]          = 4,
+                [0x3a]          = 4,
+                [0x5d]          = 4,
+                [0x7d]          = 4,
 
-                [0x74] = LoadJsonBooleanUTF8,
-                [0x66] = LoadJsonBooleanUTF8,
-                [0x6e] = LoadJsonBooleanUTF8,
+                [0x74]          = LoadJsonBooleanUTF8,
+                [0x66]          = LoadJsonBooleanUTF8,
+                [0x6e]          = LoadJsonBooleanUTF8,
 
-                [0x22] = LoadJsonStringUTF8,
+                [0x22]          = LoadJsonStringUTF8,
 
-                [0x7b] = LoadJsonObjectUTF8,
+                [0x7b]          = LoadJsonObjectUTF8,
 
-                [0x5b] = LoadJsonArrayUTF8,
+                [0x5b]          = LoadJsonArrayUTF8,
 
-                [0x2d] = LoadJsonNumberUTF8,
-                [0x30] = LoadJsonNumberUTF8,
-                [0x31] = LoadJsonNumberUTF8,
-                [0x32] = LoadJsonNumberUTF8,
-                [0x33] = LoadJsonNumberUTF8,
-                [0x34] = LoadJsonNumberUTF8,
-                [0x35] = LoadJsonNumberUTF8,
-                [0x36] = LoadJsonNumberUTF8,
-                [0x37] = LoadJsonNumberUTF8,
-                [0x38] = LoadJsonNumberUTF8,
-                [0x39] = LoadJsonNumberUTF8,
+                [0x2d]          = LoadJsonNumberUTF8,
+                [0x30]          = LoadJsonNumberUTF8,
+                [0x31]          = LoadJsonNumberUTF8,
+                [0x32]          = LoadJsonNumberUTF8,
+                [0x33]          = LoadJsonNumberUTF8,
+                [0x34]          = LoadJsonNumberUTF8,
+                [0x35]          = LoadJsonNumberUTF8,
+                [0x36]          = LoadJsonNumberUTF8,
+                [0x37]          = LoadJsonNumberUTF8,
+                [0x38]          = LoadJsonNumberUTF8,
+                [0x39]          = LoadJsonNumberUTF8,
             }
         }
 
         function LoadJsonDataUTF8(self, json, nxtp, jsonIndex)
             local code
 
-            code = strbyte(json, nxtp)
-            nxtp = nxtp + 1
+            code                = strbyte(json, nxtp)
+            nxtp                = nxtp + 1
 
             while true do
-                local token = _TokenMapUTF8[code]
+                local token     = _TokenMapUTF8[code]
 
-                if not token then error(_ERR_MSG_UNEXPECTED:format(jsonIndex)) end
-                jsonIndex = jsonIndex + 1
+                if not token then error(ERR_MSG_UNEXPECTED:format(jsonIndex)) end
+                jsonIndex       = jsonIndex + 1
 
                 if token == 1 then
-                    code = strbyte(json, nxtp)
-                    nxtp = nxtp + 1
+                    code        = strbyte(json, nxtp)
+                    nxtp        = nxtp + 1
                 elseif token == 4 then
                     return jsonIndex, token, nxtp, code, jsonIndex
                 else
@@ -1176,22 +1175,22 @@ PLoop(function(_ENV)
                 local ok, msg, token, _, obj = pcall(LoadJsonDataUTF8, self, json, 1, 0)
 
                 if not ok then
-                    msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
+                    msg         = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
                     error(msg, 2)
                 end
 
                 return obj
             elseif first == 0 then
-                decode = UTF16BEDecode
+                decode          = UTF16BEDecodes
             else
-                decode = UTF16LEDecode
+                decode          = UTF16LEDecodes
             end
 
             local iter, tar, startp = decode(json)
             local ok, msg, token, _, obj = pcall(LoadJsonData, self, iter, tar, startp, 0)
 
             if not ok then
-                msg = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
+                msg             = strtrim(msg:match(":%d+:%s*(.-)$") or msg)
                 error(msg, 2)
             end
 
@@ -1211,11 +1210,11 @@ PLoop(function(_ENV)
             wipe                = Toolset.wipe,
             type                = type,
             getmetatable        = getmetatable,
-            SerializeDataWithWriter = SerializeDataWithWriter,
+            SerializeDataWithWriter         = SerializeDataWithWriter,
             SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
-            SerializeSimpleData = SerializeSimpleData,
-            SerializeDataWithWrite = SerializeDataWithWrite,
-            SerializeDataWithWriteNoIndent = SerializeDataWithWriteNoIndent,
+            SerializeSimpleData             = SerializeSimpleData,
+            SerializeDataWithWrite          = SerializeDataWithWrite,
+            SerializeDataWithWriteNoIndent  = SerializeDataWithWriteNoIndent,
         }
 
         -----------------------------------
@@ -1236,7 +1235,7 @@ PLoop(function(_ENV)
         __Arguments__{ Any }
         function Serialize(self, data)
             if type(data) == "table" and getmetatable(data) == nil then
-                local cache = self()
+                local cache     = self()
 
                 if self.Indent then
                     SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak)
@@ -1244,7 +1243,7 @@ PLoop(function(_ENV)
                     SerializeDataWithWriterNoIndent(data, tinsert, cache)
                 end
 
-                local ret = tblconcat(cache)
+                local ret       = tblconcat(cache)
 
                 self(cache)
 
@@ -1283,17 +1282,17 @@ PLoop(function(_ENV)
 
         --- Deserialize the data to common lua data.
         __Arguments__{ String }
-        Deserialize = LoadJson
+        Deserialize             = LoadJson
 
         __Arguments__{ System.IO.TextReader }
         function Deserialize(self, reader)
-            local data = reader:ReadToEnd()
+            local data          = reader:ReadToEnd()
             if data then return LoadJson(self, data) end
         end
 
         __Arguments__{ Function }
         function Deserialize(self, read)
-            local data = List(read):Join()
+            local data          = List(read):Join()
             if data then return LoadJson(self, data) end
         end
 

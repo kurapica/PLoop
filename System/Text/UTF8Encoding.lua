@@ -37,45 +37,45 @@ PLoop(function(_ENV)
 
     -- Default
     function decode(str, startp)
-        if not startp then return nil end
+        startp                  = startp or 1
 
-        local byte = strbyte(str, startp)
+        local byte              = strbyte(str, startp)
         if not byte then return nil end
 
         if byte < 0x80 then
             -- 1-byte
-            return startp + 1, byte
+            return byte, 1
         elseif byte < 0xC2 then
             -- Error
-            return startp + 1, byte + 0xDC00
+            return byte + 0xDC00, 1
         elseif byte < 0xE0 then
             -- 2-byte
-            local sbyte = strbyte(str, startp + 1)
+            local sbyte         = strbyte(str, startp + 1)
             if not sbyte or floor(sbyte / 0x40) ~= 2 then
                 -- Error
-                return startp + 1, byte + 0xDC00
+                return byte + 0xDC00, 1
             end
-            return startp + 2, (byte * 0x40) + sbyte - 0x3080
+            return (byte * 0x40) + sbyte - 0x3080, 2
         elseif byte < 0xF0 then
             -- 3-byte
-            local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
+            local sbyte, tbyte  = strbyte(str, startp + 1, startp + 2)
             if not (sbyte and tbyte) or floor(sbyte / 0x40) ~= 2 or (byte == 0xE0 and sbyte < 0xA0) or floor(tbyte / 0x40) ~= 2 then
                 -- Error
-                return startp + 1, byte + 0xDC00
+                return byte + 0xDC00, 1
             end
-            return startp + 3, (byte * 0x1000) + (sbyte * 0x40) + tbyte - 0xE2080
+            return (byte * 0x1000) + (sbyte * 0x40) + tbyte - 0xE2080, 3
         elseif byte < 0xF5 then
             -- 4-byte
             local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
             if not (sbyte and tbyte and fbyte) or floor(sbyte / 0x40) ~= 2 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or floor(tbyte / 0x40) ~= 2 or floor(fbyte / 0x40) ~= 2 then
                 -- Error
-                return startp + 1, byte + 0xDC00
+                return byte + 0xDC00, 1
             end
 
-            return startp + 4, (byte * 0x40000) + (sbyte * 0x1000) + (tbyte * 0x40) + fbyte - 0x3C82080
+            return (byte * 0x40000) + (sbyte * 0x1000) + (tbyte * 0x40) + fbyte - 0x3C82080, 4
         else
             -- Error
-            return startp + 1, byte + 0xDC00
+            return byte + 0xDC00, 1
         end
     end
 
@@ -112,7 +112,7 @@ PLoop(function(_ENV)
             end
         end
 
-        error(("%s is not a valid unicode."):format(code))
+        error(("%s is not a valid unicode."):format(code), 2)
     end
 
     -- Lua 5.3 - bitwise oper
@@ -120,43 +120,43 @@ PLoop(function(_ENV)
         -- Use load since 5.1 & 5.2 can't read the bitwise oper
         decode = loadsnippet([[
             return function (str, startp)
-                if not startp then return nil end
+                startp          = startp or 1
 
-                local byte = strbyte(str, startp)
+                local byte      = strbyte(str, startp)
                 if not byte then return nil end
 
                 if byte < 0x80 then
                     -- 1-byte
-                    return startp + 1, byte
+                    return byte, 1
                 elseif byte < 0xC2 then
                     -- Error
-                    return startp + 1, byte + 0xDC00
+                    return byte + 0xDC00, 1
                 elseif byte < 0xE0 then
                     -- 2-byte
                     local sbyte = strbyte(str, startp + 1)
                     if not sbyte or (sbyte & 0xC0) ~= 0x80 then
                         -- Error
-                        return startp + 1, byte + 0xDC00
+                        return byte + 0xDC00, 1
                     end
-                    return startp + 2, (byte << 6) + sbyte - 0x3080
+                    return (byte << 6) + sbyte - 0x3080, 2
                 elseif byte < 0xF0 then
                     -- 3-byte
                     local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
                     if not (sbyte and tbyte) or (sbyte & 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or (tbyte & 0xC0) ~= 0x80 then
                         -- Error
-                        return startp + 1, byte + 0xDC00
+                        return byte + 0xDC00, 1
                     end
-                    return startp + 3, (byte << 12) + (sbyte << 6) + tbyte - 0xE2080
+                    return (byte << 12) + (sbyte << 6) + tbyte - 0xE2080, 3
                 elseif byte < 0xF5 then
                     -- 4-byte
                     local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
                     if not (sbyte and tbyte and fbyte) or (sbyte & 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or (tbyte & 0xC0) ~= 0x80 or (fbyte & 0xC0) ~= 0x80 then
                         -- Error
-                        return startp + 1, byte + 0xDC00
+                        return byte + 0xDC00, 1
                     end
-                    return startp + 4, (byte << 18) + (sbyte << 12) + (tbyte << 6) + fbyte - 0x3C82080
+                    return (byte << 18) + (sbyte << 12) + (tbyte << 6) + fbyte - 0x3C82080, 4
                 else
-                    return startp + 1, byte + 0xDC00
+                    return byte + 0xDC00, 1
                 end
             end
         ]], "UTF8_DECODE", _ENV)()
@@ -195,7 +195,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                error(("%s is not a valid code_point."):format(code))
+                error(("%s is not a valid code_point."):format(code), 2)
             end
         ]], "UTF8_ENCODE", _ENV)()
     end
@@ -203,49 +203,49 @@ PLoop(function(_ENV)
     -- Lua 5.2 - bit32 lib or luajit bit lib
     if (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
         export {
-            band    = _G.bit32 and bit32.band   or bit.band,
-            lshift  = _G.bit32 and bit32.lshift or bit.lshift,
-            rshift  = _G.bit32 and bit32.rshift or bit.rshift,
+            band                = _G.bit32 and bit32.band   or bit.band,
+            lshift              = _G.bit32 and bit32.lshift or bit.lshift,
+            rshift              = _G.bit32 and bit32.rshift or bit.rshift,
         }
 
         function decode(str, startp)
-            if not startp then return nil end
+            startp              = startp or 1
 
-            local byte = strbyte(str, startp)
+            local byte          = strbyte(str, startp)
             if not byte then return nil end
 
             if byte < 0x80 then
                 -- 1-byte
-                return startp + 1, byte
+                return byte, 1
             elseif byte < 0xC2 then
                 -- Error
-                return startp + 1, byte + 0xDC00
+                return byte + 0xDC00, 1
             elseif byte < 0xE0 then
                 -- 2-byte
-                local sbyte = strbyte(str, startp + 1)
+                local sbyte     = strbyte(str, startp + 1)
                 if not sbyte or band(sbyte, 0xC0) ~= 0x80 then
                     -- Error
-                    return startp + 1, byte + 0xDC00
+                    return byte + 0xDC00, 1
                 end
-                return startp + 2, lshift(byte, 6) + sbyte - 0x3080
+                return lshift(byte, 6) + sbyte - 0x3080, 2
             elseif byte < 0xF0 then
                 -- 3-byte
                 local sbyte, tbyte = strbyte(str, startp + 1, startp + 2)
                 if not (sbyte and tbyte) or band(sbyte, 0xC0) ~= 0x80 or (byte == 0xE0 and sbyte < 0xA0) or band(tbyte, 0xC0) ~= 0x80 then
                     -- Error
-                    return startp + 1, byte + 0xDC00
+                    return byte + 0xDC00, 1
                 end
-                return startp + 3, lshift(byte, 12) + lshift(sbyte, 6) + tbyte - 0xE2080
+                return lshift(byte, 12) + lshift(sbyte, 6) + tbyte - 0xE2080, 3
             elseif byte < 0xF5 then
                 -- 4-byte
                 local sbyte, tbyte, fbyte = strbyte(str, startp + 1, startp + 3)
                 if not (sbyte and tbyte and fbyte) or band(sbyte, 0xC0) ~= 0x80 or (byte == 0xF0 and sbyte < 0x90) or (byte == 0xF4 and sbyte >= 0x90) or band(tbyte, 0xC0) ~= 0x80 or band(fbyte, 0xC0) ~= 0x80 then
                     -- Error
-                    return startp + 1, byte + 0xDC00
+                    return byte + 0xDC00, 1
                 end
-                return startp + 4, lshift(byte, 18) + lshift(sbyte, 12) + lshift(tbyte, 6) + fbyte - 0x3C82080
+                return lshift(byte, 18) + lshift(sbyte, 12) + lshift(tbyte, 6) + fbyte - 0x3C82080, 4
             else
-                return startp + 1, byte + 0xDC00
+                return byte + 0xDC00, 1
             end
         end
 
@@ -282,7 +282,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            error(("%s is not a valid code_point."):format(code))
+            error(("%s is not a valid code_point."):format(code), 2)
         end
     end
 
@@ -295,41 +295,8 @@ PLoop(function(_ENV)
     31  U+4000000   U+7FFFFFFF  6   1111110x    10xxxxxx    10xxxxxx    10xxxxxx    10xxxxxx    10xxxxxx
     ]]
     --- Represents the utf-8 encoding.
-    __Abstract__()
-    class "UTF8Encoding" (function(_ENV)
-        inherit "Encoding"
-
-        export { encode = encode, decode = decode, type = type, ipairs = ipairs, tconcat = table.concat, tinsert = table.insert }
-
-        __Static__()
-        property "EncodingName" { Set = false, Default = "UTF-8" }
-
-        --- Decode to the unicode code points
-        function Decode(str, startp) return decode, str, startp or 1 end
-
-        --- Encode the unicode code points
-        function Encode(codes, arg1, arg2)
-            local ty = type(codes)
-            if ty == "number" then
-                return encode(codes)
-            elseif ty == "table" then
-                local cache = {}
-
-                for _, code in ipairs(codes) do
-                    tinsert(cache, encode(code))
-                end
-
-                return tconcat(cache)
-            elseif ty == "function" then
-                local cache = {}
-
-                for _, code in codes, arg1, arg2 do
-                    tinsert(cache, encode(code))
-                end
-
-                return tconcat(cache)
-            end
-        end
-    end)
-
+    System.Text.Encoding "UTF8Encoding" {
+        encode                  = encode,
+        decode                  = decode,
+    }
 end)

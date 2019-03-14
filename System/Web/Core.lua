@@ -522,7 +522,7 @@ PLoop(function(_ENV)
         end
 
         --- Encodes a string to be displayed in a browser
-        __Arguments__{ String, -System.Text.Encoding/nil }
+        __Arguments__{ String, System.Text.Encoding/nil }
         __Static__() function HtmlEncode(text, encode)
             local iter, tar, idx= (encode or UTF8Encoding).Decode(text)
             local byte
@@ -572,7 +572,7 @@ PLoop(function(_ENV)
         end
 
         --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-        __Arguments__{ String, -System.Text.Encoding/nil }
+        __Arguments__{ String, System.Text.Encoding/nil }
         __Static__() function HtmlDecode(text, encode)
             encode              = (encode or UTF8Encoding).Encode
             return (strgsub(text, "&(#?)([xX]?)([^&]+);", function(isNumber, isHex, entity)
