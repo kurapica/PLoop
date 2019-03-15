@@ -727,12 +727,8 @@ PLoop(function(_ENV)
                 end,
             },
             [Date]              = {
-                fromvalue       = function(value, format)
-                    return Date.Parse(value, format)
-                end,
-                tovalue         = function(value, format)
-                    return value:ToString(format)
-                end,
+                fromvalue       = Date.Parse,
+                tovalue         = Date.ToString,
             }
         }
 
@@ -1201,17 +1197,16 @@ PLoop(function(_ENV)
         --                    static property                    --
         -----------------------------------------------------------
         --- the default type converter
-        __Static__() __Indexer__()
+        __Static__() __Indexer__(AnyType)
         property "Converter" {
             get     = function(self, datatype)
                 return TYPE_CONVERTER[datatype]
             end,
             set     = function(self, datatype, converter)
-                if Struct.ValidateValue(AnyType, datatype) and converter then
-                    TYPE_CONVERTER = safeset(TYPE_CONVERTER, datatype, converter)
-                end
+                TYPE_CONVERTER = safeset(TYPE_CONVERTER, datatype, converter)
             end,
             type    = TypeConverter,
+            require = true,
         }
 
         -----------------------------------------------------------
