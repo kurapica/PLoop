@@ -53,7 +53,7 @@ PLoop(function(_ENV)
 
             getContext              = Context.GetContextFromStack,
 
-            IHttpContextHandler, HTTP_STATUS,
+            IHttpContextHandler, HTTP_STATUS, Web
         }
 
         local _InitGlobalHandlers   = {}

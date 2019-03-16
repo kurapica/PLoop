@@ -199,6 +199,8 @@ PLoop(function(_ENV)
         export {
             CURRENT_ROOT        = IO.Path.GetCurrentPath():lower(),
 
+            with                = with,
+
             loadstring          = _G.loadstring or load,
             loadsnippet         = Toolset.loadsnippet,
             pcall               = pcall,
