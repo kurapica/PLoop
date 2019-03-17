@@ -504,7 +504,8 @@ The classes are types that abstracted from a group of similar objects. The objec
 
 A class can be defined within several parts: constructor, meta-method, object method, property and event:
 
-```luarequire "PLoop"
+```lua
+require "PLoop"
 
 PLoop(function(_ENV)
 	class "Imaginary" (function(_ENV)
