@@ -254,7 +254,7 @@ PLoop(function(_ENV)
             saveActionMap(owner, name, self.Action or name, self.Method)
         end
 
-        __Arguments__{ String/nil, HttpMethod/HttpMethod.ALL }
+        __Arguments__{ String, HttpMethod/HttpMethod.ALL }
         function __Action__(self, action, method)
             self.Action = action
             self.Method = method

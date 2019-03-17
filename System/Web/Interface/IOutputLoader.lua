@@ -126,39 +126,36 @@ PLoop(function(_ENV)
 
             if self.RenderConfig then webconfig(self.RenderConfig) end
 
-            local getappconfig = function(self, app)
-                if IsObjectType(app, Application) then
-                    local configs   = app[RenderConfig]
-                    if configs then
-                        return configs[self] or base and base.AppRenderConfig[app]
-                    end
-                end
+            local getappconfig  = function(self, app)
+                local configs   = app[RenderConfig]
+                return configs and configs[self] or base and base.AppRenderConfig[app]
             end
 
             ApplyEnv(manager, function(_ENV)
                 __Static__() property "WebRenderConfig" { set = false, default = webconfig }
-                __Static__() __Indexer__() property "AppRenderConfig" { set = false, get = getappconfig }
+                __Static__() __Indexer__(Application) property "AppRenderConfig" { set = false, get = getappconfig }
             end)
         end
 
         function AttachAttribute(self, target, targettype, owner, name, stack)
-            local cname     = self.ConfigName
-            local section   = Web.ConfigSection.View
+            local cname         = self.ConfigName
+            local base          = self.Base
+            local section       = Web.ConfigSection.View
 
-            section.Field[cname]    = RenderConfig.ConfigType
-            section.OnFieldParse    = section.OnFieldParse + function(self, fld, val)
+            section.Field[cname]= RenderConfig.ConfigType
+            section.OnFieldParse= section.OnFieldParse + function(self, fld, val)
                 if fld == cname then
                     target.WebRenderConfig(val)
                 end
             end
 
-            section         = Application.ConfigSection.View
+            section             = Application.ConfigSection.View
 
-            section.Field[cname]    = RenderConfig.ConfigType
-            section.OnFieldParse    = section.OnFieldParse + function(self, fld, val, app)
+            section.Field[cname]= RenderConfig.ConfigType
+            section.OnFieldParse= section.OnFieldParse + function(self, fld, val, app)
                 if fld == cname and IsObjectType(app, Application) then
                     local configs       = app[RenderConfig] or {}
-                    configs[target]     = RenderConfig(nil, target.Base and target.Base.AppRenderConfig[app])(val)
+                    configs[target]     = RenderConfig(nil, base and base.AppRenderConfig[app])(val)
                     app[RenderConfig]   = configs
                 end
             end

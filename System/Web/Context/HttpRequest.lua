@@ -18,9 +18,6 @@ PLoop(function(_ENV)
     class "System.Web.HttpRequest" (function (_ENV)
         local function defcache() return {} end
 
-        --- The http context
-        __Final__() property "Context"                  { type = System.Web.HttpContext }
-
         --- Specifies the length, in bytes, of content sent by the client
         __Abstract__() property "ContentLength"         { }
 
@@ -50,6 +47,9 @@ PLoop(function(_ENV)
 
         --- Gets information about the URL of the current request
         __Abstract__() property "Url"                   { default = function(self) return self.Context.Application:Url2Path(self.RawUrl:match("^[^?#]+")) end }
+
+        --- The http context
+        __Final__()    property "Context"               { type = System.Web.HttpContext }
 
         --- Whether the request is handled
         __Final__()    property "Handled"               { Type = Boolean, default = false }

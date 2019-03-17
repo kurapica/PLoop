@@ -177,7 +177,7 @@ PLoop(function(_ENV)
         --- The raw item table
         __Final__() property "RawItems"         { field = 2, set = false, default = function(self) return {} end }
 
-        --- Gets and sets the date time, allowed the next request access the session
+        --- Gets or sets the date time, allowed the next request access the session
         __Set__ (PropertySet.Clone)
         __Final__() property "Timeout"          { field = 3, type = Date, handler = function(self) self.TimeoutChanged = true end }
 
