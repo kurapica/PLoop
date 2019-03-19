@@ -34,7 +34,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
 -- Update Date  :   2019/03/19                                               --
--- Version      :   1.1.0                                                    --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -3440,7 +3440,7 @@ do
                 if validateflags(FLG_STRUCT_VALID_KEY, token) then
                     tinsert(body, [[
                         ret, msg  = kvald(ktype, k, false, cache)
-                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "key in %%s") or strformat("the key in %s must be [%s]", "%s", tostring(ktype)) end
+                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "[key in %%s]") or strformat("the [key in %s] must be [%s]", "%s", tostring(ktype)) end
                     ]])
 
                     if not validateflags(FLG_STRUCT_IMTBL_KEY, token) then
@@ -3453,7 +3453,7 @@ do
                 if validateflags(FLG_STRUCT_VALID_VAL, token) then
                     tinsert(body, [[
                         ret, msg  = vvald(vtype, v, false, cache)
-                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "value in %%s") or strformat("the value in %s must be [%s]", "%s", tostring(vtype)) end
+                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "[value in %%s]") or strformat("the [value in %s] must be [%s]", "%s", tostring(vtype)) end
                         value[k] = ret
                     ]])
                 end
