@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
--- Update Date  :   2019/02/28                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/03/19                                               --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -34,6 +34,7 @@ PLoop(function(_ENV)
         MEMBER              = StructCategory.MEMBER,
         CUSTOM              = StructCategory.CUSTOM,
         ARRAY               = StructCategory.ARRAY,
+        DICTIONARY          = StructCategory.DICTIONARY,
         getnamespace        = Namespace.Validate,
         validenum           = Enum.ValidateValue,
         validstruct         = Struct.ValidateValue,
@@ -43,6 +44,8 @@ PLoop(function(_ENV)
         getstructtemplate   = Struct.GetTemplate,
         getstrcuttemppars   = Struct.GetTemplateParameters,
         getbasestruct       = Struct.GetBaseStruct,
+        getdictkey          = Struct.GetDictionaryKey,
+        getdictval          = Struct.GetDictionaryValue,
     }
     export { Enum, Struct, Class, Property }
 
@@ -149,6 +152,14 @@ PLoop(function(_ENV)
                     if mtype and not isSerializableType(mtype, cache) then return false end
                 end
             end
+            return true
+        elseif category == DICTIONARY then
+            cache               = cache or isselfreferenced(type) and {}
+            if cache then cache[type] = true end
+            local ktype         = getdictkey(type)
+            if not (isstruct(ktype) and getstructcategory(ktype) == CUSTOM and isSerializableType(ktype)) then return false end
+            local vtype         = getdictval(type)
+            if not (vtype and isSerializableType(vtype, cache)) then return false end
             return true
         end
 
@@ -257,6 +268,16 @@ PLoop(function(_ENV)
                         end
                     end
                 end
+            elseif scategory == DICTIONARY then
+                local vtype = getdictval(stype)
+                for k, v in pairs(object) do
+                    local tk = type(k)
+
+                    if (tk == "string" or tk == "number") and isSerializable(v) then
+                        if type(v) == "table" then v = serialize(v, vtype, cache) end
+                        storage[k] = v
+                    end
+                end
             else
                 stype = nil
             end
@@ -352,6 +373,14 @@ PLoop(function(_ENV)
                                     end
                                 end
                             end
+                        end
+
+                        return otype(storage)
+                    elseif scategory == DICTIONARY then
+                        local vtype = getdictval(otype)
+
+                        for k, v in pairs(storage) do
+                            storage[k] = deserialize(v, vtype)
                         end
 
                         return otype(storage)

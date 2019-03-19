@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2018/04/04                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/19                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -223,6 +223,7 @@ PLoop(function(_ENV)
             MEMBER              = StructCategory.MEMBER,
             ARRAY               = StructCategory.ARRAY,
             CUSTOM              = StructCategory.CUSTOM,
+            DICTIONARY          = StructCategory.DICTIONARY,
             Debug               = Logger.Default[Logger.LogLevel.Debug],
 
             HttpMethod_GET      = HttpMethod.GET,
@@ -321,7 +322,7 @@ PLoop(function(_ENV)
             end
         end
 
-        local function parseType(vtype, require)
+        local function parseType(vtype, require, stack)
             if vtype then
                 if IsEnum(vtype) then
                     for k, v in GetEnumValues(vtype) do
@@ -334,15 +335,17 @@ PLoop(function(_ENV)
                     if category == CUSTOM then
                         return { type = vtype, validate = validateCustomValue, number = IsSubStruct(vtype, Number), require = require }
                     elseif category == ARRAY then
-                        return { elementconfig = parseType(GetArrayElement(vtype)), validate = validateArrayValue, require = require }
+                        return { elementconfig = parseType(GetArrayElement(vtype), nil, stack + 1), validate = validateArrayValue, require = require }
                     elseif category == MEMBER then
                         local memconfigs    = {}
 
                         for _, mem in GetMembers(vtype) do
-                            memconfigs[mem:GetName()] = parseType(mem:GetType(), mem:IsRequire())
+                            memconfigs[mem:GetName()] = parseType(mem:GetType(), mem:IsRequire(), stack + 1)
                         end
 
                         return { memberconfigs = memconfigs, validate = validateMemberValue, require = require }
+                    elseif category == DICTIONARY then
+                        error("The dictionary struct type isn't supported", stack + 1)
                     end
                 end
             end
@@ -383,9 +386,9 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            if GetStructCategory(self[1]) ~= MEMBER then return end
+            if GetStructCategory(self[1]) ~= MEMBER then error("The form validation type isn't valid", stack + 1) end
 
-            local config    = parseType(self[1])
+            local config    = parseType(self[1], nil, stack + 1)
 
             if targettype == AttributeTargets.Function then
                 return function(context)

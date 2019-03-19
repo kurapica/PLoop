@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/03/11                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/19                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2791,6 +2791,17 @@ end
 --              The array structure also support methods, static methods, base
 --          struct, validator and initializer.
 --
+-- iv. Dict     The dictionary structure represent tables that contains a specific
+--          type keys and specific type value pairs.
+--
+--                  struct "NameAge" (function(_ENV)
+--                      __key   = String
+--                      __value = Number
+--                  end)
+--
+--                  v = NameAge{ ann = 2, ben = 3 }
+--
+--
 -- To simplify the definition of the struct, table can be used instead of the
 -- function as the definition body.
 --
@@ -2820,6 +2831,10 @@ end
 --                  -- Array struct
 --                  -- A valid type with number index, also can use the __array as the key
 --                  struct "Locations" { Location }
+--
+--                  -- Dict struct
+--                  struct "NameAge" { [String] = Number }
+--
 --
 -- If a data type's prototype can provide `ValidateValue(type, value)` method,
 -- it'd be marked as a value type, the value type can be used in many places,
@@ -2879,6 +2894,7 @@ do
     STRUCT_TYPE_MEMBER          = "MEMBER"
     STRUCT_TYPE_ARRAY           = "ARRAY"
     STRUCT_TYPE_CUSTOM          = "CUSTOM"
+    STRUCT_TYPE_DICT            = "DICTIONARY"
 
     -----------------------------------------------------------------------
     --                         private constants                         --
@@ -2891,6 +2907,10 @@ do
 
     -- FIELD INDEX
     local FLD_STRUCT_MOD        = -newindex(1)      -- FIELD MODIFIER
+    local FLD_STRUCT_KEYTYPE    = -newindex()       -- FIELD DICT  KEY TYPE
+    local FLD_STRUCT_VALTYPE    = -newindex()       -- FIELD DICT  VAL TYPE
+    local FLD_STRUCT_KEYVALID   = -newindex()       -- FIELD DICT  KEY VALIDATOR
+    local FLD_STRUCT_VALVALID   = -newindex()       -- FIELD IDCT  VAL VALIDATOR
     local FLD_STRUCT_TYPEMETHOD = -newindex()       -- FIELD OBJECT METHODS
     local FLD_STRUCT_DEFAULT    = -newindex()       -- FEILD DEFAULT
     local FLD_STRUCT_BASE       = -newindex()       -- FIELD BASE STRUCT
@@ -2926,6 +2946,7 @@ do
     local FLG_CUSTOM_STRUCT     = newflags(true)    -- CUSTOM STRUCT FLAG
     local FLG_MEMBER_STRUCT     = newflags()        -- MEMBER STRUCT FLAG
     local FLG_ARRAY_STRUCT      = newflags()        -- ARRAY  STRUCT FLAG
+    local FLG_DICT_STRUCT       = newflags()        -- DICT   STRUCT FLAG
     local FLG_STRUCT_SINGLE_VLD = newflags()        -- SINGLE VALID  FLAG
     local FLG_STRUCT_MULTI_VLD  = newflags()        -- MULTI  VALID  FLAG
     local FLG_STRUCT_SINGLE_INIT= newflags()        -- SINGLE INIT   FLAG
@@ -2936,12 +2957,17 @@ do
     local FLG_STRUCT_FIRST_TYPE = newflags()        -- FIRST  MEMBER TYPE    FLAG
     local FLG_STRUCT_IMMUTABLE  = newflags()        -- IMMUTABLE     FLAG
     local FLG_STRUCT_ALLOW_OBJ  = newflags()        -- ALLOW  OBjECT FLAG
+    local FLG_STRUCT_VALID_KEY  = newflags()        -- KEY    VALID  FLAG
+    local FLG_STRUCT_VALID_VAL  = newflags()        -- VALUE  VALID  FLAG
+    local FLG_STRUCT_IMTBL_KEY  = newflags()        -- IMMUTBL KEY   LFAG
 
     local STRUCT_KEYWORD_ARRAY  = "__array"
     local STRUCT_KEYWORD_BASE   = "__base"
     local STRUCT_KEYWORD_DFLT   = "__default"
     local STRUCT_KEYWORD_INIT   = "__init"
     local STRUCT_KEYWORD_VALD   = "__valid"
+    local STRUCT_KEYWORD_KEY    = "__key"
+    local STRUCT_KEYWORD_VAL    = "__value"
 
     -- UNSAFE MODE FIELDS
     local FLD_STRUCT_META       = "__PLOOP_STRUCT_META"
@@ -3010,6 +3036,10 @@ do
                     return true
                 elseif key == STRUCT_KEYWORD_BASE then
                     struct.SetBaseStruct(owner, value, stack)
+                elseif key == STRUCT_KEYWORD_KEY then
+                    struct.SetDictionaryKey(owner, value, stack)
+                elseif key == STRUCT_KEYWORD_VAL then
+                    struct.SetDictionaryValue(owner, value, stack)
                 else
                     struct.AddMember(owner, key, { Type = value }, stack)
                 end
@@ -3032,6 +3062,10 @@ do
                 struct.SetDefault(owner, value, stack)
                 return true
             end
+        elseif getprototypemethod(key, "ValidateValue") and getprototypemethod(value, "ValidateValue") then
+            struct.SetDictionaryKey(owner, key, stack)
+            struct.SetDictionaryValue(owner, value, stack)
+            return true
         end
     end
 
@@ -3049,6 +3083,19 @@ do
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 m               = m[FLD_MEMBER_TYPE]
                 if not cache[m] and struct.Validate(m) and (filter(m) or chkStructContent(m, filter, cache)) then
+                    return true
+                end
+            end
+        else
+            if info[FLD_STRUCT_KEYTYPE] then
+                local key           = info[FLD_STRUCT_KEYTYPE]
+                if not cache[key] and struct.Validate(key) and (filter(key) or chkStructContent(key, filter, cache)) then
+                    return true
+                end
+            end
+            if info[FLD_STRUCT_VALTYPE] then
+                local val           = info[FLD_STRUCT_VALTYPE]
+                if not cache[val] and struct.Validate(val) and (filter(val) or chkStructContent(val, filter, cache)) then
                     return true
                 end
             end
@@ -3089,6 +3136,13 @@ do
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 checkStructDependence(target, m[FLD_MEMBER_TYPE])
             end
+        else
+            if info[FLD_STRUCT_KEYTYPE] then
+                checkStructDependence(target, info[FLD_STRUCT_KEYTYPE])
+            end
+            if info[FLD_STRUCT_VALTYPE] then
+                checkStructDependence(target, info[FLD_STRUCT_VALTYPE])
+            end
         end
     end
 
@@ -3104,6 +3158,9 @@ do
             for _, m in ipairs, info, FLD_STRUCT_MEMBERSTART - 1 do
                 if not getobjectvalue(m[FLD_MEMBER_TYPE], "IsImmutable") then return false end
             end
+        else
+            if info[FLD_STRUCT_KEYTYPE] and not getobjectvalue(info[FLD_STRUCT_KEYTYPE], "IsImmutable") then return false end
+            if info[FLD_STRUCT_VALTYPE] and not getobjectvalue(info[FLD_STRUCT_VALTYPE], "IsImmutable") then return false end
         end
         return true
     end
@@ -3132,6 +3189,11 @@ do
                         return true
                     end
                 end
+            else
+                local key       = info[FLD_STRUCT_KEYTYPE]
+                if key and key == target or (struct.Validate(key) and chkStructContents(key, filter)) then return true end
+                local val       = info[FLD_STRUCT_VALTYPE]
+                if val and val == target or (struct.Validate(val) and chkStructContents(val, filter)) then return true end
             end
         end
 
@@ -3159,6 +3221,21 @@ do
         elseif info[FLD_STRUCT_ARRAY] then
             token               = turnonflags(FLG_ARRAY_STRUCT, token)
             token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token) -- Always allow the object as array
+        elseif info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then
+            token               = turnonflags(FLG_DICT_STRUCT, token)
+            token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token) -- Always allow the object as dict
+
+            if info[FLD_STRUCT_KEYTYPE] then
+                token           = turnonflags(FLG_STRUCT_VALID_KEY, token)
+
+                if getobjectvalue(info[FLD_STRUCT_KEYTYPE], "IsImmutable") then
+                    token       = turnonflags(FLG_STRUCT_IMTBL_KEY, token)
+                end
+            end
+
+            if info[FLD_STRUCT_VALTYPE] then
+                token           = turnonflags(FLG_STRUCT_VALID_VAL, token)
+            end
         else
             token               = turnonflags(FLG_CUSTOM_STRUCT, token)
         end
@@ -3206,7 +3283,7 @@ do
             tinsert(body, "return function(%s)")    -- remain for special variables
             tinsert(body, [[return function(info, value, onlyValid, cache)]])
 
-            if validateflags(FLG_MEMBER_STRUCT, token) or validateflags(FLG_ARRAY_STRUCT, token) then
+            if validateflags(FLG_MEMBER_STRUCT, token) or validateflags(FLG_ARRAY_STRUCT, token) or validateflags(FLG_DICT_STRUCT, token) then
                 uinsert(apis, "strformat")
                 uinsert(apis, "type")
                 uinsert(apis, "strgsub")
@@ -3304,6 +3381,95 @@ do
                             local ret, msg  = avalid(array, v, false, cache)
                             if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "%%s[" .. i .. "]") or strformat("the %s[%s] must be [%s]", "%s", i, tostring(array)) end
                             value[i] = ret
+                        end
+                    end
+                ]])
+            elseif validateflags(FLG_DICT_STRUCT, token) then
+                uinsert(apis, "pairs")
+
+                if validateflags(FLG_STRUCT_VALID_KEY, token) then
+                    tinsert(body, [[
+                        local ktype = info[]] .. FLD_STRUCT_KEYTYPE .. [[]
+                        local kvald = info[]] .. FLD_STRUCT_KEYVALID.. [[]
+                    ]])
+                end
+
+                if validateflags(FLG_STRUCT_VALID_VAL, token) then
+                    tinsert(body, [[
+                        local vtype = info[]] .. FLD_STRUCT_VALTYPE .. [[]
+                        local vvald = info[]] .. FLD_STRUCT_VALVALID.. [[]
+                    ]])
+                end
+
+                tinsert(body, [[
+                    local ret, msg
+                    if onlyValid then
+                        for k, v in pairs, value do
+                ]])
+
+                if validateflags(FLG_STRUCT_VALID_KEY, token) then
+                    tinsert(body, [[
+                        ret, msg  = kvald(ktype, k, true, cache)
+                        if msg then return nil, true end
+                    ]])
+                end
+
+                if validateflags(FLG_STRUCT_VALID_VAL, token) then
+                    tinsert(body, [[
+                        ret, msg  = vvald(vtype, v, true, cache)
+                        if msg then return nil, true end
+                    ]])
+                end
+
+                tinsert(body, [[
+                        end
+                    else
+                ]])
+
+                if validateflags(FLG_STRUCT_VALID_KEY, token) and not validateflags(FLG_STRUCT_IMTBL_KEY, token) then
+                    uinsert(apis, "_Cache")
+                    tinsert(body, [[
+                        local nkeymap = _Cache()
+                    ]])
+                end
+
+                tinsert(body, [[
+                        for k, v in pairs, value do
+                ]])
+
+                if validateflags(FLG_STRUCT_VALID_KEY, token) then
+                    tinsert(body, [[
+                        ret, msg  = kvald(ktype, k, false, cache)
+                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "key in %%s") or strformat("the key in %s must be [%s]", "%s", tostring(ktype)) end
+                    ]])
+
+                    if not validateflags(FLG_STRUCT_IMTBL_KEY, token) then
+                        tinsert(body, [[
+                            if k ~= ret then nkeymap[k] = ret end
+                        ]])
+                    end
+                end
+
+                if validateflags(FLG_STRUCT_VALID_VAL, token) then
+                    tinsert(body, [[
+                        ret, msg  = vvald(vtype, v, false, cache)
+                        if msg then return nil, type(msg) == "string" and strgsub(msg, "%%s", "value in %%s") or strformat("the value in %s must be [%s]", "%s", tostring(vtype)) end
+                        value[k] = ret
+                    ]])
+                end
+
+                if validateflags(FLG_STRUCT_VALID_KEY, token) and not validateflags(FLG_STRUCT_IMTBL_KEY, token) then
+                    tinsert(body, [[
+                        for k, nk in pairs, nkeymap do
+                            local v = value[k]
+                            value[k] = nil
+                            value[nk]= v
+                        end
+                        _Cache(nkeymap)
+                    ]])
+                end
+
+                tinsert(body, [[
                         end
                     end
                 ]])
@@ -3443,6 +3609,9 @@ do
             end
         elseif info[FLD_STRUCT_ARRAY] then
             token               = turnonflags(FLG_ARRAY_STRUCT, token)
+            token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token)
+        elseif info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then
+            token               = turnonflags(FLG_DICT_STRUCT, token)
             token               = turnonflags(FLG_STRUCT_ALLOW_OBJ, token)
         else
             token               = turnonflags(FLG_CUSTOM_STRUCT, token)
@@ -3739,6 +3908,7 @@ do
                     if name == "" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The name can't be empty", stack) end
                     if type(definition) ~= "table" then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The definition is missing", stack) end
                     if info[FLD_STRUCT_ARRAY] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is an array structure, can't add member", stack) end
+                    if info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then error("Usage: struct.AddMember(structure[, name], definition[, stack]) - The structure is a dictionary structure, can't add member", stack) end
 
                     local idx   = FLD_STRUCT_MEMBERSTART
                     while info[idx] do
@@ -3902,12 +4072,16 @@ do
                     local binfo = _StructInfo[ninfo[FLD_STRUCT_BASE]]
 
                     if ninfo[FLD_STRUCT_ARRAY] then             -- Array
-                        if not binfo[FLD_STRUCT_ARRAY] then
-                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct isn't an array structure", tostring(target)), stack)
+                        if binfo[FLD_STRUCT_MEMBERSTART] then
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be a member structure", tostring(target)), stack)
+                        elseif binfo[FLD_STRUCT_KEYTYPE] or binfo[FLD_STRUCT_VALTYPE] then
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be a dictionary structure", tostring(target)), stack)
                         end
                     elseif ninfo[FLD_STRUCT_MEMBERSTART] then   -- Member
                         if binfo[FLD_STRUCT_ARRAY] then
                             error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure", tostring(target)), stack)
+                        elseif binfo[FLD_STRUCT_KEYTYPE] or binfo[FLD_STRUCT_VALTYPE] then
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be a dictionary structure", tostring(target)), stack)
                         elseif binfo[FLD_STRUCT_MEMBERSTART] then
                             -- Try to keep the base struct's member order
                             local cache     = _Cache()
@@ -3944,10 +4118,30 @@ do
 
                             _Cache(cache)
                         end
+                    elseif ninfo[FLD_STRUCT_KEYTYPE] or ninfo[FLD_STRUCT_VALTYPE] then
+                        if binfo[FLD_STRUCT_ARRAY] then
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be an array structure", tostring(target)), stack)
+                        elseif binfo[FLD_STRUCT_MEMBERSTART] then
+                            error(strformat("Usage: struct.EndDefinition(structure[, stack]) - The %s's base struct can't be a member structure", tostring(target)), stack)
+                        elseif binfo[FLD_STRUCT_KEYTYPE] or binfo[FLD_STRUCT_VALTYPE] then
+                            if not ninfo[FLD_STRUCT_KEYTYPE] then
+                                ninfo[FLD_STRUCT_KEYTYPE] = binfo[FLD_STRUCT_KEYTYPE]
+                                ninfo[FLD_STRUCT_KEYVALID]= binfo[FLD_STRUCT_KEYVALID]
+                            end
+                            if not ninfo[FLD_STRUCT_VALTYPE] then
+                                ninfo[FLD_STRUCT_VALTYPE] = binfo[FLD_STRUCT_VALTYPE]
+                                ninfo[FLD_STRUCT_VALVALID]= binfo[FLD_STRUCT_VALVALID]
+                            end
+                        end
                     else                                        -- Custom
                         if binfo[FLD_STRUCT_ARRAY] then
-                            ninfo[FLD_STRUCT_ARRAY] = binfo[FLD_STRUCT_ARRAY]
-                            ninfo[FLD_STRUCT_ARRVALID]= binfo[FLD_STRUCT_ARRVALID]
+                            ninfo[FLD_STRUCT_ARRAY]     = binfo[FLD_STRUCT_ARRAY]
+                            ninfo[FLD_STRUCT_ARRVALID]  = binfo[FLD_STRUCT_ARRVALID]
+                        elseif binfo[FLD_STRUCT_KEYTYPE] or binfo[FLD_STRUCT_VALTYPE] then
+                            ninfo[FLD_STRUCT_KEYTYPE]   = binfo[FLD_STRUCT_KEYTYPE]
+                            ninfo[FLD_STRUCT_KEYVALID]  = binfo[FLD_STRUCT_KEYVALID]
+                            ninfo[FLD_STRUCT_VALTYPE]   = binfo[FLD_STRUCT_VALTYPE]
+                            ninfo[FLD_STRUCT_VALVALID]  = binfo[FLD_STRUCT_VALVALID]
                         elseif binfo[FLD_STRUCT_MEMBERSTART] then
                             -- Share members
                             local idx = FLD_STRUCT_MEMBERSTART
@@ -4007,6 +4201,8 @@ do
                     _Cache(args)
                 elseif ninfo[FLD_STRUCT_ARRAY] then
                     ninfo[FLD_STRUCT_ERRMSG] = strformat("Usage: %s(...) - ", tostring(target))
+                elseif ninfo[FLD_STRUCT_KEYTYPE] or ninfo[FLD_STRUCT_VALTYPE] then
+                    ninfo[FLD_STRUCT_ERRMSG] = strformat("Usage: %s{...} - ", tostring(target))
                 else
                     ninfo[FLD_STRUCT_ERRMSG] = strformat("[%s]", tostring(target))
                 end
@@ -4027,7 +4223,7 @@ do
                     local deft  = ninfo[FLD_STRUCT_DEFAULT]
                     ninfo[FLD_STRUCT_DEFAULT] = nil
 
-                    if not ninfo[FLD_STRUCT_ARRAY] and not ninfo[FLD_STRUCT_MEMBERSTART] then
+                    if not (ninfo[FLD_STRUCT_ARRAY] or ninfo[FLD_STRUCT_MEMBERSTART] or ninfo[FLD_STRUCT_KEYTYPE] or ninfo[FLD_STRUCT_VALTYPE]) then
                         local ret, msg = struct.ValidateValue(target, deft)
                         if not msg then ninfo[FLD_STRUCT_DEFAULT] = ret end
                     end
@@ -4081,6 +4277,28 @@ do
                 if info and info[FLD_STRUCT_COMBTYPE1] then return info[FLD_STRUCT_COMBTYPE1], info[FLD_STRUCT_COMBTYPE2] end
             end;
 
+            --- Get the dictionary key type of the target
+            -- @static
+            -- @method  GetDictionaryKey
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  type                        the key type
+            ["GetDictionaryKey"]= function(target)
+                local info      = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_KEYTYPE]
+            end;
+
+            --- Get the dictionary value type of the target
+            -- @static
+            -- @method  GetDictionaryValue
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  type                        the value type
+            ["GetDictionaryValue"] = function(target)
+                local info      = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_VALTYPE]
+            end;
+
             --- Get the custom structure's default value
             -- @static
             -- @method  GetDefault
@@ -4106,7 +4324,12 @@ do
             -- @param   target                      the target string, like "value"
             -- @return  string                      the error message
             ["GetErrorMessage"] = function(template, target)
-                return strgsub(template, "%%s%.?", target)
+                target          = strtrim(tostring(target) or "")
+                if target == "" then
+                    return strgsub(template, "%%s%.?", "")
+                else
+                    return strgsub(template, "%%s", target)
+                end
             end;
 
             --- Get the master type of the struct
@@ -4213,6 +4436,7 @@ do
                 if info then
                     if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
                     if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
+                    if info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then return STRUCT_TYPE_DICT end
                     return STRUCT_TYPE_CUSTOM
                 end
             end;
@@ -4264,7 +4488,7 @@ do
             -- @return  boolean                     true if the structure allow objects
             ["IsObjectAllowed"] = function(target)
                 local info      = getStructTargetInfo(target)
-                return info and validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD]) or false
+                return info and (info[FLD_STRUCT_ARRAY] or info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] or validateflags(MOD_ALLOWOBJ_STRUCT, info[FLD_STRUCT_MOD])) or false
             end;
 
             --- Whether a structure use the other as its base structure
@@ -4335,6 +4559,7 @@ do
 
                 if info then
                     if not def then error(strformat("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has dictionary settings, can't set array element", stack) end
                     if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure has member settings, can't set array element", stack) end
 
                     local tpValid = getprototypemethod(eleType, "ValidateValue")
@@ -4344,6 +4569,60 @@ do
                     info[FLD_STRUCT_ARRVALID]   = tpValid
                 else
                     error("Usage: struct.SetArrayElement(structure, eleType[, stack]) - The structure is not valid", stack)
+                end
+            end;
+
+            --- Set the dictionary key type
+            -- @static
+            -- @method  SetDictionaryKey
+            -- @owner   struct
+            -- @format  (structure, keyType[, stack])
+            -- @param   structure                   the structure
+            -- @param   keyType                     the key type
+            -- @param   stack                       the stack level
+            ["SetDictionaryKey"]= function(target, keyType, stack)
+                local info, def = getStructTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: struct.SetDictionaryKey(structure, keyType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if info[FLD_STRUCT_ARRAY] then error("Usage: struct.SetDictionaryKey(structure, keyType[, stack]) - The structure has array settings, can't set the key type", stack) end
+                    if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetDictionaryKey(structure, keyType[, stack]) - The structure has member settings, can't set the key type", stack) end
+
+                    local tpValid = getprototypemethod(keyType, "ValidateValue")
+                    if not tpValid then error("Usage: struct.SetDictionaryKey(structure, keyType[, stack]) - The key type is not valid", stack) end
+
+                    info[FLD_STRUCT_KEYTYPE]    = keyType
+                    info[FLD_STRUCT_KEYVALID]   = tpValid
+                else
+                    error("Usage: struct.SetDictionaryKey(structure, keyType[, stack]) - The structure is not valid", stack)
+                end
+            end;
+
+            --- Set the dictionary value type
+            -- @static
+            -- @method  SetDictionaryValue
+            -- @owner   struct
+            -- @format  (structure, valType[, stack])
+            -- @param   structure                   the structure
+            -- @param   keyType                     the key type
+            -- @param   stack                       the stack level
+            ["SetDictionaryValue"] = function(target, valType, stack)
+                local info, def = getStructTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: struct.SetDictionaryValue(structure, valType[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if info[FLD_STRUCT_ARRAY] then error("Usage: struct.SetDictionaryValue(structure, valType[, stack]) - The structure has array settings, can't set the value type", stack) end
+                    if info[FLD_STRUCT_MEMBERSTART] then error("Usage: struct.SetDictionaryValue(structure, valType[, stack]) - The structure has member settings, can't set the value type", stack) end
+
+                    local tpValid = getprototypemethod(valType, "ValidateValue")
+                    if not tpValid then error("Usage: struct.SetDictionaryValue(structure, valType[, stack]) - The value type is not valid", stack) end
+
+                    info[FLD_STRUCT_VALTYPE]    = valType
+                    info[FLD_STRUCT_VALVALID]   = tpValid
+                else
+                    error("Usage: struct.SetDictionaryValue(structure, valType[, stack]) - The structure is not valid", stack)
                 end
             end;
 
@@ -4793,7 +5072,7 @@ do
                 end
 
                 for k, v in pairs, definition do
-                    if type(k) == "string" then
+                    if type(k) ~= "number" then
                         setStructBuilderValue(self, k, v, stack, true)
                     end
                 end
@@ -10462,7 +10741,7 @@ do
                     tinsert(head, "ivtype")
                     tinsert(body, [[
                         local ret, msg = ivalid(ivtype, idxname)
-                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s key"), 3) end
+                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s", name .. "'s key"), 3) end
                         idxname = ret
                     ]])
                 end
@@ -10744,7 +11023,7 @@ do
                     tinsert(head, "ivtype")
                     tinsert(body, [[
                         local ret, msg = ivalid(ivtype, idxname)
-                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s key"), 3) end
+                        if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s", name .. "'s key"), 3) end
                         idxname = ret
                     ]])
                 end
@@ -10773,13 +11052,13 @@ do
                         if validateflags(FLG_PROPSET_INDEXER, token) then
                             tinsert(body, [[
                                 local ret, msg = valid(vtype, value)
-                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name .. "'s value"), 3) end
+                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s", name .. "'s value"), 3) end
                                 value = ret
                             ]])
                         else
                             tinsert(body, [[
                                 local ret, msg = valid(vtype, value)
-                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s%.?", name), 3) end
+                                if msg then error(strgsub(type(msg) == "string" and msg or "the %s is not valid", "%%s", name), 3) end
                                 value = ret
                             ]])
                         end
@@ -12745,7 +13024,8 @@ do
     StructCategory = enum "System.StructCategory" {
         "MEMBER",
         "ARRAY",
-        "CUSTOM"
+        "CUSTOM",
+        "DICTIONARY"
     }
 
     -----------------------------------------------------------------------

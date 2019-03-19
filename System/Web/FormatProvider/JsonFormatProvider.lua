@@ -68,7 +68,15 @@ PLoop(function(_ENV)
 
             if objField then
                 data[Serialization.ObjectTypeField] = nil
-                if isListType(objField, IIndexedList) or (isstruct(objField) and getstructcategory(objField) == "ARRAY") then return true end
+                if isListType(objField, IIndexedList) then return true end
+                if isstruct(objField) then
+                    local stype = getstructcategory(objField)
+                    if stype == "ARRAY" then
+                        return true
+                    elseif stype == "MEMBER" or stype == "DICTIONARY" then
+                        return false
+                    end
+                end
             end
 
             -- Check the data

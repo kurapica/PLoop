@@ -26,6 +26,7 @@ You can also find useful features for enterprise development like code organizat
 	* [Custom](#custom)
 	* [Member](#member)
 	* [Array](#array)
+	* [Dictionary](#dictionary)
 * [Class](#class)
 * [Interface](#interface)
 * [Serialization](#serialization)
@@ -496,6 +497,20 @@ end)
 So the **Locations** should contains several **Location** values.
 
 The enum and struct are all data types, normally used for type validation. The interface and class types is the core system of the **PLoop**.
+
+### Dictionary
+
+The dictionary structure represent tables that contains a specific type keys and specific type value pairs.
+
+```lua
+require "PLoop"
+
+PLoop(function(_ENV)
+	struct "NameAge" { [String] = Number }
+
+	v = NameAge{ ann = 2, ben = 3 }
+end)
+```
 
 
 ## Class

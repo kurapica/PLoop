@@ -1507,7 +1507,7 @@ GetMember(target, name)                 |获得目标结构体指定的成员
 GetMembers(target[, cache])             |如果cache存在，将成员按顺序保存并返回cache，否则返回一个用于for循环的迭代器
 GetMethod(target, name)                 |返回方法及一个表明是否静态方法的布尔值
 GetMethods(target[, cache])             |如果cache存在，将方法和名字保存在cache中，并返回cache，否则返回一个用于for循环的迭代器
-GetStructCategory(target)               |返回结构体的类型: CUSTOM, MEMBER, ARRAY
+GetStructCategory(target)               |返回结构体的类型: CUSTOM, MEMBER, ARRAY, DICTIONARY
 IsImmutable(target)                     |目标结构体是否是不可变类型，即指通过校验不会被改变
 IsSubType(target, base)                 |目标结构体是否是base的扩展类型
 IsSealed(target)                        |目标结构体是否已经封闭，无法被重定义
