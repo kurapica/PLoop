@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
 -- Update Date  :   2018/05/12                                               --
--- Version      :   1.1.0                                                    --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -241,9 +241,9 @@ PLoop(function(_ENV)
         end
 
         __Arguments__{ IDictionary }
-        function __new(_, dict)
+        function __new(_, org)
             local dict  = {}
-            for key, value in dict:GetIterator() do
+            for key, value in org:GetIterator() do
                 dict[key] = value
             end
             return dict, true
@@ -483,6 +483,10 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                     Final method                      --
         -----------------------------------------------------------
+        --- Convert the selected items to a dictionary
+        __Arguments__{ -IDictionary/Dictionary }
+        function ToDict(self, cls) return cls(self) end
+
         --- Combine the key-value pairs to get a result
         __Arguments__{ Callable, Any/nil }
         function Reduce(self, func, init)
