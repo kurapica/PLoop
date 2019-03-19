@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
 -- Update Date  :   2019/03/19                                               --
--- Version      :   1.1.1                                                    --
+-- Version      :   1.1.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -233,10 +233,17 @@ PLoop(function(_ENV)
             local scategory = getstructcategory(stype)
             if scategory == ARRAY then
                 local etype = getarrayelement(stype)
-                for i, val in ipairs(object) do
-                    if isSerializable(val) then
+                if isSerializableType(etype) then
+                    for i, val in ipairs(object) do
                         if type(val) == "table" then val = serialize(val, etype, cache) end
                         storage[i] = val
+                    end
+                else
+                    for i, val in ipairs(object) do
+                        if isSerializable(val) then
+                            if type(val) == "table" then val = serialize(val, etype, cache) end
+                            storage[i] = val
+                        end
                     end
                 end
             elseif scategory == MEMBER then
@@ -270,12 +277,23 @@ PLoop(function(_ENV)
                 end
             elseif scategory == DICTIONARY then
                 local vtype = getdictval(stype)
-                for k, v in pairs(object) do
-                    local tk = type(k)
+                if isSerializableType(vtype) then
+                    for k, v in pairs(object) do
+                        local tk = type(k)
 
-                    if (tk == "string" or tk == "number") and isSerializable(v) then
-                        if type(v) == "table" then v = serialize(v, vtype, cache) end
-                        storage[k] = v
+                        if (tk == "string" or tk == "number") then
+                            if type(v) == "table" then v = serialize(v, vtype, cache) end
+                            storage[k] = v
+                        end
+                    end
+                else
+                    for k, v in pairs(object) do
+                        local tk = type(k)
+
+                        if (tk == "string" or tk == "number") and isSerializable(v) then
+                            if type(v) == "table" then v = serialize(v, vtype, cache) end
+                            storage[k] = v
+                        end
                     end
                 end
             else
