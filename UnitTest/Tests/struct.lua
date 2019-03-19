@@ -137,7 +137,7 @@ end
 __Test__() function dict()
     struct "IDName" { [Number] = String }
 
-    Assert.Find("struct.lua:143: the key in value must be number, got string",
+    Assert.Find("struct.lua:143: the [key in value] must be number, got string",
         Assert.Error(
             function()
                 local v = IDName{ [100] = "Ann", Ben = 2 }
