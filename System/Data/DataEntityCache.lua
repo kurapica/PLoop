@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2018/11/08                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/20                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -125,13 +125,25 @@ PLoop(function(_ENV)
                 local key       = CACHE_KEY .. tostring(entity[QueryKey])
                 self.Cache:Delete(key)
             end
+
+            __Arguments__{ primaryflds[1].type }
+            function DeleteEntity(self, id)
+                local key       = CACHE_KEY .. tostring(id)
+                self.Cache:Delete(key)
+            end
+
+            __Arguments__{ QueryData }
+            function DeleteEntity(self, query)
+                local key       = CACHE_KEY .. tostring(query[QueryKey])
+                self.Cache:Delete(key)
+            end
         else
             local pattern       = List(#primaryflds)
             local args          = {}
             for i, v in ipairs(primaryflds) do args[i] = v.type end
 
             --- Get the entity object with the index key
-            __Arguments__(args) arg = nil
+            __Arguments__(args)
             function GetEntity(self, ...)
                 local id        = List(...):Map(tostring):Join("^")
 
@@ -185,6 +197,19 @@ PLoop(function(_ENV)
             --- Delete the entity from the cache
             __Arguments__{ clsEntity }
             function DeleteEntity(self, entity)
+                local id        = pattern:Map(function(v) return tostring(query[primaryflds[v].name]) end):Join("^")
+                local key       = CACHE_KEY .. id
+                self.Cache:Delete(key)
+            end
+            __Arguments__(args) args = nil
+            function DeleteEntity(self, ...)
+                local id        = List(...):Map(tostring):Join("^")
+                local key       = CACHE_KEY .. id
+                self.Cache:Delete(key)
+            end
+
+            __Arguments__{ QueryData }
+            function DeleteEntity(self, query)
                 local id        = pattern:Map(function(v) return tostring(query[primaryflds[v].name]) end):Join("^")
                 local key       = CACHE_KEY .. id
                 self.Cache:Delete(key)
