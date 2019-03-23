@@ -20,13 +20,16 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        --- Set key-value pair to the cache
+        --- Try sets the the value with non-exist key to the cache, return true if success
+        __Abstract__() function TrySet(self, key, value, expiretime) end
+
+        --- Sets key-value pair to the cache
         __Abstract__() function Set(self, key, value, expiretime) end
 
-        --- Set the expire time for a key
+        --- Sets the expire time for a key
         __Abstract__() function SetExpireTime(self, key, expiretime) end
 
-        --- Get value for a key
+        --- Gets value for a key
         __Abstract__() function Get(self, key) end
 
         --- Whether the key existed in the cache

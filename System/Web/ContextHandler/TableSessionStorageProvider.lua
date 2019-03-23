@@ -59,6 +59,12 @@ PLoop(function(_ENV)
             end
         end
 
+        function TrySetItems(self, id, time, timeout)
+            if self.Storage[id] ~= nil then return false end
+            self:SetItems(id, time, timeout)
+            return true
+        end
+
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------

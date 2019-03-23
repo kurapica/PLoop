@@ -131,6 +131,9 @@ PLoop(function(_ENV)
         --- Remove session item
         __Abstract__() function RemoveItems(self, id) end
 
+        --- Try sets the item with an un-existed key, return true if success
+        __Abstract__() function TrySetItems(self, id, time, timeout) end
+
         --- Update the item with current session data
         __Abstract__() function SetItems(self, id, item, timeout) end
 
@@ -217,12 +220,13 @@ PLoop(function(_ENV)
                     self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
                 end
             else
-                id, item    = nil
-                while not id or provider:Contains(id) do
+                id, item    = nil, {}
+                while not (id and provider:TrySetItems(id, item)) do
                     id      = manager:CreateSessionID(context)
                 end
 
                 rawset(self, 1, id)
+                rawset(self, 2, item)
 
                 self.IsNewSession = true
                 self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
