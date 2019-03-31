@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/11                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/26                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -196,12 +196,17 @@ PLoop(function(_ENV)
         --- Whether the session items changed
         __Final__() property "ItemsChanged"     { field = 7, type = Boolean }
 
+        --- The http context
+        __Final__() property "Context"          { field = 0, type = HttpContext }
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         --- Get or generate the session for a http context
         __Arguments__{ System.Web.HttpContext }
         function __ctor(self, context)
+            rawset(self, 0, context)
+
             -- Build Session
             local manager   = context.Application[ISessionIDManager]       or ISessionIDManager.Default
             local provider  = context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default

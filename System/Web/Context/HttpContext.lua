@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/03/26                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -28,6 +28,7 @@ PLoop(function(_ENV)
             issubtype           = Class.IsSubType,
             ispathrooted        = IO.Path.IsPathRooted,
             combinepath         = IO.Path.CombinePath,
+            HttpMethod_GET      = HttpMethod.GET,
 
             Date, HttpSession, ISessionIDManager, ISessionStorageProvider,
             HttpContext, HttpRequest, HttpResponse, HttpMethod
@@ -47,6 +48,8 @@ PLoop(function(_ENV)
             Cookies             = { set = false, default = function(self) return self.RawRequest.Cookies end },
             IsSecureConnection  = { set = false, default = function(self) return self.RawRequest.IsSecureConnection end },
             RawUrl              = { set = false, default = function(self) return self.RawRequest.RawUrl end },
+            QueryString         = { type= Table, default = function(self) return self.RawRequest.QueryString end },
+            Form                = { type= Table, default = function(self) return self.RawRequest.Form end },
         }
 
         --- Inner http response
@@ -139,9 +142,10 @@ PLoop(function(_ENV)
         -- @param   url             the inner request url
         -- @param   params          the request querystring or form table
         -- @param   method          the request method
-        __Arguments__{ NEString, Table/nil, HttpMethod/HttpMethod.GET}
+        __Arguments__{ NEString, Table/nil, HttpMethod/nil}
         function ProcessInnerRequest(self, url, params, method)
             local rawreq    = self.Request
+            method          = method or HttpMethod_GET
 
             local ctx       = InnerContext(self.Application)
             ctx.RawContext  = self
@@ -153,7 +157,7 @@ PLoop(function(_ENV)
             request.HttpMethod  = method
 
             if params then
-                if method == HttpMethod.GET then
+                if method == HttpMethod_GET then
                     request.QueryString = params
                 else
                     request.Form        = params
