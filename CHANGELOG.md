@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2019-04-01 WangXH <kurapica125@outlook.com>
+### Changed
+- The System.Web.HttpSession have a new property "Context" used to get the context where it's generated.
+- Fix the spell error for method "TrySetItems" of System.Web.ICacheSessionStorageProvider.
+
+
 ## [1.2.1] - 2019-03-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The System.Data.Cache add an abstract method: TrySet, used to try add a key value pair when the key not existed, this is used to replace the Exist-Set operation so used to make sure the operation is thread-safe.
