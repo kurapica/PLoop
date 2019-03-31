@@ -65,7 +65,7 @@ PLoop(function(_ENV)
         end
 
         --- Try sets the item with an un-existed key, return true if success
-        function TrySetItems(self, id, time, timeout)
+        function TrySetItems(self, id, item, timeout)
             return with(self:GetCacheObject())(function(cache)
                 return cache:TrySet(id, item, timeout)
             end)
