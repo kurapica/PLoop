@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2019/02/07                                               --
--- Version      :   1.0.1                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.0.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1174,11 +1174,11 @@ PLoop(function(_ENV)
             local first, second = strbyte(json, 1, 2)
             local decode
 
-            if not first or not second or (first == 0 and second == 0) then
+            if (first == 0 and second == 0) then
                 error("Can't determine the json's encoding.")
             end
 
-            if first > 0 and second > 0 then
+            if (not first or first > 0) and (not second or second > 0) then
                 -- Speed up for UTF-8
                 local ok, msg, token, _, obj = pcall(LoadJsonDataUTF8, self, json, 1, 0)
 

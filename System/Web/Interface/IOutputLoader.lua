@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/04/11                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -478,7 +478,7 @@ PLoop(function(_ENV)
 
                 local wRenderOtherIndent    = [[self:RenderAnother(%s, _PL_write, _PL_indent.."%s", %s%s)]]
                 local wRenderOtherNoIndent  = [[self:RenderAnother(%s, _PL_write, "", %s%s)]]
-                local wInnerRequest         = [[self.Context:ProcessInnerRequest(%s%s)]]
+                local wInnerRequest         = [[_PL_write(tostring(self.Context:ProcessInnerRequest(%s%s)))]]
 
                 definition = {"local _PL_HtmlEncode, tostring = System.Web.HtmlEncode, System.Web.ParseString"}
 

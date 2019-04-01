@@ -128,7 +128,7 @@ PLoop(function(_ENV)
 
                 if data then
                     response.ContentType    = "application/json"
-                    if context.IsInnerRequest and context.RawContext.ProcessPhase == HEAD_PHASE then
+                    if context.IsInnerRequest then -- and context.RawContext.ProcessPhase == HEAD_PHASE then
                         context:SaveJsonData(data, type)
                     else
                         context[__Json__]   = { data, type }

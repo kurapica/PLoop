@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/04/19                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -43,7 +43,7 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceManager.LoadResource,
             IsObjectType        = Class.IsObjectType,
 
-            System.Text.UTF8Encoding, IO.Resource.IResourceManager
+            System.Text.UTF8Encoding, IO.Resource.IResourceManager, Web
         }
 
         local SPECIAL_MAP       = { [System.Data.DBNull] = "" }
@@ -518,7 +518,7 @@ PLoop(function(_ENV)
 
         --- Parse the value to string so special null value can be changed to empty string
         __Static__() function ParseString(val)
-            return val == nil and "" or SPECIAL_MAP[val] or tostring(val)
+            return val == nil and "" or SPECIAL_MAP[val] or type(val) ~= "table" and tostring(val) or Web.Json(val)
         end
 
         --- Encodes a string to be displayed in a browser

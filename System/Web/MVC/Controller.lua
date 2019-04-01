@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/06/10                                               --
--- Update Date  :   2018/04/02                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -163,7 +163,7 @@ PLoop(function(_ENV)
             if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
 
             local context   = self.Context
-            if context.IsInnerRequest and context.RawContext.ProcessPhase == HEAD_PHASE then
+            if context.IsInnerRequest then --and context.RawContext.ProcessPhase == HEAD_PHASE then
                 context:SaveJsonData(object, oType)
             else
                 res.ContentType = "application/json"

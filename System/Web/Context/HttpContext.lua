@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2019/03/26                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -144,13 +144,13 @@ PLoop(function(_ENV)
         -- @param   method          the request method
         __Arguments__{ NEString, Table/nil, HttpMethod/nil}
         function ProcessInnerRequest(self, url, params, method)
-            local rawreq    = self.Request
-            method          = method or HttpMethod_GET
+            local rawreq        = self.Request
+            method              = method or rawreq.HttpMethod
 
-            local ctx       = InnerContext(self.Application)
-            ctx.RawContext  = self
+            local ctx           = InnerContext(self.Application)
+            ctx.RawContext      = self
 
-            local request   = InnerRequest(ctx)
+            local request       = InnerRequest(ctx)
             request.RawRequest  = rawreq
             request.Root        = rawreq.Root
             request.Url         = url
@@ -164,8 +164,8 @@ PLoop(function(_ENV)
                 end
             end
 
-            ctx.Request     = request
-            ctx.Response    = InnerResponse (ctx)
+            ctx.Request         = request
+            ctx.Response        = InnerResponse (ctx)
             ctx.Response.RawResponse = self.Response
 
             return ctx:Process()
@@ -176,7 +176,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ Application }
         function __ctor(self, app)
-            self.Application = app
+            self.Application    = app
         end
     end)
 end)

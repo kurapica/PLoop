@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/03/19                                               --
--- Version      :   1.0.1                                                    --
+-- Update Date  :   2019/04/01                                               --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -282,7 +282,22 @@ PLoop(function(_ENV)
                 value           = Deserialize(JsonFormatProvider(), value)
             end
 
-            if type(value) ~= "table" or value[1] == nil then
+            if type(value) ~= "table" then
+                if value == nil then
+                    return nil, config.require and __Form__.RequireMessage or nil
+                end
+
+                -- Could be one element
+                local errs
+                local val, err  = config.elementconfig:validate(value)
+                value           = { val }
+                if err then
+                    errs        = {}
+                    errs[1]     = err
+                end
+
+                return value, errs
+            elseif value[1] == nil then
                 return nil, config.require and __Form__.RequireMessage or nil
             else
                 local errs

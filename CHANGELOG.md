@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 - The System.Web.HttpSession have a new property "Context" used to get the context where it's generated.
 - Fix the spell error for method "TrySetItems" of System.Web.ICacheSessionStorageProvider.
 - Struct.GetErrorMessage will only have one return value now, others are discarded.
+- Fix the System.Web.__Form__ can't validate single value for array types.
+- Send the Json data in an inner request will just return the json data to where the `context:ProcessInnerRequest(...)` is called, the system won't try to serialize and output it.
+- The inner request will use the raw request's http method if not specific, also will use the raw request's querystring or form if not specific.
+- The System.Web.ParseString will also convert the Lua table(object) values to json format string, so we can use the lua table in the template directly.
+- Fix the System.Web.JsonFormatProvider fail to parse 1-byte json data.
+-
 
 
 ## [1.2.1] - 2019-03-26 WangXH <kurapica125@outlook.com>
