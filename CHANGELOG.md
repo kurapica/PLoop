@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - The System.Web.HttpSession have a new property "Context" used to get the context where it's generated.
 - Fix the spell error for method "TrySetItems" of System.Web.ICacheSessionStorageProvider.
+- Struct.GetErrorMessage will only have one return value now, others are discarded.
 
 
 ## [1.2.1] - 2019-03-26 WangXH <kurapica125@outlook.com>

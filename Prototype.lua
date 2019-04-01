@@ -4326,9 +4326,9 @@ do
             ["GetErrorMessage"] = function(template, target)
                 target          = strtrim(tostring(target) or "")
                 if target == "" then
-                    return strgsub(template, "%%s%.?", "")
+                    return (strgsub(template, "%%s%.?", ""))
                 else
-                    return strgsub(template, "%%s", target)
+                    return (strgsub(template, "%%s", target))
                 end
             end;
 
