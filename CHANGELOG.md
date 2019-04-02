@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.3] - 2019-04-02 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the inner request, it won't use the http method from the raw quest if the params is specific.
+
 ## [1.2.2] - 2019-04-01 WangXH <kurapica125@outlook.com>
 ### Changed
 - The System.Web.HttpSession have a new property "Context" used to get the context where it's generated.

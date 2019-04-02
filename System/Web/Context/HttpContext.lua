@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
 -- Update Date  :   2019/04/01                                               --
--- Version      :   1.1.1                                                    --
+-- Version      :   1.1.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -145,7 +145,6 @@ PLoop(function(_ENV)
         __Arguments__{ NEString, Table/nil, HttpMethod/nil}
         function ProcessInnerRequest(self, url, params, method)
             local rawreq        = self.Request
-            method              = method or rawreq.HttpMethod
 
             local ctx           = InnerContext(self.Application)
             ctx.RawContext      = self
@@ -154,15 +153,20 @@ PLoop(function(_ENV)
             request.RawRequest  = rawreq
             request.Root        = rawreq.Root
             request.Url         = url
-            request.HttpMethod  = method
+
 
             if params then
+                method          = method or HttpMethod_GET
                 if method == HttpMethod_GET then
                     request.QueryString = params
                 else
                     request.Form        = params
                 end
+            else
+                method          = method or rawreq.HttpMethod
             end
+
+            request.HttpMethod  = method
 
             ctx.Request         = request
             ctx.Response        = InnerResponse (ctx)
