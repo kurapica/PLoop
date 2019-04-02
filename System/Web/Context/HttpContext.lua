@@ -154,7 +154,6 @@ PLoop(function(_ENV)
             request.Root        = rawreq.Root
             request.Url         = url
 
-
             if params then
                 method          = method or HttpMethod_GET
                 if method == HttpMethod_GET then

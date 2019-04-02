@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/04/10                                               --
--- Update Date  :   2018/04/02                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/04/02                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -319,6 +319,7 @@ PLoop(function(_ENV)
 
                     -- Get params & default
                     def = def:gsub("^%s*(%b())%s*", function(p) params = p return '' end)
+                    if not params then def = def:gsub("^%s*(%b{})%s*", function(p) params = p return '' end) end
                     default = def:gsub("^%s*(.-)%s*$", "%1")
 
                     -- Convert the url with inline code
