@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.4] - 2019-04-03 WangXH <kurapica125@outlook.com>
+### Changed
+- The data view's property is not read only now, so they can be serialized.
+
 ## [1.2.3] - 2019-04-02 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the inner request, it won't use the http method from the raw quest if the params is specific.

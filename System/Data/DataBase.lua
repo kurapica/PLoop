@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2018/09/07                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/04/03                                               --
+-- Version      :   1.1.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1164,14 +1164,36 @@ PLoop(function(_ENV)
                 local fld           = set.name
                 local converter     = set.converter or TYPE_CONVERTER[ptype]
 
-                definition.set      = false
-
                 if converter then
                     set.converter   = converter
                     local fromvalue = converter.fromvalue
                     local tovalue   = converter.tovalue
                     local format    = set.format or converter.format
                     local objfld    = "_Object_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
+                    local ntnull    = set.notnull
+
+                    definition.set  = function(self, object)
+                        local value = rawget(self, objfld)
+                        if value ~= nil and value == object then return end
+
+                        local data  = self[FIELD_DATA]
+                        if not data then data = {} self[FIELD_DATA] = data end
+                        local oval  = parseValue(data[fld])
+
+                        if object == nil then
+                            value   = nil
+                        else
+                            value   = tovalue(object, format)
+                        end
+
+                        if value == oval then return end
+                        if value == nil and ntnull then
+                            throw("The value can't be nil")
+                        end
+
+                        data[fld]   = value
+                        rawset(self, objfld, object)
+                    end
 
                     definition.get  = function(self)
                         local val   = rawget(self, objfld)
@@ -1188,8 +1210,24 @@ PLoop(function(_ENV)
                         return val
                     end
                 else
+                    local ntnull    = set.notnull
+
+                    definition.set  = function(self, value)
+                        local data  = self[FIELD_DATA]
+                        if not data then data = {} self[FIELD_DATA] = data end
+                        local oval  = parseValue(data[fld])
+
+                        if value == oval then return end
+                        if value == nil and ntnull then
+                            throw("The value can't be nil")
+                        end
+
+                        data[fld]   = value
+                    end
                     definition.get  = function(self) self = self[FIELD_DATA] or nil return self and parseValue(self[fld]) end
                 end
+
+                definition.throwable= set.notnull or nil
             end
         end
 
