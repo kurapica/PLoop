@@ -239,7 +239,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-To use the get call line, the `debug.getinfo` must existed.
+To use the get call line, the `debug.getinfo` must exist.
 
 ### Access un-existed object fields
 
@@ -578,7 +578,7 @@ end)
 
 The interfaces are abstract types of functionality, it also provided the multi-inheritance mechanism to the class. It works like the class, just can't be used to create objects.
 
-A class can only have one interface, but can extend no limit interfaces.
+A class can only have one super class, but can extend no limit interfaces.
 
 You could find the details in [006.class.md](https://github.com/kurapica/PLoop/blob/master/Docs/006.class.md)
 
