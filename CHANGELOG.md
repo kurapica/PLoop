@@ -1,14 +1,21 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.5] - 2019-04-05 WangXH <kurapica125@outlook.com>
+### Changed
+- The `__View__` attribute don't require the function must have a return value as the view data now.
+
+
 ## [1.2.4] - 2019-04-03 WangXH <kurapica125@outlook.com>
 ### Changed
 - The data view's property is not read only now, so they can be serialized.
+
 
 ## [1.2.3] - 2019-04-02 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the inner request, it won't use the http method from the raw quest if the params is specific.
 - The default template system in the web, can use tables as params for inner request or embed pages like `@[~/test { id = 1}]`, no need use the parentheses.
+
 
 ## [1.2.2] - 2019-04-01 WangXH <kurapica125@outlook.com>
 ### Changed
@@ -20,7 +27,6 @@ All notable changes to this project will be documented in this file.
 - The inner request will use the raw request's http method if not specific, also will use the raw request's querystring or form if not specific.
 - The System.Web.ParseString will also convert the Lua table(object) values to json format string, so we can use the lua table in the template directly.
 - Fix the System.Web.JsonFormatProvider fail to parse 1-byte json data.
--
 
 
 ## [1.2.1] - 2019-03-26 WangXH <kurapica125@outlook.com>

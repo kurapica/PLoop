@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2018/04/04                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2018/04/05                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -217,7 +217,7 @@ PLoop(function(_ENV)
 
                 if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
-                if data and path then
+                if path then
                     if self[4] then
                         context[__View__]       = { self[4], data }
                         response.ContentType    = "text/html"
@@ -233,11 +233,7 @@ PLoop(function(_ENV)
                         end
                     end
                 else
-                    if path then
-                        Error("The function %q failed to return a view data", self[1])
-                    else
-                        Error("The function %q failed to return a view path", self[1])
-                    end
+                    Error("The function %q failed to return a view path", self[1])
                     response.StatusCode = HTTP_STATUS.SERVER_ERROR
                 end
             else
