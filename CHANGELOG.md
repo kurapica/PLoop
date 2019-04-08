@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [1.2.6] - 2019-04-09 WangXH <kurapica125@outlook.com>
+### Changed
+- The inner request will also return the redirected path and code as result.
+
+
 ## [1.2.5] - 2019-04-05 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `__View__` attribute don't require the function must have a return value as the view data now.

@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2019/04/01                                               --
--- Version      :   1.1.2                                                    --
+-- Update Date  :   2019/04/08                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -101,6 +101,11 @@ PLoop(function(_ENV)
                 -- So we don't need to serialize and deserialize the json data
                 local json = self[InnerContext]
                 if json then return json[1], json[2] end
+
+                -- Check redirect
+                if self.Response.RequestRedirected then
+                    return self.Response.RedirectLocation, self.Response.StatusCode
+                end
             end
         end)
 
