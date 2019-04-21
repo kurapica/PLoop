@@ -205,7 +205,7 @@ PLoop(function(_ENV)
             end
 
             if not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
-                error("Usage: Date.Parse(s[, format][,isutc]) - the s isn't valid date", 2)
+                return
             end
 
             return Date(year, month, day, hour, min, sec, isutc)
