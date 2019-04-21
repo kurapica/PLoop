@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/08                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/04/21                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -192,7 +192,7 @@ PLoop(function(_ENV)
                 end
             end)
 
-            if fail or not (hour and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
+            if fail or not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
                 error("Usage: Date.Parse(s[, format][,isutc]) - the format isn't valid", 2)
             end
 
@@ -207,7 +207,7 @@ PLoop(function(_ENV)
                 sec         = tonumber(rs[sec])
             end
 
-            if not (hour and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
+            if not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
                 error("Usage: Date.Parse(s[, format][,isutc]) - the s isn't valid date", 2)
             end
 

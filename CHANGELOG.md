@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.7] - 2019-04-21 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the Date.Parse for custom format.
+
 
 ## [1.2.6] - 2019-04-09 WangXH <kurapica125@outlook.com>
 ### Changed
