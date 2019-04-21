@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/08                                               --
 -- Update Date  :   2019/04/21                                               --
--- Version      :   1.0.1                                                    --
+-- Version      :   1.0.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -136,7 +136,6 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ NEString, TimeFormat/"%Y-%m-%d %X", Boolean/false }
         function Parse(s, format, isutc)
             local year, month, day, hour, min, sec
-            local fail
             local index = 1
 
             if format:find("^!") then
@@ -155,23 +154,23 @@ PLoop(function(_ENV)
                 if w == "d" then
                     day     = index
                     index   = index + 1
-                    return "(%d%d)"
+                    return "(%d?%d)"
                 elseif w == "H" then
                     hour    = index
                     index   = index + 1
-                    return "(%d%d)"
+                    return "(%d?%d)"
                 elseif w == "m" then
                     month   = index
                     index   = index + 1
-                    return "(%d%d)"
+                    return "(%d?%d)"
                 elseif w == "M" then
                     min     = index
                     index   = index + 1
-                    return "(%d%d)"
+                    return "(%d?%d)"
                 elseif w == "S" then
                     sec     = index
                     index   = index + 1
-                    return "(%d%d)"
+                    return "(%d?%d)"
                 elseif w == "X" then
                     hour    = index
                     index   = index + 1
@@ -182,17 +181,15 @@ PLoop(function(_ENV)
                     sec     = index
                     index   = index + 1
 
-                    return "(%d%d):(%d%d):(%d%d)"
+                    return "(%d?%d):(%d?%d):(%d?%d)"
                 elseif w == "Y" then
                     year    = index
                     index   = index + 1
                     return "(%d%d%d%d)"
-                else
-                    fail = true
                 end
             end)
 
-            if fail or not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
+            if not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
                 error("Usage: Date.Parse(s[, format][,isutc]) - the format isn't valid", 2)
             end
 
