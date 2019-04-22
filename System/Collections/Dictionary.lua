@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2018/05/12                                               --
--- Version      :   1.1.1                                                    --
+-- Update Date  :   2019/04/22                                               --
+-- Version      :   1.1.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -347,6 +347,8 @@ PLoop(function(_ENV)
         extend "IDictionary"
 
         export {
+            DictionaryStreamWorker,
+
             type                = type,
             yield               = coroutine.yield,
             tinsert             = table.insert,
@@ -446,7 +448,7 @@ PLoop(function(_ENV)
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__{ IDictionary }
-        function DictionaryStreamWorker(self, dict)
+        function __ctor(self, dict)
             self[FLD_TARGETDICT] = dict
         end
 
