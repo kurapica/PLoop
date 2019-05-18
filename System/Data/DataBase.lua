@@ -222,6 +222,16 @@ PLoop(function(_ENV)
         -- @return self
         __Abstract__() function OrderBy(self, field, desc) return self end
 
+        -- Set the limit count
+        -- @param count
+        -- @return self
+        __Abstract__() function Limit(self, count) return self end
+
+        -- Set the offset
+        -- @param offset
+        -- @return self
+        __Abstract__() function Offset(self, offset) return self end
+
         --- Generate the final sql
         -- @return sql
         __Abstract__() function ToSql(self) end
@@ -1484,158 +1494,101 @@ PLoop(function(_ENV)
         QueryData               = struct(fldmembers)
         fldmembers              = nil
 
+        local function genQueryData(query)
+            local fquery        = {}
+
+            for name, val in pairs(query) do
+                local fld       = props[name]
+
+                if fld then
+                    if converter[fld] then
+                        val     = converter[1].tovalue(val, converter[2])
+                        if val == nil then
+                            error(strformat("The %q isn't valid", name), 3)
+                        end
+                    end
+                    fquery[fld] = val
+                elseif foreign[name] then
+                    local data  = val[FIELD_DATA]
+
+                    if not data then
+                        error(strformat("The %q isn't valid", name), 3)
+                    end
+
+                    for fkey, mkey in pairs(foreign[name]) do
+                        local fval  = data[mkey]
+                        if fval == nil then
+                            error(strformat("The %q isn't valid", name), 3)
+                        end
+                        fquery[fkey]= fval
+                    end
+                else
+                    error(strformat("The %s don't have field property named %q", clsname, name), 3)
+                end
+            end
+
+            if not next(fquery) then error("The query data can't be empty", 3) end
+
+            return fquery
+        end
+
+        local function genOrder(builder, orders)
+            if orders then
+                for _, order in ipairs(orders) do
+                    builder:OrderBy(props[order.name] or order.name, order.desc)
+                end
+            end
+            return builder
+        end
+
+        local function getEntityList(self, builder, lock)
+            local ctx           = self[0]
+
+            if builder then
+                if builder == self[1] then self[1] = nil end
+
+                builder:From(tabelname):Select(fields)
+                if lock then builder:Lock() end
+
+                local sql           = builder:ToSql()
+                local rs            = sql and ctx:Query(sql)
+
+                if rs then
+                    for i, data in ipairs(rs) do
+                        rs[i]       = Entity(ctx, data)
+                        if lock then rs[i]:SetLockForUpdate() end
+                    end
+
+                    return rs
+                end
+            end
+
+            return List()
+        end
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         __Arguments__{ QueryData, QueryOrders/nil }
         function Query(self, query, orders)
-            local fquery        = {}
-
-            for name, val in pairs(query) do
-                local fld       = props[name]
-
-                if fld then
-                    if converter[fld] then
-                        val     = converter[1].tovalue(val, converter[2])
-                        if val == nil then
-                            error(strformat("The %q isn't valid", name), 2)
-                        end
-                    end
-                    fquery[fld] = val
-                elseif foreign[name] then
-                    local data  = val[FIELD_DATA]
-
-                    if not data then
-                        error(strformat("The %q isn't valid", name), 2)
-                    end
-
-                    for fkey, mkey in pairs(foreign[name]) do
-                        local fval  = data[mkey]
-                        if fval == nil then
-                            error(strformat("The %q isn't valid", name), 2)
-                        end
-                        fquery[fkey]= fval
-                    end
-                else
-                    error(strformat("The %s don't have field property named %q", clsname, name), 2)
-                end
-            end
-
-            if not next(fquery) then error("The query data can't be empty", 2) end
-
-            local ctx           = self[0]
-            local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(fquery)
-
-            if orders then
-                for _, order in ipairs(orders) do
-                    builder:OrderBy(order.name, order.desc)
-                end
-            end
-
-            local sql           = builder:ToSql()
-
-            if sql then
-                local rs        = ctx:Query(sql)
-
-                if rs then
-                    for i, data in ipairs(rs) do
-                        rs[i]   = Entity(ctx, data)
-                    end
-
-                    return rs
-                end
-            end
-
-            return List()
+            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder():Where(genQueryData(query)), orders))
         end
 
         __Arguments__{ QueryData, QueryOrders/nil }
         function Lock(self, query, orders)
-            local fquery        = {}
-
-            for name, val in pairs(query) do
-                local fld       = props[name]
-
-                if fld then
-                    if converter[fld] then
-                        val     = converter[1].tovalue(val, converter[2])
-                        if val == nil then
-                            error(strformat("The %q isn't valid", name), 2)
-                        end
-                    end
-                    fquery[fld] = val
-                elseif foreign[name] then
-                    local data  = val[FIELD_DATA]
-
-                    if not data then
-                        error(strformat("The %q isn't valid", name), 2)
-                    end
-
-                    for fkey, mkey in pairs(foreign[name]) do
-                        local fval  = data[mkey]
-                        if fval == nil then
-                            error(strformat("The %q isn't valid", name), 2)
-                        end
-                        fquery[fkey]= fval
-                    end
-                else
-                    error(strformat("The %s don't have field property named %q", clsname, name), 2)
-                end
-            end
-
-            local ctx           = self[0]
-            local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(fquery):Lock()
-
-            if orders then
-                for _, order in ipairs(orders) do
-                    builder:OrderBy(order.name, order.desc)
-                end
-            end
-
-            local sql           = builder:ToSql()
-
-            if sql then
-                local rs        = ctx:Query(sql)
-
-                if rs then
-                    for i, data in ipairs(rs) do
-                        rs[i]   = Entity(ctx, data)
-                        rs[i]:SetLockForUpdate()
-                    end
-
-                    return rs
-                end
-            end
-
-            return List()
+            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder():Where(genQueryData(query)), orders), true)
         end
 
         __Arguments__{ QueryOrders/nil }
         function QueryAll(self, orders)
-            local ctx           = self[0]
-            local builder       = ctx.Connection:SqlBuilder():From(tabelname):Select(fields)
+            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder(), orders))
+        end
 
-            if orders then
-                for _, order in ipairs(orders) do
-                    builder:OrderBy(order.name, order.desc)
-                end
-            end
-
-            local sql           = builder:ToSql()
-
-            if sql then
-                local rs        = ctx:Query(sql)
-
-                if rs then
-                    for i, data in ipairs(rs) do
-                        rs[i]   = Entity(ctx, data)
-                    end
-
-                    return rs
-                end
-            end
-
-            return List()
+        __Arguments__{ QueryData }
+        function Where(self, query)
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
+            self[1]:Where(genQueryData(query))
+            return self
         end
 
         __Arguments__{ NEString, Any * 0 }
@@ -1648,53 +1601,39 @@ PLoop(function(_ENV)
         __Arguments__{ QueryOrders }
         function OrderBy(self, orders)
             self[1]            = self[1] or self[0].Connection:SqlBuilder()
-            for _, order in ipairs(orders) do
-                self[1]:OrderBy(order.name, order.desc)
-            end
+            genOrder(self[1], orders)
+            return self
+        end
+
+        __Arguments__{ NEString, Boolean/nil }
+        function OrderBy(self, name, desc)
+            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]:OrderBy(props[name] or name, desc)
+            return self
+        end
+
+        __Arguments__{ NaturalNumber }
+        function Limit(self, limit)
+            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]:Limit(limit)
+            return self
+        end
+
+        __Arguments__{ NaturalNumber }
+        function Offset(self, offset)
+            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]:Offset(offset)
             return self
         end
 
         __Arguments__{}
         function Query(self)
-            local ctx           = self[0]
-            local builder       = self[1]
-            if not (ctx and builder) then return List() end
-
-            self[1]             = nil
-
-            local rs            = ctx:Query(builder:From(tabelname):Select(fields))
-
-            if rs then
-                for i, data in ipairs(rs) do
-                    rs[i]       = Entity(ctx, data)
-                end
-
-                return rs
-            else
-                return List()
-            end
+            return getEntityList(self, self[1])
         end
 
         __Arguments__{}
         function Lock(self)
-            local ctx           = self[0]
-            local builder       = self[1]
-            if not (ctx and builder) then return List() end
-
-            self[1]             = nil
-
-            local rs            = ctx:Query(builder:From(tabelname):Select(fields):Lock())
-
-            if rs then
-                for i, data in ipairs(rs) do
-                    rs[i]       = Entity(ctx, data)
-                    rs[i]:SetLockForUpdate()
-                end
-
-                return rs
-            else
-                return List()
-            end
+            return getEntityList(self, self[1], true)
         end
 
         --- Get the data context of the data collection
