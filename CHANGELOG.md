@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [1.2.8] - 2019-05-17 WangXH <kurapica125@outlook.com>
+### Changed
+- System.Data.DataCollection.Query method changed, can no longer be used to process sql directly, we can use `ctx.Users:Where("id in (%s)", {1, 2, 3, 4}):OrderBy{ "id" }:Query()`, the Lock method is also changed.
+
+
 ## [1.2.7] - 2019-04-21 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the Date.Parse for custom format.

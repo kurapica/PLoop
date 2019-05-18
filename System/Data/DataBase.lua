@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2019/04/03                                               --
--- Version      :   1.1.1                                                    --
+-- Update Date  :   2019/05/17                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1639,23 +1639,62 @@ PLoop(function(_ENV)
         end
 
         __Arguments__{ NEString, Any * 0 }
-        function Query(self, sql, ...)
-            local ctx           = self[0]
-            --local sql           = ctx.Connection:SqlBuilder():From(tabelname):Select(fields):Where(where, ...):ToSql()
+        function Where(self, condition, ...)
+            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]:Where(condition, ...)
+            return self
+        end
 
-            if ctx then
-                local rs        = ctx:Query(sql, ...)
-
-                if rs then
-                    for i, data in ipairs(rs) do
-                        rs[i]   = Entity(ctx, data)
-                    end
-
-                    return rs
-                end
+        __Arguments__{ QueryOrders }
+        function OrderBy(self, orders)
+            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            for _, order in ipairs(orders) do
+                self[1]:OrderBy(order.name, order.desc)
             end
+            return self
+        end
 
-            return List()
+        __Arguments__{}
+        function Query(self)
+            local ctx           = self[0]
+            local builder       = self[1]
+            if not (ctx and builder) then return List() end
+
+            self[1]             = nil
+
+            local rs            = ctx:Query(builder:From(tabelname):Select(fields))
+
+            if rs then
+                for i, data in ipairs(rs) do
+                    rs[i]       = Entity(ctx, data)
+                end
+
+                return rs
+            else
+                return List()
+            end
+        end
+
+        __Arguments__{}
+        function Lock(self)
+            local ctx           = self[0]
+            local builder       = self[1]
+            if not (ctx and builder) then return List() end
+
+            self[1]             = nil
+
+            local rs            = ctx:Query(builder:From(tabelname):Select(fields):Lock())
+
+            if rs then
+                for i, data in ipairs(rs) do
+                    rs[i]       = Entity(ctx, data)
+                    rs[i]:SetLockForUpdate()
+                end
+
+                return rs
+            else
+                return List()
+            end
         end
 
         --- Get the data context of the data collection
