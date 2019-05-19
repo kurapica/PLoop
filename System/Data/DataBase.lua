@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2019/05/17                                               --
--- Version      :   1.2.1                                                    --
+-- Update Date  :   2019/05/19                                               --
+-- Version      :   1.2.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1593,35 +1593,36 @@ PLoop(function(_ENV)
 
         __Arguments__{ NEString, Any * 0 }
         function Where(self, condition, ...)
-            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
+            condition           = condition:gsub("%%?[_%w]+", props)
             self[1]:Where(condition, ...)
             return self
         end
 
         __Arguments__{ QueryOrders }
         function OrderBy(self, orders)
-            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
             genOrder(self[1], orders)
             return self
         end
 
         __Arguments__{ NEString, Boolean/nil }
         function OrderBy(self, name, desc)
-            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
             self[1]:OrderBy(props[name] or name, desc)
             return self
         end
 
         __Arguments__{ NaturalNumber }
         function Limit(self, limit)
-            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
             self[1]:Limit(limit)
             return self
         end
 
         __Arguments__{ NaturalNumber }
         function Offset(self, offset)
-            self[1]            = self[1] or self[0].Connection:SqlBuilder()
+            self[1]             = self[1] or self[0].Connection:SqlBuilder()
             self[1]:Offset(offset)
             return self
         end
