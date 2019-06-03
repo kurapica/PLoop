@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.10] - 2019-06-03 WangXH <kurapica125@outlook.com>
+### Added
+- The `System.Web.__InnerRequest__` is added, so the web request handler(function or action) can only be processed for inner request.
+
+
 ## [1.2.9] - 2019-05-19 WangXH <kurapica125@outlook.com>
 ### Changed
 - The queue and final method system added for System.Data.DataCollection, only suppor on data entity query, so we can use codes like `ctx.Users:Where("Telno like '%s'", telno):OrderBy("id"):Limit(10):Offset(30):Query()`, the query key in Where and OrderBy could be the data entity property, it'll be changed to the real field name.

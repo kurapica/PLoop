@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/04/01                                               --
--- Version      :   1.1.1                                                    --
+-- Update Date  :   2019/06/03                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -454,6 +454,50 @@ PLoop(function(_ENV)
             end)
             return { type }, true
         end
+    end)
+
+    -- the inner request validator
+    __Sealed__() class "__InnerRequest__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export { NOT_FOUND      = NOT_FOUND }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if targettype == AttributeTargets.Function then
+                return function(context, ...)
+                    if not context.IsInnerRequest then
+                        context.Response.StatusCode = NOT_FOUND
+                        return
+                    end
+
+                    return definition(context, ...)
+                end
+            else
+                return function(self, context, ...)
+                    if not context.IsInnerRequest then
+                        context.Response.StatusCode = NOT_FOUND
+                        return
+                    end
+
+                    return definition(self, context, ...)
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
+
+        --- the attribute priority
+        property "Priority"         { set = false, default = AttributePriority.Lower }
+
+        -- the attribute priority sub level
+        property "SubLevel"         { set = false, default = - 3000 }
     end)
 
     -----------------------------------------------------------------------
