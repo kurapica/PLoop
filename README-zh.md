@@ -265,7 +265,7 @@ require "PLoop"
 PLoop(function(_ENV)
 	obj = List(10)
 
-	print(obj:Remove()) -- 10
+	print(obj:RemoveByIndex()) -- 10
 end)
 ```
 
