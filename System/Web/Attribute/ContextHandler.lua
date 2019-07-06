@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2018/04/05                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/07/05                                               --
+-- Version      :   1.2.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -356,6 +356,8 @@ PLoop(function(_ENV)
                 local path, raw = self[1](context)
                 if path then
                     response:Redirect(path, nil, raw)
+                elseif self[2] then
+                    response:Redirect(self[2], nil, self[3])
                 else
                     response.StatusCode = HTTP_STATUS.NOT_FOUND
                 end
@@ -365,7 +367,7 @@ PLoop(function(_ENV)
         RedirectContextHandler  = class { IHttpContextHandler,
             Process = processHandler,
             __call  = processHandler,
-            __new   = function(_, target) return { target }, true end,
+            __new   = function(_, target, path, raw) return { target, path, raw }, true end,
         }
 
         -----------------------------------------------------------
@@ -381,9 +383,21 @@ PLoop(function(_ENV)
         -- @return  definition                  the new definition
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
             if targettype == AttributeTargets.Method and issubtype(owner, Controller) then
-                return function (self, ...) return self:Redirect(definition(self, ...)) end
+                if self.Path then
+                    local opath, oraw       = self.Path, self.Raw
+                    return function(self, ...)
+                        local path, raw     = definition(self, ...)
+                        if path then
+                            return self:Redirect(path, raw)
+                        else
+                            return self:Redirect(opath, oraw)
+                        end
+                    end
+                else
+                    return function (self, ...) return self:Redirect(definition(self, ...)) end
+                end
             elseif targettype == AttributeTargets.Function then
-                return RedirectContextHandler(definition)
+                return RedirectContextHandler(definition, self.Path, self.Raw)
             end
         end
 
@@ -393,5 +407,14 @@ PLoop(function(_ENV)
         --- the attribute target
         property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
         property "Priority"         { set = false, default = AttributePriority.Lowest }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ NEString/nil, Boolean/nil }
+        function __ctor(self, path, raw)
+            self.Path       = path
+            self.Raw        = raw
+        end
     end)
 end)
