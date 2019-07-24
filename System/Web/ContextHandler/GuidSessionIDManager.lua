@@ -46,6 +46,7 @@ PLoop(function(_ENV)
         function SaveSessionID(self, context, session)
             local cookie = context.Response.Cookies[self.CookieName]
             cookie.Value = session.SessionID
+            cookie.HttpOnly = true
             if session.Timeout then cookie.Expires = session.Timeout end
         end
 
