@@ -47,6 +47,7 @@ PLoop(function(_ENV)
             local cookie = context.Response.Cookies[self.CookieName]
             cookie.Value = session.SessionID
             cookie.HttpOnly = true
+            cookie.SameSite = "Lax"
             if session.Timeout then cookie.Expires = session.Timeout end
         end
 
