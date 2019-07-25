@@ -201,6 +201,11 @@ PLoop(function(_ENV)
             self.Context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
         end
 
+        --- Forbidden
+        function Forbidden(self)
+            self.Context.Response.StatusCode = HTTP_STATUS.FORBIDDEN
+        end
+
         -----------------------------------------------------------------------
         --                          inherit method                           --
         -----------------------------------------------------------------------
