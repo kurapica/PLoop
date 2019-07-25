@@ -17,7 +17,7 @@ PLoop(function(_ENV)
     __Sealed__() class "System.Web.GuidSessionIDManager" (function (_ENV)
         extend "ISessionIDManager"
 
-        export { validate = Struct.ValidateValue }
+        export { validate = Struct.ValidateValue, HttpCookie.SameSiteValue }
         export { Guid, Date }
 
         -----------------------------------------------------------------------
@@ -47,7 +47,7 @@ PLoop(function(_ENV)
             local cookie = context.Response.Cookies[self.CookieName]
             cookie.Value = session.SessionID
             cookie.HttpOnly = true
-            cookie.SameSite = "Lax"
+            cookie.SameSite = SameSiteValue.Lax
             if session.Timeout then cookie.Expires = session.Timeout end
         end
 
