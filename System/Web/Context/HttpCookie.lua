@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/11                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/07/25                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -26,6 +26,11 @@ PLoop(function(_ENV)
             tblconcat           = table.concat,
             type                = type,
             pairs               = pairs,
+        }
+
+        __Sealed__() enum "SameSiteValue" {
+            Strict              = Strict,
+            Lax                 = Lax,
         }
 
         -----------------------------------------------------------------------
@@ -46,6 +51,9 @@ PLoop(function(_ENV)
 
         --- Gets or sets a value that specifies whether a cookie is accessible by client-side script
         property "HttpOnly" { type = Boolean }
+
+        --- Gets or sets whether the cookie should be restricted to a first-party or same-site context
+        property "SameSite" { type = SameSiteValue }
 
         --- Gets or sets the name of a cookie
         property "Name"     { type = String }
@@ -80,9 +88,10 @@ PLoop(function(_ENV)
                 end
             end
             if self.Expires  then tinsert(cache, "Expires=" .. self.Expires:ToUTCString("%a, %d-%b-%y %X GMT")) end
-            if self.MaxAge   then tinsert(cache, "Max-Age=" .. self.MaxAge) end
-            if self.Domain   then tinsert(cache, "Domain="  .. self.Domain) end
-            if self.Path     then tinsert(cache, "Path="    .. self.Path)   end
+            if self.MaxAge   then tinsert(cache, "Max-Age=" .. self.MaxAge)   end
+            if self.Domain   then tinsert(cache, "Domain="  .. self.Domain)   end
+            if self.Path     then tinsert(cache, "Path="    .. self.Path)     end
+            if self.SameSite then tinsert(cache, "SameSite=".. self.SameSite) end
             if self.Secure   then tinsert(cache, "Secure")   end
             if self.HttpOnly then tinsert(cache, "HttpOnly") end
 
