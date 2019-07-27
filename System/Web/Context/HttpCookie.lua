@@ -29,8 +29,8 @@ PLoop(function(_ENV)
         }
 
         __Sealed__() enum "SameSiteValue" {
-            Strict              = Strict,
-            Lax                 = Lax,
+            Strict              = "Strict",
+            Lax                 = "Lax",
         }
 
         -----------------------------------------------------------------------

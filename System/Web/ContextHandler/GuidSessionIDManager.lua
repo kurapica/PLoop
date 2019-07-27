@@ -38,17 +38,17 @@ PLoop(function(_ENV)
         end
 
         function RemoveSessionID(self, context)
-            local cookie = context.Response.Cookies[self.CookieName]
+            local cookie        = context.Response.Cookies[self.CookieName]
             if not cookie.Value then cookie.Value = "none" end
-            cookie.Expires = Date.Now:AddMinutes(-1)
+            cookie.Expires      = Date.Now:AddMinutes(-1)
         end
 
         function SaveSessionID(self, context, session)
-            local cookie = context.Response.Cookies[self.CookieName]
-            cookie.Value = session.SessionID
-            cookie.HttpOnly = true
-            cookie.SameSite = SameSiteValue.Lax
-            if session.Timeout then cookie.Expires = session.Timeout end
+            local cookie        = context.Response.Cookies[self.CookieName]
+            cookie.Value        = session.SessionID
+            cookie.HttpOnly     = true
+            cookie.SameSite     = SameSiteValue.Lax
+            cookie.Expires      = session.Timeout or Date.Now:AddMinutes(self.TimeoutMinutes)
         end
 
         function ValidateSessionID(self, id)
