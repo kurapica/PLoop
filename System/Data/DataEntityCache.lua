@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2019/03/20                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/07/27                                               --
+-- Version      :   1.2.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -79,14 +79,14 @@ PLoop(function(_ENV)
             __Arguments__{ primaryflds[1].type }
             function GetEntity(self, id)
                 local key       = CACHE_KEY .. tostring(id)
-                local entity    = self.Cache:Get(key)
+                local entity    = self.Cache:Get(key, clsEntity)
 
                 if entity == nil then
                     with(self.DataContext)(function(ctx)
                         entity  = ctx[KeyCollection]:Query{ [QueryKey] = id }:First()
 
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            self.Cache:Set(key, entity, self.Timeout, true)
                         end
                     end)
                 end
@@ -97,14 +97,14 @@ PLoop(function(_ENV)
             __Arguments__{ QueryData }
             function GetEntity(self, query)
                 local key       = CACHE_KEY .. tostring(query[QueryKey])
-                local entity    = self.Cache:Get(key)
+                local entity    = self.Cache:Get(key, clsEntity)
 
                 if entity == nil then
                     with(self.DataContext)(function(ctx)
                         entity  = ctx[KeyCollection]:Query(query):First()
 
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            self.Cache:Set(key, entity, self.Timeout, true)
                         end
                     end)
                 end
@@ -116,7 +116,7 @@ PLoop(function(_ENV)
             __Arguments__{ clsEntity }
             function SaveEntity(self, entity)
                 local key       = CACHE_KEY .. tostring(entity[QueryKey])
-                self.Cache:Set(key, entity, self.Timeout)
+                self.Cache:Set(key, entity, self.Timeout, true)
             end
 
             --- Delete the entity from the cache
@@ -148,7 +148,7 @@ PLoop(function(_ENV)
                 local id        = List(...):Map(tostring):Join("^")
 
                 local key       = CACHE_KEY .. id
-                local entity    = self.Cache:Get(key)
+                local entity    = self.Cache:Get(key, clsEntity)
 
                 if entity == nil then
                     local query = {}
@@ -158,7 +158,7 @@ PLoop(function(_ENV)
                         entity  = ctx[KeyCollection]:Query(query):First()
 
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            self.Cache:Set(key, entity, self.Timeout, true)
                         end
                     end)
                 end
@@ -171,14 +171,14 @@ PLoop(function(_ENV)
                 local id        = pattern:Map(function(v) return tostring(query[primaryflds[v].name]) end):Join("^")
 
                 local key       = CACHE_KEY .. id
-                local entity    = self.Cache:Get(key)
+                local entity    = self.Cache:Get(key, clsEntity)
 
                 if entity == nil then
                     with(self.DataContext)(function(ctx)
                         entity  = ctx[KeyCollection]:Query(query):First()
 
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            self.Cache:Set(key, entity, self.Timeout, true)
                         end
                     end)
                 end
@@ -191,7 +191,7 @@ PLoop(function(_ENV)
             function SaveEntity(self, entity)
                 local id        = pattern:Map(function(v) return tostring(query[primaryflds[v].name]) end):Join("^")
                 local key       = CACHE_KEY .. id
-                self.Cache:Set(key, entity, self.Timeout)
+                self.Cache:Set(key, entity, self.Timeout, true)
             end
 
             --- Delete the entity from the cache
