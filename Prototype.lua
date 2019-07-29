@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/06/03                                               --
--- Version      :   1.2.10                                                   --
+-- Update Date  :   2019/07/29                                               --
+-- Version      :   1.2.11                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -541,7 +541,7 @@ do
             setfenv             = fakefunc
         end
     end
-    safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
+    safesetfenv                 = fakefunc
 
     -----------------------------------------------------------------------
     --                            main cache                             --
@@ -15629,6 +15629,8 @@ end
 --                              _G installation                              --
 -------------------------------------------------------------------------------
 do
+    safesetfenv                 = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
+
     -----------------------------------------------------------------------
     --                            _G keyword                             --
     -----------------------------------------------------------------------
