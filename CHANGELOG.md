@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.2.11] - 2019-06-03 WangXH <kurapica125@outlook.com>
+### Added
+- The prototype.lua keeps using no old style to avoid some problem caused by the environment changing, there is no need to keep using the old definition style.
+
 ## [1.2.10] - 2019-06-03 WangXH <kurapica125@outlook.com>
 ### Added
 - The `System.Web.__InnerRequest__` is added, so the web request handler(function or action) can only be processed for inner request.
