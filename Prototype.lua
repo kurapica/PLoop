@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/07/29                                               --
--- Version      :   1.2.11                                                   --
+-- Update Date  :   2019/07/30                                               --
+-- Version      :   1.2.12                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -7537,7 +7537,8 @@ do
         if not info then return msg, stack end
 
         if not class.Validate(target) then return "the target is not valid", stack end
-        if not class.Validate(super) then return "the superclass must be a class", stack end
+        if not class.Validate(super) then return "the super class must be a class", stack end
+        if class.IsFinal(super) then return "the super class is marked as final, can't be inherited", stack end
 
         if info[FLD_IC_SUPCLS] and info[FLD_IC_SUPCLS] ~= super then return strformat("The %s already has a super class", tostring(target)), stack end
 
