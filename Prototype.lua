@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/07/30                                               --
--- Version      :   1.2.12                                                   --
+-- Update Date  :   2019/08/18                                               --
+-- Version      :   1.2.14                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -6109,6 +6109,7 @@ do
     local MOD_ATTROBJ_CLS       = newflags()                -- CAN APPLY ATTRIBUTES ON OBJECTS
     local MOD_TEMPLATE_IC       = newflags()                -- AS TEMPLATE INTERFACE/CLASS
     local MOD_AUTOCACHE_OBJ     = newflags()                -- OBJECT METHOD AUTO-CACHE
+    local MOD_RECYCLABLE_OBJ    = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
 
     local MOD_INITVAL_CLS       = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                   (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -7246,11 +7247,14 @@ do
                 -- Auto-gen dispose for object methods
                 local FLD_IC_STDISP     = dispIdx + 1
                 if FLD_IC_STDISP <= FLD_IC_ENDISP then
-                    objmtd[IC_META_DISPOB]  = function(self)
-                        if rawget(self, IC_META_DISPOSED) == true then return end
-                        for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
-                        rawset(wipe(self), IC_META_DISPOSED, true)
-                    end
+                    objmtd[IC_META_DISPOB]  = validateflags(MOD_RECYCLABLE_OBJ, info[FLD_IC_MOD])
+                        and function(self)
+                            for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
+                        end or function(self)
+                            if rawget(self, IC_META_DISPOSED) == true then return end
+                            for i = FLD_IC_STDISP, FLD_IC_ENDISP do info[i](self) end
+                            rawset(wipe(self), IC_META_DISPOSED, true)
+                        end
 
                     if not objmeta[IC_META_GC] and PLOOP_PLATFORM_SETTINGS.USE_DISPOSE_AS_META_GC then
                         objmeta[IC_META_GC] = objmtd[IC_META_DISPOB]
@@ -8847,6 +8851,17 @@ do
                 return info and validateflags(MOD_ATTRFUNC_OBJ, info[FLD_IC_MOD]) or false
             end;
 
+            --- Whether the class object is recyclable so the system won't wipe it when dispose it
+            -- @static
+            -- @method  IsObjectRecyclable
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the class object is recyclable
+            ["IsObjectRecyclable"] = function(target)
+                local info      = getICTargetInfo(target)
+                return info and validateflags(MOD_RECYCLABLE_OBJ, info[FLD_IC_MOD]) or false
+            end;
+
             --- Whether the class object'll save its source when created
             -- @static
             -- @method  IsObjectSourceDebug
@@ -9137,6 +9152,20 @@ do
             ["SetObjectGenerator"] = function(target, func, stack)
                 local msg, stack= addMetaData(target, IC_META_NEW, func, stack)
                 if msg then error("Usage: class.SetObjectGenerator(target, func[, stack]) - " .. msg, stack + 1) end
+            end;
+
+            --- Whether the class object is recyclable so the system won't wipe it when dispose it
+            -- @static
+            -- @method  IsObjectRecyclable
+            -- @owner   class
+            -- @owner   class
+            -- @format  (target, on[, stack])
+            -- @param   target                      the target class
+            -- @param   on                          true if the object of the class should be recyclable
+            -- @param   stack                       the stack level
+            ["SetObjectRecyclable"] = function(target, on, stack)
+                local msg, stack    = toggleICMode(target, MOD_RECYCLABLE_OBJ, on, stack)
+                if msg then error("Usage: class.SetObjectRecyclable(target, on, [, stack])  - " .. msg, stack + 1) end
             end;
 
             --- Make the class object so you can't read value from a non-existed fields
@@ -13381,6 +13410,18 @@ do
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
         end
     end)
+
+    --- Set the class's object to be recyclable
+    __Sealed__()
+    class "System.__Recyclable__" { IApplyAttribute,
+        ApplyAttribute          = function (self, target, targettype, manager, owner, name, stack)
+            if targettype == ATTRTAR_CLASS then
+                class.SetObjectRecyclable(target, self[1], stack + 1)
+            end
+        end,
+        AttributeTarget         = { set = false, default = ATTRTAR_CLASS + ATTRTAR_INTERFACE },
+        __new                   = function (_, flag) return { flag == nil and true or flag } end
+    }
 
     --- Set the class's objects so access non-existent fields on them will be denied
     __Sealed__()

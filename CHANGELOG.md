@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.2.14] - 2019-08-18 WangXH <kurapica125@outlook.com>
+### Added
+- The `System.__Recyclable__` attribtue is added for classes, so their objects are recylable, the system won't wipe them when Dispose them, and the *Disposed* field won't be set to true since we need to re-use them. The recycle part must be done by the classes themselves.
+
 ## [1.2.11] - 2019-06-03 WangXH <kurapica125@outlook.com>
 ### Added
 - The prototype.lua keeps using no old style to avoid some problem caused by the environment changing, there is no need to keep using the old definition style.
