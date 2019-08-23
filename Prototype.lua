@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/08/18                                               --
--- Version      :   1.2.14                                                   --
+-- Update Date  :   2019/08/23                                               --
+-- Version      :   1.2.15                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -14341,6 +14341,11 @@ do
 
             for i = 1, len do
                 local var       = self[i]
+
+                if not var then
+                    error(strformat("Usage: __Arguments__{...} - the %s type setting is not valid", parseindex(i)), stack)
+                end
+
                 vars[i]         = var
 
                 if var.optional then

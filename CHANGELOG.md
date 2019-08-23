@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.2.15] - 2019-08-23 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the error message stack level for un-supported type settings in `__Arguments__`.
+
 ##[1.2.14] - 2019-08-18 WangXH <kurapica125@outlook.com>
 ### Added
 - The `System.__Recyclable__` attribtue is added for classes, so their objects are recylable, the system won't wipe them when Dispose them, and the *Disposed* field won't be set to true since we need to re-use them. The recycle part must be done by the classes themselves.
