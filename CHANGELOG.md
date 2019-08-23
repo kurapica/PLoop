@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ##[1.2.15] - 2019-08-23 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the error message stack level for un-supported type settings in `__Arguments__`.
+- Add variable checking for Enum.ValidateFlags, the check will be disabled when set PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED to true.
 
 ##[1.2.14] - 2019-08-18 WangXH <kurapica125@outlook.com>
 ### Added

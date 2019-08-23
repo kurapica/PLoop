@@ -5599,9 +5599,17 @@ do
             -- @owner   enum
             -- @param   target                      the target value only should be 2^n
             -- @param   check                       the check value
-            -- @param   boolean                     true if the check value contains the target value
+            -- @return  boolean                     true if the check value contains the target value
             -- @usage   print(enum.ValidateFlags(4, 7)) -- true : 7 = 1 + 2 + 4
-            ["ValidateFlags"]   = validateflags;
+            ["ValidateFlags"]   = PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED and validateflags or function(target, check, stack)
+                if not (type(target) == "number" and floor(target) == target and target > 0) then
+                    error("Usage: enum.ValidateFlags(target, check) - the target value must be a positive integer", parsestack(stack) + 1)
+                end
+                if not (type(check) == "number" and floor(check) == check) then
+                    error("Usage: enum.ValidateFlags(target, check) - the check value must be an integer", parsestack(stack) + 1)
+                end
+                return validateflags(target, check)
+            end;
 
             --- Whether the value is the enumeration's element's name or value
             -- @static
