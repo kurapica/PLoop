@@ -5605,7 +5605,7 @@ do
                 if not (type(target) == "number" and floor(target) == target and target > 0) then
                     error("Usage: enum.ValidateFlags(target, check) - the target value must be a positive integer", parsestack(stack) + 1)
                 end
-                if not (type(check) == "number" and floor(check) == check) then
+                if check ~= nil and not (type(check) == "number" and floor(check) == check) then
                     error("Usage: enum.ValidateFlags(target, check) - the check value must be an integer", parsestack(stack) + 1)
                 end
                 return validateflags(target, check)
