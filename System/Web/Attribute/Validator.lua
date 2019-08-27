@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/06/03                                               --
--- Version      :   1.2.1                                                    --
+-- Update Date  :   2019/08/27                                               --
+-- Version      :   1.2.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -217,6 +217,7 @@ PLoop(function(_ENV)
             tonumber            = tonumber,
             pairs               = pairs,
             type                = type,
+            pcall               = pcall,
             strgsub             = string.gsub,
             strtrim             = function (s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
 
@@ -279,7 +280,8 @@ PLoop(function(_ENV)
 
         local function validateArrayValue(config, value)
             if type(value) == "string" then
-                value           = Deserialize(JsonFormatProvider(), value)
+                local ok, val   = pcall(Deserialize, JsonFormatProvider(), value)
+                if ok then value= val end
             end
 
             if type(value) ~= "table" then
@@ -318,7 +320,8 @@ PLoop(function(_ENV)
 
         local function validateMemberValue(config, value)
             if type(value) == "string" then
-                value               = Deserialize(JsonFormatProvider(), value)
+                local ok, val   = pcall(Deserialize, JsonFormatProvider(), value)
+                if ok then value= val end
             end
 
             if type(value) ~= "table" then
