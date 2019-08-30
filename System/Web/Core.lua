@@ -517,8 +517,8 @@ PLoop(function(_ENV)
         end
 
         --- Parse the value to string so special null value can be changed to empty string
-        __Static__() function ParseString(val)
-            return val == nil and "" or SPECIAL_MAP[val] or type(val) ~= "table" and tostring(val) or Web.Json(val)
+        __Static__() function ParseString(val, otype)
+            return val == nil and "" or SPECIAL_MAP[val] or type(val) ~= "table" and tostring(val) or Web.Json(val, otype)
         end
 
         --- Encodes a string to be displayed in a browser

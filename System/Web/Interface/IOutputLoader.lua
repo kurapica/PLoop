@@ -478,9 +478,9 @@ PLoop(function(_ENV)
 
                 local wRenderOtherIndent    = [[self:RenderAnother(%s, _PL_write, _PL_indent.."%s", %s%s)]]
                 local wRenderOtherNoIndent  = [[self:RenderAnother(%s, _PL_write, "", %s%s)]]
-                local wInnerRequest         = [[_PL_write(tostring(self.Context:ProcessInnerRequest(%s%s)))]]
+                local wInnerRequest         = [[_PL_write(tostring(select(2, self.Context:ProcessInnerRequest(%s%s))))]]
 
-                definition = {"local _PL_HtmlEncode, tostring = System.Web.HtmlEncode, System.Web.ParseString"}
+                definition = {"local _PL_HtmlEncode, tostring, select = System.Web.HtmlEncode, System.Web.ParseString, select"}
 
                 local noindent              = config.noindent
                 local linebreak             = not config.nolinebreak
