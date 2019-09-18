@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
--- Update Date  :   2019/03/19                                               --
--- Version      :   1.1.2                                                    --
+-- Update Date  :   2019/09/03                                               --
+-- Version      :   1.1.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -54,6 +54,7 @@ PLoop(function(_ENV)
     -----------------------------------------------------------
     local _SerializableType     = {}
     local _SerializeInfo        = {}
+    local _DefaultInfo          = {}
     local _NonSerializableInfo  = {}
 
     -----------------------------------------------------------
@@ -84,6 +85,7 @@ PLoop(function(_ENV)
         -- Cache the field info for quick access
         if isclass(type) and not issubtype(type, ISerializable) then
             local fieldInfo = {}
+            local dftInfo
 
             for name, prop in getfeatures(type) do
                 if validprop(prop) and not _NonSerializableInfo[prop] and prop:IsReadable() and prop:IsWritable() then
@@ -93,10 +95,19 @@ PLoop(function(_ENV)
                     elseif isSerializableType(ptype) then
                         fieldInfo[name] = ptype
                     end
+
+                    local default = prop:GetDefault()
+                    if default ~= nil then
+                        dftInfo         = dftInfo or {}
+                        dftInfo[name]   = default
+                    end
                 end
             end
 
             _SerializeInfo  = safeset(_SerializeInfo, type, fieldInfo)
+            if dftInfo or _DefaultInfo[type] then
+                _DefaultInfo= safeset(_DefaultInfo, type, dftInfo)
+            end
         elseif isstruct(type) and getstructcategory(type) == MEMBER then
             local fieldInfo = {}
 
@@ -203,13 +214,26 @@ PLoop(function(_ENV)
             else
                 local srinfo = _SerializeInfo[stype]
                 if srinfo and type(srinfo) == "table" then
-                    for name, ptype in pairs(srinfo) do
-                        local val = object[name]
-                        if val ~= nil then
-                            if type(val) == "table" then
-                                val = serialize(val, ptype, cache)
+                    local default = _DefaultInfo[stype]
+                    if default then
+                        for name, ptype in pairs(srinfo) do
+                            local val = object[name]
+                            if val ~= nil and val ~= default[name] then
+                                if type(val) == "table" then
+                                    val = serialize(val, ptype, cache)
+                                end
+                                storage[name] = val
                             end
-                            storage[name] = val
+                        end
+                    else
+                        for name, ptype in pairs(srinfo) do
+                            local val = object[name]
+                            if val ~= nil then
+                                if type(val) == "table" then
+                                    val = serialize(val, ptype, cache)
+                                end
+                                storage[name] = val
+                            end
                         end
                     end
                 else

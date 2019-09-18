@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/08/30                                               --
--- Version      :   1.3.1                                                    --
+-- Update Date  :   2019/09/03                                               --
+-- Version      :   1.3.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11657,7 +11657,7 @@ do
             -- @return  default                     the default value
             ["GetDefault"]      = function(self)
                 local info      = _PropertyInfo[self]
-                return info and clone(info[FLD_PROP_DEFAULT]) or ni
+                return info and clone(info[FLD_PROP_DEFAULT]) or nil
             end;
 
             --- Get the property type

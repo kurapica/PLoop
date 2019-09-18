@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+##[1.3.2] - 2019-09-03 WangXH <kurapica125@outlook.com>
+### Changed
+- The class object's default property value won't be serialized.
+
 ##[1.3.1] - 2019-08-30 WangXH <kurapica125@outlook.com>
 ### Changed
 - ProcessInnerRequest will return the status code as the first value, then the redirected path or the json data.
