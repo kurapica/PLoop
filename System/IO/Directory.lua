@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/03/29                                               --
--- Update Date  :   2018/03/29                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/09/20                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -31,31 +31,25 @@ PLoop(function(_ENV)
 
         if OperationSystem.Current == OperationSystemType.Windows then
             --- Get sub-directories
-            __PipeRead__("dir \"%s\"", ".*", OperationSystemType.Windows)
+            __PipeRead__("dir /A:D /b \"%s\"", ".*", OperationSystemType.Windows)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
                 if result then
-                    for line in strgmatch(result, "[^\n]+") do
-                        local dir = strmatch(line, "<DIR>%s+(.*)$")
-                        if dir and (dir ~= "" and dir ~= "." and dir ~= "..") then
-                            yield(dir)
-                        end
+                    for word in strgmatch(result, "[^\n]+") do
+                        yield(word)
                     end
                 end
             end
 
             --- Get files
-            __PipeRead__("dir \"%s\"", ".*", OperationSystemType.Windows)
+            __PipeRead__("dir /A:-D /b \"%s\"", ".*", OperationSystemType.Windows)
             __Iterator__()
             __Static__()
             function GetFiles(path, result)
                 if result then
-                    for line in strgmatch(result, "[^\n]+") do
-                        local file = strmatch(line, "^%d+[%d/%s:,]+(.*)$")
-                        if file and not strfind(file, "^<DIR>") then
-                            yield(file)
-                        end
+                    for word in strgmatch(result, "[^\n]+") do
+                        yield(word)
                     end
                 end
             end
