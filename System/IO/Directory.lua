@@ -55,32 +55,28 @@ PLoop(function(_ENV)
             end
         else
             --- Get sub-directories
-            __PipeRead__("ls -l \"%s\"", ".*", OperationSystemType.Linux)
-            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l \"%s\"", ".*", OperationSystemType.MacOS)
+            __PipeRead__("ls -d */ \"%s\"", ".*", OperationSystemType.Linux)
+            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -d */ \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
                 if result then
-                    for line in strgmatch(result, "[^\n]+") do
-                        if strsub(line, 1, 1) == "d" then
-                            local dir = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
-                            if dir and dir ~= "" then yield(dir) end
-                        end
+                    for word in strgmatch(result, "%S+") do
+                        yield(strsub(word, 1, -2))
                     end
                 end
             end
 
             --- Get files
-            __PipeRead__("ls -l \"%s\"", ".*", OperationSystemType.Linux)
-            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -l \"%s\"", ".*", OperationSystemType.MacOS)
+            __PipeRead__("ls --file-type \"%s\"", ".*", OperationSystemType.Linux)
+            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls --file-type \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetFiles(path, result)
                 if result then
-                    for line in strgmatch(result, "[^\n]+") do
-                        if strsub(line, 1, 1) == "-" then
-                            local file = strmatch(line, "^%S+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+.*%s+([^%d%s]+.*)$")
-                            if file and file ~= "" then yield(file) end
+                    for word in strgmatch(result, "%S+") do
+                        if not strsub(word, -1) == "/" then
+                            yield(word)
                         end
                     end
                 end
