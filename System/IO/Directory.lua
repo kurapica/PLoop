@@ -77,7 +77,7 @@ PLoop(function(_ENV)
             function GetFiles(path, result)
                 if result then
                     for word in strgmatch(result, "%S+") do
-                        if not strsub(word, -1) == "/" then
+                        if strsub(word, -1) ~= "/" then
                             yield(word)
                         end
                     end
