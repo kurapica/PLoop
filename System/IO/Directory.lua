@@ -55,14 +55,16 @@ PLoop(function(_ENV)
             end
         else
             --- Get sub-directories
-            __PipeRead__("ls -d */ \"%s\"", ".*", OperationSystemType.Linux)
-            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -d */ \"%s\"", ".*", OperationSystemType.MacOS)
+            __PipeRead__("ls --file-type \"%s\"", ".*", OperationSystemType.Linux)
+            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls --file-type \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
                 if result then
                     for word in strgmatch(result, "%S+") do
-                        yield(strsub(word, 1, -2))
+                        if strsub(word, -1) == "/" then
+                            yield(strsub(word, 1, -2))
+                        end
                     end
                 end
             end
