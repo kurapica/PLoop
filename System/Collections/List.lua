@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2018/05/12                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/09/20                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -21,6 +21,7 @@ PLoop(function(_ENV)
     export { yield = coroutine.yield }
 
     __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
+    __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, obj, idx do yield(k, v == nil and k or v) end end
 
     --- Represents the list collections that only elements has meanings
     interface "IList" { Iterable }
@@ -260,7 +261,7 @@ PLoop(function(_ENV)
     __Sealed__() __NoRawSet__(true)
     class "XList" (function(_ENV)
         extend "IList"
-        export { ipairs = ipairs, type = type, iterforstep = iterforstep }
+        export { ipairs = ipairs, type = type, iterforstep = iterforstep, iterforlist = iterforlist }
 
         XLIST_TYPE_STEP         = 1
         XLIST_TYPE_ITER         = 2
@@ -275,7 +276,7 @@ PLoop(function(_ENV)
             if type == XLIST_TYPE_STEP then
                 return iterforstep(self[2], self[3], self[4])
             elseif type == XLIST_TYPE_ITER then
-                return self[2], self[3], self[4]
+                return iterforlist(self[2], self[3], self[4])
             else
                 return self[2]:GetIterator()
             end
