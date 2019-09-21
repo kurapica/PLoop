@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/09/14                                               --
--- Update Date  :   2018/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/09/21                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -68,16 +68,15 @@ PLoop(function(_ENV)
             while k do
                 nk, nv = next(data, k)
 
-                if type(k) == "number" then k = strformat("[%s]", k) end
                 if type(v) == "table" then
-                    write(strformat("%s=", k))
+                    write(strformat("[%s]=", SerializeSimpleData(k)))
                     SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
                     if nk then write(",") end
                 else
                     if nk then
-                        write(strformat("%s=%s,", k, SerializeSimpleData(v)))
+                        write(strformat("[%s]=%s,", SerializeSimpleData(k), SerializeSimpleData(v)))
                     else
-                        write(strformat("%s=%s", k, SerializeSimpleData(v)))
+                        write(strformat("[%s]=%s", SerializeSimpleData(k), SerializeSimpleData(v)))
                     end
                 end
 
@@ -112,9 +111,8 @@ PLoop(function(_ENV)
             while k do
                 nk, nv = next(data, k)
 
-                if type(k) == "number" then k = strformat("[%s]", k) end
                 if type(v) == "table" then
-                    write(strformat("%s%s = ", subIndentChar, k))
+                    write(strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
                     SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
                     if nk then
                         write("," .. lineBreak)
@@ -123,9 +121,9 @@ PLoop(function(_ENV)
                     end
                 else
                     if nk then
-                        write(strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                        write(strformat("%s[%s] = %s,%s", subIndentChar, SerializeSimpleData(k), SerializeSimpleData(v), lineBreak))
                     else
-                        write(strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                        write(strformat("%s[%s] = %s%s", subIndentChar, SerializeSimpleData(k), SerializeSimpleData(v), lineBreak))
                     end
                 end
 
@@ -158,16 +156,15 @@ PLoop(function(_ENV)
             while k do
                 nk, nv = next(data, k)
 
-                if type(k) == "number" then k = strformat("[%s]", k) end
                 if type(v) == "table" then
-                    write(object, strformat("%s=", k))
+                    write(object, strformat("[%s]=", SerializeSimpleData(k)))
                     SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
                     if nk then write(object, ",") end
                 else
                     if nk then
-                        write(object, strformat("%s=%s,", k, SerializeSimpleData(v)))
+                        write(object, strformat("[%s]=%s,", SerializeSimpleData(k), SerializeSimpleData(v)))
                     else
-                        write(object, strformat("%s=%s", k, SerializeSimpleData(v)))
+                        write(object, strformat("[%s]=%s", SerializeSimpleData(k), SerializeSimpleData(v)))
                     end
                 end
 
@@ -202,9 +199,8 @@ PLoop(function(_ENV)
             while k do
                 nk, nv = next(data, k)
 
-                if type(k) == "number" then k = strformat("[%s]", k) end
                 if type(v) == "table" then
-                    write(object, strformat("%s%s = ", subIndentChar, k))
+                    write(object, strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
                     SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
                     if nk then
                         write(object, "," .. lineBreak)
@@ -213,9 +209,9 @@ PLoop(function(_ENV)
                     end
                 else
                     if nk then
-                        write(object, strformat("%s%s = %s,%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                        write(object, strformat("%s[%s] = %s,%s", subIndentChar, SerializeSimpleData(k), SerializeSimpleData(v), lineBreak))
                     else
-                        write(object, strformat("%s%s = %s%s", subIndentChar, k, SerializeSimpleData(v), lineBreak))
+                        write(object, strformat("%s[%s] = %s%s", subIndentChar, SerializeSimpleData(k), SerializeSimpleData(v), lineBreak))
                     end
                 end
 
