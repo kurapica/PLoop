@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/04/10                                               --
--- Update Date  :   2019/04/02                                               --
--- Version      :   1.0.1                                                    --
+-- Update Date  :   2019/09/24                                               --
+-- Version      :   1.0.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -499,7 +499,7 @@ PLoop(function(_ENV)
                 parseCnt = 0
 
                 if head == "." or head == ":" then
-                    line, parseCnt = line:gsub("^([%.:][_%a][%w_]+)%s*", parsePrintTemp)
+                    line, parseCnt = line:gsub("^([%.:][_%a][%w_]*)%s*", parsePrintTemp)
                 --elseif head == "'" then
                 --    line, parseCnt = line:gsub("^(%b'')%s*", parsePrintTemp)
                 --elseif head == "\"" then
