@@ -16,6 +16,7 @@ PLOOP_PLATFORM_SETTINGS = {
     CORE_LOG_LEVEL      = 3,
     MULTI_OS_THREAD     = false,
     TYPE_VALIDATION_DISABLED = false,
+    ENV_ALLOW_GLOBAL_VAR_BE_NIL = true,
 }
 
 require "PLoop"(function(_ENV)

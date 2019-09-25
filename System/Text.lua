@@ -8,12 +8,12 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2014/10/05                                               --
--- Update Date  :   2019/03/14                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/09/25                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
-    export { "type", "error", "ipairs", tconcat = table.concat, istype = Class.IsObjectType, Prototype, Namespace, Toolset, IList }
+    export { "type", "error", "ipairs", tconcat = table.concat, istype = Class.IsObjectType, Prototype, Namespace, Toolset, Iterable }
 
     function newEncoder(name, settings)
         if type(settings) ~= "table" or type(settings.decode) ~= "function" or type(settings.encode) ~= "function" then
@@ -50,7 +50,7 @@ PLoop(function(_ENV)
                     if ty      == "function" then
                         -- pass
                     elseif ty  == "table" then
-                        if istype(codes, IList) then
+                        if istype(codes, Iterable) then
                             codes, arg1, arg2 = codes:GetIterator()
                         else
                             codes, arg1, arg2 = ipairs(codes)
