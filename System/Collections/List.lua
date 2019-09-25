@@ -21,7 +21,7 @@ PLoop(function(_ENV)
     export { yield = coroutine.yield }
 
     __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
-    __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, obj, idx do yield(k, v == nil and k or v) end end
+    __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
 
     --- Represents the list collections that only elements has meanings
     interface "IList" { Iterable }
