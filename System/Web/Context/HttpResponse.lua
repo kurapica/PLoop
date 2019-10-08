@@ -57,13 +57,15 @@ PLoop(function(_ENV)
         --- Redirects the client to a new URL.
         __Arguments__{ String, HTTP_STATUS/HTTP_STATUS.REDIRECT, Boolean/false }
         function Redirect(self, url, code, raw)
-            -- Check the url
-            if not ispathrooted(url) then
-                url = combinepath(getdirectory(self.Context.Request.Url), url)
-            end
+            if not url:match("^%s*%a+:") then
+                -- Check the url
+                if not ispathrooted(url) then
+                    url = combinepath(getdirectory(self.Context.Request.Url), url)
+                end
 
-            if not raw then
-                url = self.Context.Application:Path2Url(url)
+                if not raw then
+                    url = self.Context.Application:Path2Url(url)
+                end
             end
 
             self.StatusCode         = code

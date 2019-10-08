@@ -23,6 +23,7 @@ PLoop(function(_ENV)
         export {
             fopen               = io.open,
             floor               = math.floor,
+            error               = error,
         }
 
         --- the file read mode

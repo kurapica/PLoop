@@ -187,7 +187,7 @@ PLoop(function(_ENV)
             if res.RequestRedirected then return end
 
             if path ~= "" then
-                if not ispathrooted(path) then
+                if not (path:match("^%s*%a+:") or ispathrooted(path)) then
                     Error("Only absolute path supported for Controller's Redirect.")
                     res.StatusCode = HTTP_STATUS.NOT_FOUND
                     return
