@@ -8,14 +8,15 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2014/10/05                                               --
--- Update Date  :   2019/09/25                                               --
--- Version      :   1.0.1                                                    --
+-- Update Date  :   2019/10/11                                               --
+-- Version      :   1.0.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     export { "type", "error", "ipairs", tconcat = table.concat, istype = Class.IsObjectType, Prototype, Namespace, Toolset, Iterable }
 
-    function newEncoder(name, settings)
+    local encoder
+    local newEncoder            = function (name, settings)
         if type(settings) ~= "table" or type(settings.decode) ~= "function" or type(settings.encode) ~= "function" then
             error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = function }", 3)
         end
