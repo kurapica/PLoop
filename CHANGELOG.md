@@ -2,6 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 
+## [1.4.1] - 2019-10-18 WangXH <kurapica125@outlook.com>
+### Changed
+- The environment will access the global namespaces at last, after read the base environment
+
 ## [1.3.2] - 2019-09-03 WangXH <kurapica125@outlook.com>
 ### Changed
 - The class object's default property value won't be serialized.

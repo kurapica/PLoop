@@ -368,7 +368,7 @@ __Test__() function template()
         )
     )
 
-    Assert.Find("class.lua:374: the 3rd must be string, got number",
+    Assert.Find("class.lua:374: Usage: Anonymous([... as System.String]) - the 3rd argument must be string, got number",
         Assert.Error(
             function()
                 local o = Queue[String]("hi", "1", 2)

@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/09/03                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2019/10/18                                               --
+-- Version      :   1.4.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1776,20 +1776,6 @@ do
                     end
                 ]])
 
-                -- Check global namespaces & root namespaces
-                tinsert(body, [[
-                    if not isparent then
-                        for _, sns in ipairs, _GlobalNS, 0 do
-                            if name == nsname(sns, true) then return sns end
-                            value = ]] .. (PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and "sns[name]" or "safeget(sns, name)") .. [[
-                            if value ~= nil then return value end
-                        end
-
-                        value = namespace.GetNamespace(name)
-                        if value ~= nil then return value end
-                    end
-                ]])
-
                 -- Check base environment
                 uinsert(apis, "_G")
                 tinsert(body, [[
@@ -1835,6 +1821,23 @@ do
 
                 tinsert(body, [[
                     value = getenvvalue(env, name)
+                ]])
+
+                -- Check global namespaces & root namespaces
+                tinsert(body, [[
+                    if value == nil then
+                        value = namespace.GetNamespace(name)
+
+                        if value == nil then
+                            local nvalid = namespace.Validate
+                            local nsname = namespace.GetNamespaceName
+                            for _, sns in ipairs, _GlobalNS, 0 do
+                                if name == nsname(sns, true) then return sns end
+                                value = ]] .. (PLOOP_PLATFORM_SETTINGS.NAMESPACE_NIL_VALUE_ACCESSIBLE and "sns[name]" or "safeget(sns, name)") .. [[
+                                if value ~= nil then break end
+                            end
+                        end
+                    end
                 ]])
 
                 if not PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL then
@@ -8776,7 +8779,7 @@ do
             -- @method  GetSuperObjectStyle
             -- @owner   class
             -- @param   target                      the target class
-            -- @return  boolean                     true if the class don't use super object access style
+            -- @return  boolean                     true if the class use super object access style
             ["GetSuperObjectStyle"] = function(target)
                 local info      = getICTargetInfo(target)
                 return info and not validateflags(MOD_NOSUPER_OBJ, info[FLD_IC_MOD]) or false
@@ -11669,6 +11672,17 @@ do
             ["GetType"]         = function(self)
                 local info      = _PropertyInfo[self]
                 return info and info[FLD_PROP_TYPE] or nil
+            end;
+
+            --- Get the index key type
+            -- @static
+            -- @method  GetIndexType
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  type                        the index key type
+            ["GetIndexType"]         = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_INDEXERTYP] or nil
             end;
 
             --- Parse a string-[table|type] pair as the property's definition, the string is the property's name and the value should be a table or a valid type
