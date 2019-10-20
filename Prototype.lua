@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/10/18                                               --
--- Version      :   1.4.1                                                    --
+-- Update Date  :   2019/10/20                                               --
+-- Version      :   1.4.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1785,8 +1785,6 @@ do
                         if value == nil then
                             value = getenvvalue(parent, name, true)
                         end
-                    else
-                        value = rawget(_G, name)
                     end
                 ]])
 
@@ -1823,7 +1821,7 @@ do
                     value = getenvvalue(env, name)
                 ]])
 
-                -- Check global namespaces & root namespaces
+                -- Check global namespaces & root namespaces & _G
                 tinsert(body, [[
                     if value == nil then
                         value = namespace.GetNamespace(name)
@@ -1837,6 +1835,10 @@ do
                                 if value ~= nil then break end
                             end
                         end
+                    end
+
+                    if value == nil then
+                        value = rawget(_G, name)
                     end
                 ]])
 

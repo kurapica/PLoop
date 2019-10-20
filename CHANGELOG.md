@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.4.2] - 2019-10-20 WangXH <kurapica125@outlook.com>
+### Changed
+- The environment will access the `_G` at the last, after read the global namespace, so other oop system won't affect the PLoop
 
 ## [1.4.1] - 2019-10-18 WangXH <kurapica125@outlook.com>
 ### Changed
