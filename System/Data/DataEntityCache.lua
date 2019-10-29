@@ -8,14 +8,14 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2019/07/27                                               --
--- Version      :   1.2.0                                                    --
+-- Update Date  :   2019/10/29                                               --
+-- Version      :   1.3.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     --- The basic cache interface
-    __Arguments__{ -System.Data.IDataEntity }
-    __Sealed__() class "System.Data.DataEntityCache" (function(_ENV, clsEntity)
+    __Arguments__{ -System.Data.IDataEntity, -System.Data.ICache/nil }
+    __Sealed__() class "System.Data.DataEntityCache" (function(_ENV, clsEntity, clsCache)
         extend "System.IAutoClose"
 
         export { "tostring", "ipairs", "tonumber", "select", List }
@@ -61,7 +61,7 @@ PLoop(function(_ENV)
         __Abstract__() property "DataContext"   { type = clsContext, default = function(self) return clsContext() end }
 
         --- The cache object
-        __Abstract__() property "Cache"         { type = System.Data.ICache }
+        __Abstract__() property "Cache"         { type = System.Data.ICache, default = clsCache and function(self) return clsCache() end or nil }
 
         --- The time out seconds
         __Abstract__() property "Timeout"       { type = NaturalNumber }

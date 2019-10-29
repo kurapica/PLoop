@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.4.3] - 2019-10-29 WangXH <kurapica125@outlook.com>
+### Changed
+- The System.Data.DataEntityCache can use cache class(extend System.Data.ICache) as its second template parameter, so it can create cache object directly, works like `System.Data.DataCollection[{MyDataContext, NgxLua.Redis }]`
+
 ## [1.4.2] - 2019-10-20 WangXH <kurapica125@outlook.com>
 ### Changed
 - The environment will access the `_G` at the last, after read the global namespace, so other oop system won't affect the PLoop
