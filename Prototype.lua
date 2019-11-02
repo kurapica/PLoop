@@ -11893,6 +11893,7 @@ do
             local info          = _PropertyInfo[self]
             local owner         = info[FLD_PROP_OWNER]
             local name          = info[FLD_PROP_NAME]
+            local chkdefunc     = false
 
             attribute.InitDefinition(self, ATTRTAR_PROPERTY, definition, owner, name, stack)
 
@@ -11951,8 +11952,13 @@ do
                     elseif k == "default" then
                         if type(v) == "function" then
                             info[FLD_PROP_DEFAULTFUNC] = v
+                            chkdefunc = true
                         else
                             info[FLD_PROP_DEFAULT] = v
+                        end
+                    elseif k == "factory" then
+                        if type(v) == "function" then
+                            info[FLD_PROP_DEFAULTFUNC] = v
                         end
                     elseif k == "event" then
                         if tval == "string" or event.Validate(v) then
@@ -11987,15 +11993,25 @@ do
             end
 
             -- Check Default
-            if info[FLD_PROP_DEFAULT] ~= nil and info[FLD_PROP_TYPE] then
-                local ret, msg  = info[FLD_PROP_VALID](info[FLD_PROP_TYPE], info[FLD_PROP_DEFAULT])
-                if not msg then
-                    info[FLD_PROP_DEFAULT] = ret
-                else
-                    error([[Usage: property "name" { type = ...,  default = ... } - the default don't match the type setting]], stack)
+            if info[FLD_PROP_TYPE] then
+                if chkdefunc then
+                    local ret, msg  = info[FLD_PROP_VALID](info[FLD_PROP_TYPE], info[FLD_PROP_DEFAULTFUNC])
+                    if not msg then
+                        info[FLD_PROP_DEFAULT] = info[FLD_PROP_DEFAULTFUNC]
+                        info[FLD_PROP_DEFAULTFUNC] = nil
+                    end
                 end
-            elseif info[FLD_PROP_DEFAULT] == nil and info[FLD_PROP_TYPE] then
-                info[FLD_PROP_DEFAULT] = getobjectvalue(info[FLD_PROP_TYPE], "GetDefault")
+
+                if info[FLD_PROP_DEFAULT] ~= nil then
+                    local ret, msg  = info[FLD_PROP_VALID](info[FLD_PROP_TYPE], info[FLD_PROP_DEFAULT])
+                    if not msg then
+                        info[FLD_PROP_DEFAULT] = ret
+                    else
+                        error([[Usage: property "name" { type = ...,  default = ... } - the default don't match the type setting]], stack)
+                    end
+                elseif info[FLD_PROP_DEFAULT] == nil then
+                    info[FLD_PROP_DEFAULT] = getobjectvalue(info[FLD_PROP_TYPE], "GetDefault")
+                end
             end
 
             -- Clear conflict settings
