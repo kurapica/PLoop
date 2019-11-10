@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/11                                               --
--- Update Date  :   2019/03/26                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2019/11/10                                               --
+-- Version      :   1.2.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -145,9 +145,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function __init(self)
             if self.Application then
-                self.Application[ISessionStorageProvider] = self
+                self.Application[ISessionStorageProvider]   = self
             else
-                ISessionStorageProvider.Default = self
+                ISessionStorageProvider.Default             = self
             end
         end
     end)
@@ -155,7 +155,13 @@ PLoop(function(_ENV)
     --- the http session
     __Sealed__() class "System.Web.HttpSession" (function (_ENV)
 
-        export { System.Web.ISessionIDManager, System.Web.ISessionStorageProvider, System.Date, "rawset" }
+        export { System.Web.ISessionIDManager, System.Web.ISessionStorageProvider, System.Date, HttpSession, "rawset" }
+
+        -----------------------------------------------------------------------
+        --                          static property                          --
+        -----------------------------------------------------------------------
+        --- The field of the temporary flag in session items
+        __Static__() property "TemporaryField" { type = String, default = "_PL_TEMP_SESSION" }
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -164,9 +170,9 @@ PLoop(function(_ENV)
         __Indexer__()
         __Final__() property "Items"            {
             set = function(self, key, value)
-                if self.RawItems[key] ~= value then
-                    self.ItemsChanged = true
-                    self.RawItems[key] = value
+                if self.RawItems[key]  ~= value then
+                    self.ItemsChanged   = true
+                    self.RawItems[key]  = value
                 end
             end,
             get = function(self, key)
@@ -196,6 +202,24 @@ PLoop(function(_ENV)
         --- Whether the session items changed
         __Final__() property "ItemsChanged"     { field = 7, type = Boolean }
 
+        --- Whether the session is temporary
+        __Final__() property "IsTemporary"      {
+            field               = 8,
+            type                = Boolean,
+            default             = function(self)
+                return self.Items[HttpSession.TemporaryField] and true or false
+            end,
+            handler             = function(self, val)
+                self.Items[HttpSession.TemporaryField] = val and 1 or nil
+                if val then
+                    self.Timeout= nil
+                else
+                    local man   = self.Context.Application[ISessionIDManager] or ISessionIDManager.Default
+                    self.Timeout= Date.Now:AddMinutes(man.TimeoutMinutes)
+                end
+            end
+        }
+
         --- The http context
         __Final__() property "Context"          { field = 0, type = HttpContext }
 
@@ -221,7 +245,7 @@ PLoop(function(_ENV)
                 rawset(self, 1, id)
                 rawset(self, 2, item)
 
-                if manager.KeepAlive then
+                if manager.KeepAlive and not self.IsTemporary then
                     self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
                 end
             else

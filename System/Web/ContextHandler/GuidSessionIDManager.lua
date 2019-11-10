@@ -48,7 +48,7 @@ PLoop(function(_ENV)
             cookie.Value        = session.SessionID
             cookie.HttpOnly     = true
             cookie.SameSite     = SameSiteValue.Lax
-            cookie.Expires      = session.Timeout or Date.Now:AddMinutes(self.TimeoutMinutes)
+            cookie.Expires      = not session.IsTemporary and (session.Timeout or Date.Now:AddMinutes(self.TimeoutMinutes)) or nil
         end
 
         function ValidateSessionID(self, id)
