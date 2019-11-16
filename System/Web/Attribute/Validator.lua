@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/08/27                                               --
--- Version      :   1.2.2                                                    --
+-- Update Date  :   2019/11/16                                               --
+-- Version      :   1.3.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -39,9 +39,8 @@ PLoop(function(_ENV)
             if targettype == AttributeTargets.Function then
                 if authority then
                     return function(context, ...)
-                        local session = context.Session
-                        local settings= context.Application[__Login__]
-                        if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
+                        local settings  = context.Application[__Login__]
+                        if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
                             local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
                             if result then
                                 return definition(context, ...)
@@ -49,6 +48,7 @@ PLoop(function(_ENV)
                                 return context.Response:Redirect(path)
                             end
                         end
+
                         if context.Request.HttpMethod == HttpMethod_GET then
                             context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
@@ -57,11 +57,11 @@ PLoop(function(_ENV)
                     end
                 else
                     return function(context, ...)
-                        local session = context.Session
-                        local settings= context.Application[__Login__]
-                        if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
+                        local settings  = context.Application[__Login__]
+                        if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
                             return definition(context, ...)
                         end
+
                         if context.Request.HttpMethod == HttpMethod_GET then
                             context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
@@ -72,9 +72,8 @@ PLoop(function(_ENV)
             else
                 if authority then
                     return function(self, context, ...)
-                        local session = context.Session
-                        local settings= context.Application[__Login__]
-                        if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
+                        local settings  = context.Application[__Login__]
+                        if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
                             local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
                             if result then
                                 return definition(self, context, ...)
@@ -82,6 +81,7 @@ PLoop(function(_ENV)
                                 return context.Response:Redirect(path)
                             end
                         end
+
                         if context.Request.HttpMethod == HttpMethod_GET then
                             context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
@@ -90,11 +90,11 @@ PLoop(function(_ENV)
                     end
                 else
                     return function(self, context, ...)
-                        local session = context.Session
-                        local settings= context.Application[__Login__]
-                        if session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil then
+                        local settings  = context.Application[__Login__]
+                        if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
                             return definition(self, context, ...)
                         end
+
                         if context.Request.HttpMethod == HttpMethod_GET then
                             context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
                         else
@@ -108,21 +108,31 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                    static property                    --
         -----------------------------------------------------------
-        --- the key in the session items for checking
+        --- the default key in the session items for checking
         __Static__() property "DefaultKey"              { type = String, default = "user" }
 
-        --- the login path
+        --- the default login checker, so the user can do their own login check logic
+        __Static__() property "DefaultLoginChecker"     {
+            type                    = Function,
+            default                 = function(context)
+                local settings      = context.Application[__Login__]
+                return context.Session.Items[settings and settings.Key or __Login__.DefaultKey] ~= nil
+            end,
+        }
+
+        --- the default login path
         __Static__() property "DefaultLoginPage"        { type = String }
 
-        --- the key to send the request path to the login page
+        --- the default key to send the request path to the login page
         __Static__() property "DefaultPathKey"          { type = String, default = "path"}
 
-        --- the authority checker
+        --- the default authority checker
         __Static__() property "DefaultAuthorityChecker" { type = Function, default = function() return true end }
 
         --- the key in the session items for checking
         __Indexer__(Application)
-        __Static__() property "Key"                     { type = String,
+        __Static__() property "Key"                     {
+            type                    = String,
             set = function(self, app, value)
                 app                 = app._Application
 
@@ -133,10 +143,25 @@ PLoop(function(_ENV)
             end,
         }
 
+        --- the login checker
+        __Indexer__(Application)
+        __Static__() property "LoginChecker"            {
+            type                    = Function,
+            set                     = function(self, app, value)
+                app                 = app._Application
+
+                local settings      = app[__Login__] or {}
+                settings.LoginChecker = value
+
+                app[__Login__]      = settings
+            end,
+        }
+
         --- the login path
         __Indexer__(Application)
-        __Static__() property "LoginPage"               { type = String,
-            set = function(self, app, value)
+        __Static__() property "LoginPage"               {
+            type                    = String,
+            set                     = function(self, app, value)
                 app                 = app._Application
 
                 local settings      = app[__Login__] or {}
@@ -148,8 +173,9 @@ PLoop(function(_ENV)
 
         --- the key to send the request path to the login page
         __Indexer__(Application)
-        __Static__() property "PathKey"                 { type = String,
-            set = function(self, app, value)
+        __Static__() property "PathKey"                 {
+            type                    = String,
+            set                     = function(self, app, value)
                 app                 = app._Application
 
                 local settings      = app[__Login__] or {}
@@ -161,8 +187,9 @@ PLoop(function(_ENV)
 
         --- the authority checker
         __Indexer__(Application)
-        __Static__() property "AuthorityChecker"        { type = Function,
-            set = function(self, app, value)
+        __Static__() property "AuthorityChecker"        {
+            type                    = Function,
+            set                     = function(self, app, value)
                 app                 = app._Application
 
                 local settings      = app[__Login__] or {}
@@ -510,6 +537,7 @@ PLoop(function(_ENV)
 
     local configMap         = {
         Key                 = String,
+        LoginChecker        = Function,
         LoginPage           = String,
         PathKey             = String,
         AuthorityChecker    = Function,
