@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/11                                               --
--- Update Date  :   2019/11/10                                               --
--- Version      :   1.2.0                                                    --
+-- Update Date  :   2019/11/16                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -222,6 +222,14 @@ PLoop(function(_ENV)
 
         --- The http context
         __Final__() property "Context"          { field = 0, type = HttpContext }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        function RefreshTimeout(self)
+            local man           = self.Context.Application[ISessionIDManager] or ISessionIDManager.Default
+            self.Timeout        = Date.Now:AddMinutes(man.TimeoutMinutes)
+        end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
