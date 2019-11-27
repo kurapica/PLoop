@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/11/11                                               --
--- Version      :   1.4.4                                                    --
+-- Update Date  :   2019/11/27                                               --
+-- Version      :   1.4.5                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -8081,6 +8081,25 @@ do
                 return info and info[FLD_IC_REQCLS]
             end;
 
+            --- Gets the sub types of the interface
+            -- @static
+            -- @method GetSubTypes
+            -- @owner  interface
+            -- @param  target                       the target interface
+            -- @retur  iterator
+            ["GetSubTypes"]     = function(target)
+                local map       = _ICDependsMap[target]
+                if map then
+                    local i     = 0
+                    return function()
+                        i       = i + 1
+                        return map[i]
+                    end
+                else
+                    return fakefunc, target
+                end
+            end;
+
             --- Get the super method of the target interface with the given name
             -- @static
             -- @method  GetSuperMethod
@@ -8737,6 +8756,14 @@ do
             ["GetObjectSource"] = function(object)
                 return type(object) == "table" and rawget(object, FLD_OBJ_SOURCE) or nil
             end;
+
+            --- Gets the sub types of the class
+            -- @static
+            -- @method GetSubTypes
+            -- @owner  class
+            -- @param  target                       the target class
+            -- @retur  iterator
+            ["GetSubTypes"]     = interface.GetSubTypes;
 
             --- Get the super class of the target class
             -- @static
