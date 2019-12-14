@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/11/27                                               --
--- Version      :   1.4.5                                                    --
+-- Update Date  :   2019/12/07                                               --
+-- Version      :   1.5.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -280,6 +280,10 @@ do
         --- Use the Dispose as the __gc, only works for Lua 5.3 and above
         -- Default true
         USE_DISPOSE_AS_META_GC              = true,
+
+        --- Use `this` keywords for all object methods
+        -- Default false
+        USE_THIS_FOR_OBJECT_METHODS         = false,
     }
 
     -- Special constraint
@@ -6258,6 +6262,7 @@ do
     local FLD_IC_META           = "__PLOOP_IC_META"
     local FLD_IC_TYPE           = "__PLOOP_IC_TYPE"
     local FLD_OBJ_SOURCE        = "__PLOOP_OBJ_SOURCE"
+    local FLD_EXD_METHOD        = "__PLOOP_EXD_METHOD"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -7324,10 +7329,10 @@ do
     local saveObjectMethod
         saveObjectMethod        = function (target, name, func, child)
         local info, def         = getICTargetInfo(target)
-
         if def then return end
 
-        if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
+        --if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] ~= nil and (info[FLD_IC_TYPMTD][name] == false or not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
+        if child and info[FLD_IC_TYPMTD] and info[FLD_IC_TYPMTD][name] and (not (info[FLD_IC_INHRTP] and info[FLD_IC_INHRTP][name] == INRT_PRIORITY_ABSTRACT)) then return end
 
         if info[FLD_IC_OBJMTD] ~= nil then
             info[FLD_IC_OBJMTD] = savestorage(info[FLD_IC_OBJMTD] or {}, name, func)
@@ -7437,7 +7442,11 @@ do
         if type(func) ~= "function" then return "the func must be a function", stack end
 
         local typmtd            = info[FLD_IC_TYPMTD]
-        if not def and (typmtd and (typmtd[name] or (typmtd[name] == false and info[name])) or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name] ~= nil) then
+        if not def and (
+            typmtd and (typmtd[name] or (typmtd[name] == false and info[name]))
+            or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][name]
+            or info[FLD_IC_OBJMTD] and info[FLD_IC_OBJMTD][name]
+            or info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][name]) then
             return strformat("The %s can't be overridden", name), stack
         end
 
@@ -8446,24 +8455,41 @@ do
 
             stack               = stack + 1
 
-            interface.BeginDefinition(target, stack)
+            if interface.IsSealed(target) then
+                Debug("[interface] %s extend methods", stack, tostring(target))
 
-            Debug("[interface] %s created", stack, tostring(target))
+                local builder = prototype.NewObject(extendbuilder)
+                environment.Initialize  (builder)
+                environment.SetNamespace(builder, target)
+                environment.SetParent   (builder, env)
+                environment.SetDefinitionMode(builder, true)
 
-            local builder = prototype.NewObject(interfacebuilder)
-            environment.Initialize  (builder)
-            environment.SetNamespace(builder, target)
-            environment.SetParent   (builder, env)
-            environment.SetDefinitionMode(builder, true)
-
-            _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
-
-            if definition then
-                builder(definition, stack)
-                return target
+                if definition then
+                    builder(definition, stack)
+                    return target
+                else
+                    return builder
+                end
             else
-                if not keepenv then safesetfenv(stack, builder) end
-                return builder
+                interface.BeginDefinition(target, stack)
+
+                Debug("[interface] %s created", stack, tostring(target))
+
+                local builder = prototype.NewObject(interfacebuilder)
+                environment.Initialize  (builder)
+                environment.SetNamespace(builder, target)
+                environment.SetParent   (builder, env)
+                environment.SetDefinitionMode(builder, true)
+
+                _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
+
+                if definition then
+                    builder(definition, stack)
+                    return target
+                else
+                    if not keepenv then safesetfenv(stack, builder) end
+                    return builder
+                end
             end
         end,
     }
@@ -9368,24 +9394,41 @@ do
 
             stack               = stack + 1
 
-            class.BeginDefinition(target, stack)
+            if class.IsSealed(target) then
+                Debug("[class] %s extend methods", stack, tostring(target))
 
-            Debug("[class] %s created", stack, tostring(target))
+                local builder = prototype.NewObject(extendbuilder)
+                environment.Initialize  (builder)
+                environment.SetNamespace(builder, target)
+                environment.SetParent   (builder, env)
+                environment.SetDefinitionMode(builder, true)
 
-            local builder       = prototype.NewObject(classbuilder)
-            environment.Initialize  (builder)
-            environment.SetNamespace(builder, target)
-            environment.SetParent   (builder, env)
-            environment.SetDefinitionMode(builder, true)
-
-            _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
-
-            if definition then
-                builder(definition, stack)
-                return target
+                if definition then
+                    builder(definition, stack)
+                    return target
+                else
+                    return builder
+                end
             else
-                if not keepenv then safesetfenv(stack, builder) end
-                return builder
+                class.BeginDefinition(target, stack)
+
+                Debug("[class] %s created", stack, tostring(target))
+
+                local builder       = prototype.NewObject(classbuilder)
+                environment.Initialize  (builder)
+                environment.SetNamespace(builder, target)
+                environment.SetParent   (builder, env)
+                environment.SetDefinitionMode(builder, true)
+
+                _ICBuilderInDefine  = savestorage(_ICBuilderInDefine, builder, true)
+
+                if definition then
+                    builder(definition, stack)
+                    return target
+                else
+                    if not keepenv then safesetfenv(stack, builder) end
+                    return builder
+                end
             end
         end,
     }
@@ -9672,6 +9715,96 @@ do
 
             if getfenv(stack)  == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
+            end
+
+            return owner
+        end,
+    }
+
+    -- Only works for method extend
+    extendbuilder               = prototype {
+        __tostring              = function(self)
+            local owner         = environment.GetNamespace(self)
+            return "[extendbuilder]" .. (owner and tostring(owner) or "anonymous")
+        end,
+        __index                 = function(self, key)
+            local cache         = rawget(self, FLD_EXD_METHOD)
+            local value         = cache and cache[key] or environment.GetValue(self, key, 2)
+            return value
+        end,
+        __newindex              = function(self, key, value)
+            local owner         = environment.GetNamespace(self)
+            if not owner then return end
+
+            if type(key) == "string" and not tonumber(key) and type(value) == "function" then
+                if META_KEYS[key] ~= nil then error(strformat("the %s can't be used as method name", key), 2) end
+
+                local info      = _ICInfo[owner]
+                local typmtd    = info[FLD_IC_TYPMTD]
+
+                if typmtd and (typmtd[key] or (typmtd[key] == false and info[key]))
+                    or info[FLD_IC_TYPFTR] and info[FLD_IC_TYPFTR][key]
+                    or info[FLD_IC_OBJMTD] and info[FLD_IC_OBJMTD][key]
+                    or info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][key] then
+                    error(strformat("the %s can't be overridden", key), 2)
+                end
+
+                if attribute.HaveRegisteredAttributes() then
+                    attribute.SaveAttributes(value, ATTRTAR_METHOD, 2)
+
+                    local ret   = attribute.InitDefinition(value, ATTRTAR_METHOD, value, owner, key, 2)
+                    if ret ~= value then attribute.ToggleTarget(value, ret) value = ret end
+
+                    attribute.ApplyAttributes (value, ATTRTAR_METHOD, nil, owner, key, 2)
+                    attribute.AttachAttributes(value, ATTRTAR_METHOD, owner, key, 2)
+                end
+
+                local cache     = rawget(self, FLD_EXD_METHOD)
+                if not cache then
+                    cache       = {}
+                    rawset(self, FLD_EXD_METHOD, cache)
+                end
+                cache[key]      = value
+                return
+            end
+
+            environment.SaveValue(self, key, value, 2)
+        end,
+        __call                  = function(self, definition, stack)
+            stack               = parsestack(stack) + 1
+
+            local owner         = environment.GetNamespace(self)
+            if not owner then error("the environment owner not existed", stack) end
+
+            if not definition then
+                if getmetatable(owner) == class then
+                    error("Usage: class([env, ][name, ][stack]) (definition) - the definition is missing", stack)
+                else
+                    error("Usage: interface([env, ][name, ][stack]) (definition) - the definition is missing", stack)
+                end
+            end
+
+            definition          = parseDefinition(definition, self, stack)
+
+            if type(definition) == "function" then
+                setfenv(definition, self)
+                definition(self)
+            else
+                if getmetatable(owner) == class then
+                    error("Usage: class([env, ][name, ][stack]) (definition) - the definition must be a function", stack)
+                else
+                    error("Usage: interface([env, ][name, ][stack]) (definition) - the definition must be a function", stack)
+                end
+            end
+
+            environment.SetDefinitionMode(self, false)
+
+            local exdmtds       = rawget(self, FLD_EXD_METHOD)
+            if exdmtds then
+                for name, func in pairs, exdmtds do
+                    interface.AddMethod(owner, name, func, 2)
+                end
+                rawset(self, FLD_EXD_METHOD, nil)
             end
 
             return owner
@@ -12415,7 +12548,6 @@ do
         if not (type(value) == "string" and strfind(value, "=>")) then return onlyvalid or "the %s must be a string like 'x,y=>x+y'" end
 
         local param, body       = strmatch(value, "^(.-)=>(.+)$")
-        param                   = param and strgsub(param, "[^_%w]+", ",")
         body                    = body and strfind(body, "return") and body or ("return " .. (body or ""))
 
         local func              = loadsnippet(strformat("return function(%s) %s end", param, body), value, _G)
@@ -13656,10 +13788,12 @@ do
             FLD_VAR_USGMSG      = -4,
             FLD_VAR_VARVLD      = -5,
             FLD_VAR_THRABL      = -6,
+            FLD_VAR_NDTHIS      = -7,
 
             TYPE_VALD_DISD      = Platform.TYPE_VALIDATION_DISABLED,
+            ALL_USE_THIS        = Platform.USE_THIS_FOR_OBJECT_METHODS,
 
-            THIS_METHOD         = {
+            CTOR_METHOD         = {
                 __exist         = true,
                 __new           = true,
                 __ctor          = true,
@@ -13786,7 +13920,7 @@ do
             local usage         = {}
 
             if targettype == AttributeTargets.Method then
-                if THIS_METHOD[name] and Class.Validate(owner) then
+                if CTOR_METHOD[name] and Class.Validate(owner) then
                     tinsert(usage, strformat("Usage: %s(", tostring(owner)))
                 elseif getmetatable(owner).IsStaticMethod(owner, name) then
                     tinsert(usage, strformat("Usage: %s.%s(", tostring(owner), name))
@@ -13871,7 +14005,7 @@ do
 
             token               = 0
 
-            if not ismulti and THIS_METHOD[name] and Class.Validate(owner) then
+            if not ismulti and CTOR_METHOD[name] and Class.Validate(owner) then
                 isctor          = true
                 token           = turnonflags(FLG_TYP_CONTOR, token)
             end
@@ -14192,7 +14326,7 @@ do
             end
         end
 
-        local function genOverload(overload, owner, name, hasself)
+        local function genOverload(overload, owner, name, hasself, needthis)
             local token         = 0
             local passStack     = PASS_STACK_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) and PASS_STACK_METHOD[name] or false
 
@@ -14200,8 +14334,11 @@ do
                 token           = turnonflags(FLG_OVD_SELFIN, token)
             end
 
-            if THIS_METHOD[name] and Class.Validate(owner) then
+            if CTOR_METHOD[name] and Class.Validate(owner) then
                 token           = turnonflags(FLG_OVD_THROW, token)
+            end
+
+            if needthis then
                 token           = turnonflags(FLG_OVD_THIS, token)
             end
 
@@ -14357,6 +14494,12 @@ do
         --- Mark the target function as throwable
         function Throwable(self)
             self.IsThrowable    = true
+            return self
+        end
+
+        --- Mark the overload must use this keyword
+        function UseThis(self)
+            self.IsThisUsable   = true
         end
 
         -----------------------------------------------------------
@@ -14400,7 +14543,8 @@ do
                 [FLD_VAR_IMMTBL]= true,
                 [FLD_VAR_USGMSG]= "",
                 [FLD_VAR_VARVLD]= false,
-                [FLD_VAR_THRABL]= self.IsThrowable and not THIS_METHOD[name],
+                [FLD_VAR_THRABL]= self.IsThrowable and not CTOR_METHOD[name],
+                [FLD_VAR_NDTHIS]= self.IsThisUsable,
             }
 
             local minargs
@@ -14492,7 +14636,23 @@ do
 
                 genArgumentValid(vars, true, owner, name, hasself)
 
-                return genOverload(tblclone(overload, {}), owner, name, hasself)
+                -- check need this
+                local needthis  = ALL_USE_THIS
+
+                if not needthis then
+                    if CTOR_METHOD[name] and Class.Validate(owner) then
+                        needthis= true
+                    else
+                        for _, vars in ipairs, overload, 0 do
+                            if vars[FLD_VAR_NDTHIS] then
+                                needthis = true
+                                break
+                            end
+                        end
+                    end
+                end
+
+                return genOverload(tblclone(overload, {}), owner, name, hasself, needthis)
             else
                 local isbuilder = targettype ~= AttributeTargets.Function
                 if not isbuilder and TYPE_VALD_DISD and vars[FLD_VAR_IMMTBL] and not vars[FLD_VAR_THRABL] then return end
@@ -14526,6 +14686,9 @@ do
 
         --- whether the target function may throw exceptions instead of error message
         property "IsThrowable"      { type = Boolean }
+
+        --- whether must use the this keyword
+        property "IsThisUsable"     { type = Boolean }
 
         --- The template parameter
         property "Template"         { type = Any }
