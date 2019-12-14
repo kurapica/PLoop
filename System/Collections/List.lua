@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2019/09/20                                               --
--- Version      :   1.2.1                                                    --
+-- Update Date  :   2019/12/02                                               --
+-- Version      :   1.2.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -201,11 +201,9 @@ PLoop(function(_ENV)
 
         __Arguments__{ NaturalNumber, Callable }
         function __new(_, count, initValue)
-            local i     = 1
             local obj   = {}
             for i = 1, count do
                 obj[i]  = initValue(i)
-                i       = i + 1
             end
             return obj, true
         end
@@ -662,7 +660,7 @@ PLoop(function(_ENV)
             tonumber            = tonumber,
         }
 
-        export { ListStreamWorker, IIndexedList }
+        export { ListStreamWorker, IIndexedList, XList }
 
         -----------------------------------------------------------
         --                     Queue method                      --
@@ -691,6 +689,9 @@ PLoop(function(_ENV)
         --- Convert the selected items to a list
         __Arguments__{ -IList/List }
         function ToList(self, cls) return cls(self) end
+
+        --- Save the link operations into a xlist so we can use it as a new start for link operations
+        function ToXList(self) return XList(self) end
 
         --- Combine the items to get a result
         __Arguments__{ Callable, System.Any/nil }

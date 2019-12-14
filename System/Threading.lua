@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2013/08/13                                               --
--- Update Date  :   2018/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2019/12/04                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 PLoop(function(_ENV)
     __Final__() __Sealed__() __Abstract__()
@@ -121,7 +121,8 @@ PLoop(function(_ENV)
             end
 
             local getCurrentPool    = getlocal and function()
-                if running() == nil then return end
+                local curr, ismain  = running()
+                if not curr or ismain then return end
 
                 local stack         = 5
                 local n, v          = getlocal(stack, 1)
@@ -145,6 +146,17 @@ PLoop(function(_ENV)
             -- @return wrap                 the wrap function or thread
             __Arguments__{ Function, Boolean/nil }
             GetThread = newpoolthread
+
+            --- safe call the function within a coroutine, if the caller is already
+            -- in a coroutine, no new coroutine will be used
+            __Arguments__{ Function, Any * 0 }
+            function SafeThreadCall(self, func, ...)
+                local curr, ismain  = running()
+                if curr and not ismain then return func(...) end
+
+                local thread        = newrecyclethread(self)
+                return thread(func)(...)
+            end
 
             --- call the function with arguments in a recyclable coroutine
             -- @param   func                the target function
@@ -361,13 +373,23 @@ PLoop(function(_ENV)
 
             export { ThreadPool, Context }
 
-            local wraptarget = Platform.MULTI_OS_THREAD and function(target)
+            local wraptarget    = Platform.MULTI_OS_THREAD and function(target)
                 return function(...)
                     return ThreadPool.Current:ThreadCall(target, ...)
                 end
             end or function(target)
                 return function(...)
                     return ThreadPool.Default:ThreadCall(target, ...)
+                end
+            end
+
+            local safewrap      = Platform.MULTI_OS_THREAD and function(target)
+                return function(...)
+                    return ThreadPool.Current:SafeThreadCall(target, ...)
+                end
+            end or function(target)
+                return function(...)
+                    return ThreadPool.Default:SafeThreadCall(target, ...)
                 end
             end
 
@@ -383,7 +405,11 @@ PLoop(function(_ENV)
             -- @param   stack                       the stack level
             -- @return  definition                  the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
-                return wraptarget(definition)
+                if self[1] then
+                    return safewrap(definition)
+                else
+                    return wraptarget(definition)
+                end
             end
 
             -----------------------------------------------------------
@@ -394,6 +420,11 @@ PLoop(function(_ENV)
 
             --- the attribute's priority
             property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
+
+            -----------------------------------------------------------
+            --                      constructor                      --
+            -----------------------------------------------------------
+            function __new(_, safe) return { safe }, true end
         end)
 
         --- specify a method or function as iterator who use yield to generate values

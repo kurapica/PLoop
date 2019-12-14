@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2019/04/22                                               --
--- Version      :   1.1.2                                                    --
+-- Update Date  :   2019/12/02                                               --
+-- Version      :   1.1.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -469,7 +469,7 @@ PLoop(function(_ENV)
             yield               = coroutine.yield,
         }
 
-        export { DictionaryStreamWorker, ListStreamWorker }
+        export { DictionaryStreamWorker, ListStreamWorker, XDictionary }
 
         -----------------------------------------------------------
         --                     Queue method                      --
@@ -488,6 +488,9 @@ PLoop(function(_ENV)
         --- Convert the selected items to a dictionary
         __Arguments__{ -IDictionary/Dictionary }
         function ToDict(self, cls) return cls(self) end
+
+        --- Save the link operations into a xdictionary so we can use it as a new start for link operations
+        function ToXDict(self) return XDictionary(self) end
 
         --- Combine the key-value pairs to get a result
         __Arguments__{ Callable, Any/nil }
