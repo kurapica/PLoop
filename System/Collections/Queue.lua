@@ -132,11 +132,19 @@ PLoop(function(_ENV)
         end
 
         --- Returns the object at the beginning of the Queue without removing it
+        __Arguments__{ NaturalNumber/nil }
         function Peek(self, count)
             count               = min(count and type(count) == "number" and count or 1, self[FIELD_REAR] - self[FIELD_FRONT])
             if count < 1 then return end
 
             local start         = self[FIELD_FRONT]
+            return unpack(self, start + 1, start + count)
+        end
+
+        __Arguments__{ NaturalNumber, NaturalNumber }
+        function Peek(self, start, count)
+            start               = self[FIELD_FRONT] + start - 1
+            count               = min(count, self[FIELD_REAR] - start)
             return unpack(self, start + 1, start + count)
         end
 

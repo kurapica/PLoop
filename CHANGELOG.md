@@ -1,9 +1,29 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.5.1] - 2019-12-17 WangXH <kurapica125@outlook.com>
+### Added
+- `USE_THIS_FOR_OBJECT_METHODS` platform setting is added, used to make sure the overload object method can use `this(self, ...)` to call the other implementions of the same method, default false(normall you can call the target method directly like `Method(self, ...)`)
+- The `UseThis` method is added to the `__Arguments__` attribtue, so we can use `this` keyword in object method like `__Arguments__{...}:UseThis()`
+- `System.Collections.Queue` is added
+- Now can use `interface (target) (function(_ENV) ... end)` or `class (target) (function(_ENV) ... end)` to define object or static methods for sealed types, can only be used to define un-existed methods, no keywords can be used.
+- System.Reactive lib is added.
+
+### Changed
+- Fix the class method extension, object method with the same name of the static method should works now.
+
+
+## [1.4.6] - 2019-12-02 WangXH <kurapica125@outlook.com>
+### Added
+- `ToXList` method is added to the `System.Collections.IList`, so we can save the link operations to the XList object and start the new link operations.
+- `ToXDict` method is added to the `System.Collections.IDictionary`, so we can save the link operations to the XDictionary and start the new link operations.
+- `SafeThreadCall` is added to the `System.Threading.ThreadPool`, it works like the ThreadCall, but only use a new coroutine if the caller isn't in a coroutine, also using `__Async__(true)` will wrap the target function by the `SafeThreadCall`.
+
+
 ## [1.4.5] - 2019-11-27 WangXH <kurapica125@outlook.com>
 ### Added
 - `GetSubTypes` Method is added to `System.Class` and `System.Interface`, will return an iterator to get all sub types directly extend or inherit the target interface or class.
+
 
 ## [1.4.4] - 2019-10-29 WangXH <kurapica125@outlook.com>
 ### Added
@@ -12,38 +32,47 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Add support for `IsTemporary` session settings
 
+
 ## [1.4.3] - 2019-10-29 WangXH <kurapica125@outlook.com>
 ### Changed
 - The System.Data.DataEntityCache can use cache class(extend System.Data.ICache) as its second template parameter, so it can create cache object directly, works like `System.Data.DataCollection[{MyDataContext, NgxLua.Redis }]`
+
 
 ## [1.4.2] - 2019-10-20 WangXH <kurapica125@outlook.com>
 ### Changed
 - The environment will access the `_G` at the last, after read the global namespace, so other oop system won't affect the PLoop
 
+
 ## [1.4.1] - 2019-10-18 WangXH <kurapica125@outlook.com>
 ### Changed
 - The environment will access the global namespaces at last, after read the base environment
+
 
 ## [1.3.2] - 2019-09-03 WangXH <kurapica125@outlook.com>
 ### Changed
 - The class object's default property value won't be serialized.
 
+
 ## [1.3.1] - 2019-08-30 WangXH <kurapica125@outlook.com>
 ### Changed
 - ProcessInnerRequest will return the status code as the first value, then the redirected path or the json data.
+
 
 ## [1.2.15] - 2019-08-23 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the error message stack level for un-supported type settings in `__Arguments__`.
 - Add variable checking for Enum.ValidateFlags, the check will be disabled when set PLOOP_PLATFORM_SETTINGS.TYPE_VALIDATION_DISABLED to true.
 
+
 ## [1.2.14] - 2019-08-18 WangXH <kurapica125@outlook.com>
 ### Added
 - The `System.__Recyclable__` attribtue is added for classes, so their objects are recylable, the system won't wipe them when Dispose them, and the *Disposed* field won't be set to true since we need to re-use them. The recycle part must be done by the classes themselves.
 
+
 ## [1.2.11] - 2019-06-03 WangXH <kurapica125@outlook.com>
 ### Added
 - The prototype.lua keeps using no old style to avoid some problem caused by the environment changing, there is no need to keep using the old definition style.
+
 
 ## [1.2.10] - 2019-06-03 WangXH <kurapica125@outlook.com>
 ### Added
