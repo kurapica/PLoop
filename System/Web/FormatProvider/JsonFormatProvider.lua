@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
 -- Update Date  :   2019/04/01                                               --
--- Version      :   1.0.2                                                    --
+-- Version      :   1.0.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -86,6 +86,10 @@ PLoop(function(_ENV)
                 if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
                     return false
                 end
+            end
+
+            for i = 1, count do
+                if data[i] == nil then return false end
             end
 
             return true
