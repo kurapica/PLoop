@@ -572,8 +572,8 @@ PLoop(function(_ENV)
         end
 
         --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-        __Arguments__{ String, System.Text.Encoding/nil }
-        __Static__() function HtmlDecode(text, encode)
+        __Arguments__{ String, System.Text.Encoding/nil, Boolean/nil }
+        __Static__() function HtmlDecode(text, encode, discard)
             encode              = (encode or UTF8Encoding).Encode
             return (strgsub(text, "&(#?)([xX]?)([^&]+);", function(isNumber, isHex, entity)
                 isNumber        = isNumber and #isNumber > 0
@@ -585,7 +585,15 @@ PLoop(function(_ENV)
 
                 -- entity
                 if not isNumber then
-                    return _EntityMap[entity]
+                    local rs    = _EntityMap[entity]
+
+                    if discard then
+                        if #rs > 1 or strbyte(rs) >= 0x80 then
+                            return ""
+                        end
+                    end
+
+                    return rs
                 else
                     -- code
                     if isHex then
@@ -593,6 +601,8 @@ PLoop(function(_ENV)
                     else
                         entity = tonumber(entity)
                     end
+
+                    if discard and entity >= 0x80 then return "" end
 
                     return entity and encode(entity)
                 end
