@@ -588,8 +588,9 @@ PLoop(function(_ENV)
                     local rs    = _EntityMap[entity]
 
                     if discard then
-                        if #rs > 1 or strbyte(rs) >= 0x80 then
-                            return ""
+                        local b = strbyte(rs)
+                        if #rs > 1 or b >= 0x80 then
+                            return b == 0xa0 and " " or ""
                         end
                     end
 
