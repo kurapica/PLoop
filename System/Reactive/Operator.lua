@@ -42,9 +42,8 @@ PLoop(function(_ENV)
 
             Observable.From(observer.OnUnsubscribe):Subscribe(function() self:Unsubscribe() end)
 
-            if self.RefOperator then self.RefOperator:Subscribe(observer) end
-
             self.Observable:Subscribe(self)
+            if self.RefOperator then self.RefOperator:Subscribe(observer) end
 
             return observer
         end
@@ -74,19 +73,17 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, IObservable/nil, Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, observable, onNext, onError, onCompleted, refObservable, refOnNext, refOnError, refOnCompleted)
+        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, Operator/nil }
+        function __ctor(self, observable, onNext, onError, onCompleted, refOperator)
             self.Observable     = observable
             self.OnNextCore     = onNext
             self.OnErrorCore    = onError
             self.OnCompletedCore= onCompleted
-
-            if refObservable then
-                self.RefOperator= Operator(refObservable, refOnNext, refOnError, refOnCompleted)
-            end
+            self.RefOperator    = refOperator
         end
     end)
 
+    -- Method Extension
     interface (IObservable) (function(_ENV)
         export {
             max                 = math.max,
@@ -99,12 +96,11 @@ PLoop(function(_ENV)
             tinsert             = table.insert,
             pcall               = pcall,
             next                = next,
-            select              = selector,
+            select              = select,
             pairs               = pairs,
             loadsnippet         = Toolset.loadsnippet,
             otime               = os and (os.clock or os.time) or GetTime, -- GetTime for WOW temporary
             unpack              = unpack or table.unpack,
-            Info                = Logger.Default[Logger.LogLevel.Info],
             isValidValue        = Struct.ValidateValue,
             serialize           = Serialization.Serialize,
             isObjectType        = Class.IsObjectType,
@@ -113,9 +109,11 @@ PLoop(function(_ENV)
             resume              = coroutine.resume,
             status              = coroutine.status,
 
+            Info                = Logger.Default[Logger.LogLevel.Info],
+
             RunWithLock         = ILockManager.RunWithLock,
 
-            LOCK_KEY            = "PLOOP_REACTIVE_SEQEQ_%s",
+            LOCK_KEY            = "PLOOP_RX_%s",
 
             Operator, IObservable, Observer, Threading, Guid, Exception, Dictionary, Subject, List,
             Serialization.Serializable, Serialization.StringFormatProvider, PublishSubject, ReplaySubject
@@ -569,7 +567,7 @@ PLoop(function(_ENV)
             local squeue        = Queue()
             local iscomp
 
-            local compare       = function(observer)
+            local compareQueue  = function(observer)
                 local fcount    = fqueue:Dequeue()
                 local scount    = squeue:Dequeue()
 
@@ -589,7 +587,7 @@ PLoop(function(_ENV)
             local complete      = function(observer)
                 if iscomp then
                     while not observer.IsUnsubscribed and squeue:Peek() and fqueue:Peek() do
-                        compare(observer)
+                        compareQueue(observer)
                     end
 
                     if not observer.IsUnsubscribed then
@@ -608,14 +606,15 @@ PLoop(function(_ENV)
             return Operator(self,
                 function(observer, ...)
                     fqueue(select("#", ...), ...)
-                    return squeue:Peek() and compare(observer)
+                    return squeue:Peek() and compareQueue(observer)
                 end, nil, complete,
                 -- The other sequence
-                other,
-                function(observer, ...)
-                    squeue(select("#", ...), ...)
-                    return fqueue:Peek() and compare(observer)
-                end, nil, complete
+                Operator(other,
+                    function(observer, ...)
+                        squeue(select("#", ...), ...)
+                        return fqueue:Peek() and compareQueue(observer)
+                    end, nil, complete
+                )
             )
         end
 
@@ -733,21 +732,20 @@ PLoop(function(_ENV)
         --- Returns a sequence with a single value being the last value of the source sequence
         __Arguments__{ Callable/"=>true" }
         function Last(self, predicate)
-            local last          = Queue()
+            local last          = {}
 
             return Operator(self, function(observer, ...)
                 local ok, ret   = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
                 if ret then
-                    local count = last:Dequeue()
-                    if count then last:Dequeue(count) end
-                    last:Enqueue(select("#", ...), ...)
+                    last[0]     = select("#", ...)
+                    for i = 1, last[0] do last[i] = select(i, ...) end
                 end
             end, nil, function(observer)
                 if not observer.IsUnsubscribed then
-                    if #last > 0 then
-                        observer:OnNext(last:Dequeue(last:Dequeue()))
+                    if last[0] then
+                        observer:OnNext(unpack(last, 1, last[0]))
                         observer:OnCompleted()
                     else
                         observer:OnError(Exception("There is no elements in the source sequence"))
@@ -760,23 +758,21 @@ PLoop(function(_ENV)
         -- or the default value if the source sequence is empty
         __Arguments__{ Callable/"=>true", System.Any * 0 }
         function LastOrDefault(self, predicate, ...)
-            local last          = Queue()
-            local count         = select("#", ...)
-            if count > 0 then last:Enqueue(count, ...) end
+            local last          = { ... }
+            last[0]             = #last
 
             return Operator(self, function(observer, ...)
                 local ok, ret   = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
                 if ret then
-                    local count = last:Dequeue()
-                    if count then last:Dequeue(count) end
-                    last:Enqueue(select("#", ...), ...)
+                    last[0]     = select("#", ...)
+                    for i = 1, last[0] do last[i] = select(i, ...) end
                 end
             end, nil, function(observer)
                 if not observer.IsUnsubscribed then
-                    if #last > 0 then
-                        observer:OnNext(last:Dequeue(last:Dequeue()))
+                    if last[0] then
+                        observer:OnNext(unpack(last, 1, last[0]))
                         observer:OnCompleted()
                     else
                         observer:OnError(Exception("There is no elements in the source sequence"))
@@ -785,7 +781,7 @@ PLoop(function(_ENV)
             end)
         end
 
-        --- Returns a sequence with calculated values from teh source sequence,
+        --- Returns a sequence with calculated values from the source sequence,
         -- if emits the seed, the first value will be used as the seed
         __Arguments__{ Callable, System.Any/nil }
         function Scan(self, accumulator, seed)
@@ -1267,113 +1263,114 @@ PLoop(function(_ENV)
             local rightwindows  = List()
 
             return Operator(self, function(observer, ...)
-                local count = select("#", ...)
+                    local count = select("#", ...)
 
-                -- join the right window
-                if #rightwindows > 0 then
-                    if count == 1 then
-                        local a1 = ...
-                        for _, rwin in rightwindows:GetIterator() do
-                            observer:OnNext(resultSelector(a1, unpack(rwin)))
-                        end
-                    elseif count == 2 then
-                        local a1, a2 = ...
-                        for _, rwin in rightwindows:GetIterator() do
-                            observer:OnNext(resultSelector(a1, a2, unpack(rwin)))
-                        end
-                    elseif count == 3 then
-                        local a1, a2, a3 = ...
-                        for _, rwin in rightwindows:GetIterator() do
-                            observer:OnNext(resultSelector(a1, a2, a3, unpack(rwin)))
-                        end
-                    else
-                        for _, rwin in rightwindows:GetIterator() do
-                            local queue = Queue{ ... }:Enqueue(unpack(rwin))
-                            observer:OnNext(resultSelector(queue:Dequeue(#queue)))
-                        end
-                    end
-                end
-
-                -- Open window
-                local ok, selector = pcall(leftDurationSelector, ...)
-                if not ok then return observer:OnError(Exception(selector)) end
-                if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
-
-                local window
-
-                local close = function()
-                    window:Unsubscribe()
-                    leftwindows:Remove(window)
-                end
-
-                window      = Observer(close, close, close)
-
-                for i = 1, count do
-                    window[i]= select(i, ...)
-                end
-
-                leftwindows:Insert(window)
-                selector:Subscribe(window)
-            end, function(observer, ex)
-                leftwindows:Each("Unsubscribe")
-                rightwindows:Each("Unsubscribe")
-                observer:OnError(ex)
-            end, function(observer)
-                leftwindows:Each("Unsubscribe")
-                rightwindows:Each("Unsubscribe")
-                observer:OnCompleted()
-            end, right, function(observer, ...)
-                local count = select("#", ...)
-
-                -- join the right window
-                if #leftwindows > 0 then
-                    for _, lwin in leftwindows:GetIterator() do
-                        local lcnt = #lwin
-                        if lcnt == 1 then
-                            local a1 = lwin[1]
-                            observer:OnNext(resultSelector(a1, ...))
-                        elseif lcnt == 2 then
-                            local a1, a2 = lwin[1], lwin[2]
-                            observer:OnNext(resultSelector(a1, a2, ...))
-                        elseif lcnt == 3 then
-                            local a1, a2, a3 = lwin[1], lwin[2], lwin[3]
-                            observer:OnNext(resultSelector(a1, a2, a3, ...))
+                    -- join the right window
+                    if #rightwindows > 0 then
+                        if count == 1 then
+                            local a1 = ...
+                            for _, rwin in rightwindows:GetIterator() do
+                                observer:OnNext(resultSelector(a1, unpack(rwin)))
+                            end
+                        elseif count == 2 then
+                            local a1, a2 = ...
+                            for _, rwin in rightwindows:GetIterator() do
+                                observer:OnNext(resultSelector(a1, a2, unpack(rwin)))
+                            end
+                        elseif count == 3 then
+                            local a1, a2, a3 = ...
+                            for _, rwin in rightwindows:GetIterator() do
+                                observer:OnNext(resultSelector(a1, a2, a3, unpack(rwin)))
+                            end
                         else
-                            local queue = Queue{ unpack(lwin) }:Enqueue(...)
-                            observer:OnNext(resultSelector(queue:Dequeue(#queue)))
+                            for _, rwin in rightwindows:GetIterator() do
+                                local queue = Queue{ ... }:Enqueue(unpack(rwin))
+                                observer:OnNext(resultSelector(queue:Dequeue(#queue)))
+                            end
                         end
                     end
-                end
 
-                -- Open window
-                local ok, selector = pcall(rightDurationSelector, ...)
-                if not ok then return observer:OnError(Exception(selector)) end
-                if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
+                    -- Open window
+                    local ok, selector = pcall(leftDurationSelector, ...)
+                    if not ok then return observer:OnError(Exception(selector)) end
+                    if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
 
-                local window
+                    local window
 
-                local close = function()
-                    window:Unsubscribe()
-                    rightwindows:Remove(window)
-                end
+                    local close = function()
+                        window:Unsubscribe()
+                        leftwindows:Remove(window)
+                    end
 
-                window      = Observer(close, close, close)
+                    window      = Observer(close, close, close)
 
-                for i = 1, count do
-                    window[i]= select(i, ...)
-                end
+                    for i = 1, count do
+                        window[i]= select(i, ...)
+                    end
 
-                rightwindows:Insert(window)
-                selector:Subscribe(window)
-            end, function(observer, ex)
-                leftwindows:Each("Unsubscribe")
-                rightwindows:Each("Unsubscribe")
-                observer:OnError(ex)
-            end, function(observer)
-                leftwindows:Each("Unsubscribe")
-                rightwindows:Each("Unsubscribe")
-                observer:OnCompleted()
-            end)
+                    leftwindows:Insert(window)
+                    selector:Subscribe(window)
+                end, function(observer, ex)
+                    leftwindows:Each("Unsubscribe")
+                    rightwindows:Each("Unsubscribe")
+                    observer:OnError(ex)
+                end, function(observer)
+                    leftwindows:Each("Unsubscribe")
+                    rightwindows:Each("Unsubscribe")
+                    observer:OnCompleted()
+                end, Operator(right, function(observer, ...)
+                    local count = select("#", ...)
+
+                    -- join the right window
+                    if #leftwindows > 0 then
+                        for _, lwin in leftwindows:GetIterator() do
+                            local lcnt = #lwin
+                            if lcnt == 1 then
+                                local a1 = lwin[1]
+                                observer:OnNext(resultSelector(a1, ...))
+                            elseif lcnt == 2 then
+                                local a1, a2 = lwin[1], lwin[2]
+                                observer:OnNext(resultSelector(a1, a2, ...))
+                            elseif lcnt == 3 then
+                                local a1, a2, a3 = lwin[1], lwin[2], lwin[3]
+                                observer:OnNext(resultSelector(a1, a2, a3, ...))
+                            else
+                                local queue = Queue{ unpack(lwin) }:Enqueue(...)
+                                observer:OnNext(resultSelector(queue:Dequeue(#queue)))
+                            end
+                        end
+                    end
+
+                    -- Open window
+                    local ok, selector = pcall(rightDurationSelector, ...)
+                    if not ok then return observer:OnError(Exception(selector)) end
+                    if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
+
+                    local window
+
+                    local close = function()
+                        window:Unsubscribe()
+                        rightwindows:Remove(window)
+                    end
+
+                    window      = Observer(close, close, close)
+
+                    for i = 1, count do
+                        window[i]= select(i, ...)
+                    end
+
+                    rightwindows:Insert(window)
+                    selector:Subscribe(window)
+                end, function(observer, ex)
+                    leftwindows:Each("Unsubscribe")
+                    rightwindows:Each("Unsubscribe")
+                    observer:OnError(ex)
+                end, function(observer)
+                    leftwindows:Each("Unsubscribe")
+                    rightwindows:Each("Unsubscribe")
+                    observer:OnCompleted()
+                end)
+            )
         end
 
         -----------------------------------------------------------------------
@@ -1589,7 +1586,7 @@ PLoop(function(_ENV)
                     if completed then observer:OnCompleted() end
                     completed   = true
                 end,
-                sampler, function(observer, ...)
+                Operator(sampler, function(observer, ...)
                     local count = #queue
                     if count > 0 then
                         observer:OnNext(queue:Dequeue(count))
@@ -1601,7 +1598,7 @@ PLoop(function(_ENV)
                     end
                     if completed then observer:OnCompleted() end
                     completed   = true
-                end
+                end)
             )
         end
 

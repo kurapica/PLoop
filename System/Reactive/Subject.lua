@@ -21,7 +21,7 @@ PLoop(function(_ENV)
 
         export { Observable, Observer, Dictionary, next = next, type = type, pairs = pairs }
 
-        FIELD_NEW_SUBSCRIBE     = "__Subject_New_Subscribe"
+        FIELD_NEW_SUBSCRIBE     = "__Subject_New"
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -118,11 +118,7 @@ PLoop(function(_ENV)
     __Sealed__() class "AsyncSubject" (function(_ENV)
         inherit "Subject"
 
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- The last value from the source observable
-        property "LastValue" { }
+        export { select = select, unpack = unpack or table.unpack }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -130,15 +126,16 @@ PLoop(function(_ENV)
         --- Provides the observer with new data
         function OnNext(self, ...)
             if not self.IsUnsubscribed then
-                self.LastValue = ...
+                self[0]         = select("#", ...)
+                for i = 1, self[0] do
+                    self[i]     = select(i, ...)
+                end
             end
         end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            if self.LastValue ~= nil then
-                super.OnNext(self, self.LastValue)
-            end
+            if self[0] > 0 then super.OnNext(self, unpack(self, 1, self[0])) end
             super.OnCompleted(self)
         end
     end)
@@ -148,38 +145,45 @@ PLoop(function(_ENV)
     __Sealed__() class "BehaviorSubject" (function(_ENV)
         inherit "Subject"
 
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- The last value from the source observable
-        property "LastValue" { }
+        export { select = select, unpack = unpack or table.unpack }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
             local observer      = super.Subscribe(self, ...)
-            if self.LastValue ~= nil then observer:OnNext(self.LastValue) end
+            if self[0] > 0 then observer:OnNext(unpack(self, 1, self[0])) end
         end
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self.LastValue      = ...
+            self[0]         = select("#", ...)
+            for i = 1, self[0] do
+                self[i]     = select(i, ...)
+            end
             super.OnNext(self, ...)
         end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Any/nil }
-        function __ctor(self, observable, default)
-            self.LastValue      = default
+        __Arguments__{ IObservable, Any * nil }
+        function __ctor(self, observable, ...)
+            self[0]         = select("#", ...)
+            for i = 1, self[0] do
+                self[i]     = select(i, ...)
+            end
+
             super(self, observable)
         end
 
-        __Arguments__{ Any/nil }
-        function __ctor(self, default)
-            self.LastValue      = default
+        __Arguments__{ Any * nil }
+        function __ctor(self, ...)
+            self[0]         = select("#", ...)
+            for i = 1, self[0] do
+                self[i]     = select(i, ...)
+            end
+
             super(self)
         end
     end)
@@ -219,34 +223,47 @@ PLoop(function(_ENV)
     __Sealed__() class "ReplaySubject" (function(_ENV)
         inherit "Subject"
 
-        export { Queue }
+        export { Queue, select = select }
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- The replay item count
+        property "QueueCount"   { type = Number, default = 0 }
+
         --- The last values from the source observable
-        property "Queue"      { set = false, default = function() return Queue() end }
+        property "Queue"        { set = false, default = function() return Queue() end }
 
         --- The max length of the buff size
-        property "QueueSize"  { type = Number, default = math.huge }
+        property "QueueSize"    { type = Number, default = math.huge }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
             local observer      = super.Subscribe(self, ...)
-            if #self.Queue > 0 then
-                for _, v in self.Queue:GetIterator() do
-                    observer:OnNext(v)
+            if self.Queue:Peek() then
+                local queue     = self.Queue
+                local index     = 1
+
+                local count     = queue:Peek(index, 1)
+                while count do
+                    observer:OnNext(queue:Peek(index + 1, count))
+                    index       = index + 1 + count
+                    count       = queue:Peek(index, 1)
                 end
             end
         end
 
         --- Provides the observer with new data
-        function OnNext(self, item)
-            self.Queue:Enqueue(item)
-            if #self.Queue > self.QueueSize then self.Queue:Dequeue(#self.Queue - self.QueueSize) end
-            super.OnNext(self, item)
+        function OnNext(self, ...)
+            self.Queue:Enqueue(select("#", ...), ...)
+            if self.QueueCount + 1 > self.QueueSize then
+                self.Queue:Dequeue(self.Queue:Dequeue())
+            else
+                self.QueueCount = self.QueueCount + 1
+            end
+            super.OnNext(self, ...)
         end
 
         -----------------------------------------------------------------------

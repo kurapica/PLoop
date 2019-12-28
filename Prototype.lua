@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2019/12/07                                               --
--- Version      :   1.5.1                                                    --
+-- Update Date  :   2019/12/27                                               --
+-- Version      :   1.5.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -7026,7 +7026,8 @@ do
                 uinsert(apis, "strformat")
                 uinsert(apis, "tostring")
                 uinsert(apis, "throw")
-                tinsert(body, [[if not pcall(setmetatable, obj, objmeta) then throw(strformat("The %s's __new meta-method doesn't provide a valid table as object", tostring(objmeta["__metatable"]))) end]])
+                uinsert(apis, "getmetatable")
+                tinsert(body, [[if getmetatable(obj) ~= cls and not pcall(setmetatable, obj, objmeta) then throw(strformat("The %s's __new meta-method doesn't provide a valid table as object", tostring(objmeta["__metatable"]))) end]])
             else
                 tinsert(body, [[setmetatable(obj, objmeta)]])
             end

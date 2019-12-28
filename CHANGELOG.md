@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.5.2] - 2019-12-27 WangXH <kurapica125@outlook.com>
+### Changed
+- If use the `System.__Recycable__` mark the classes, the class can collect disposed objects in the `__dtor` method, can re use them by the `__new` method, since they all disposed, they should be used as new object and passed to the `__ctor` method.
+
+
 ##[1.5.1] - 2019-12-17 WangXH <kurapica125@outlook.com>
 ### Added
 - `USE_THIS_FOR_OBJECT_METHODS` platform setting is added, used to make sure the overload object method can use `this(self, ...)` to call the other implementions of the same method, default false(normall you can call the target method directly like `Method(self, ...)`)
