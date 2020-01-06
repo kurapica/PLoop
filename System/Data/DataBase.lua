@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
 -- Update Date  :   2019/05/19                                               --
--- Version      :   1.2.2                                                    --
+-- Version      :   1.3.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -178,6 +178,7 @@ PLoop(function(_ENV)
     }
 
     class "DataCollection" {}
+    class "DataObjectCollection" {}
 
     __Sealed__() interface "ISqlBuilder" (function(_ENV)
         -----------------------------------------------------------
@@ -278,6 +279,15 @@ PLoop(function(_ENV)
 
         export { "getmetatable", GetNormalMethod = Class.GetNormalMethod }
 
+        --- Fired when the transaction has began
+        event "OnBegin"
+
+        --- Fired when the transaction is commited
+        event "OnCommit"
+
+        --- Fired when the transaction is rollbacked
+        event "OnRollback"
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -310,6 +320,7 @@ PLoop(function(_ENV)
             if not self.IsTransactionOpen then
                 GetNormalMethod(getmetatable(self), "Begin")(self)
                 self.IsTransactionOpen = true
+                return OnBegin(self)
             end
         end
 
@@ -318,6 +329,7 @@ PLoop(function(_ENV)
             if self.IsTransactionOpen then
                 GetNormalMethod(getmetatable(self), "Commit")(self)
                 self.IsTransactionOpen = false
+                return OnCommit(self)
             end
         end
 
@@ -326,6 +338,7 @@ PLoop(function(_ENV)
             if self.IsTransactionOpen then
                 GetNormalMethod(getmetatable(self), "Rollback")(self)
                 self.IsTransactionOpen = false
+                return OnRollback(self)
             end
         end
     end)
@@ -418,14 +431,19 @@ PLoop(function(_ENV)
     __Sealed__() interface "IDataContext" (function (_ENV)
         extend "IAutoClose"
 
-        export { List, __DataView__, "ipairs", "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert, getAttachedData = Attribute.GetAttachedData }
+        export { Dictionary, List, __DataView__, "ipairs", "pairs", "next", "pcall", "error", "getmetatable", "tonumber", tinsert = table.insert, getAttachedData = Attribute.GetAttachedData }
+
+        --- Fired when all entities is commited to the data base and the transaction is closed
+        event "OnEntitySaved"
 
         FLD_CHANGED_ENTITY      = 1
         FLD_CURRENT_TRANST      = 2
+        FLD_TRANSTN_ENTITY      = 3
 
         field {
             [FLD_CHANGED_ENTITY]= {},           -- the change entities
             [FLD_CURRENT_TRANST]= false,        -- the current transaction
+            [FLD_TRANSTN_ENTITY]= false,        -- the saved entities during the transaction
         }
 
         -----------------------------------------------------------
@@ -441,6 +459,15 @@ PLoop(function(_ENV)
                 if not (trans and trans.IsTransactionOpen) then
                     trans       = self.Connection:NewTransaction()
                     self[FLD_CURRENT_TRANST] = trans
+
+                    trans.OnCommit = trans.OnCommit + function()
+                        local entities = self[FLD_TRANSTN_ENTITY]
+                        if entities then
+                            self[FLD_TRANSTN_ENTITY] = false
+
+                            OnEntitySaved(self, Dictionary(entities).Keys:ToList())
+                        end
+                    end
                 end
                 return trans
             end
@@ -465,10 +492,17 @@ PLoop(function(_ENV)
         --- Save the data changes in the context
         function SaveChanges(self, stack)
             if self[FLD_CHANGED_ENTITY][1] == nil then return end
-            stack           = (tonumber(stack) or 1) + 1
+            stack               = (tonumber(stack) or 1) + 1
+
+            local entities      = self[FLD_TRANSTN_ENTITY]
+            if not entities then
+                entities        = {}
+                self[FLD_TRANSTN_ENTITY] = entities
+            end
 
             for _, entity in ipairs(self[FLD_CHANGED_ENTITY]) do
                 entity:SaveChange(stack)
+                entities[entity]= true
             end
 
             self[FLD_CHANGED_ENTITY] = {}
@@ -1292,7 +1326,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataTable__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute" "IInitAttribute"
 
-        export { Namespace, Class, Environment, IDataContext, IDataEntity, DataCollection, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
+        export { Namespace, Class, Environment, IDataContext, IDataEntity, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
 
         local setDataContext    = IDataEntity.SetDataContext
         local setEntityData     = IDataEntity.SetEntityData
@@ -1406,7 +1440,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataContext__" (function(_ENV)
         extend "IApplyAttribute"
 
-        export { Namespace, Class, Attribute, Environment, IDataContext, IDataEntity, __DataTable__, DataCollection, "next" }
+        export { Namespace, Class, Attribute, Environment, IDataContext, IDataObject, IDataEntity, __DataTable__, __DataObject__, DataCollection, "next" }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -1424,18 +1458,33 @@ PLoop(function(_ENV)
             end)
 
             for name, entityCls in Namespace.GetNamespaces(target) do
-                if Class.Validate(entityCls) and Class.IsSubType(entityCls, IDataEntity) then
-                    local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
-                    if set then
-                        local name  = set.collection
-                        local cls   = DataCollection[entityCls]
+                if Class.Validate(entityCls) then
+                    if  Class.IsSubType(entityCls, IDataEntity) then
+                        local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
+                        if set then
+                            local name  = set.collection
+                            local cls   = DataCollection[entityCls]
 
-                        Environment.Apply(manager, function(_ENV)
-                            property (name) {
-                                set         = false,
-                                default     = function(self) return cls(self) end,
-                            }
-                        end)
+                            Environment.Apply(manager, function(_ENV)
+                                property (name) {
+                                    set     = false,
+                                    default = function(self) return cls(self) end,
+                                }
+                            end)
+                        end
+                    elseif Class.IsSubType(entityCls, IDataObject) then
+                        local set       = Attribute.GetAttachedData(__DataObject__, entityCls)
+                        if set then
+                            local name  = set.collection
+                            local cls   = DataObjectCollection[entityCls]
+
+                            Environment.Apply(manager, function(_ENV)
+                                property (name) {
+                                    set     = false,
+                                    default = function(self) return cls(self) end,
+                                }
+                            end)
+                        end
                     end
                 end
             end
@@ -1446,6 +1495,100 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- the attribute target
         property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
+    end)
+
+    --- The data object that generated from several data entities
+    __Sealed__() interface "IDataObject" {}
+
+    --- The attribtue used to bind data object settings
+    __Sealed__() class "__DataObject__" (function(_ENV)
+        extend "IAttachAttribute" "IApplyAttribute"
+
+        export { Namespace, Class, Property, Environment, IDataObject, System.Serialization.__Serializable__, ipairs = ipairs, pairs = pairs, pcall = pcall, error = error }
+
+        __Sealed__() struct "DataObjectSetting" {
+            { name = "index",       type = struct { String }, require = true },
+            { name = "collection",  type = String },
+        }
+
+        local function loadinittable(self, init)
+            for k, v in pairs(init) do
+                self[k] = v
+            end
+        end
+
+        local function safeinit(self, init)
+            local ok, err       = pcall(loadinittable(self, init))
+            if not ok then throw(err:match("%d+:%s*(.-)$") or err) end
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- attach data on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  data                        the attribute data to be attached
+        function AttachAttribute(self, target, targettype, owner, name, stack)
+            -- Check the index
+            local settings      = self[0]
+            if #settings.index == 0 then
+                error("The index settings must be provided", stack + 1)
+            end
+
+            set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
+
+            for i, name in ipairs(settings.index) do
+                local feature   = Class.GetFeature(target, name)
+                if not (feature and Property.Validate(feature) and not Property.IsStatic(feature)) then
+                    error(("The %s as index must be an object property of the %s"):format(name, tostring(target)), stack + 1)
+                end
+            end
+
+            return self[0]
+        end
+
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+            local ctor = Class.GetMetaMethod(target, "__ctor")
+
+            Environment.Apply(manager, function(_ENV)
+                extend(System.Data.IDataObject)
+
+                __Arguments__{ System.RawTable }
+                __ctor          = safeinit
+
+                __Arguments__{ System.Data.IDataContext, Any * 1 }
+                __ctor          = ctor
+            end)
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ DataObjectSetting }
+        function __new(_, set)
+            return { [0] = set }, true
+        end
+
+        function __ctor(self)
+            __Serializable__()
+        end
     end)
 
     __Sealed__() __Arguments__{ -IDataEntity }
@@ -1664,5 +1807,73 @@ PLoop(function(_ENV)
         function __new(cls, context)
             return { [0] = context }, true
         end
+    end)
+
+    __Sealed__() __Arguments__{ -IDataObject }
+    class "DataObjectCollection" (function(_ENV, DataObject)
+
+        if DataObject == IDataObject then return end
+
+        export {
+            ipairs              = ipairs,
+            pairs               = pairs,
+            type                = type,
+            getmetatable        = getmetatable,
+            error               = error,
+            tinsert             = table.insert,
+            tconcat             = table.concat,
+            strformat           = string.format,
+            tostring            = tostring,
+            next                = next,
+            loadsnippet         = loadsnippet,
+            IsObjectType        = IsObjectType,
+
+            Class, Property, Any, List
+        }
+
+        -----------------------------------------------------------
+        --                        helper                         --
+        -----------------------------------------------------------
+        local settings          = Attribute.GetAttachedData(__DataObject__, DataObject)
+        local indexes           = List(settings.index)
+
+        local getQueryData      = loadsnippet("return function(query) return " .. indexes:Map("i=>'query.' .. i"):Join(", ") .. " end", "getQueryData_" .. DataObject, _ENV)()
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        __Arguments__{ unpack(indexes:Map(function(name) return Class.GetFeature(DataObject, name):GetType() end):ToList()) }
+        function Query(self, ...)
+            return DataObject(self:GetDataContext(), ...)
+        end
+
+        __Arguments__{
+            struct {
+                unpack(
+                    indexes:Map(function(name)
+                        local ftr   = Class.GetFeature(DataObject, name)
+                        return { type = ftr:GetType(), name = name, require = true }
+                    end):ToList()
+                )
+            }
+        }
+        function Query(self, query)
+            return Query(self, getQueryData(query))
+        end
+
+        --- Get the data context of the data collection
+        function GetDataContext(self)
+            return self[0]
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ IDataContext }
+        function __new(cls, context)
+            return { [0] = context }, true
+        end
+
+        export { Query }
     end)
 end)
