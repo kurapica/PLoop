@@ -13736,7 +13736,7 @@ do
         -- @param   init            the init table
         loadinittable           = function(self, init)
             local ok, msg       = pcall(loadinittable, self, init)
-            if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end
+            if not ok then throw(type(msg) == "string" and strmatch(msg, "%d+:%s*(.-)$") or msg) end
         end,
 
         --- Convert an index number to string

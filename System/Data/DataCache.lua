@@ -47,9 +47,9 @@ PLoop(function(_ENV)
     --- The bridge for the data context and cache
     __Arguments__{ -IDataEntity, -ICache, NaturalNumber/nil }
     __Sealed__() class "DataEntityCache" (function(_ENV, clsEntity, clsCache, defaultTimeout)
-        inherit "IDataCache"
+        extend "IDataCache"
 
-        export { "tostring", "ipairs", "tonumber", "select", List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
+        export { "tostring", "ipairs", "tonumber", "select", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsEntity):match("^(.*)%.[%P_]+$"))
         local CACHE_KEY         = "PLDEC:" .. clsEntity .. ":"
@@ -81,7 +81,6 @@ PLoop(function(_ENV)
 
         if #primaryflds == 0 then error("The " .. clsEntity .. " has no data table primary index settings") end
 
-        local QueryData         = struct { unpack(primaryflds) }
         local KeyCollection     = set.collection
         props                   = nil
 
@@ -256,14 +255,14 @@ PLoop(function(_ENV)
             end
         ]]
 
-        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, QueryData)
+        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack(primaryflds) })
     end)
 
     __Arguments__{ - IDataObject, - ICache, NaturalNumber/nil }
     __Sealed__() class "DataObjectCache" (function(_ENV, clsDataObject, clsCache, defaultTimeout)
-        inherit "IDataCache"
+        extend "IDataCache"
 
-        export { "tostring", "ipairs", "tonumber", "select", List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
+        export { "tostring", "ipairs", "tonumber", "select", List, with = with, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsDataObject):match("^(.*)%.[%P_]+$"))
         local CACHE_KEY         = "PLDEC:" .. clsDataObject .. ":"
@@ -279,7 +278,6 @@ PLoop(function(_ENV)
 
         if #primaryflds == 0 then error("The " .. clsDataObject .. " has no data table index settings") end
 
-        local QueryData         = struct { unpack(primaryflds) }
         local KeyCollection     = set.collection
 
         -----------------------------------------------------------
@@ -331,7 +329,7 @@ PLoop(function(_ENV)
                     entity      = self.Cache:Get(key, clsDataObject)
 
                     if entity == nil then
-                        entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[):First()
+                        entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
                             self.Cache:Set(key, entity, self.Timeout, true)
                         end
@@ -344,7 +342,7 @@ PLoop(function(_ENV)
 
                         if entity == nil then
                             with(clsContext())(function(ctx)
-                                entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[):First()
+                                entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                             end)
                             if entity then
                                 cache:Set(key, entity, self.Timeout, true)
@@ -368,7 +366,7 @@ PLoop(function(_ENV)
                     entity      = self.Cache:Get(key, clsDataObject)
 
                     if entity == nil then
-                        entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[):First()
+                        entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
                             self.Cache:Set(key, entity, self.Timeout, true)
                         end
@@ -381,7 +379,7 @@ PLoop(function(_ENV)
 
                         if entity == nil then
                             with(clsContext())(function(ctx)
-                                entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[):First()
+                                entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                             end)
                             if entity then
                                 cache:Set(key, entity, self.Timeout, true)
@@ -453,7 +451,7 @@ PLoop(function(_ENV)
             end
         ]]
 
-        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, QueryData)
+        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, struct { unpack(primaryflds) })
     end)
 
     --- The attribute used to bind the cache settings to the data entity or data object class
@@ -465,6 +463,7 @@ PLoop(function(_ENV)
 
             ipairs              = ipairs,
             pairs               = pairs,
+            type                = type,
             unpack              = unpack or table.unpack,
             clone               = Toolset.clone,
             error               = error,
@@ -473,9 +472,10 @@ PLoop(function(_ENV)
 
             isProperty          = Property.Validate,
             isStaticProp        = Property.IsStatic,
-            IsSubType           = Class.IsSubType,
+            isSubType           = Class.IsSubType,
             getAttachedData     = Attribute.GetAttachedData,
             getNamespaceName    = Namespace.GetNamespaceName,
+            getNamespace        = Namespace.GetNamespace,
         }
 
         local function isDataField(cls, prop)
@@ -489,12 +489,12 @@ PLoop(function(_ENV)
         end
 
         local function getRootNamespace(cls)
-            return Namespace.GetNamespace(Namespace.GetNamespaceName(cls):match("^(.*)%.[%P_]+$"))
+            return getNamespace(Namespace.GetNamespaceName(cls):match("^(.*)%.[%P_]+$"))
         end
 
         struct "DataCacheSettings" {
             name                = String,
-            depends             = struct  { [-IDataEntity] = struct { [String] = String } },
+            depends             = struct  { [(-IDataEntity) + String] = struct { [String] = String } },
             timeout             = NaturalNumber,
         }
 
@@ -517,7 +517,20 @@ PLoop(function(_ENV)
 
             local root          = getRootNamespace(target)
 
-            if IsSubType(target, IDataEntity) then
+            if settings.depends then
+                for depcls, map in pairs(settings.depends) do
+                    if type(depcls) == "string" then
+                        local cl= getNamespace(root, depcls)
+                        if not isSubType(cl, IDataEntity) then
+                            error("The " .. depcls .. " is not a data entity class can be used as dependency", stack + 1)
+                        end
+                        settings.depends[cl]    = map
+                        settings.depends[depcls]= nil
+                    end
+                end
+            end
+
+            if isSubType(target, IDataEntity) then
                 local set       = getAttachedData(__DataTable__, target)
                 if not set.indexes then error("The " .. target .. " has no data table index settings", stack + 1) end
 
@@ -580,7 +593,7 @@ PLoop(function(_ENV)
 
                 settings.primary= { unpack(primary) }
                 return settings
-            elseif IsSubType(target, IDataObject) then
+            elseif isSubType(target, IDataObject) then
                 local set       = getAttachedData(__DataObject__, target)
                 local primary   = set.index
 
@@ -645,15 +658,15 @@ PLoop(function(_ENV)
 
     --- The attribute used to bind cache to data context
     __Sealed__() class "__DataContextCache__" (function(_ENV)
-        extend "IAttachAttribute"
+        extend "IAttachAttribute" "IApplyAttribute"
 
-        export { Environment, Class, List, DataEntityCache, DataObjectCache, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = unpack or table.unpack, safeset = Toolset.safeset, getAttachedData = Attribute.GetAttachedData }
+        export { Namespace, Environment, Class, List, DataEntityCache, DataObjectCache, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = unpack or table.unpack, safeset = Toolset.safeset, loadsnippet = Toolset.loadsnippet, getAttachedData = Attribute.GetAttachedData }
 
         local _EntityDepends    = {}
 
         local _PrimaryMap       = setmetatable({}, {
             __index             = function(self, count)
-                local func          = loadsnippet([[
+                local func, msg = loadsnippet([[
                     return function(map, entity)
                         return ]] .. List(count, "i=>'entity[map[' .. i .. ']]'"):Join(", ") .. [[
                     end
@@ -667,7 +680,7 @@ PLoop(function(_ENV)
         local _SaveEntityPrimary= setmetatable({}, {
             __index             = function(self, count)
                 local args      = List(count, "i=>'arg' .. i"):Join(", ")
-                local func      = loadsnippet([[
+                local func, msg = loadsnippet([[
                     return function(cache, ]] .. args .. [[)
                         local len = #cache
                         for i = 1, len, ]] .. count .. [[ do
@@ -676,6 +689,7 @@ PLoop(function(_ENV)
                         ]] .. List(count, "i=>'cache[len + ' .. i .. ']'"):Join(", ") .. [[ = ]] .. args .. [[
                     end
                 ]], "DataContextCache_Primary_" .. count, _ENV)()
+
                 rawset(self, count, func)
                 return func
             end
@@ -686,7 +700,7 @@ PLoop(function(_ENV)
 
             for _, entity in entities:GetIterator() do
                 local cls       = GetObjectClass(entity)
-                local depends   = _EntityDepends[entity]
+                local depends   = _EntityDepends[cls]
 
                 if depends then
                     for target, convertor in pairs(depends) do
@@ -732,6 +746,7 @@ PLoop(function(_ENV)
 
             for name, entityCls in Namespace.GetNamespaces(target) do
                 local isEntityCls   = Class.IsSubType(entityCls, IDataEntity)
+
                 if Class.Validate(entityCls) and (isEntityCls or Class.IsSubType(entityCls, IDataObject)) then
                     local settings  = getAttachedData(__DataCacheEnable__, entityCls)
 
@@ -755,6 +770,17 @@ PLoop(function(_ENV)
                     end
                 end
             end
+        end
+
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+            Class.AddExtend(target, IDataContextCacheEnabled)
         end
 
         -----------------------------------------------------------

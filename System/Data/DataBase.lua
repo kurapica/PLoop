@@ -459,12 +459,13 @@ PLoop(function(_ENV)
                 if not (trans and trans.IsTransactionOpen) then
                     trans       = self.Connection:NewTransaction()
                     self[FLD_CURRENT_TRANST] = trans
+                    self[FLD_TRANSTN_ENTITY] = false
 
                     trans.OnCommit = trans.OnCommit + function()
                         local entities = self[FLD_TRANSTN_ENTITY]
+
                         if entities then
                             self[FLD_TRANSTN_ENTITY] = false
-
                             OnEntitySaved(self, Dictionary(entities).Keys:ToList())
                         end
                     end
@@ -1436,67 +1437,6 @@ PLoop(function(_ENV)
         end
     end)
 
-    --- The attribute used to describe the data context
-    __Sealed__() class "__DataContext__" (function(_ENV)
-        extend "IApplyAttribute"
-
-        export { Namespace, Class, Attribute, Environment, IDataContext, IDataObject, IDataEntity, __DataTable__, __DataObject__, DataCollection, "next" }
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        --- apply changes on the target
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   manager                     the definition manager of the target
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
-            Environment.Apply(manager, function(_ENV)
-                extend (System.Data.IDataContext)
-            end)
-
-            for name, entityCls in Namespace.GetNamespaces(target) do
-                if Class.Validate(entityCls) then
-                    if  Class.IsSubType(entityCls, IDataEntity) then
-                        local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
-                        if set then
-                            local name  = set.collection
-                            local cls   = DataCollection[entityCls]
-
-                            Environment.Apply(manager, function(_ENV)
-                                property (name) {
-                                    set     = false,
-                                    default = function(self) return cls(self) end,
-                                }
-                            end)
-                        end
-                    elseif Class.IsSubType(entityCls, IDataObject) then
-                        local set       = Attribute.GetAttachedData(__DataObject__, entityCls)
-                        if set then
-                            local name  = set.collection
-                            local cls   = DataObjectCollection[entityCls]
-
-                            Environment.Apply(manager, function(_ENV)
-                                property (name) {
-                                    set     = false,
-                                    default = function(self) return cls(self) end,
-                                }
-                            end)
-                        end
-                    end
-                end
-            end
-        end
-
-        -----------------------------------------------------------
-        --                       property                        --
-        -----------------------------------------------------------
-        --- the attribute target
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
-    end)
-
     --- The data object that generated from several data entities
     __Sealed__() interface "IDataObject" {}
 
@@ -1528,7 +1468,7 @@ PLoop(function(_ENV)
                 error("The index settings must be provided", stack + 1)
             end
 
-            set.collection  = set.collection or (Namespace.GetNamespaceName(target, true) .. "s")
+            settings.collection = settings.collection or (Namespace.GetNamespaceName(target, true) .. "s")
 
             for i, name in ipairs(settings.index) do
                 local feature   = Class.GetFeature(target, name)
@@ -1807,6 +1747,8 @@ PLoop(function(_ENV)
             ipairs              = ipairs,
             pairs               = pairs,
             type                = type,
+            pcall               = pcall,
+            unpack              = unpack or table.unpack,
             getmetatable        = getmetatable,
             error               = error,
             tinsert             = table.insert,
@@ -1814,7 +1756,7 @@ PLoop(function(_ENV)
             strformat           = string.format,
             tostring            = tostring,
             next                = next,
-            loadsnippet         = loadsnippet,
+            loadsnippet         = Toolset.loadsnippet,
             IsObjectType        = IsObjectType,
 
             Class, Property, Any, List
@@ -1833,7 +1775,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ unpack(indexes:Map(function(name) return Class.GetFeature(DataObject, name):GetType() end):ToList()) }
         function Query(self, ...)
-            return DataObject(self:GetDataContext(), ...)
+            local ok, obj       = pcall(DataObject, self[0], ...)
+            return ok and obj or nil
         end
 
         __Arguments__{
@@ -1864,5 +1807,66 @@ PLoop(function(_ENV)
         end
 
         export { Query }
+    end)
+
+    --- The attribute used to describe the data context
+    __Sealed__() class "__DataContext__" (function(_ENV)
+        extend "IApplyAttribute"
+
+        export { Namespace, Class, Attribute, Environment, IDataContext, IDataObject, IDataEntity, __DataTable__, __DataObject__, DataCollection, DataObjectCollection, "next" }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- apply changes on the target
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   manager                     the definition manager of the target
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        function ApplyAttribute(self, target, targettype, manager, owner, name, stack)
+            Environment.Apply(manager, function(_ENV)
+                extend (System.Data.IDataContext)
+            end)
+
+            for name, entityCls in Namespace.GetNamespaces(target) do
+                if Class.Validate(entityCls) then
+                    if  Class.IsSubType(entityCls, IDataEntity) then
+                        local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
+                        if set then
+                            local name  = set.collection
+                            local cls   = DataCollection[entityCls]
+
+                            Environment.Apply(manager, function(_ENV)
+                                property (name) {
+                                    set     = false,
+                                    default = function(self) return cls(self) end,
+                                }
+                            end)
+                        end
+                    elseif Class.IsSubType(entityCls, IDataObject) then
+                        local set       = Attribute.GetAttachedData(__DataObject__, entityCls)
+                        if set then
+                            local name  = set.collection
+                            local cls   = DataObjectCollection[entityCls]
+
+                            Environment.Apply(manager, function(_ENV)
+                                property (name) {
+                                    set     = false,
+                                    default = function(self) return cls(self) end,
+                                }
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Class }
     end)
 end)
