@@ -1511,17 +1511,6 @@ PLoop(function(_ENV)
             { name = "collection",  type = String },
         }
 
-        local function loadinittable(self, init)
-            for k, v in pairs(init) do
-                self[k] = v
-            end
-        end
-
-        local function safeinit(self, init)
-            local ok, err       = pcall(loadinittable(self, init))
-            if not ok then throw(err:match("%d+:%s*(.-)$") or err) end
-        end
-
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -1565,7 +1554,7 @@ PLoop(function(_ENV)
                 extend(System.Data.IDataObject)
 
                 __Arguments__{ System.RawTable }
-                __ctor          = safeinit
+                __ctor          = Toolset.loadinittable
 
                 __Arguments__{ System.Data.IDataContext, Any * 1 }
                 __ctor          = ctor

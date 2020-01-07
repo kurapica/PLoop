@@ -13731,6 +13731,14 @@ do
         -- @param   env             the environment, default _G
         loadsnippet             = loadsnippet,
 
+        --- load the init table for the object, only be used as constructor
+        -- @param   self            the object
+        -- @param   init            the init table
+        loadinittable           = function(self, init)
+            local ok, msg       = pcall(loadinittable, self, init)
+            if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end
+        end,
+
         --- Convert an index number to string
         -- @param   index           the number
         -- @return  string
