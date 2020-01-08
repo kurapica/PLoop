@@ -15,6 +15,8 @@
 PLoop(function(_ENV)
     namespace "System.Data"
 
+    local PLOOP_CACHE_KEY_PREFIX= "PLDC:"
+
     --- The interface for bridges between the data context and the cache server
     __Sealed__() interface "IDataCache" (function(_ENV)
         extend "IAutoClose"
@@ -52,7 +54,7 @@ PLoop(function(_ENV)
         export { "tostring", "ipairs", "tonumber", "select", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsEntity):match("^(.*)%.[%P_]+$"))
-        local CACHE_KEY         = "PLDEC:" .. clsEntity .. ":"
+        local CACHE_KEY         = PLOOP_CACHE_KEY_PREFIX .. clsEntity .. ":"
 
         local set               = Attribute.GetAttachedData(__DataTable__, clsEntity)
         if not set.indexes then error("The " .. clsEntity .. " has no data table index settings") end
@@ -265,7 +267,7 @@ PLoop(function(_ENV)
         export { "tostring", "ipairs", "tonumber", "select", List, with = with, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsDataObject):match("^(.*)%.[%P_]+$"))
-        local CACHE_KEY         = "PLDEC:" .. clsDataObject .. ":"
+        local CACHE_KEY         = PLOOP_CACHE_KEY_PREFIX .. clsDataObject .. ":"
 
         local set               = Attribute.GetAttachedData(__DataObject__, clsDataObject)
         if not set.index then error("The " .. clsDataObject .. " has no data object index settings") end
