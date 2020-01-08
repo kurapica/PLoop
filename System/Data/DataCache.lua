@@ -518,16 +518,21 @@ PLoop(function(_ENV)
             local root          = getRootNamespace(target)
 
             if settings.depends then
+                local depends   = {}
+
                 for depcls, map in pairs(settings.depends) do
                     if type(depcls) == "string" then
                         local cl= getNamespace(root, depcls)
                         if not isSubType(cl, IDataEntity) then
                             error("The " .. depcls .. " is not a data entity class can be used as dependency", stack + 1)
                         end
-                        settings.depends[cl]    = map
-                        settings.depends[depcls]= nil
+                        depends[cl]     = map
+                    else
+                        depends[depcls] = map
                     end
                 end
+
+                settings.depends= depends
             end
 
             if isSubType(target, IDataEntity) then
