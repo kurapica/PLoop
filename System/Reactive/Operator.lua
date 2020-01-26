@@ -1225,7 +1225,7 @@ PLoop(function(_ENV)
                             safeNext(observer, pcall(resultSelector, a1, a2, a3, queueb:Dequeue(second)))
                         else
                             local q = Queue():Enqueue(...):Enqueue(queueb:Dequeue(second))
-                            safeNext(observer, pcall(resultSelector, q:Dequeue(#q)))
+                            safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
                         end
                     end
                 end, nil, complete):Subscribe(observer)
@@ -1247,7 +1247,7 @@ PLoop(function(_ENV)
                             safeNext(observer, pcall(resultSelector, a1, a2, a3, ...))
                         else
                             local q = Queue():Enqueue(queuea:Dequeue(first)):Enqueue(...)
-                            safeNext(observer, pcall(resultSelector, q:Dequeue(#q)))
+                            safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
                         end
                     end
                 end, nil, complete):Subscribe(observer)
@@ -1285,7 +1285,7 @@ PLoop(function(_ENV)
                         else
                             for _, rwin in rightwindows:GetIterator() do
                                 local queue = Queue{ ... }:Enqueue(unpack(rwin))
-                                observer:OnNext(resultSelector(queue:Dequeue(#queue)))
+                                observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
                             end
                         end
                     end
@@ -1336,7 +1336,7 @@ PLoop(function(_ENV)
                                 observer:OnNext(resultSelector(a1, a2, a3, ...))
                             else
                                 local queue = Queue{ unpack(lwin) }:Enqueue(...)
-                                observer:OnNext(resultSelector(queue:Dequeue(#queue)))
+                                observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
                             end
                         end
                     end
@@ -1419,7 +1419,7 @@ PLoop(function(_ENV)
                             if queue:Peek() == nil then count = count - 1 end
                         end)
 
-                        safeNext(observer, pcall(selector, rs:Dequeue(#rs)))
+                        safeNext(observer, pcall(selector, rs:Dequeue(rs.Count)))
                     end
                 end
 
@@ -1453,7 +1453,7 @@ PLoop(function(_ENV)
             return Operator(self, function(observer, ...)
                 queue:Enqueue(...)
 
-                local qcnt      = #queue
+                local qcnt      = queue.Count
 
                 while qcnt > 0 do
                     if skipcnt > 0 then
@@ -1479,7 +1479,7 @@ PLoop(function(_ENV)
                     end
                 end
             end, nil, function(observer)
-                local qcnt      = #queue
+                local qcnt      = queue.Count
                 if qcnt > skipcnt then
                     if skipcnt > 0 then queue:Dequeue(skipcnt) end
                     observer:OnNext(List{ queue:Dequeue(qcnt - skipcnt) })
@@ -1587,12 +1587,12 @@ PLoop(function(_ENV)
                     completed   = true
                 end,
                 Operator(sampler, function(observer, ...)
-                    local count = #queue
+                    local count = queue.Count
                     if count > 0 then
                         observer:OnNext(queue:Dequeue(count))
                     end
                 end, nil, function(observer)
-                    local count = #queue
+                    local count = queue.Count
                     if count > 0 then
                         observer:OnNext(queue:Dequeue(count))
                     end

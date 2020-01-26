@@ -65,6 +65,12 @@ PLoop(function(_ENV)
         end
 
         -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- Get the count of items in the object
+        property "Count" { set = false, get = function (self) return self[FIELD_REAR] - self[FIELD_FRONT] end }
+
+        -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Returns an iterator that iterates through the Queue
