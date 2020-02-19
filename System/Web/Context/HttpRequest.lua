@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/02/19                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -18,11 +18,14 @@ PLoop(function(_ENV)
     class "System.Web.HttpRequest" (function (_ENV)
         local function defcache() return {} end
 
+        --- Get the collection of the http headers
+        __Abstract__() property "Headers"               { default = defcache }
+
         --- Specifies the length, in bytes, of content sent by the client
-        __Abstract__() property "ContentLength"         { }
+        __Abstract__() property "ContentLength"         { default = function() return self.Headers["content-length"] end }
 
         --- Gets the MIME content type of the incoming request
-        __Abstract__() property "ContentType"           { }
+        __Abstract__() property "ContentType"           { default = function() return self.Headers["content-type"] end }
 
         --- Gets a collection of cookies sent by the client
         __Abstract__() property "Cookies"               { default = defcache }
@@ -47,6 +50,9 @@ PLoop(function(_ENV)
 
         --- Gets information about the URL of the current request
         __Abstract__() property "Url"                   { default = function(self) return self.Context.Application:Url2Path(self.RawUrl:match("^[^?#]+")) end }
+
+        --- The accept mime type of the query
+        __Abstract__() property "Accept"                { default = function(self) return self.Headers["accept"] end }
 
         --- The http context
         __Final__()    property "Context"               { type = System.Web.HttpContext }
