@@ -93,10 +93,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- The handler's action
         property "Action"       { type = String }
 
         --- The handler's process phase
         property "ProcessPhase" { type = ProcessPhase, default = ProcessPhase.Head + ProcessPhase.Body + ProcessPhase.Final }
+
+        --- Whether the controller has finished the output
+        property "IsFinished"   { type = Boolean, default = false }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -109,11 +113,12 @@ PLoop(function(_ENV)
         -- @param   obj             the iterator object
         -- @param   index           the iterator index
         function Text(self, text, obj, idx)
-            local res       = self.Context.Response
-            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            self.IsFinished     = true
 
-            local write     = res.Write
-            res.ContentType = "text/plain"
+            local write         = res.Write
+            res.ContentType     = "text/plain"
 
             yield() -- finish head sending
 
@@ -130,18 +135,19 @@ PLoop(function(_ENV)
         -- @param   path            the response page path
         -- @param   ...             the data that passed to the view
         function View(self, path, ...)
-            local res       = self.Context.Response
-            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            self.IsFinished     = true
 
-            local context   = self.Context
-            local cls       = type(path) == "string" and GetRelativeResource(self, path, context) or path
+            local context       = self.Context
+            local cls           = type(path) == "string" and GetRelativeResource(self, path, context) or path
 
             if isclass(cls) and issubtype(cls, IHttpOutput) then
-                local view  = cls(...)
+                local view      = cls(...)
 
                 res.ContentType = "text/html"
 
-                view.Context= context
+                view.Context    = context
                 view:OnLoad(context)
 
                 yield()
@@ -151,7 +157,7 @@ PLoop(function(_ENV)
                 yield()
             else
                 Error("%s - the view page file can't be found.", tostring(path))
-                res.StatusCode = HTTP_STATUS.NOT_FOUND
+                res.StatusCode  = HTTP_STATUS.NOT_FOUND
             end
         end
 
@@ -159,10 +165,11 @@ PLoop(function(_ENV)
         -- @param   json            the response json
         -- @param   type            the object type to be serialized
         function Json(self, object, oType)
-            local res       = self.Context.Response
-            if res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            self.IsFinished     = true
 
-            local context   = self.Context
+            local context       = self.Context
             if context.IsInnerRequest then --and context.RawContext.ProcessPhase == HEAD_PHASE then
                 context:SaveJsonData(object, oType)
             else
@@ -183,8 +190,9 @@ PLoop(function(_ENV)
         --- Redirect to another url
         -- @param   url            the redirected url
         function Redirect(self, path, raw)
-            local res       = self.Context.Response
-            if res.RequestRedirected then return end
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected then return end
+            self.IsFinished     = true
 
             if path ~= "" then
                 if not (path:match("^%s*%a+:") or ispathrooted(path)) then
@@ -198,12 +206,23 @@ PLoop(function(_ENV)
 
         --- Missing
         function NotFound(self)
+            if self.IsFinished then return end
+            self.IsFinished     = true
             self.Context.Response.StatusCode = HTTP_STATUS.NOT_FOUND
         end
 
         --- Forbidden
         function Forbidden(self)
+            if self.IsFinished then return end
+            self.IsFinished     = true
             self.Context.Response.StatusCode = HTTP_STATUS.FORBIDDEN
+        end
+
+        --- Server Error
+        function ServerError(self)
+            if self.IsFinished then return end
+            self.IsFinished     = true
+            self.Context.Response.StatusCode = HTTP_STATUS.SERVER_ERROR
         end
 
         -----------------------------------------------------------------------

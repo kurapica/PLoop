@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2019/12/02                                               --
--- Version      :   1.1.3                                                    --
+-- Update Date  :   2020/02/19                                               --
+-- Version      :   1.1.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -365,13 +365,13 @@ PLoop(function(_ENV)
             export { Context }
 
             getIdleworkers      = function()
-                local context   = Context.Current
-                return context and context[DictionaryStreamWorker]
+                -- local context   = Context.Current
+                -- return context and context[DictionaryStreamWorker]
             end
 
             rycIdleworkers      = function(worker)
-                local context   = Context.Current
-                if context then context[DictionaryStreamWorker] = worker end
+                -- local context   = Context.Current
+                -- if context then context[DictionaryStreamWorker] = worker end
             end
         else
             -- Keep idle workers for re-usage
@@ -438,11 +438,19 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Map the items to other type datas
         __Arguments__{ Callable }
-        function Map(self, func) self[FLD_MAPACTITON] = func return self end
+        function Map(self, func)
+            if self[FLD_MAPACTITON] then return DictionaryStreamWorker(self):Map(func) end
+            self[FLD_MAPACTITON] = func
+            return self
+        end
 
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
-        function Filter(self, func) self[FLD_FILTERACTN] = func return self end
+        function Filter(self, func)
+            if self[FLD_FILTERACTN] then return DictionaryStreamWorker(self):Filter(func) end
+            self[FLD_FILTERACTN] = func
+            return self
+        end
 
         -----------------------------------------------------------
         --                      constructor                      --

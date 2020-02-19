@@ -198,27 +198,43 @@ PLoop(function(_ENV)
             IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web
         }
 
+        local processView       = function(self, default, path, data)
+            if self.IsFinished then return end
+
+            local typath        = type(path)
+            if typath == "table" then
+                path, data      = default, path
+            elseif typath ~= "string" then
+                path, data      = default
+            end
+
+            if not path then return self:ServerError() end
+            if data and type(data) ~= "table" then data = nil end
+
+            return self:View(path, data)
+        end
+
         local processHandler    = function(self, context, phase)
             local response      = context.Response
             if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
             if phase == HEAD_PHASE then
-                local path, data
-
-                if self[3] then
-                    path        = self[3]
-                    data        = self[2](context)
-                else
-                    path, data  = self[2](context)
-                    if type(path) ~= "string" then
-                        path    = nil
-                    end
-                end
-
+                local path, data= self[2](context)
                 if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
+                local typath    = type(path)
+                if typath == "table" then
+                    path, data  = self[3], path
+                elseif typath ~= "string" then
+                    path, data  = self[3], nil
+                end
+
+                if type(data) ~= "table" then
+                    data        = nil
+                end
+
                 if path then
-                    if self[4] then
+                    if self[4] and path == self[3] then
                         context[__View__]       = { self[4], data }
                         response.ContentType    = "text/html"
                     else
@@ -281,16 +297,251 @@ PLoop(function(_ENV)
                             viewcls = loadresource(viewpath, StringReader(viewcont), self.Context.Application) or false
                             if not viewcls then
                                 Error("The context for path - %q can't be parsed as view", viewpath)
+                                return self:ServerError()
                             end
                         end
-                        return viewcls and self:View(viewcls, definition(self, ...))
+
+                        return processView(self, viewcls, definition(self, ...))
                     end
                 else
-                    local path = self.Path
-                    if path then
-                        return function (self, ...) return self:View(path, definition(self, ...)) end
+                    local dpath = self.Path
+                    if dpath then
+                        return function (self, ...)
+                            return processView(self, dpath, definition(self, ...))
+                        end
                     else
-                        return function (self, ...) return self:View(definition(self, ...)) end
+                        return function (self, ...)
+                            return processView(self, nil, definition(self, ...))
+                        end
+                    end
+                end
+            elseif targettype == AttributeTargets.Function then
+                local viewcls
+                if self.Content then
+                    if not self.Path then
+                        error("the view path must be specified.", stack + 1)
+                    end
+
+                    viewcls = loadresource(self.Path, StringReader(self.Content), owner)
+                    if not (viewcls and issubtype(viewcls, IHttpOutput)) then
+                        error("the context can't be parsed as view.", stack + 1)
+                    end
+                end
+
+                return ViewContextHandler(name, definition, self.Path or false, viewcls or false)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
+        property "Priority"         { set = false, default = AttributePriority.Lowest }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ NEString/nil, NEString/nil }
+        function __ctor(self, path, content)
+            self.Path       = path
+            self.Content    = content
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __Arguments__{ NEString }
+        function __call(self, content)
+            self.Content    = content
+        end
+    end)
+
+    __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
+    class "__Switch__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export {
+            serialize           = Serialization.Serialize,
+            type                = type,
+            HEAD_PHASE          = IHttpContextHandler.ProcessPhase.Head,
+            isclass             = Class.Validate,
+            issubtype           = Class.IsSubType,
+            GetResource         = GetResource,
+            loadresource        = IO.Resource.IResourceLoader.LoadResource,
+            Error               = Logger.Default[Logger.LogLevel.Error],
+            Json                = Json,
+
+            SWITCH_CASE_VIEW    = 1,
+            SWITCH_CASE_JSON    = 2,
+            SWITCH_CASE_TEXT    = 3,
+
+            JsonFormatProvider, IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __Switch__, HTTP_STATUS, Web
+        }
+
+        local processView       = function(self, default, path, data)
+            if self.IsFinished then return end
+
+            local typath        = type(path)
+            if typath == "table" then
+                path, data      = default, path
+            elseif typath ~= "string" then
+                path, data      = default
+            end
+
+            if data and type(data) ~= "table" then data = nil end
+
+            local request       = self.Context.Request
+
+            if request:IsHtmlAccepted() then
+                if not path then return self:ServerError() end
+                return self:View(path, data)
+            elseif request:IsJsonAccepted() then
+                if data then
+                    return self:Json(data)
+                else
+                    return self:ServerError()
+                end
+            elseif request:IsTextAccepted() then
+                if data then
+                    return self:Text(Json(data))
+                else
+                    return self:ServerError()
+                end
+            else
+                self.Context.Response.StatusCode = HTTP_STATUS.NONE_ACCEPTABLE
+            end
+        end
+
+        local processHandler    = function(self, context, phase)
+            local response      = context.Response
+            if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+            if phase == HEAD_PHASE then
+                local path, data= self[2](context)
+                if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+                local typath    = type(path)
+                if typath == "table" then
+                    path, data  = self[3], path
+                elseif typath ~= "string" then
+                    path, data  = self[3], nil
+                end
+
+                if type(data) ~= "table" then
+                    data        = nil
+                end
+
+                local request   = context.Request
+
+                if request:IsHtmlAccepted() then
+                    if path then
+                        if self[4] and path == self[3] then
+                            context[__Switch__]     = { SWITCH_CASE_VIEW, self[4], data }
+                            response.ContentType    = "text/html"
+                        else
+                            local cls               = path and GetResource(path, context)
+
+                            if cls and issubtype(cls, IHttpOutput) then
+                                context[__Switch__] = { SWITCH_CASE_VIEW, cls, data }
+                                response.ContentType= "text/html"
+                            else
+                                Error("%s - the view page file can't be found.", self[3])
+                                response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                            end
+                        end
+                    else
+                        Error("The function %q failed to return a view path", self[1])
+                        response.StatusCode         = HTTP_STATUS.SERVER_ERROR
+                    end
+                elseif request:IsJsonAccepted() then
+                    if data then
+                        response.ContentType        = "application/json"
+                        if context.IsInnerRequest then
+                            context:SaveJsonData(data)
+                        else
+                            context[__Switch__]     = { SWITCH_CASE_JSON, data }
+                        end
+                    else
+                        Error("The function %q failed to return a json data", self[1])
+                        response.StatusCode         = HTTP_STATUS.SERVER_ERROR
+                    end
+                elseif request:IsTextAccepted() then
+                    if data then
+                        response.ContentType        = "text/plain"
+                        context[__Switch__]         = { SWITCH_CASE_TEXT, data }
+                    else
+                        Error("The function %q failed to return a value as text", self[1])
+                        response.StatusCode         = HTTP_STATUS.SERVER_ERROR
+                    end
+                else
+                    response.StatusCode             = HTTP_STATUS.NONE_ACCEPTABLE
+                end
+            else
+                local content                       = context[__Switch__]
+                if content then
+                    if content[1] == SWITCH_CASE_VIEW then
+                        local view                  = content[2](content[3])
+
+                        view.Context                = context
+                        view:OnLoad(context)
+
+                        return view:SafeRender(response.Write, "")
+                    else
+                        serialize(JsonFormatProvider(), content[2], response.Write)
+                    end
+                end
+            end
+        end
+
+        ViewContextHandler      = class { IHttpContextHandler,
+            Process = processHandler,
+            __call  = processHandler,
+            __new   = function(_, name, target, path, viewcls) return { name, target, path, viewcls }, true end,
+        }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if targettype == AttributeTargets.Method and issubtype(owner, Controller) then
+                if self.Content then
+                    if not self.Path then
+                        error("the view path must be specified.", stack + 1)
+                    end
+
+                    local viewcls
+                    local viewpath  = self.Path
+                    local viewcont  = self.Content
+                    return function(self, ...)
+                        if viewcls ==  nil then
+                            viewcls = loadresource(viewpath, StringReader(viewcont), self.Context.Application) or false
+                            if not viewcls then
+                                Error("The context for path - %q can't be parsed as view", viewpath)
+                                return self:ServerError()
+                            end
+                        end
+
+                        return processView(self, viewcls, definition(self, ...))
+                    end
+                else
+                    local dpath = self.Path
+                    if dpath then
+                        return function (self, ...)
+                            return processView(self, dpath, definition(self, ...))
+                        end
+                    else
+                        return function (self, ...)
+                            return processView(self, nil, definition(self, ...))
+                        end
                     end
                 end
             elseif targettype == AttributeTargets.Function then
