@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/07/05                                               --
--- Version      :   1.2.0                                                    --
+-- Update Date  :   2020/02/21                                               --
+-- Version      :   1.3.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -391,26 +391,7 @@ PLoop(function(_ENV)
 
             if data and type(data) ~= "table" then data = nil end
 
-            local request       = self.Context.Request
-
-            if request:IsHtmlAccepted() then
-                if not path then return self:ServerError() end
-                return self:View(path, data)
-            elseif request:IsJsonAccepted() then
-                if data then
-                    return self:Json(data)
-                else
-                    return self:ServerError()
-                end
-            elseif request:IsTextAccepted() then
-                if data then
-                    return self:Text(Json(data))
-                else
-                    return self:ServerError()
-                end
-            else
-                self.Context.Response.StatusCode = HTTP_STATUS.NONE_ACCEPTABLE
-            end
+            return self:AutoSwitch(path, data)
         end
 
         local processHandler    = function(self, context, phase)
