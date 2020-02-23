@@ -141,7 +141,7 @@ PLoop(function(_ENV)
     end)
 
     --- Emitting the item most recently emitted by the source Observable (or a seed/default value
-    -- if none has yet been emitted) and then continues to emit any other items emitted later by the source Observable(
+    -- if none has yet been emitted) and then continues to emit any other items emitted later by the source Observable
     __Sealed__() class "BehaviorSubject" (function(_ENV)
         inherit "Subject"
 
@@ -188,7 +188,7 @@ PLoop(function(_ENV)
         end
     end)
 
-    --- Emits to an observer only those items that are emitted by the source Observable(s) subsequent to the time of the subscription
+    --- Emits to an observers only when connect to the observable source
     __Sealed__() class "PublishSubject" (function(_ENV)
         inherit "Subject" extend "IConnectableObservable"
 

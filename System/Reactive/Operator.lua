@@ -349,7 +349,8 @@ PLoop(function(_ENV)
         --- filter out all values until a value fails the predicate, then the remaining sequence can be returned
         __Arguments__{ Callable }
         function SkipWhile(self, condition)
-            return self:Where(function(...) return not condition(...) end)
+            local take          = false
+            return self:Where(function(...) take = take or not condition(...) return take end)
         end
 
         --- return all values while the predicate passes, and when the first value fails the sequence will complete
@@ -906,7 +907,7 @@ PLoop(function(_ENV)
         -- sequence, then combined those child sequence to produce a final sequence
         __Arguments__{ Callable }
         function SelectMany(self, selector)
-            local childobs      = Dictionary()
+            local childobs      = {}
             local iscompleted
 
             return Operator(self,
@@ -914,15 +915,19 @@ PLoop(function(_ENV)
                     local ok, ret = pcall(selector, ...)
                     if not (ok and isObjectType(ret, IObservable)) then
                         local ex= Exception(ret or "The key selector doesn't return an observable sequence")
-                        childobs.Keys:Each("Unsubscribe")
+                        for key in pairs(childobs) do
+                            key:Unsubscribe()
+                        end
                         return observer:OnError(ex)
                     end
 
                     local obs
-                    obs         = ret:Subscribe(function(...)
+                    obs         = Observer(function(...)
                         observer:OnNext(...)
                     end, function(ex)
-                        childobs.Keys:Each("Unsubscribe")
+                        for key in pairs(childobs) do
+                            key:Unsubscribe()
+                        end
                         observer:OnError(ex)
                     end, function()
                         childobs[obs] = nil
@@ -930,11 +935,13 @@ PLoop(function(_ENV)
                             observer:OnCompleted()
                         end
                     end)
-
                     childobs[obs] = true
+                    ret:Subscribe(obs)
                 end,
                 function(observer, ex)
-                    childobs.Keys:Each("Unsubscribe")
+                    for key in pairs(childobs) do
+                        key:Unsubscribe()
+                    end
                     observer:OnError(ex)
                 end,
                 function(observer)
@@ -948,11 +955,28 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             Combining                             --
         -----------------------------------------------------------------------
-        --- Concatenates two observable sequences. Returns an observable sequence that contains the
-        -- elements of the first sequence, followed by those of the second the sequence
-        __Arguments__{ IObservable }
-        function Concat(self, observable)
-            return Operator(self, nil, nil, function(observer) observable:Subscribe(observer) end)
+        --- Concatenates two or more observable sequences. Returns an observable
+        -- sequence that contains the elements of the first sequence, followed by
+        -- those of the second the sequence
+        __Arguments__{ IObservable * 1 }
+        function Concat(self, ...)
+            if select("#", ...) == 1 then
+                local observable= ...
+                return Operator(self, nil, nil, function(observer) observable:Subscribe(observer) end)
+            else
+                local queue     = Queue{ ... }
+
+                local oper
+                oper            = Operator(self, nil, nil, function(observer)
+                    local nxt   = queue:Dequeue()
+                    if nxt then
+                        return nxt:Subscribe(oper)
+                    else
+                        observer:OnCompleted()
+                    end
+                end)
+                return oper
+            end
         end
 
         --- Repeats the observable sequence indefinitely and sequentially
@@ -975,9 +999,26 @@ PLoop(function(_ENV)
         --- Prefix values to a sequence
         __Arguments__{ System.Any * 0 }
         function StartWith(self, ...)
-            return Operator(Observable.From{ ... }, nil, nil, function(observer)
-                return self:Subscribe(observer)
-            end)
+            local count         = select("#", ...)
+
+            if count == 0 then
+                return self
+            elseif count == 1 then
+                return Operator(Observable.Just(...), nil, nil, function(observer)
+                    return self:Subscribe(observer)
+                end)
+            else
+                local data      = { ... }
+
+                return Operator(Observable(function(observer)
+                        for i = 1, #data do
+                            observer:OnNext(data[i])
+                        end
+                        observer:OnCompleted()
+                    end), nil, nil, function(observer)
+                    return self:Subscribe(observer)
+                end)
+            end
         end
 
         --- Return values from the sequence that is first to produce values, and ignore the other sequences
@@ -1151,7 +1192,7 @@ PLoop(function(_ENV)
 
         --- The CombineLatest extension method allows you to take the most recent value from two sequences, and with a given
         --- function transform those into a value for the result sequence
-        __Arguments__{ IObservable, Callable }
+        __Arguments__{ IObservable, Callable/"...=>..." }
         function CombineLatest(self, secseq, resultSelector)
             return Observable(function(observer)
                 local cache     = {}
@@ -1193,7 +1234,7 @@ PLoop(function(_ENV)
         end
 
         --- the Zip method brings together two sequences of values as pairs
-        __Arguments__{ IObservable, Callable }
+        __Arguments__{ IObservable, Callable/"...=>..." }
         function Zip(self, secseq, resultSelector)
             return Observable(function(observer)
                 local queuea    = Queue()
@@ -1392,7 +1433,7 @@ PLoop(function(_ENV)
             return self
         end
 
-        __Arguments__{ Callable }
+        __Arguments__{ Callable/"...=>..." }
         function Pattern:Then(resultSelector)
             return Plan{ self, resultSelector }
         end
@@ -1563,12 +1604,16 @@ PLoop(function(_ENV)
                 end, onError, function(observer)
                     if currsub then currsub:OnCompleted() end
                     observer:OnCompleted()
-                end, sampler, function(observer, ...)
-                    if currsub then currsub:OnCompleted() end
+                end, Operator(sampler,
+                    function(observer, ...)
+                        if currsub then currsub:OnCompleted() end
 
-                    currsub     = Subject()
-                    observer:OnNext(currsub)
-                end, onError, function(observer) end
+                        currsub     = Subject()
+                        observer:OnNext(currsub)
+                    end,
+                    onError,
+                    function(observer) end
+                )
             )
         end
 
