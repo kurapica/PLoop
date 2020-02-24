@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/02/21                                               --
--- Version      :   1.3.0                                                    --
+-- Update Date  :   2020/02/24                                               --
+-- Version      :   1.3.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -21,8 +21,10 @@ PLoop(function(_ENV)
         extend "IInitAttribute"
 
         export {
+            type                = type,
             unpack              = unpack,
             issubtype           = Class.IsSubType,
+            parseString         = ParseString,
             HEAD_PHASE          = IHttpContextHandler.ProcessPhase.Head,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
@@ -37,27 +39,31 @@ PLoop(function(_ENV)
                 local iter, obj, idx    = self[2](context)
                 if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
-                if iter then
+                local tyrs              = iter and type(iter)
+
+                if tyrs == "string" then
                     response.ContentType= "text/plain"
-                    context[__Text__]   = self[3] and { iter, obj, idx } or iter
+                    context[__Text__]   = parseString(iter)
+                elseif tyrs == "function" then
+                    response.ContentType= "text/plain"
+                    context[__Text__]   = { iter, obj, idx }
+                elseif tyrs == "table" then
+                    response.ContentType= "text/plain"
+                    context[__Text__]   = parseString(iter, obj)
                 else
-                    if self[3] then
-                        Error("The function %q failed to return an iterator", self[1])
-                    else
-                        Error("The function %q failed to return a text value", self[1])
-                    end
+                    Error("The function %q failed to return any value can be output as text", self[1])
                     response.StatusCode = HTTP_STATUS.SERVER_ERROR
                 end
             else
                 local write     = response.Write
                 local content   = context[__Text__]
                 if content then
-                    if self[3] then
+                    if type(content) == "table" then
                         for idx, text in unpack(content) do
-                            write(text or idx)
+                            write(parseString(text or idx))
                         end
                     else
-                        write(content)
+                        write(parseString(content))
                     end
                 end
             end
@@ -66,7 +72,7 @@ PLoop(function(_ENV)
         TextContextHandler      = class { IHttpContextHandler,
             Process = processHandler,
             __call  = processHandler,
-            __new   = function(_, name, target, async) return { name, target, async }, true end,
+            __new   = function(_, name, target ) return { name, target }, true end,
         }
 
         -----------------------------------------------------------
@@ -84,7 +90,7 @@ PLoop(function(_ENV)
             if targettype == AttributeTargets.Method and issubtype(owner, Controller) then
                 return function (self, ...) return self:Text(definition(self, ...)) end
             elseif targettype == AttributeTargets.Function then
-                return TextContextHandler(name, definition, self.Async or false)
+                return TextContextHandler(name, definition)
             end
         end
 
@@ -94,14 +100,6 @@ PLoop(function(_ENV)
         --- the attribute target
         property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
         property "Priority"         { set = false, default = AttributePriority.Lowest }
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        __Arguments__{ Variable("async", Boolean, true, false) }
-        function __ctor(self, async)
-            self.Async = async
-        end
     end)
 
     --- The context handler wrapper for json
@@ -357,6 +355,182 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- The context handler wrapper for file
+    __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
+    class "__File__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export {
+            type                = type,
+            unpack              = unpack,
+            issubtype           = Class.IsSubType,
+            parseString         = ParseString,
+            HEAD_PHASE          = IHttpContextHandler.ProcessPhase.Head,
+            Error               = Logger.Default[Logger.LogLevel.Error],
+
+            IHttpContextHandler, AttributeTargets, __File__, HTTP_STATUS, Controller, Date, Guid
+        }
+
+        local getFileName       = function(self)
+            return self[3] and Date.Now:ToString(self[3]) or self[4] or Guid.New():gsub("%-", "") .. ".txt"
+        end
+
+        local processHandler    = function(self, context, phase)
+            local response      = context.Response
+            if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+            if phase == HEAD_PHASE then
+                local name, iter, obj, idx = self[2](context)
+                if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+                local tname     = type(name)
+
+                if tname == "string" then
+                    if iter then
+                        tname   = type(iter)
+
+                        if tname == "string" then
+                            response.ContentType= "text/plain"
+                            response.Header["Content-Disposition"] = "attachment;filename=" .. name
+                            context[__File__]   = iter
+                        elseif tname == "function" then
+                            response.ContentType= "text/plain"
+                            response.Header["Content-Disposition"] = "attachment;filename=" .. name
+                            context[__File__]   = { iter, obj, idx }
+                        elseif tname == "table" then
+                            response.ContentType= "text/plain"
+                            response.Header["Content-Disposition"] = "attachment;filename=" .. name
+                            context[__File__]   = parseString(iter)
+                        else
+                            Error("The function %q failed to return any value can be output as file", self[1])
+                            response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                        end
+                    else
+                        response.ContentType= "text/plain"
+                        response.Header["Content-Disposition"] = "attachment;filename=" .. getFileName(self)
+                        context[__File__]   = name
+                    end
+                elseif tname == "function" then
+                    response.ContentType= "text/plain"
+                    response.Header["Content-Disposition"] = "attachment;filename=" .. getFileName(self)
+                    context[__File__]   = { name, iter, obj }
+                elseif tname == "table" then
+                    response.ContentType= "text/plain"
+                    response.Header["Content-Disposition"] = "attachment;filename=" .. getFileName(self)
+                    context[__File__]   = parseString(name)
+                else
+                    Error("The function %q failed to return any value can be output as file", self[1])
+                    response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                end
+            else
+                local write     = response.Write
+                local content   = context[__File__]
+                if content then
+                    if type(content) == "table" then
+                        for idx, text in unpack(content) do
+                            write(parseString(text or idx))
+                        end
+                    else
+                        write(parseString(content))
+                    end
+                end
+            end
+        end
+
+        local processFile       = function(self, default, name, iter, obj, idx)
+            local tname         = type(name)
+
+            if tname == "string" then
+                if iter then
+                    tname       = type(iter)
+
+                    if tname == "string" then
+                        self:File(name, iter)
+                    elseif tname == "function" then
+                        self:File(name, iter, obj, idx)
+                    elseif tname == "table" then
+                        self:File(name, parseString(iter))
+                    else
+                        self:ServerError()
+                    end
+                else
+                    self:File(default, parseString(name))
+                end
+            elseif tname == "function" then
+                self:File(default, name, iter, obj)
+            elseif tname == "table" then
+                self:File(default, parseString(name))
+            else
+                self:ServerError()
+            end
+        end
+
+        FileContextHandler      = class { IHttpContextHandler,
+            Process = processHandler,
+            __call  = processHandler,
+            __new   = function(_, name, target, timeformat, filename ) return { name, target, timeformat, filename }, true end,
+        }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if targettype == AttributeTargets.Method and issubtype(owner, Controller) then
+                if self.TimeFormat then
+                    local tfmt  = self.TimeFormat
+                    return function (self, ...)
+                        return processFile(self, Date.Now:ToString(tfmt), definition(self, ...))
+                    end
+                elseif self.FileName then
+                    local name  = self.FileName
+                    return function (self, ...)
+                        return processFile(self, name, definition(self, ...))
+                    end
+                else
+                    return function (self, ...)
+                        return processFile(self, nil, definition(self, ...))
+                    end
+                end
+            elseif targettype == AttributeTargets.Function then
+                return FileContextHandler(name, definition, self.TimeFormat, self.FileName)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
+        property "Priority"         { set = false, default = AttributePriority.Lowest }
+
+        -- The time format to generate the file name
+        property "TimeFormat"       { type = TimeFormat }
+
+        -- The file name
+        property "FileName"         { type = String }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ TimeFormat }
+        function __ctor(self, format)
+            self.TimeFormat     = format
+        end
+
+        __Arguments__{ String/nil }
+        function __ctor(self, name)
+            self.FileName       = name
+        end
+    end)
+
     __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
     class "__Switch__" (function(_ENV)
         extend "IInitAttribute"
@@ -475,7 +649,7 @@ PLoop(function(_ENV)
             end
         end
 
-        ViewContextHandler      = class { IHttpContextHandler,
+        SwitchContextHandler      = class { IHttpContextHandler,
             Process = processHandler,
             __call  = processHandler,
             __new   = function(_, name, target, path, viewcls) return { name, target, path, viewcls }, true end,
@@ -538,7 +712,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                return ViewContextHandler(name, definition, self.Path or false, viewcls or false)
+                return SwitchContextHandler(name, definition, self.Path or false, viewcls or false)
             end
         end
 

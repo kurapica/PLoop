@@ -87,7 +87,7 @@ PLoop(function(_ENV)
             error               = error,
 
             JsonFormatProvider, IHttpOutput, HTTP_STATUS, IHttpContextHandler.ProcessPhase,
-            Controller, ThreadPool
+            Controller, ThreadPool, Guid
         }
 
         -----------------------------------------------------------------------
@@ -250,6 +250,11 @@ PLoop(function(_ENV)
             self.IsFinished     = true
 
             local write         = res.Write
+
+            -- A default name
+            if type(name) ~= "string" then
+                name            = Guid.New():gsub("%-", "") .. ".txt"
+            end
 
             res.ContentType     = "text/plain"
             res.Header["Content-Disposition"] = "attachment;filename=" .. name
