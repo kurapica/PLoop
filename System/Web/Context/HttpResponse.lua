@@ -27,8 +27,12 @@ PLoop(function(_ENV)
         --- The http context
         __Final__() property "Context"              { type = System.Web.HttpContext }
 
+        --- Set the http response header
+        __Indexer__ ()
+        __Abstract__() property "Header"            { set = function(self, key, value) end }
+
         --- Gets or sets the HTTP MIME type of the output stream.
-        __Abstract__() property "ContentType"       {}
+        __Abstract__() property "ContentType"       { set = function(self, value) self.Header["Content-Type"] = value end }
 
         --- Gets or sets the value of the Http Location header.
         __Abstract__() property "RedirectLocation"  {}

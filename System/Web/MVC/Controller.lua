@@ -243,6 +243,28 @@ PLoop(function(_ENV)
             end
         end
 
+        --- Send the data as file
+        function File(self, name, text, obj, idx)
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            self.IsFinished     = true
+
+            local write         = res.Write
+
+            res.ContentType     = "text/plain"
+            res.Header["Content-Disposition"] = "attachment;filename=" .. name
+
+            yield()
+
+            if type(text) == "function" then
+                for i, m in text, obj, idx do write(parseString(m or i)) end
+            else
+                write(parseString(text))
+            end
+
+            yield() -- finish body sending
+        end
+
         --- Redirect to another url
         -- @param   url            the redirected url
         function Redirect(self, path, raw)
