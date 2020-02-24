@@ -412,7 +412,26 @@ PLoop(function(_ENV)
                     end
                 elseif tname == "function" then
                     response.ContentType= "text/plain"
-                    response.Header["Content-Disposition"] = "attachment;filename=" .. getFileName(self)
+
+                    local fname
+
+                    -- Check if use the first return value as the file name
+                    if self[3] or self[4] then
+                        fname           = getFileName(self)
+                    else
+                        local k, v      = name(iter, obj)
+                        fname           = v or k
+
+                        if type(fname) ~= "string" then
+                            Error("The function %q failed to return a file name", self[1])
+                            response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                            return
+                        end
+
+                        obj             = k
+                    end
+
+                    response.Header["Content-Disposition"] = "attachment;filename=" .. fname
                     context[__File__]   = { name, iter, obj }
                 elseif tname == "table" then
                     response.ContentType= "text/plain"
