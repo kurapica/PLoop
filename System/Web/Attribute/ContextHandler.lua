@@ -476,6 +476,17 @@ PLoop(function(_ENV)
                     self:File(default, parseString(name))
                 end
             elseif tname == "function" then
+                if not default then
+                    local k, v  = name(iter, obj)
+                    default       = v or k
+
+                    if type(default) ~= "string" then
+                        return self:ServerError()
+                    end
+
+                    obj         = k
+                end
+
                 self:File(default, name, iter, obj)
             elseif tname == "table" then
                 self:File(default, parseString(name))
