@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/02/20                                               --
--- Version      :   1.5.3                                                    --
+-- Update Date  :   2020/02/26                                               --
+-- Version      :   1.5.4                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1599,12 +1599,12 @@ do
             -- @param   env                         the environment
             -- @param   func:function               the target function
             -- @param   stack:number                the target stack level
-            ["Apply"]           = function(env, func)
+            ["Apply"]           = function(env, func, ...)
                 -- Module "Test" (function(_ENV) ... end)
                 if type(func)  == "function" then
                     setfenv(func, env)
                     environment.SetDefinitionMode(env, true)
-                    func(env)
+                    func(env, ...)
                     environment.SetDefinitionMode(env, false)
                     return env
                 end
