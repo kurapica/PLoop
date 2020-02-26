@@ -15,8 +15,26 @@
 PLoop(function(_ENV)
     --- Defines a provider for push-based notification
     __Sealed__() __AnonymousClass__() interface "System.IObservable" (function(_ENV)
+        export {
+            pcall               = pcall,
+            Error               = Logger.Default[Logger.LogLevel.Error],
+        }
+
+        local function safeCall(func)
+            return function(...)
+                local ok, ret = pcall(func, ...)
+                if not ok then Error(ret) end
+            end
+        end
+
         --- Notifies the provider that an observer is to receive notifications.
-        __Abstract__() function Subscribe(self, observer) end
+        __Abstract__() function Subscribe(self, onNext, onError, onCompleted) end
+
+        -- Safe subscribe the handlers
+        __Arguments__{ Callable, Callable/nil, Callable/nil }
+        function SafeSubscribe(self, onNext, onError, onCompleted)
+            return self:Subscribe(safeCall(onNext), onError, onCompleted)
+        end
     end)
 
     --- Provides a mechanism for receiving push-based notifications
