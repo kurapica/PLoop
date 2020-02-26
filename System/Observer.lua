@@ -17,13 +17,14 @@ PLoop(function(_ENV)
     __Sealed__() __AnonymousClass__() interface "System.IObservable" (function(_ENV)
         export {
             pcall               = pcall,
+            tostring            = tostring,
             Error               = Logger.Default[Logger.LogLevel.Error],
         }
 
         local function safeCall(func)
             return function(...)
                 local ok, ret = pcall(func, ...)
-                if not ok then Error(ret) end
+                if not ok then Error(tostring(ret)) end
             end
         end
 
