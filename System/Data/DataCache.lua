@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2019/10/29                                               --
--- Version      :   1.3.0                                                    --
+-- Update Date  :   2020/02/26                                               --
+-- Version      :   1.3.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -126,7 +126,7 @@ PLoop(function(_ENV)
             local primaryflds, clsEntity, clsContext, clsCache, QueryData  = ...
 
             --- Get the entity object with the index key
-            __Arguments__{ unpack( primaryflds:Map("v=>v.type"):ToList() ) }
+            __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
             function Get(self, ]] .. args .. [[)
                 local key       = ]] .. entityKey .. [[
                 local entity
@@ -229,7 +229,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            __Arguments__{ unpack( primaryflds:Map("v=>v.type"):ToList() ) }
+            __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
             function Delete(self, ]] .. args .. [[)
                 local key       = ]] .. entityKey .. [[
 
@@ -257,7 +257,7 @@ PLoop(function(_ENV)
             end
         ]]
 
-        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack(primaryflds) })
+        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) })
     end)
 
     __Arguments__{ - IDataObject, - ICache, NaturalNumber/nil }
@@ -322,7 +322,7 @@ PLoop(function(_ENV)
             local primaryflds, clsDataObject, clsContext, clsCache, QueryData  = ...
 
             --- Get the entity object with the index key
-            __Arguments__{ unpack( primaryflds:Map("v=>v.type"):ToList() ) }
+            __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
             function Get(self, ]] .. args .. [[)
                 local key       = ]] .. entityKey .. [[
                 local entity
@@ -425,7 +425,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            __Arguments__{ unpack( primaryflds:Map("v=>v.type"):ToList() ) }
+            __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
             function Delete(self, ]] .. args .. [[)
                 local key       = ]] .. entityKey .. [[
 
@@ -453,7 +453,7 @@ PLoop(function(_ENV)
             end
         ]]
 
-        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, struct { unpack(primaryflds) })
+        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) })
     end)
 
     --- The attribute used to bind the cache settings to the data entity or data object class

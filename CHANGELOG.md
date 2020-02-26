@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ##[1.5.4] - 2020-02-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `Environment.Apply(func, ...)` can provide arguments for the target function
+- Improve the method validation error message for the data base and data cache system
 
 
 ##[1.5.3] - 2020-02-19 WangXH <kurapica125@outlook.com>
