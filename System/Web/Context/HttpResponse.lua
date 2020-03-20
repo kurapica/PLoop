@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/03/20                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -35,7 +35,7 @@ PLoop(function(_ENV)
         __Abstract__() property "ContentType"       { set = function(self, value) self.Header["Content-Type"] = value end }
 
         --- Gets or sets the value of the Http Location header.
-        __Abstract__() property "RedirectLocation"  {}
+        __Abstract__() property "RedirectLocation"  { set = function(self, value) self.Header.Location = value end }
 
         --- Whether the request is been redirected.
         __Abstract__() property "RequestRedirected" { type = Boolean }
@@ -54,9 +54,6 @@ PLoop(function(_ENV)
 
         --- Finish the response, used to close resources such like output wirter
         __Abstract__() function Close(self) end
-
-        --- Server redirect the client to a new URL
-        __Abstract__() function ServerRedirect(self) end
 
         --- Redirects the client to a new URL.
         __Arguments__{ String, HTTP_STATUS/HTTP_STATUS.REDIRECT, Boolean/false }

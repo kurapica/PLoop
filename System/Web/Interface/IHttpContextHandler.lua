@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/06/08                                               --
--- Update Date  :   2018/03/15                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/03/20                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -183,7 +183,7 @@ PLoop(function(_ENV)
 
             -- Call server's redirect method
             if response.RequestRedirected then
-                response:ServerRedirect()
+                response:SendHeaders()
             else
                 -- send the headers
                 response:SendHeaders()
