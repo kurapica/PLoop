@@ -32,10 +32,10 @@ PLoop(function(_ENV)
         __Abstract__() property "Header"            { set = function(self, key, value) end }
 
         --- Gets or sets the HTTP MIME type of the output stream.
-        __Abstract__() property "ContentType"       { set = function(self, value) self.Header["Content-Type"] = value end }
+        __Abstract__() property "ContentType"       { handler = function(self, value) self.Header["Content-Type"] = value end }
 
         --- Gets or sets the value of the Http Location header.
-        __Abstract__() property "RedirectLocation"  { set = function(self, value) self.Header.Location = value end }
+        __Abstract__() property "RedirectLocation"  { handler = function(self, value) self.Header.Location = value end }
 
         --- Whether the request is been redirected.
         __Abstract__() property "RequestRedirected" { type = Boolean }
