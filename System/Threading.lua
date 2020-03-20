@@ -41,6 +41,8 @@ PLoop(function(_ENV)
                 select              = select,
                 tblconcat           = table.concat,
                 strformat           = string.format,
+
+                PREPARE_CONFIRM     = function() end,
             }
 
             export { ThreadPool, Platform, Context }
@@ -68,21 +70,29 @@ PLoop(function(_ENV)
                 return pass
             end
 
-            local function returnwithrecycle(pool, thread, ...)
+            local function returnwithrecycle(pool, thread, asiter, ...)
                 if #pool < pool.PoolSize then
                     tinsert(pool, thread)       -- recyle the thread
                 end
-                yield(...)                      -- return the value
+                if asiter then
+                    if select("#", ...) > 0 then
+                        yield(...)              -- return the value
+                    end
+                    yield()
+                else
+                    yield(...)
+                end
             end
 
-            local function preparefunc(pool, thread, func, ...)
+            local function preparefunc(pool, thread, func, asiter, ...)
+                if not func then return end
                 local cnt = select("#", ...)
-                returnwithrecycle(pool, thread, (_PassArgs[cnt] or newPass(cnt))(thread, func, ...))
+                returnwithrecycle(pool, thread, asiter, (_PassArgs[cnt] or newPass(cnt))(thread, func, ...))
             end
 
             local function recyclethread(pool, thread)
                 while true do
-                    preparefunc(pool, thread, yield())
+                    preparefunc(pool, thread, yield(PREPARE_CONFIRM))
                 end
             end
 
@@ -90,8 +100,11 @@ PLoop(function(_ENV)
                 local thread        = tremove(self)
 
                 if thread then
-                    thread()            -- resume to prepare
-                    return thread
+                    for i = 1, 2 do
+                        if thread() == PREPARE_CONFIRM then
+                            return thread
+                        end
+                    end
                 end
 
                 thread              = wrap(recyclethread)
@@ -196,7 +209,7 @@ PLoop(function(_ENV)
             __Arguments__{ Function, Any * 0 }
             function GetIterator(self, func, ...)
                 local thread        = newrecyclethread(self)
-                return thread(func, ...)
+                return thread(func, true, ...)
             end
 
             -----------------------------------------------------------
