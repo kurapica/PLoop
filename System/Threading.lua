@@ -68,23 +68,16 @@ PLoop(function(_ENV)
                 return pass
             end
 
-            local function returnwithrecycle(pool, thread, asiter, ...)
+            local function returnwithrecycle(pool, thread, ...)
                 if #pool < pool.PoolSize then
                     tinsert(pool, thread)       -- recyle the thread
                 end
-                if asiter then
-                    if select("#", ...) > 0 then
-                        yield(...)              -- return the value
-                    end
-                    yield()
-                else
-                    yield(...)
-                end
+                yield(...)                      -- return the value
             end
 
-            local function preparefunc(pool, thread, func, asiter, ...)
+            local function preparefunc(pool, thread, func, ...)
                 local cnt = select("#", ...)
-                returnwithrecycle(pool, thread, asiter, (_PassArgs[cnt] or newPass(cnt))(thread, func, ...))
+                returnwithrecycle(pool, thread, (_PassArgs[cnt] or newPass(cnt))(thread, func, ...))
             end
 
             local function recyclethread(pool, thread)
@@ -203,7 +196,7 @@ PLoop(function(_ENV)
             __Arguments__{ Function, Any * 0 }
             function GetIterator(self, func, ...)
                 local thread        = newrecyclethread(self)
-                return thread(func, true, ...)
+                return thread(func, ...)
             end
 
             -----------------------------------------------------------
