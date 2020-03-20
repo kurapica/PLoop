@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.6.1] - 2020-03-20 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the problem when provide the return value in an iterator, the next iterator share the same coroutine will trigger error.
+- Remove the ServerRedirect from the HttpResponse, since it may be used to terminate the process like in the Openresty, it's done within the framework, so no code should be modified in the projects.
+
+
 ##[1.5.4] - 2020-02-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `Environment.Apply(func, ...)` can provide arguments for the target function
