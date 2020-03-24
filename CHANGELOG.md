@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.6.2] - 2020-03-24 WangXH <kurapica125@outlook.com>
+### Changed
+- The auto incr data table field don't need to be primary, it's fixed.
+
+
 ##[1.6.1] - 2020-03-20 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the problem when provide the return value in an iterator, the next iterator share the same coroutine will trigger error.

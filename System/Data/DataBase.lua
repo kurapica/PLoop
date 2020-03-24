@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2020/02/26                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2020/03/24                                               --
+-- Version      :   1.3.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -104,8 +104,8 @@ PLoop(function(_ENV)
         else
             schema.map[set.name]    = name
 
-            if set.autoincr and schema.primary == set.name then
-                schema.autokey      = true
+            if set.autoincr then
+                schema.autokey      = set.name
             end
 
             if set.unique then
@@ -676,7 +676,7 @@ PLoop(function(_ENV)
             if status == STATUS_NEW then
                 local rs            = ctx.Connection:Insert(ctx.Connection:SqlBuilder():From(schema.name):Insert(flddata):ToSql())
                 if schema.autokey and rs then
-                    flddata[schema.primary] = rs
+                    flddata[schema.autokey] = rs
                 end
             else
                 local where         = {}
