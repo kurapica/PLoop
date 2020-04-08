@@ -15,6 +15,6 @@
 PLoop(function(_ENV)
 	--- The css file loader
 	IO.Resource.__ResourceLoader__"css"
-	__Sealed__() __PageRender__("CssFile", StaticFileLoader)
+	__Sealed__() __PageRender__("CssFile", StaticFileLoader, { comment = "/* %s */" })
 	class "System.Web.CssLoader" { StaticFileLoader }
 end)

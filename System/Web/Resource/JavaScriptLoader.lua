@@ -15,6 +15,6 @@
 PLoop(function(_ENV)
 	--- The javascript file loader
 	IO.Resource.__ResourceLoader__"js"
-	__Sealed__() __PageRender__("JavascriptFile", StaticFileLoader)
+	__Sealed__() __PageRender__("JavascriptFile", StaticFileLoader, { comment = "/* %s */" })
 	class "System.Web.JavaScriptLoader" { StaticFileLoader }
 end)

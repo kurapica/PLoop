@@ -13,6 +13,6 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    __Sealed__() __PageRender__("HtmlPage", IOutputLoader, { engine = PageRenderEngine })
+    __Sealed__() __PageRender__("HtmlPage", IOutputLoader, { engine = PageRenderEngine, comment = "<!-- %s -->" })
     class "System.Web.PageLoader" { IOutputLoader }
 end)

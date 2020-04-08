@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/04/11                                               --
--- Update Date  :   2019/04/01                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2020/04/08                                               --
+-- Version      :   1.2.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -33,6 +33,7 @@ PLoop(function(_ENV)
             { name = "engine",      type = -IRenderEngine },
             { name = "asinterface", type = Boolean },
             { name = "export",      type = Table },
+            { name = "comment",     type = String },
         }
 
         local function getdefault(self, name)
@@ -84,6 +85,9 @@ PLoop(function(_ENV)
 
         --- The export variables so can be used directly, only support key-value pairs
         property "export"       { type = Table }
+
+        --- The comment pattern to be used as debug information
+        property "comment"      { type = String, default = function(self) return getdefault(self, "comment") end }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -460,6 +464,9 @@ PLoop(function(_ENV)
                 -- Generate the definition
                 engine:Init(self, config)
 
+                local commentBeginPattern   = Web.DebugMode and config.comment and ([[_PL_write(%q)]]):format(config.comment:format("Generate Begin@" .. path .. " - %s: %d"))
+                local commentEndPattern     = Web.DebugMode and config.comment and ([[_PL_write(%q)]]):format(config.comment:format("Generate End@" .. path .. " - %s: %d"))
+                local previousMethodName
                 local newLine               = true
                 local wIndent               = [[_PL_write(_PL_indent)]]
                 local wNewLine              = ([[_PL_write(%q)]]):format(config.linebreak or "\n")
@@ -532,8 +539,19 @@ PLoop(function(_ENV)
                     elseif ty == RCT_MixMethodStart then
                         -- ct - method name
                         pushcode(wDefMethod:format(ct, params))
+                        if commentBeginPattern then
+                            previousMethodName = ct
+                            if linebreak then pushcode(wNewLine) if not noindent then pushcode(wIndent) end end
+                            pushcode(commentBeginPattern:format(ct, recordCount))
+                            if linebreak then pushcode(wNewLine) end
+                        end
                     elseif ty == RCT_MixMethodEnd then
                         if definition[defineCount] == wNewLine then removecode() end
+                        if commentEndPattern then
+                            if linebreak then pushcode(wNewLine) if not noindent then pushcode(wIndent) end end
+                            pushcode(commentEndPattern:format(previousMethodName or "Anonymous", recordCount))
+                            if linebreak then pushcode(wNewLine) end
+                        end
                         pushcode("end")
                     elseif ty == RCT_LuaCode then
                         pushcode(ct)
