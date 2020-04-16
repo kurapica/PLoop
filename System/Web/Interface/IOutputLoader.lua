@@ -256,7 +256,7 @@ PLoop(function(_ENV)
             end,
 
             RenderConfig, Class, Interface, IO.Path, IHttpOutput, IO.FileReader, IO.FileWriter,
-            __Namespace__, IOutputLoader, Application, IRenderEngine
+            __Namespace__, IOutputLoader, Application, IRenderEngine, Web
         }
 
         class "__Export__" { IApplyAttribute,
