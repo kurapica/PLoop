@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/03/24                                               --
--- Version      :   1.6.2                                                    --
+-- Update Date  :   2020/05/03                                               --
+-- Version      :   1.6.3                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -10284,9 +10284,11 @@ do
 
                             if info[FLD_EVENT_HANDLER] then
                                 local handler   = info[FLD_EVENT_HANDLER]
-                                delegate.OnChange = delegate.OnChange + function(self)
-                                    return handler(self, owner, name)
-                                end
+                                attribute.IndependentCall(function()
+                                    delegate.OnChange = delegate.OnChange + function(self)
+                                        return handler(self, owner, name)
+                                    end
+                                end)
                             end
                         end
                         return delegate
@@ -10301,9 +10303,11 @@ do
                             if info[FLD_EVENT_HANDLER] then
                                 local name      = info[FLD_EVENT_NAME]
                                 local handler   = info[FLD_EVENT_HANDLER]
-                                delegate.OnChange = delegate.OnChange + function(self)
-                                    return handler(self, obj, name)
-                                end
+                                attribute.IndependentCall(function()
+                                    delegate.OnChange = delegate.OnChange + function(self)
+                                        return handler(self, obj, name)
+                                    end
+                                end)
                             end
                         end
                         return delegate

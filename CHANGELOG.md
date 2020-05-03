@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+##[1.6.3] - 2020-05-03 WangXH <kurapica125@outlook.com>
+### Changed
+- The delegate change handler binding won't consume the attributes.
+
+
 ##[1.6.2] - 2020-03-24 WangXH <kurapica125@outlook.com>
 ### Changed
 - The auto incr data table field don't need to be primary, it's fixed.
