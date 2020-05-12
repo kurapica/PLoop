@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/05/03                                               --
--- Version      :   1.6.3                                                    --
+-- Update Date  :   2020/05/12                                               --
+-- Version      :   1.6.4                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -12363,7 +12363,7 @@ do
 
         if not ok then
             if errhandler then
-                errhandler(msg, object)
+                return errhandler(msg, object)
             else
                 error(msg, 0)
             end
@@ -12380,7 +12380,7 @@ do
 
         if not ok then
             if errhandler then
-                errhandler(msg, unpack(objects))
+                return errhandler(msg, unpack(objects))
             else
                 error(msg, 0)
             end
@@ -12413,7 +12413,7 @@ do
                 local ok, msg   = pcall(object.Open, object)
                 if not ok then
                     if errhandler then
-                        errhandler(msg, object)
+                        return errhandler(msg, object)
                     else
                         error(msg, 0)
                     end
@@ -12440,7 +12440,7 @@ do
                             pcall(objects[j].Close, objects[j], msg)
                         end
                         if errhandler then
-                            errhandler(msg, object)
+                            return errhandler(msg, object)
                         else
                             error(msg, 0)
                         end
