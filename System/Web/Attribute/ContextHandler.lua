@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/02/24                                               --
--- Version      :   1.3.1                                                    --
+-- Update Date  :   2020/05/14                                               --
+-- Version      :   1.3.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -46,7 +46,9 @@ PLoop(function(_ENV)
                     context[__Text__]   = parseString(iter)
                 elseif tyrs == "function" then
                     response.ContentType= "text/plain"
-                    context[__Text__]   = { iter, obj, idx }
+                    local m
+                    idx, m              = iter(obj, idx) -- We could handle features like cookies before send text
+                    context[__Text__]   = { iter, obj, idx, m or idx }
                 elseif tyrs == "table" then
                     response.ContentType= "text/plain"
                     context[__Text__]   = parseString(iter, obj)
@@ -59,8 +61,13 @@ PLoop(function(_ENV)
                 local content   = context[__Text__]
                 if content then
                     if type(content) == "table" then
-                        for idx, text in unpack(content) do
-                            write(parseString(text or idx))
+                        if content[4] then
+                            write(parseString(content[4]))
+
+                            for idx, text in unpack(content, 1, 3) do
+                                if idx == "cannot resume dead coroutine" then break end
+                                write(parseString(text or idx))
+                            end
                         end
                     else
                         write(parseString(content))

@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/06/10                                               --
--- Update Date  :   2020/02/21                                               --
--- Version      :   1.2.0                                                    --
+-- Update Date  :   2020/05/14                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -120,11 +120,25 @@ PLoop(function(_ENV)
             local write         = res.Write
             res.ContentType     = "text/plain"
 
-            yield() -- finish head sending
-
             if type(text) == "function" then
-                for i, m in text, obj, idx do write(parseString(m or i)) end
+                local m
+                idx, m          = text(obj, idx)
+                m               = m or idx
+
+                yield() -- finish head sending
+
+                if m then
+                    write(parseString(m))
+
+                    for i, m in text, obj, idx do
+                        -- Still don't know why no error but messag returned, just a fail-safe
+                        if i == "cannot resume dead coroutine" then break end
+                        write(parseString(m or i))
+                    end
+                end
             else
+                yield() -- finish head sending
+
                 write(parseString(text))
             end
 
