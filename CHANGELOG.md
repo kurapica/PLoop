@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 
+##[1.6.5] - 2020-05-12 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the Serialization system can't recognize the combo struct types.
+
+
 ##[1.6.4] - 2020-05-12 WangXH <kurapica125@outlook.com>
 ### Changed
 - The with keyword will return the values generated from the error hadnler, the operation won't be processed when open method failed.

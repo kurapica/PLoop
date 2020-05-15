@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
--- Update Date  :   2019/09/03                                               --
--- Version      :   1.1.3                                                    --
+-- Update Date  :   2020/05/15                                               --
+-- Version      :   1.1.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -31,6 +31,7 @@ PLoop(function(_ENV)
         getmembers          = Struct.GetMembers,
         getfeatures         = Class.GetFeatures,
         getstructcategory   = Struct.GetStructCategory,
+        getComboTypes       = Struct.GetComboTypes,
         MEMBER              = StructCategory.MEMBER,
         CUSTOM              = StructCategory.CUSTOM,
         ARRAY               = StructCategory.ARRAY,
@@ -146,6 +147,10 @@ PLoop(function(_ENV)
             local template      = getstructtemplate(type)
             if template and isSerializableType(template) then
                 for _,  par in ipairs{ getstrcuttemppars(type) } do if getnamespace(par) and not isSerializableType(par) then return false end end
+                return true
+            end
+            local comba, comb   = getComboTypes(type)
+            if comba and comb and isSerializableType(comba) and isSerializableType(comb) then
                 return true
             end
         elseif category == ARRAY then
