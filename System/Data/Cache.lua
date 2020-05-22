@@ -13,8 +13,10 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
+    namespace "System.Data"
+
     --- The basic cache interface for key-value storage
-    __Sealed__() interface "System.Data.ICache" (function(_ENV)
+    __Sealed__() interface "ICache" (function(_ENV)
         extend "System.IAutoClose"
 
         -----------------------------------------------------------
@@ -46,7 +48,7 @@ PLoop(function(_ENV)
     end)
 
     --- The cache interface for hash-field-value storage
-    __Sealed__() interface "System.Data.IHashCache" (function(_ENV)
+    __Sealed__() interface "IHashCache" (function(_ENV)
         extend "System.IAutoClose"
 
         -----------------------------------------------------------
@@ -87,7 +89,7 @@ PLoop(function(_ENV)
     end)
 
     --- The cache interface for list-index-value cache storage
-    __Sealed__() interface "System.Data.IListCache" (function(_ENV)
+    __Sealed__() interface "IListCache" (function(_ENV)
         --- Sets the expire time for the list
         __Abstract__() function SetExpireTime(self, list, expiretime) end
 
