@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2020/02/26                                               --
--- Version      :   1.3.1                                                    --
+-- Update Date  :   2020/05/21                                               --
+-- Version      :   1.3.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -46,7 +46,7 @@ PLoop(function(_ENV)
          __Abstract__() function Delete(self, object) end
     end)
 
-    --- The bridge for the data context and cache
+    --- The bindings between the data entity and the data cache
     __Arguments__{ -IDataEntity, -ICache, NaturalNumber/nil }
     __Sealed__() class "DataEntityCache" (function(_ENV, clsEntity, clsCache, defaultTimeout)
         extend "IDataCache"
@@ -137,7 +137,7 @@ PLoop(function(_ENV)
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query{]] .. queryMap .. [[ }:First()
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout, true)
+                            self.Cache:Set(key, entity, self.Timeout)
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -151,7 +151,7 @@ PLoop(function(_ENV)
                             end)
 
                             if entity then
-                                cache:Set(key, entity, self.Timeout, true)
+                                cache:Set(key, entity, self.Timeout)
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -174,7 +174,7 @@ PLoop(function(_ENV)
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(query):First()
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout, true)
+                            self.Cache:Set(key, entity, self.Timeout)
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -188,7 +188,7 @@ PLoop(function(_ENV)
                             end)
 
                             if entity then
-                                cache:Set(key, entity, self.Timeout, true)
+                                cache:Set(key, entity, self.Timeout)
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -206,10 +206,10 @@ PLoop(function(_ENV)
                 local key       = ]] .. entityKey .. [[
 
                 if self.Cache then
-                    self.Cache:Set(key, query, self.Timeout, true)
+                    self.Cache:Set(key, query, self.Timeout)
                 else
                     with(clsCache())(function(cache)
-                        cache:Set(key, query, self.Timeout, true)
+                        cache:Set(key, query, self.Timeout)
                     end)
                 end
             end
@@ -260,7 +260,8 @@ PLoop(function(_ENV)
         loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) })
     end)
 
-    __Arguments__{ - IDataObject, - ICache, NaturalNumber/nil }
+    --- The bindings between the data object and the data cache
+    __Arguments__{ -IDataObject, -ICache, NaturalNumber/nil }
     __Sealed__() class "DataObjectCache" (function(_ENV, clsDataObject, clsCache, defaultTimeout)
         extend "IDataCache"
 
@@ -333,7 +334,7 @@ PLoop(function(_ENV)
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout, true)
+                            self.Cache:Set(key, entity, self.Timeout)
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -347,7 +348,7 @@ PLoop(function(_ENV)
                                 entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                             end)
                             if entity then
-                                cache:Set(key, entity, self.Timeout, true)
+                                cache:Set(key, entity, self.Timeout)
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -370,7 +371,7 @@ PLoop(function(_ENV)
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout, true)
+                            self.Cache:Set(key, entity, self.Timeout)
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -384,7 +385,7 @@ PLoop(function(_ENV)
                                 entity  = ctx.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                             end)
                             if entity then
-                                cache:Set(key, entity, self.Timeout, true)
+                                cache:Set(key, entity, self.Timeout)
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -402,10 +403,10 @@ PLoop(function(_ENV)
                 local key       = ]] .. entityKey .. [[
 
                 if self.Cache then
-                    self.Cache:Set(key, query, self.Timeout, true)
+                    self.Cache:Set(key, query, self.Timeout)
                 else
                     with(clsCache())(function(cache)
-                        cache:Set(key, query, self.Timeout, true)
+                        cache:Set(key, query, self.Timeout)
                     end)
                 end
             end
@@ -667,7 +668,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataContextCache__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute"
 
-        export { Namespace, Environment, Class, List, DataEntityCache, DataObjectCache, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = unpack or table.unpack, safeset = Toolset.safeset, loadsnippet = Toolset.loadsnippet, getAttachedData = Attribute.GetAttachedData }
+        export { Namespace, Environment, Class, List, DataEntityCache, DataObjectCache, EntityStatus, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = unpack or table.unpack, safeset = Toolset.safeset, loadsnippet = Toolset.loadsnippet, getAttachedData = Attribute.GetAttachedData }
 
         local _EntityDepends    = {}
 
@@ -705,19 +706,21 @@ PLoop(function(_ENV)
         local function onEntitySaved(self, entities)
             local map           = {}
 
-            for _, entity in entities:GetIterator() do
-                local cls       = GetObjectClass(entity)
-                local depends   = _EntityDepends[cls]
+            for entity, status in pairs(entities) do
+                if status ~= EntityStatus.NEW then
+                    local cls                   = GetObjectClass(entity)
+                    local depends               = _EntityDepends[cls]
 
-                if depends then
-                    for target, convertor in pairs(depends) do
-                        local count     = #convertor
-                        local cache     = map[convertor]
-                        if not cache then
-                            cache       = {}
-                            map[convertor] = cache
+                    if depends then
+                        for target, convertor in pairs(depends) do
+                            local count         = #convertor
+                            local cache         = map[convertor]
+                            if not cache then
+                                cache           = {}
+                                map[convertor]  = cache
+                            end
+                            _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
                         end
-                        _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
                     end
                 end
             end

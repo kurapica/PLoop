@@ -466,7 +466,7 @@ PLoop(function(_ENV)
 
                         if entities then
                             self[FLD_TRANSTN_ENTITY] = false
-                            OnEntitySaved(self, Dictionary(entities).Keys:ToList())
+                            OnEntitySaved(self, entities)
                         end
                     end
                 end
@@ -502,8 +502,10 @@ PLoop(function(_ENV)
             end
 
             for _, entity in ipairs(self[FLD_CHANGED_ENTITY]) do
-                entity:SaveChange(stack)
-                entities[entity]= true
+                local status    = entity:GetEntityStatus()
+                if entity:SaveChange(stack) then
+                    entities[entity] = status
+                end
             end
 
             self[FLD_CHANGED_ENTITY] = {}
@@ -719,6 +721,8 @@ PLoop(function(_ENV)
             end
 
             self:SetEntityStatus(STATUS_UNMODIFIED)
+
+            return true
         end
 
         __Arguments__{ Table }

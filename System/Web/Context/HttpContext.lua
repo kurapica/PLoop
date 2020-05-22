@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2019/08/30                                               --
--- Version      :   2.0.1                                                    --
+-- Update Date  :   2020/05/17                                               --
+-- Version      :   2.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -43,6 +43,8 @@ PLoop(function(_ENV)
             --- Get the raw reqeust
             RawRequest          = HttpRequest,
 
+            Headers             = { set = false, default = function(self) return self.RawRequest.Headers end},
+            Accept              = { set = false, default = function(self) return self.RawRequest.Accept end },
             ContentLength       = { set = false, default = function(self) return self.RawRequest.ContentLength end },
             ContentType         = { set = false, default = function(self) return self.RawRequest.ContentType end },
             Cookies             = { set = false, default = function(self) return self.RawRequest.Cookies end },

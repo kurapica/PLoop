@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.6.6] - 2020-05-22 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the missing of headers and accept of the http inner request class.
+- Add more interfaces for cache system.
+
 
 ##[1.6.5] - 2020-05-12 WangXH <kurapica125@outlook.com>
 ### Changed
