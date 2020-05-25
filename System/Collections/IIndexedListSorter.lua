@@ -377,7 +377,7 @@ PLoop(function(_ENV)
         start, stop = formatParams(self, start, stop)
 
         local swaped = true
-        local j
+        local i, j
 
         while stop > start and swaped do
             swaped = false
