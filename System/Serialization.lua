@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/07/22                                               --
--- Update Date  :   2020/05/15                                               --
--- Version      :   1.1.4                                                    --
+-- Update Date  :   2020/05/28                                               --
+-- Version      :   1.1.5                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -19,6 +19,7 @@ PLoop(function(_ENV)
         rawget              = rawget,
         ipairs              = ipairs,
         pairs               = pairs,
+        pcall               = pcall,
         getmetatable        = getmetatable,
         strformat           = string.format,
         safeset             = Toolset.safeset,
@@ -39,6 +40,7 @@ PLoop(function(_ENV)
         getnamespace        = Namespace.Validate,
         validenum           = Enum.ValidateValue,
         validstruct         = Struct.ValidateValue,
+        validclass          = Class.ValidateValue,
         validprop           = Property.Validate,
         gettemplate         = Class.GetTemplate,
         gettemplatepars     = Class.GetTemplateParameters,
@@ -69,6 +71,8 @@ PLoop(function(_ENV)
         isSerializableType  = false,
         serialize           = false,
         deserialize         = false,
+
+        yield               = coroutine.yield,
     }
 
     savenonserializable     = function(smem) _NonSerializableInfo = safeset(_NonSerializableInfo, smem, true) end
@@ -205,6 +209,40 @@ PLoop(function(_ENV)
         end
     end
 
+    function getAvailableContainerTypes(stype)
+        local scategory = getstructcategory(stype)
+
+        if scategory == CUSTOM then
+            local comba, comb   = getComboTypes(stype)
+            if comba and comb then
+                if isclass(comba) then
+                    yield(comba)
+                elseif isstruct(comba) then
+                    if getstructcategory(comba) == CUSTOM then
+                        getAvailableContainerTypes(comba)
+                    else
+                        yield(comba)
+                    end
+                end
+
+                if isclass(comb) then
+                    yield(comb)
+                elseif isstruct(comb) then
+                    if getstructcategory(comb) == CUSTOM then
+                        getAvailableContainerTypes(comb)
+                    else
+                        yield(comb)
+                    end
+                end
+            end
+        end
+    end
+
+    __Iterator__()
+    function iterCombType(stype)
+        getAvailableContainerTypes(stype)
+    end
+
     function serialize(object, otype, cache)
         if cache[object] then throw("Duplicated object is not supported by System.Serialization") end
         cache[object]   = true
@@ -260,7 +298,18 @@ PLoop(function(_ENV)
             end
         elseif isstruct(stype) then
             local scategory = getstructcategory(stype)
-            if scategory == ARRAY then
+
+            if scategory == CUSTOM then
+                for ctype in iterCombType(stype) do
+                    if isclass(ctype) and validclass(ctype, object, true) then
+                        return serialize(object, ctype, {})
+                    elseif isstruct(ctype) and validstruct(ctype, object, true) then
+                        return serialize(object, ctype, {})
+                    end
+                end
+
+                stype       = nil
+            elseif scategory == ARRAY then
                 local etype = getarrayelement(stype)
                 if isSerializableType(etype) then
                     for i, val in ipairs(object) do
@@ -392,7 +441,12 @@ PLoop(function(_ENV)
                 elseif isstruct(otype) then
                     local scategory = getstructcategory(otype)
 
-                    if scategory == ARRAY then
+                    if scategory == CUSTOM then
+                        for ctype in iterCombType(otype) do
+                            local ok, ret = pcall(deserialize, storage, ctype)
+                            if ok then return ret end
+                        end
+                    elseif scategory == ARRAY then
                         local etype = getarrayelement(otype)
 
                         for i, v in ipairs(storage) do

@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.6.7] - 2020-05-28 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the serialization for the combo struct types.
+
+
 ##[1.6.6] - 2020-05-22 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the missing of headers and accept of the http inner request class.

@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/05/22                                               --
--- Version      :   1.6.6                                                    --
+-- Update Date  :   2020/05/28                                               --
+-- Version      :   1.6.7                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -4443,6 +4443,7 @@ do
             ["GetStructCategory"] = function(target)
                 local info      = getStructTargetInfo(target)
                 if info then
+                    if info[FLD_STRUCT_COMBTYPE1] then return STRUCT_TYPE_CUSTOM end
                     if info[FLD_STRUCT_ARRAY] then return STRUCT_TYPE_ARRAY end
                     if info[FLD_STRUCT_MEMBERSTART] then return STRUCT_TYPE_MEMBER end
                     if info[FLD_STRUCT_KEYTYPE] or info[FLD_STRUCT_VALTYPE] then return STRUCT_TYPE_DICT end
