@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/05/14                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2020/06/02                                               --
+-- Version      :   1.3.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -454,6 +454,8 @@ PLoop(function(_ENV)
                 if content then
                     if type(content) == "table" then
                         for idx, text in unpack(content) do
+                            -- Still don't know why no error but messag returned, just a fail-safe
+                            if idx == "cannot resume dead coroutine" then break end
                             write(parseString(text or idx))
                         end
                     else
