@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2020/03/24                                               --
--- Version      :   1.3.3                                                    --
+-- Update Date  :   2020/06/01                                               --
+-- Version      :   1.4.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -188,6 +188,10 @@ PLoop(function(_ENV)
         -- @param fields    a list of the field or the string that contains the fields
         -- @return self
         __Abstract__() function Select(self, fields) return self end
+
+        --- Gets the row count
+        -- @return self
+        __Abstract__() function Count(self) return self end
 
         --- Lock the query rows
         -- @return self
