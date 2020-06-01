@@ -264,6 +264,9 @@ PLoop(function(_ENV)
         --- Sends the query sql and return the result
         __Abstract__() function Query(self, sql, ...) end
 
+        --- Sends the query sql and return the row count
+        __Abstract__() function Count(self, sql, ...) end
+
         --- Sends the insert sql to the database and return the auto-increased id
         __Abstract__() function Insert(self, sql, ...) end
 
@@ -518,6 +521,11 @@ PLoop(function(_ENV)
         --- Sends the query sql and return the result
         function Query(self, ...)
             return List(self.Connection:Query(...))
+        end
+
+        --- Gets the row count
+        function Count(self, ...)
+            return self.Connection:Count(...)
         end
 
         --- Execute the insert sql and return the result
@@ -1652,6 +1660,17 @@ PLoop(function(_ENV)
         __Arguments__{ QueryData, QueryOrders/nil }
         function Query(self, query, orders)
             return getEntityList(self, genOrder(self[0].Connection:SqlBuilder():Where(genQueryData(query)), orders))
+        end
+
+        __Arguments__{ QueryData/nil }
+        function Count(self, query)
+            local builder       = self[1] or self[0].Connection:SqlBuilder()
+            if builder == self[1] then self[1] = nil end
+            if query then builder:Where(genQueryData(query)) end
+
+            local ctx           = self[0]
+            local sql           = builder:From(tabelname):Count():ToSql()
+            return sql and ctx:Count(sql) or 0
         end
 
         __Arguments__{ QueryData, QueryOrders/nil }
