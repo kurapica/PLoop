@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2019/11/16                                               --
--- Version      :   1.3.1                                                    --
+-- Update Date  :   2020/06/02                                               --
+-- Version      :   1.3.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -431,7 +431,7 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            if GetStructCategory(self[1]) ~= MEMBER then error("The form validation type isn't valid", stack + 1) end
+            if self[1] and GetStructCategory(self[1]) ~= MEMBER then error("The form validation type isn't valid", stack + 1) end
 
             local config    = parseType(self[1], nil, stack + 1)
 
@@ -483,6 +483,11 @@ PLoop(function(_ENV)
                 type = struct(type)
             end)
             return { type }, true
+        end
+
+        __Arguments__{}
+        function __new(_)
+            return {}, true
         end
     end)
 
