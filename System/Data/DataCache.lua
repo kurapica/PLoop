@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2020/05/21                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2020/06/03                                               --
+-- Version      :   1.3.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -692,7 +692,7 @@ PLoop(function(_ENV)
                     return function(cache, ]] .. args .. [[)
                         local len = #cache
                         for i = 1, len, ]] .. count .. [[ do
-                            if ]] .. List(count, "i=>'cache[i + ' .. (i-1) .. '] == arg' .. i"):Join(" or ")  .. [[ then return end
+                            if ]] .. List(count, "i=>'cache[i + ' .. (i-1) .. '] == arg' .. i"):Join(" and ")  .. [[ then return end
                         end
                         ]] .. List(count, "i=>'cache[len + ' .. i .. ']'"):Join(", ") .. [[ = ]] .. args .. [[
                     end
