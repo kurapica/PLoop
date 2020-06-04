@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/06/02                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2020/06/04                                               --
+-- Version      :   1.3.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -403,23 +403,30 @@ PLoop(function(_ENV)
 
             -- Init
             for key, val in pairs(query) do
-                local prev
-                local ct        = form
-
-                for p in key:gmatch("%P+") do
-                    p           = tonumber(p) or p
-
-                    if prev then
-                        ct[prev]= type(ct[prev]) == "table" and ct[prev] or {}
-                        ct      = ct[prev]
-                        prev    = p
-                    else
-                        prev    = p
-                    end
+                if type(val) == "string" then
+                    val         = val:gsub("^%s*(.-)%s*$", "%1")
+                    if val == "" then val = nil end
                 end
 
-                if prev then
-                    ct[prev]    = val
+                if val ~= nil then
+                    local prev
+                    local ct        = form
+
+                    for p in key:gmatch("%P+") do
+                        p           = tonumber(p) or p
+
+                        if prev then
+                            ct[prev]= type(ct[prev]) == "table" and ct[prev] or {}
+                            ct      = ct[prev]
+                            prev    = p
+                        else
+                            prev    = p
+                        end
+                    end
+
+                    if prev then
+                        ct[prev]    = val
+                    end
                 end
             end
 
