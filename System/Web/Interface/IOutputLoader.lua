@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/04/11                                               --
--- Update Date  :   2020/04/08                                               --
--- Version      :   1.2.0                                                    --
+-- Update Date  :   2020/06/04                                               --
+-- Version      :   1.2.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -664,9 +664,6 @@ PLoop(function(_ENV)
                     end
                 end
 
-                -- global export
-                __Export__(config)
-
                 -- Re-define the target
                 local ok, err = pcall(function()
                     local def, msg  = loadsnippet("return function(_ENV) " .. definition .. " end", path, env)
@@ -680,6 +677,9 @@ PLoop(function(_ENV)
                     else
                         error(msg, 0)
                     end
+
+                    -- global export
+                    __Export__(config)
 
                     if isclass(target) then
                         target = Class(_G, target, definition)
