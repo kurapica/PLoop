@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/06/04                                               --
--- Version      :   1.3.3                                                    --
+-- Update Date  :   2020/06/13                                               --
+-- Version      :   1.3.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -332,12 +332,15 @@ PLoop(function(_ENV)
                 local errs
                 local avalid    = config.elementconfig
 
-                for i = 1, #value do
-                    local val, err = avalid:validate(value[i])
-                    value[i]    = val
-                    if err then
-                        errs    = errs or {}
-                        errs[i] = err
+                -- The array may have some empty holes
+                for i, v in pairs(value) do
+                    if type(i) == "number" then
+                        local val, err = avalid:validate(v)
+                        value[i]= val
+                        if err then
+                            errs    = errs or {}
+                            errs[i] = err
+                        end
                     end
                 end
 
