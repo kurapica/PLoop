@@ -488,8 +488,8 @@ PLoop(function(_ENV)
             self.Connection:Open()
         end
 
-        function Close(self)
-            self.Connection:Close()
+        function Close(self, ...)
+            self.Connection:Close(...)
         end
 
         --- Add changed entity
