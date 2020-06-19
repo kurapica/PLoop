@@ -1784,7 +1784,6 @@ PLoop(function(_ENV)
             tostring            = tostring,
             next                = next,
             loadsnippet         = Toolset.loadsnippet,
-            IsObjectType        = IsObjectType,
 
             Class, Property, Any, List
         }

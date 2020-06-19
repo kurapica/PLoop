@@ -505,7 +505,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__InnerRequest__" (function(_ENV)
         extend "IInitAttribute"
 
-        export { NOT_FOUND = NOT_FOUND, AttributeTargets }
+        export { NOT_FOUND = HTTP_STATUS.NOT_FOUND, AttributeTargets }
 
         -----------------------------------------------------------
         --                        method                         --

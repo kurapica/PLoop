@@ -217,7 +217,7 @@ PLoop(function(_ENV)
             route               = route and (route[httpMethod] or route[HttpMethod_ALL])
 
             if route then
-                local handler   = route.ContextHandler or route.HandlerClass and route.HandlerClass() or getHandler(context, route.RouteHandler(request))
+                local handler   = route.ContextHandler or route.HandlerClass and route.HandlerClass() or getHandler(context, route.RouteHandler(context.Request))
                 if handler then return handler end
             end
 
