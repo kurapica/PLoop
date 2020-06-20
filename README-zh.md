@@ -31,6 +31,7 @@
 	* [Custom 自定义结构体](#custom-自定义结构体)
 	* [Member 成员结构体类型](#member-成员结构体类型)
 	* [Array 数组结构体](#array-数组结构体)
+	* [Hash 键值对结构体](#hash-键值对结构体)
 	* [使用table来定义结构体](#使用table来定义结构体)
 	* [减少验证消耗](#减少验证消耗)
 	* [联合类型](#联合类型)
@@ -1047,7 +1048,7 @@ end)
 
 ## struct 结构体
 
-结构体类型是**PLoop**中的主要数据类型，也用来作为数据契约提供类型验证等功能。基于它们的结构，**PLoop**提供三种结构体类型。
+结构体类型是**PLoop**中的主要数据类型，也用来作为数据契约提供类型验证等功能。基于它们的结构，**PLoop**提供四种结构体类型。
 
 
 ### Custom 自定义结构体
@@ -1400,6 +1401,23 @@ end)
 **System.Variables**          |代表一组变量，我们会在重载系统中具体看它的用途
 
 
+### Hash 键值对结构体
+
+同样，我们可以定义对应确定键值类型的哈希table：
+
+```lua
+require "PLoop" (function(_ENV)
+    struct "SNMap" (function(_ENV)
+        __key = String
+        __value = Number
+    end)
+
+    v = SNMap{ key = true } -- the [value in value] must be number, got boolean
+    v = SNMap{ [1] = 23 } -- the [key in value] must be string, got number
+end)
+```
+
+
 ### 使用table来定义结构体
 
 为了简化结构体的定义方式，我们也可以使用table来替代函数作为定义体:
@@ -1439,6 +1457,10 @@ PLoop(function(_ENV)
 	-- 数组结构体
 	-- 数字索引的任意类型，会作为数组元素类型使用，也可以使用__array指定
 	struct "Locations" { Location }
+
+	-- 哈希结构体
+	-- 用类型作为键值即可
+	struct "SNMap" { [String] = Number }
 end)
 ```
 
