@@ -28,6 +28,7 @@ PLoop(function(_ENV)
             tblconcat           = table.concat,
             rawset              = rawset,
             pcall               = pcall,
+            throw               = throw,
         }
 
         export { Logger }
@@ -47,14 +48,19 @@ PLoop(function(_ENV)
         -- @param   logLevel                the message's log level, if lower than object.LogLevel, the message will be discarded
         -- @param   message                 the send out message, can be a formatted string
         -- @param   ...                     the list values to be included into the formatted string
-        __Arguments__{ LogLevel, String, Any * 0 }
+        __Arguments__{ LogLevel, String, Any * 0 }:Throwable()
         function Log(self, logLvl, msg, ...)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
                 local tfmt      = self.UseTimeFormat and self.TimeFormat
+                if select("#", ...) > 0 then
+                    local ok, r = pcall(strformat, msg, ...)
+                    if not ok then throw(r) end
+                    msg         = r
+                end
                 msg             = (tfmt and date and date(tfmt) or "") ..
                                     (self.__Prefix[logLvl] or "") ..
-                                    (select("#", ...) > 0 and strformat(msg, ...) or msg)
+                                    msg
 
                 -- Send message to handlers
                 for handler, lvl in pairs(self.__Handler) do
