@@ -117,6 +117,11 @@ PLoop(function(_ENV)
                 return ...
             end
 
+            local function safeIteratorCall(msg, ...)
+                if msg == "cannot resume dead coroutine" then return end
+                return msg, ...
+            end
+
             local function poolthread(pool, func)
                 return retresult(func(yield()))
             end
@@ -207,9 +212,20 @@ PLoop(function(_ENV)
             --          -- Also can be used as
             --          for k, v in Threading.Iterator(a, 1, 3) do print(k, v) end
             __Arguments__{ Function, Any * 0 }
-            function GetIterator(self, func, ...)
-                local thread        = newrecyclethread(self)
-                return thread(func, true, ...)
+            if Platform.THREAD_SAFE_ITERATOR then
+                function GetIterator(self, func, ...)
+                    local thread    = newrecyclethread(self)
+                    local wrap      = thread(func, true, ...)
+
+                    return function(...)
+                        return safeIteratorCall(wrap(...))
+                    end
+                end
+            else
+                function GetIterator(self, func, ...)
+                    local thread    = newrecyclethread(self)
+                    return thread(func, true, ...)
+                end
             end
 
             -----------------------------------------------------------

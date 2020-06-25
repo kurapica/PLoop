@@ -277,6 +277,11 @@ do
         -- Default 40
         THREAD_POOL_MAX_SIZE                = 40,
 
+        --- Whehther active safe thread iterator so it will stop for dead coroutine
+        -- On some platforms like Openresty call a dead wrap won't raise error but
+        -- return the error message 'cannot resume dead coroutine'
+        THREAD_SAFE_ITERATOR                = false,
+
         --- Use the Dispose as the __gc, only works for Lua 5.3 and above
         -- Default true
         USE_DISPOSE_AS_META_GC              = true,
