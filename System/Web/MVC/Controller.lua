@@ -131,8 +131,6 @@ PLoop(function(_ENV)
                     write(parseString(m))
 
                     for i, m in text, obj, idx do
-                        -- Still don't know why no error but messag returned, just a fail-safe
-                        if i == "cannot resume dead coroutine" then break end
                         write(parseString(m or i))
                     end
                 end
@@ -277,8 +275,6 @@ PLoop(function(_ENV)
 
             if type(text) == "function" then
                 for i, m in text, obj, idx do
-                    -- Still don't know why no error but messag returned, just a fail-safe
-                    if i == "cannot resume dead coroutine" then break end
                     write(parseString(m or i))
                 end
             else

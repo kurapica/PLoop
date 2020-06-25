@@ -65,7 +65,6 @@ PLoop(function(_ENV)
                             write(parseString(content[4]))
 
                             for idx, text in unpack(content, 1, 3) do
-                                if idx == "cannot resume dead coroutine" then break end
                                 write(parseString(text or idx))
                             end
                         end
@@ -454,8 +453,6 @@ PLoop(function(_ENV)
                 if content then
                     if type(content) == "table" then
                         for idx, text in unpack(content) do
-                            -- Still don't know why no error but messag returned, just a fail-safe
-                            if idx == "cannot resume dead coroutine" then break end
                             write(parseString(text or idx))
                         end
                     else
