@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/06/10                                               --
--- Update Date  :   2020/06/02                                               --
--- Version      :   1.2.2                                                    --
+-- Update Date  :   2020/06/29                                               --
+-- Version      :   1.3.2                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -155,14 +155,14 @@ PLoop(function(_ENV)
             local cls           = type(path) == "string" and GetRelativeResource(self, path, context) or path
 
             if isclass(cls) and issubtype(cls, IHttpOutput) then
-                local view      = cls(...)
-
                 res.ContentType = "text/html"
+
+                yield()
+
+                local view      = cls(...)
 
                 view.Context    = context
                 view:OnLoad(context)
-
-                yield()
 
                 view:SafeRender(res.Write, "")
 
@@ -282,6 +282,43 @@ PLoop(function(_ENV)
             end
 
             yield() -- finish body sending
+        end
+
+        --- Send the view as file
+        -- @param   path            the response page path or view class
+        -- @param   name            the name of the file
+        -- @param   ...             the data that passed to the view
+        function FileView(self, path, name, ...)
+            local res           = self.Context.Response
+            if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
+            self.IsFinished     = true
+
+            local context       = self.Context
+            local cls           = type(path) == "string" and GetRelativeResource(self, path, context) or path
+
+            if isclass(cls) and issubtype(cls, IHttpOutput) then
+                -- A default name
+                if type(name) ~= "string" then
+                    name        = Guid.New():gsub("%-", "") .. ".txt"
+                end
+
+                res.ContentType = "text/plain"
+                res.Header["Content-Disposition"] = "attachment;filename=" .. name
+
+                yield()
+
+                local view      = cls(...)
+
+                view.Context    = context
+                view:OnLoad(context)
+
+                view:SafeRender(res.Write, "")
+
+                yield()
+            else
+                Error("%s - the view page file can't be found.", tostring(path))
+                res.StatusCode  = HTTP_STATUS.NOT_FOUND
+            end
         end
 
         --- Redirect to another url

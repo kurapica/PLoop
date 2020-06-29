@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/06/02                                               --
--- Version      :   1.3.3                                                    --
+-- Update Date  :   2020/06/29                                               --
+-- Version      :   1.4.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -564,6 +564,228 @@ PLoop(function(_ENV)
         __Arguments__{ String/nil }
         function __ctor(self, name)
             self.FileName       = name
+        end
+    end)
+
+    --- The contents handler wrapper for file view
+    __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
+    class "__FileView__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export {
+            type                = type,
+            HEAD_PHASE          = IHttpContextHandler.ProcessPhase.Head,
+            isclass             = Class.Validate,
+            issubtype           = Class.IsSubType,
+            GetResource         = GetResource,
+            loadresource        = IO.Resource.IResourceLoader.LoadResource,
+            Error               = Logger.Default[Logger.LogLevel.Error],
+
+            IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web, Date, Guid
+        }
+
+        local processFileView   = function(self, default, dfname, path, name, data)
+            if self.IsFinished then return end
+
+            if path and name and data then
+                -- pass
+            elseif path and name then
+                if type(name) == "table" then
+                    path, name, data = nil, path, name
+                end
+            elseif path then
+                if type(path) == "table" then
+                    path, name, data = nil, nil, path
+                elseif type(path) == "string" then
+                    path, name, data = nil, path, nil
+                end
+            end
+
+            path                = path and type(path) == "string" and path or default
+            name                = name and type(name) == "string" and name or dfname
+            data                = data and type(data) == "table"  and data or nil
+
+            if not path then return self:ServerError() end
+
+            return self:FileView(path, name, data)
+        end
+
+        local processHandler    = function(self, context, phase)
+            local response      = context.Response
+            if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+            if phase == HEAD_PHASE then
+                local path, name, data = self[2](context)
+                if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
+
+                if path and name and data then
+                    -- pass
+                elseif path and name then
+                    if type(name) == "table" then
+                        path, name, data = nil, path, name
+                    end
+                elseif path then
+                    if type(path) == "table" then
+                        path, name, data = nil, nil, path
+                    elseif type(path) == "string" then
+                        path, name, data = nil, path, nil
+                    end
+                end
+
+                path                = path and type(path) == "string" and path or self[3]
+                name                = name and type(name) == "string" and name or self[5] and Date.Now:ToString(self[5]) or self[6] or Guid.New():gsub("%-", "") .. ".txt"
+                data                = data and type(data) == "table"  and data or nil
+
+                if path then
+                    if self[4] and path == self[3] then
+                        context[__View__]       = { self[4], data }
+                        response.ContentType    = "text/plain"
+                        response.Header["Content-Disposition"] = "attachment;filename=" .. name
+                    else
+                        local cls               = path and GetResource(path, context)
+
+                        if cls and issubtype(cls, IHttpOutput) then
+                            context[__View__]   = { cls, data }
+                            response.ContentType= "text/plain"
+                            response.Header["Content-Disposition"] = "attachment;filename=" .. name
+                        else
+                            Error("%s - the view page file can't be found.", self[3])
+                            response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                        end
+                    end
+                else
+                    Error("The function %q failed to return a view path", self[1])
+                    response.StatusCode = HTTP_STATUS.SERVER_ERROR
+                end
+            else
+                local content   = context[__View__]
+                if content then
+                    local view  = content[1](content[2])
+
+                    view.Context= context
+                    view:OnLoad(context)
+
+                    return view:SafeRender(response.Write, "")
+                end
+            end
+        end
+
+        FileViewContextHandler  = class { IHttpContextHandler,
+            Process = processHandler,
+            __call  = processHandler,
+            __new   = function(_, name, target, path, viewcls, tfmt, fname) return { name, target, path, viewcls, tfmt, fname }, true end,
+        }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- modify the target's definition
+        -- @param   target                      the target
+        -- @param   targettype                  the target type
+        -- @param   definition                  the target's definition
+        -- @param   owner                       the target's owner
+        -- @param   name                        the target's name in the owner
+        -- @param   stack                       the stack level
+        -- @return  definition                  the new definition
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if targettype == AttributeTargets.Method and issubtype(owner, Controller) then
+                local tfmt          = self.TimeFormat
+                local fname         = self.FileName
+
+                if self.Content then
+                    if not self.Path then
+                        error("the view path must be specified.", stack + 1)
+                    end
+
+                    local viewcls
+                    local viewpath  = self.Path
+                    local viewcont  = self.Content
+                    return function(self, ...)
+                        if viewcls ==  nil then
+                            viewcls = loadresource(viewpath, StringReader(viewcont), self.Context.Application) or false
+                            if not viewcls then
+                                Error("The context for path - %q can't be parsed as view", viewpath)
+                                return self:ServerError()
+                            end
+                        end
+
+                        if tfmt then
+                            return processFileView(self, viewcls, Date.Now:ToString(tfmt), definition(self, ...))
+                        else
+                            return processFileView(self, viewcls, fname, definition(self, ...))
+                        end
+                    end
+                else
+                    local dpath     = self.Path
+                    return function (self, ...)
+                        if tfmt then
+                            return processFileView(self, dpath, Date.Now:ToString(tfmt), definition(self, ...))
+                        else
+                            return processFileView(self, dpath, fname, definition(self, ...))
+                        end
+                    end
+                end
+            elseif targettype == AttributeTargets.Function then
+                local viewcls
+                if self.Content then
+                    if not self.Path then
+                        error("the view path must be specified.", stack + 1)
+                    end
+
+                    viewcls = loadresource(self.Path, StringReader(self.Content), owner)
+                    if not (viewcls and issubtype(viewcls, IHttpOutput)) then
+                        error("the context can't be parsed as view.", stack + 1)
+                    end
+                end
+
+                return FileViewContextHandler(name, definition, self.Path or false, viewcls or false, self.TimeFormat, self.FileName)
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        -- the attribute target
+        property "AttributeTarget"  { set = false, default = AttributeTargets.Function + AttributeTargets.Method }
+        property "Priority"         { set = false, default = AttributePriority.Lowest }
+
+        -- The time format to generate the file name
+        property "TimeFormat"       { type = TimeFormat }
+
+        -- The file name
+        property "FileName"         { type = String }
+
+        -- The view path
+        property "Path"             { type = String }
+
+        -- The view content
+        property "Content"          { type = String }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ String/nil, TimeFormat/nil, String/nil }
+        function __ctor(self, path, format, content)
+            self.Path           = path
+            self.TimeFormat     = format
+            self.Content        = content
+        end
+
+        __Arguments__{ String/nil, String/nil, String/nil  }
+        function __ctor(self, path, name, content)
+            self.Path           = path
+            self.FileName       = name
+            self.Content        = content
+        end
+
+        __Arguments__{ TimeFormat }
+        function __call(self, str)
+            self.TimeFormat     = str
+        end
+
+        __Arguments__{ String }
+        function __call(self, str)
+            self.Content        = str
         end
     end)
 
