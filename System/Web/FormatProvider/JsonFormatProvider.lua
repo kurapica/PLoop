@@ -130,7 +130,7 @@ PLoop(function(_ENV)
 
                 for i, v in ipairs(data) do
                     if type(v) == "table" and getmetatable(v) == nil then
-                        SerializeDataWithWriteNoIndent(v, write, object)
+                        SerializeDataWithWriteNoIndent(v, write)
                         if i < count then write(",") end
                     else
                         if i < count then
@@ -153,7 +153,7 @@ PLoop(function(_ENV)
 
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(strformat("%q:", k))
-                        SerializeDataWithWriteNoIndent(v, write, object)
+                        SerializeDataWithWriteNoIndent(v, write)
                         if nk then write(",") end
                     else
                         if nk then
