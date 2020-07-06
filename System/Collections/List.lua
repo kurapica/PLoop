@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2020/02/19                                               --
--- Version      :   1.2.3                                                    --
+-- Update Date  :   2020/07/06                                               --
+-- Version      :   1.2.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -584,7 +584,7 @@ PLoop(function(_ENV)
 
         __Arguments__{ Callable }
         function Filter(self, func)
-            if self[FLD_FILTERACTN] then return ListStreamWorker(self):Filter(func) end
+            if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(func) end
             self[FLD_FILTERACTN] = func
             return self
         end
@@ -592,7 +592,7 @@ PLoop(function(_ENV)
         --- Used to filter the items with a check function
         __Arguments__{ String, System.Any/nil }
         function Filter(self, feature, value)
-            if self[FLD_FILTERACTN] then return ListStreamWorker(self):Filter(feature, value) end
+            if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(feature, value) end
             self[FLD_FILTERACTN] = value ~= nil and function(item)
                 if type(item) == "table" then
                     return item[feature] == value
@@ -612,7 +612,7 @@ PLoop(function(_ENV)
         --- Used to select items with ranged index
         __Arguments__{ Integer/1, Integer/-1, Integer/1 }
         function Range(self, start, stop, step)
-            if self[FLD_RANGESTART] then return ListStreamWorker(self):Range(start, stop, step) end
+            if self[FLD_RANGESTART] or self[FLD_FILTERACTN] then return ListStreamWorker(self):Range(start, stop, step) end
             self[FLD_RANGESTART], self[FLD_RANGESTOP], self[FLD_RANGESTEP] = start, stop, step
             return self
         end

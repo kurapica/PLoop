@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
--- Update Date  :   2020/02/19                                               --
--- Version      :   1.1.4                                                    --
+-- Update Date  :   2020/07/06                                               --
+-- Version      :   1.1.5                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -447,7 +447,7 @@ PLoop(function(_ENV)
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
         function Filter(self, func)
-            if self[FLD_FILTERACTN] then return DictionaryStreamWorker(self):Filter(func) end
+            if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return DictionaryStreamWorker(self):Filter(func) end
             self[FLD_FILTERACTN] = func
             return self
         end
