@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/06/02                                               --
--- Update Date  :   2020/06/01                                               --
--- Version      :   1.4.3                                                    --
+-- Update Date  :   2020/07/06                                               --
+-- Version      :   1.4.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1784,6 +1784,7 @@ PLoop(function(_ENV)
             tostring            = tostring,
             next                = next,
             loadsnippet         = Toolset.loadsnippet,
+            error               = error,
 
             Class, Property, Any, List
         }
@@ -1802,6 +1803,7 @@ PLoop(function(_ENV)
         __Arguments__{ unpack(indexes:Map(function(name) return System.Variable(name, Class.GetFeature(DataObject, name):GetType()) end):ToList()) }
         function Query(self, ...)
             local ok, obj       = pcall(DataObject, self[0], ...)
+            if not ok and type(obj) == "string" then error(obj, 0) end
             return ok and obj or nil
         end
 
