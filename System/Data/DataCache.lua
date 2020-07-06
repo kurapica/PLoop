@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2020/06/03                                               --
--- Version      :   1.3.3                                                    --
+-- Update Date  :   2020/07/06                                               --
+-- Version      :   1.3.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -707,20 +707,18 @@ PLoop(function(_ENV)
             local map           = {}
 
             for entity, status in pairs(entities) do
-                if status ~= EntityStatus.NEW then
-                    local cls                   = GetObjectClass(entity)
-                    local depends               = _EntityDepends[cls]
+                local cls                   = GetObjectClass(entity)
+                local depends               = _EntityDepends[cls]
 
-                    if depends then
-                        for target, convertor in pairs(depends) do
-                            local count         = #convertor
-                            local cache         = map[convertor]
-                            if not cache then
-                                cache           = {}
-                                map[convertor]  = cache
-                            end
-                            _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
+                if depends then
+                    for target, convertor in pairs(depends) do
+                        local count         = #convertor
+                        local cache         = map[convertor]
+                        if not cache then
+                            cache           = {}
+                            map[convertor]  = cache
                         end
+                        _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
                     end
                 end
             end
