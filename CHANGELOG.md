@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+##[1.6.8] - 2020-07-06 WangXH <kurapica125@outlook.com>
+### Changed
+- Improve the web framework, `__FileView__` added to use view as download file.
+- THREAD_SAFE_ITERATOR option added for platform like Openresty.
+- Modify the chain method behaviors of the list and dictionary.
+
 ##[1.6.7] - 2020-05-28 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the serialization for the combo struct types.
