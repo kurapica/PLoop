@@ -99,6 +99,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, observable, onNext, onError, onCompleted)
+            self[FIELD_NEW_SUBSCRIBE] = false
+
             self.Observable     = observable
             self.OnNextCore     = onNext
             self.OnErrorCore    = onError
@@ -107,6 +109,8 @@ PLoop(function(_ENV)
 
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, onNext, onError, onCompleted)
+            self[FIELD_NEW_SUBSCRIBE] = false
+
             self.OnNextCore     = onNext
             self.OnErrorCore    = onError
             self.OnCompletedCore= onCompleted

@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/06/08                                               --
--- Version      :   1.6.8                                                    --
+-- Update Date  :   2020/07/26                                               --
+-- Version      :   1.6.9                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -12715,6 +12715,9 @@ do
     -----------------------------------------------------------------------
     -- Whether the class's objects will auto cache its object method
     --
+    -- It also can be used on the method or function so for the same arguments
+    -- the same value will be returned(the target function won't be called twice)
+    --
     -- @attribute   System.__AutoCache__
     -----------------------------------------------------------------------
     namespace.SaveNamespace("System.__AutoCache__",         prototype {
@@ -12724,7 +12727,38 @@ do
                     class.SetMethodAutoCache(target, parsestack(stack) + 1)
                 end
             end,
-            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE,
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                if targettype == ATTRTAR_FUNCTION or targettype == ATTRTAR_METHOD then
+                    local root  = setmetatable({}, WEAK_KEY)
+
+                    return function(...)
+                        local map   = root
+
+                        for i = 1, select("#", ...) do
+                            local v = select(i, ...)
+                            if v == nil then v = regValue end -- as a token
+
+                            local n = map[v]
+                            if not n then
+                                n   = setmetatable({}, WEAK_KEY)
+                                map[v] = n
+                            end
+
+                            map     = n
+                        end
+
+                        if map[fakefunc] then
+                            return unpack(map[fakefunc])
+                        end
+
+                        map[fakefunc] = { target(...) }
+
+                        return unpack(map[fakefunc])
+                    end
+                end
+            end,
+            ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE + ATTRTAR_METHOD + ATTRTAR_FUNCTION,
+            ["Priority"]        = -1,  -- Magic but the AttributePriority is defined later
         },
         __call = regSelfOrObject, __newindex = readonly, __tostring = getAttributeName
     })
