@@ -38,7 +38,7 @@ PLoop(function(_ENV)
         strchar                 = string.char,
         strsub                  = string.sub,
         strformat               = string.format,
-        strtrim                 = function(s) return s and (s:gsub("^%s*(.-)%s*$", "%1")) or "" end,
+        strtrim                 = Toolset.trim,
         isstruct                = Struct.Validate,
         getstructcategory       = Struct.GetStructCategory,
         isListType              = Class.IsSubType,

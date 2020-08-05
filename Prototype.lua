@@ -13819,6 +13819,9 @@ do
 
         --- A writeonly function used by metaw-table
         writeonly               = writeonly,
+
+        --- Trim the string
+        trim                    = strtrim,
     }
 
     -----------------------------------------------------------------------
