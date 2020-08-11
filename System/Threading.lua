@@ -436,7 +436,7 @@ PLoop(function(_ENV)
             -- @param   stack                       the stack level
             -- @return  definition                  the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
-                if self[1] then
+                if self.SafeMode then
                     return safewrap(definition)
                 else
                     return wraptarget(definition)
@@ -452,10 +452,13 @@ PLoop(function(_ENV)
             --- the attribute's priority
             property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
 
+            --- Whether use safe mode
+            property "SafeMode"         { type = Boolean }
+
             -----------------------------------------------------------
             --                      constructor                      --
             -----------------------------------------------------------
-            function __new(_, safe) return { safe }, true end
+            function __ctor(self, safe) self.SafeMode = safe and true or false end
         end)
 
         --- specify a method or function as iterator who use yield to generate values
