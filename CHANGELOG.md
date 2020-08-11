@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 
+##[1.6.10] - 2020-08-11 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix The `__AutoCache__` attribute for multi thread platform, the result may only be cached when the code processe in the same context and the debug.getgetlocal API is provided.
+
+
 ##[1.6.9] - 2020-07-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `__AutoCache__` attribute can be used on method or functions, so the results will be cached for arguments, the func will return the cached value with the same arguments.

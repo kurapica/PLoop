@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/07/26                                               --
--- Version      :   1.6.9                                                    --
+-- Update Date  :   2020/08/11                                               --
+-- Version      :   1.6.10                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -12720,43 +12720,81 @@ do
     --
     -- @attribute   System.__AutoCache__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoCache__",         prototype {
+    __AutoCache__ = namespace.SaveNamespace("System.__AutoCache__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
                     class.SetMethodAutoCache(target, parsestack(stack) + 1)
                 end
             end,
-            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
-                if targettype == ATTRTAR_FUNCTION or targettype == ATTRTAR_METHOD then
-                    local root  = setmetatable({}, WEAK_KEY)
+            ["InitDefinition"]  = not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and
+                function(self, target, targettype, definition, owner, name, stack)
+                    if targettype == ATTRTAR_FUNCTION or targettype == ATTRTAR_METHOD then
+                        local root      = setmetatable({}, WEAK_KEY)
 
-                    return function(...)
-                        local map   = root
+                        return function(...)
+                            local map   = root
 
-                        for i = 1, select("#", ...) do
-                            local v = select(i, ...)
-                            if v == nil then v = regValue end -- as a token
+                            for i = 1, select("#", ...) do
+                                local v = select(i, ...)
+                                if v == nil then v = regValue end -- as a token
 
-                            local n = map[v]
-                            if not n then
-                                n   = setmetatable({}, WEAK_KEY)
-                                map[v] = n
+                                local n = map[v]
+                                if not n then
+                                    n   = setmetatable({}, WEAK_KEY)
+                                    map[v] = n
+                                end
+
+                                map     = n
                             end
 
-                            map     = n
-                        end
+                            if map[fakefunc] then
+                                return unpack(map[fakefunc])
+                            end
 
-                        if map[fakefunc] then
+                            map[fakefunc] = { target(...) }
+
                             return unpack(map[fakefunc])
                         end
-
-                        map[fakefunc] = { target(...) }
-
-                        return unpack(map[fakefunc])
                     end
-                end
-            end,
+                end or getlocal and -- Use Context
+                function(self, target, targettype, definition, owner, name, stack)
+                    if targettype == ATTRTAR_FUNCTION or targettype == ATTRTAR_METHOD then
+                        local root      = setmetatable({}, WEAK_KEY)
+
+                        return function(...)
+                            local ctx   = Context.GetContextFromStack()
+                            if not ctx then return target(...) end
+
+                            local map   = ctx[__AutoCache__]
+                            if not map then
+                                map     = setmetatable({}, WEAK_KEY)
+                                ctx[__AutoCache__] = map
+                            end
+
+                            for i = 1, select("#", ...) do
+                                local v = select(i, ...)
+                                if v == nil then v = regValue end -- as a token
+
+                                local n = map[v]
+                                if not n then
+                                    n   = setmetatable({}, WEAK_KEY)
+                                    map[v] = n
+                                end
+
+                                map     = n
+                            end
+
+                            if map[fakefunc] then
+                                return unpack(map[fakefunc])
+                            end
+
+                            map[fakefunc] = { target(...) }
+
+                            return unpack(map[fakefunc])
+                        end
+                    end
+                end,
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE + ATTRTAR_METHOD + ATTRTAR_FUNCTION,
             ["Priority"]        = -1,  -- Magic but the AttributePriority is defined later
         },
@@ -15858,7 +15896,7 @@ do
     --- Represents the context object used to process the operations in an
     -- os thread, normally used in multi-os thread platforms
     __Sealed__() __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    class (_PLoopEnv, "System.Context") (function(_ENV)
+    Context = class (_PLoopEnv, "System.Context") (function(_ENV)
         export {
             getlocal            = getlocal,
             getobjectclass      = Class.GetObjectClass,
