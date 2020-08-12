@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/08/11                                               --
--- Version      :   1.6.10                                                   --
+-- Update Date  :   2020/08/12                                               --
+-- Version      :   1.6.11                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -432,59 +432,83 @@ do
     --                         flags management                          --
     -----------------------------------------------------------------------
     if LUA_VERSION >= 5.3 then
-        validateflags           = loadstring [[
-            return function(checkValue, targetValue)
-                return (checkValue & (targetValue or 0)) > 0
-            end
-        ]] ()
+        lshift                  = loadstring [[ return function(x, n) return x << n end ]] ()
+        rshift                  = loadstring [[ return function(x, n) return x >> n end ]] ()
+        band                    = loadstring [[ return function(x, n) return x & n  end ]] ()
+        bnot                    = loadstring [[ return function(x)    return ~x     end ]] ()
+        bor                     = loadstring [[ return function(x, n) return x | n  end ]] ()
+        bxor                    = loadstring [[ return function(x, n) return x ~ n  end ]] ()
 
-        turnonflags             = loadstring [[
-            return function(checkValue, targetValue)
-                return checkValue | (targetValue or 0)
-            end
-        ]] ()
+        validateflags           = loadstring [[ return function(x, n) return (x & (n or 0)) > 0 end ]] ()
+        turnonflags             = loadstring [[ return function(x, n) return x | (n or 0) end ]] ()
+        turnoffflags            = loadstring [[ return function(x, n) return (~x) & (n or 0) end ]] ()
+    elseif ((LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table")) then
+        lshift                  = _G.bit32 and _G.bit32.lshift  or _G.bit.lshift
+        rshift                  = _G.bit32 and _G.bit32.rshift  or _G.bit.rshift
+        band                    = _G.bit32 and _G.bit32.band    or _G.bit.band
+        bnot                    = _G.bit32 and _G.bit32.bnot    or _G.bit.bnot
+        bor                     = _G.bit32 and _G.bit32.bor     or _G.bit.bor
+        bxor                    = _G.bit32 and _G.bit32.bxor    or _G.bit.bxor
 
-        turnoffflags            = loadstring [[
-            return function(checkValue, targetValue)
-                return (~checkValue) & (targetValue or 0)
-            end
-        ]] ()
-    elseif (LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table") then
-        local band              = _G.bit32 and _G.bit32.band or _G.bit.band
-        local bor               = _G.bit32 and _G.bit32.bor  or _G.bit.bor
-        local bnot              = _G.bit32 and _G.bit32.bnot or _G.bit.bnot
-
-        validateflags           = function (checkValue, targetValue)
-            return band(checkValue, targetValue or 0) > 0
-        end
-
-        turnonflags             = function (checkValue, targetValue)
-            return bor(checkValue, targetValue or 0)
-        end
-
-        turnoffflags            = function (checkValue, targetValue)
-            return band(bnot(checkValue), targetValue or 0)
-        end
+        validateflags           = function (x, n) return band(x, n or 0) > 0 end
+        turnonflags             = function (x, n) return bor(x, n or 0) end
+        turnoffflags            = function (x, n) return band(bnot(x), n or 0) end
     else
-        validateflags           = function (checkValue, targetValue)
-            if not targetValue or checkValue > targetValue then return false end
-            targetValue = targetValue % (2 * checkValue)
-            return (targetValue - targetValue % checkValue) == checkValue
+        -- Create the custom bit lib, for simple, don't check whether the number is integer
+        local MOD               = 2^32
+        local MODMAX            = MOD - 1
+        local xorcache          = { [0]={[0]=0,[1]=1}, [1]={[0]=1,[1]=0} }
+
+        for i = 0, 15 do
+            xorcache[i]         = xorcache[i] or {}
+
+            for j = 0, 15 do
+                if not xorcache[i][j] then
+                    local a, b  = i, j
+                    local res,p = 0,1
+                    while a ~= 0 and b ~= 0 do
+                      local am, bm = a % 2, b % 2
+                      res       = res + xorcache[am][bm] * p
+                      a         = (a - am) / 2
+                      b         = (b - bm) / 2
+                      p         = p * 2
+                    end
+                    xorcache[i][j] = res + (a + b) * p
+                end
+            end
         end
 
-        turnonflags             = function (checkValue, targetValue)
-            if not validateflags(checkValue, targetValue) then
-                return checkValue + (targetValue or 0)
-            end
-            return targetValue
-        end
+        local bit_bxor          = function (a, b)
+                                    local res,p = 0,1
+                                    while a ~= 0 and b ~= 0 do
+                                        local am, bm = a % 16, b % 16
+                                        res = res + xorcache[am][bm] * p
+                                        a   = (a - am) / 16
+                                        b   = (b - bm) / 16
+                                        p   = p * 16
+                                    end
+                                    res = res + (a + b) * p
+                                    return res
+                                end
 
-        turnoffflags            = function (checkValue, targetValue)
-            if validateflags(checkValue, targetValue) then
-                return targetValue - checkValue
-            end
-            return targetValue
-        end
+        local tobit             = function(x) x = x % MOD return x >= 0x80000000 and (x - MOD) or x end
+        local bit_bnot          = function(a) return MODMAX - a end
+        local bit_band          = function(a, b) return ((a+b) - bit_bxor(a,b))/2 end
+        local bit_bor           = function(a, b) return MODMAX - bit_band(MODMAX - a, MODMAX - b) end
+        local bit_rshift, bit_lshift
+        bit_rshift              = function(a, d) return d < 0 and bit_lshift(a, -d) or floor(a % MOD / 2^d) end
+        bit_lshift              = function(a, d) return d < 0 and bit_rshift(a, -d) or (a * 2^d) % MOD end
+
+        lshift                  = function(a, d) return tobit(bit_lshift(a % MOD, d % 32)) end
+        rshift                  = function(a, d) return tobit(bit_rshift(a % MOD, d % 32)) end
+        band                    = function(a, b) return tobit(bit_band(a % MOD, b % MOD)) end
+        bnot                    = function(a)    return tobit(bit_bnot(a % MOD)) end
+        bor                     = function(a, b) return tobit(bit_bor(a % MOD, b % MOD)) end
+        bxor                    = function(a, b) return tobit(bit_bxor(a % MOD, b % MOD)) end
+
+        validateflags           = function (x, n) if not n or x > n then return false end n = n % (2 * x) return (n - n % x) == x end
+        turnonflags             = function (x, n) return validateflags(x, n) and n or (x + (n or 0)) end
+        turnoffflags            = function (x, n) return validateflags(x, n) and (n - x) or n end
     end
 
     -----------------------------------------------------------------------
@@ -13833,6 +13857,14 @@ do
         -- @param   index           the number
         -- @return  string
         parseindex              = parseindex,
+
+        --- The bit operations
+        lshift                  = lshift,
+        rshift                  = rshift,
+        band                    = band,
+        bor                     = bor,
+        bnot                    = bnot,
+        bxor                    = bxor,
 
         --- validate flags values
         -- @param   chkvalue        the check value, must be 2^n
