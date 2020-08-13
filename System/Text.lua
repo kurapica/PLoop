@@ -18,7 +18,7 @@ PLoop(function(_ENV)
     local encoder
     local newEncoder            = function (name, settings)
         if type(settings) ~= "table" or type(settings.decode) ~= "function" or type(settings.encode) ~= "function" then
-            error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = function }", 3)
+            error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function }", 3)
         end
 
         local encode            = settings.encode
@@ -86,7 +86,7 @@ PLoop(function(_ENV)
         },
         __newindex              = Toolset.readonly,
         __call                  = function(self, name)
-            if type(name) ~= "string" then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = function }", 2) end
+            if type(name) ~= "string" then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function }", 2) end
             return function(settings)
                 local coder     = newEncoder(name, settings)
                 return coder
