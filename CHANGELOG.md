@@ -2,82 +2,82 @@
 All notable changes to this project will be documented in this file.
 
 
-##[1.6.11] - 2020-08-14 WangXH <kurapica125@outlook.com>
+## [1.6.11] - 2020-08-14 WangXH <kurapica125@outlook.com>
 ### Changed
 - The anonymous array & hash struct type with only type settings like `struct { Number }` and `struct { [String] = Number }` will be auto sealed and unique, so the system won't generate multi struct types for the same types.
 - The `lshift,rshift,band,bor,bnot,bxor` api is added in the `System.Toolset`, they are generated based on the platform.
 
 
-##[1.6.10] - 2020-08-11 WangXH <kurapica125@outlook.com>
+## [1.6.10] - 2020-08-11 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix The `__AutoCache__` attribute for multi thread platform, the result may only be cached when the code processe in the same context and the debug.getgetlocal API is provided.
 
 
-##[1.6.9] - 2020-07-26 WangXH <kurapica125@outlook.com>
+## [1.6.9] - 2020-07-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `__AutoCache__` attribute can be used on method or functions, so the results will be cached for arguments, the func will return the cached value with the same arguments.
 
 
-##[1.6.8] - 2020-07-06 WangXH <kurapica125@outlook.com>
+## [1.6.8] - 2020-07-06 WangXH <kurapica125@outlook.com>
 ### Changed
 - Improve the web framework, `__FileView__` added to use view as download file.
 - THREAD_SAFE_ITERATOR option added for platform like Openresty.
 - Modify the chain method behaviors of the list and dictionary.
 
-##[1.6.7] - 2020-05-28 WangXH <kurapica125@outlook.com>
+## [1.6.7] - 2020-05-28 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the serialization for the combo struct types.
 
 
-##[1.6.6] - 2020-05-22 WangXH <kurapica125@outlook.com>
+## [1.6.6] - 2020-05-22 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the missing of headers and accept of the http inner request class.
 - Add more interfaces for cache system.
 
 
-##[1.6.5] - 2020-05-12 WangXH <kurapica125@outlook.com>
+## [1.6.5] - 2020-05-12 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the Serialization system can't recognize the combo struct types.
 
 
-##[1.6.4] - 2020-05-12 WangXH <kurapica125@outlook.com>
+## [1.6.4] - 2020-05-12 WangXH <kurapica125@outlook.com>
 ### Changed
 - The with keyword will return the values generated from the error hadnler, the operation won't be processed when open method failed.
 
 
-##[1.6.3] - 2020-05-03 WangXH <kurapica125@outlook.com>
+## [1.6.3] - 2020-05-03 WangXH <kurapica125@outlook.com>
 ### Changed
 - The delegate change handler binding won't consume the attributes.
 
 
-##[1.6.2] - 2020-03-24 WangXH <kurapica125@outlook.com>
+## [1.6.2] - 2020-03-24 WangXH <kurapica125@outlook.com>
 ### Changed
 - The auto incr data table field don't need to be primary, it's fixed.
 
 
-##[1.6.1] - 2020-03-20 WangXH <kurapica125@outlook.com>
+## [1.6.1] - 2020-03-20 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the problem when provide the return value in an iterator, the next iterator share the same coroutine will trigger error.
 - Remove the ServerRedirect from the HttpResponse, since it may be used to terminate the process like in the Openresty, it's done within the framework, so no code should be modified in the projects.
 
 
-##[1.5.4] - 2020-02-26 WangXH <kurapica125@outlook.com>
+## [1.5.4] - 2020-02-26 WangXH <kurapica125@outlook.com>
 ### Changed
 - The `Environment.Apply(func, ...)` can provide arguments for the target function
 - Improve the method validation error message for the data base and data cache system
 
 
-##[1.5.3] - 2020-02-19 WangXH <kurapica125@outlook.com>
+## [1.5.3] - 2020-02-19 WangXH <kurapica125@outlook.com>
 ### Changed
 - The List and Dictionary can chain same queue method like `List(10):Map("x=>x^2"):Map("x=>x+1"):Each(print)`
 
 
-##[1.5.2] - 2019-12-27 WangXH <kurapica125@outlook.com>
+## [1.5.2] - 2019-12-27 WangXH <kurapica125@outlook.com>
 ### Changed
 - If use the `System.__Recycable__` mark the classes, the class can collect disposed objects in the `__dtor` method, can re use them by the `__new` method, since they all disposed, they should be used as new object and passed to the `__ctor` method.
 
 
-##[1.5.1] - 2019-12-17 WangXH <kurapica125@outlook.com>
+## [1.5.1] - 2019-12-17 WangXH <kurapica125@outlook.com>
 ### Added
 - `USE_THIS_FOR_OBJECT_METHODS` platform setting is added, used to make sure the overload object method can use `this(self, ...)` to call the other implementions of the same method, default false(normall you can call the target method directly like `Method(self, ...)`)
 - The `UseThis` method is added to the `__Arguments__` attribtue, so we can use `this` keyword in object method like `__Arguments__{...}:UseThis()`
