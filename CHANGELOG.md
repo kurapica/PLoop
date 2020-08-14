@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file.
 
 
+##[1.6.11] - 2020-08-14 WangXH <kurapica125@outlook.com>
+### Changed
+- The anonymous array & hash struct type with only type settings like `struct { Number }` and `struct { [String] = Number }` will be auto sealed and unique, so the system won't generate multi struct types for the same types.
+- The `lshift,rshift,band,bor,bnot,bxor` api is added in the `System.Toolset`, they are generated based on the platform.
+
+
 ##[1.6.10] - 2020-08-11 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix The `__AutoCache__` attribute for multi thread platform, the result may only be cached when the code processe in the same context and the debug.getgetlocal API is provided.

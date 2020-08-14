@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/08/12                                               --
+-- Update Date  :   2020/08/14                                               --
 -- Version      :   1.6.11                                                   --
 --===========================================================================--
 
@@ -3035,6 +3035,8 @@ do
 
     local _ValidTypeCombine     = newstorage(WEAK_KEY)
     local _UnmSubTypeMap        = newstorage(WEAK_ALL)
+    local _AnonyArrayType       = newstorage(WEAK_ALL)
+    local _AnonyHashType        = newstorage(WEAK_ALL)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -4880,6 +4882,45 @@ do
         },
         __newindex              = readonly,
         __call                  = function(self, ...)
+            -- For simple, only re-use anonymous type generated with one table and one key-value pairs
+            local _arrayType
+            local _hashKeyType, _hashValType
+
+            if select("#", ...) == 1 then
+                local definition= ...
+                if type(definition) == "table" then
+                    local k, v
+                    for i, j in pairs, definition do
+                        if k then k = nil break end
+                        k, v    = i, j
+                    end
+                    if k and v then
+                        if type(k) == "number" then
+                            if getprototypemethod(v, "ValidateValue") then
+                                _arrayType  = v
+                                local stype = _AnonyArrayType[v]
+                                if stype then
+                                    -- Clear the keyword accessor
+                                    environment.GetKeywordVisitor(struct)
+                                    return stype
+                                end
+                            end
+                        else
+                            if getprototypemethod(k, "ValidateValue") and getprototypemethod(v, "ValidateValue") then
+                                _hashKeyType, _hashValType = k, v
+                                local stype = _AnonyHashType[k]
+                                stype       = stype and stype[v]
+                                if stype then
+                                    -- Clear the keyword accessor
+                                    environment.GetKeywordVisitor(struct)
+                                    return stype
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
             local visitor, env, target, definition, keepenv, stack  = getTypeParams(struct, tstruct, ...)
             if not target then error("Usage: struct([env, ][name, ][definition, ][keepenv, ][stack]) - the struct type can't be created", stack) end
 
@@ -4898,6 +4939,17 @@ do
             environment.SetNamespace(builder, target)
             environment.SetParent   (builder, env)
             environment.SetDefinitionMode(builder, true)
+
+            -- Seal the anonymous type directly
+            if _arrayType or _hashKeyType then
+                struct.SetSealed(target, stack)
+
+                if _arrayType then
+                    _AnonyArrayType = savestorage(_AnonyArrayType, _arrayType, target)
+                else
+                    _AnonyHashType  = savestorage(_AnonyHashType, _hashKeyType, savestorage(_AnonyHashType[_hashKeyType] or {}, _hashValType, target))
+                end
+            end
 
             _StructBuilderInDefine = savestorage(_StructBuilderInDefine, builder, true)
 
