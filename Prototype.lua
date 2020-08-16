@@ -15679,45 +15679,49 @@ do
         --                       property                       --
         -----------------------------------------------------------
         --- a message that describes the current exception
-        property "Message"          { type = String }
+        __Abstract__() property "Message"          { type = String, default = "There is an exception occurred" }
+
+        --- The error code
+        __Abstract__() property "Code"             { type = Number }
 
         --- a string representation of the immediate frames on the call stack
-        property "StackTrace"       { type = String }
+        __Abstract__() property "StackTrace"       { type = String }
 
         --- the method that throws the current exception
-        property "TargetSite"       { type = String }
+        __Abstract__() property "TargetSite"       { type = String }
 
         --- the source of the exception
-        property "Source"           { type = String }
+        __Abstract__() property "Source"           { type = String }
 
         --- the Exception instance that caused the current exception
-        property "InnerException"   { type = Exception }
+        __Abstract__() property "InnerException"   { type = Exception }
 
         --- key/value pairs that provide additional information about the exception
-        property "Data"             { type = Table }
+        __Abstract__() property "Data"             { type = Table }
 
         --- key/value pairs of the local variable
-        property "LocalVariables"   { type = Table }
+        __Abstract__() property "LocalVariables"   { type = Table }
 
         --- key/value pairs of the upvalues
-        property "Upvalues"         { type = Table }
+        __Abstract__() property "Upvalues"         { type = Table }
 
         --- whether the stack data is saved, the system will save the stack data
         -- if the value is false when the exception is thrown out
-        property "StackDataSaved"   { type = Boolean,       default = not Platform.EXCEPTION_SAVE_STACK_DATA }
+        __Abstract__() property "StackDataSaved"   { type = Boolean,       default = not Platform.EXCEPTION_SAVE_STACK_DATA }
 
         --- the stack level to be scanned, default 1, where the throw is called
-        property "StackLevel"       { type = NaturalNumber, default = 1 }
+        __Abstract__() property "StackLevel"       { type = NaturalNumber, default = 1 }
 
         --- whether save the local variables and the upvalues for the exception
-        property "SaveVariables"    { type = Boolean,       default = Platform.EXCEPTION_SAVE_VARIABLES }
+        __Abstract__() property "SaveVariables"    { type = Boolean,       default = Platform.EXCEPTION_SAVE_VARIABLES }
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Variable("message", String), Variable("inner", Exception, true), Variable("savevariables", Boolean, true) }
-        function Exception(self, message, inner, savevariables)
+        __Arguments__{ Variable("message", String, true), Variable("code", Number, true), Variable("inner", Exception, true), Variable("savevariables", Boolean, true) }
+        function Exception(self, message, code, inner, savevariables)
             self.Message        = message
+            self.Code           = code
             self.InnerException = inner
             self.SaveVariables  = savevariables
         end
