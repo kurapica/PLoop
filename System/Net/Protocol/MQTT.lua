@@ -16,7 +16,7 @@ PLoop(function(_ENV)
     namespace "System.Net.MQTT"
 
     export {
-        List, Exception, System.Text.UTF8Encoding,
+        List, Exception, XDictionary, System.Text.UTF8Encoding,
 
         lshift                  = Toolset.lshift,
         rshift                  = Toolset.rshift,
@@ -30,6 +30,9 @@ PLoop(function(_ENV)
         tinsert                 = table.insert,
         tconcat                 = table.concat,
         unpack                  = unpack or table.unpack,
+        type                    = type,
+        ipairs                  = ipairs,
+        pairs                   = pairs,
 
         throw                   = throw,
 
@@ -115,10 +118,18 @@ PLoop(function(_ENV)
     --- The SubAck Return Code
     __Sealed__()
     enum "SubAckReturnCode" {
-        MAX_QOS_0               = 0,
-        MAX_QOS_1               = 1,
-        MAX_QOS_2               = 2,
-        FAILURE                 = 0x80,
+        MAX_QOS_0               = 0,                    -- The subscription is accepted and the maximum QoS sent will be QoS 0. This might be a lower QoS than was requested
+        MAX_QOS_1               = 1,                    -- The subscription is accepted and the maximum QoS sent will be QoS 1. This might be a lower QoS than was requested.
+        MAX_QOS_2               = 2,                    -- The subscription is accepted and any received QoS will be sent to this subscription.
+        FAILURE                 = 128,                  -- The subscription is not accepted and the Server either does not wish to reveal the reason or none of the other Reason Codes apply.
+        IMPLEMENTATION_SPECIFIC_ERROR = 131,            -- The SUBSCRIBE is valid but the Server does not accept it.
+        NOT_AUTHORIZED          = 135,                  -- The Client is not authorized to make this subscription.
+        TOPIC_FILTER_INVALID    = 143,                  -- The Topic Filter is correctly formed but is not allowed for this Client.
+        PACKET_IDENTIFIER_IN_USE= 145,                  -- The specified Packet Identifier is already in use.
+        QUOTA_EXCEEDED          = 151,                  -- An implementation or administrative imposed limit has been exceeded.
+        SHARED_SUBSCRIPTIONS_NOT_SUPPORTED  = 158,      -- The Server does not support Shared Subscriptions for this Client.
+        SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED  = 161,  -- The Server does not support Subscription Identifiers; the subscription is not accepted.
+        WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED    = 162,  -- The Server does not support Wildcard Subscriptions; the subscription is not accepted.
     }
 
     --- The Property Identifier
@@ -203,6 +214,43 @@ PLoop(function(_ENV)
         WILDCARD_SUBSCRIPTIONS_NOT_SUPPORTED    = 162,  -- SUBACK, DISCONNECT
     }
 
+    -- The PUBACK Reason Code
+    PubAckReasonCode = {
+        [ReasonCode.SUCCESS                 ] = true,
+        [ReasonCode.NO_MATCHING_SUBSCRIBERS ] = true,
+        [ReasonCode.UNSPECIFIED_ERROR       ] = true,
+        [ReasonCode.IMPLEMENTATION_SPECIFIC_ERROR] = true,
+        [ReasonCode.NOT_AUTHORIZED          ] = true,
+        [ReasonCode.TOPIC_NAME_INVALID      ] = true,
+        [ReasonCode.PACKET_IDENTIFIER_IN_USE] = true,
+        [ReasonCode.QUOTA_EXCEEDED          ] = true,
+        [ReasonCode.PAYLOAD_FORMAT_INVALID  ] = true,
+    }
+
+    -- The PUBREL Reason Code
+    PubRelReasonCode = {
+        [ReasonCode.SUCCESS                 ] = true,
+        [ReasonCode.PACKET_IDENTIFIER_NOT_FOUND] = true,
+    }
+
+    -- The UNSUBACK Reason Code
+    UnsubAckReasonCode = {
+        [ReasonCode.SUCCESS ]               = true,
+        [ReasonCode.NO_SUBSCRIPTION_EXISTED]= true,
+        [ReasonCode.UNSPECIFIED_ERROR]      = true,
+        [ReasonCode.IMPLEMENTATION_SPECIFIC_ERROR] = true,
+        [ReasonCode.NOT_AUTHORIZED]         = true,
+        [ReasonCode.TOPIC_FILTER_INVALID]   = true,
+        [ReasonCode.PACKET_IDENTIFIER_IN_USE] = true,
+    }
+
+    -- The Authentication Reason Code
+    AuthReasonCode = {
+        [ReasonCode.SUCCESS] = true,
+        [ReasonCode.CONTINUE_AUTHENTICATION] = true,
+        [ReasonCode.RE_AUTHENTICATE] = true,
+    }
+
     --- The MQTT CONNECT Packet
     __Sealed__()
     struct "ConnectPacket" {
@@ -220,7 +268,7 @@ PLoop(function(_ENV)
 
                 { name = "properties", type = struct { [PropertyIdentifier] = Any } },
             }
-        }
+        },
 
         { name = "properties",   type = struct { [PropertyIdentifier] = Any } },
 
@@ -250,8 +298,9 @@ PLoop(function(_ENV)
         { name = "properties",   type = struct { [PropertyIdentifier] = Any } },
     }
 
-    --- The MQTT PUBACK Packet
-    struct "PubAckPacket" {
+    --- The MQTT ACK Packet
+    __Sealed__()
+    struct "AckPacket" {
         { name = "packetID",     type = Number },
         { name = "reasonCode",   type = ReasonCode },
         { name = "properties",   type = struct { [PropertyIdentifier] = Any } },
@@ -261,10 +310,18 @@ PLoop(function(_ENV)
     __Sealed__()
     struct "SubscribePacket" {
         { name = "packetID",     type = Number },
+        { name = "properties",   type = struct { [PropertyIdentifier] = Any } },
         { name = "topicFilters", type = struct {
                 struct {
                     { name = "topicFilter",  type = String },
                     { name = "requestedQoS", type = Number },
+                    { name = "options", type = struct { -- MQTT v5.0
+                            { name = "retain", type = Number },
+                            { name = "rap",    type = Boolean }, -- Retain as Published
+                            { name = "nolocal",type = Boolean },
+                            { name = "qos",    type = Number },
+                        }
+                    }
                 }
             }
         }
@@ -274,6 +331,7 @@ PLoop(function(_ENV)
     __Sealed__()
     struct "SubAckPacket" {
         { name = "packetID",     type = Number },
+        { name = "properties",   type = struct { [PropertyIdentifier] = Any } },
         { name = "returnCodes",  type = struct { SubAckReturnCode } },
     }
 
@@ -333,7 +391,12 @@ PLoop(function(_ENV)
         [PropertyIdentifier.CONTENT_TYPE                     ] = nil,
         [PropertyIdentifier.RESPONSE_TOPIC                   ] = nil,
         [PropertyIdentifier.CORRELATION_DATA                 ] = nil,
-        [PropertyIdentifier.SUBSCRIPTION_IDENTIFIER          ] = nil,
+        [PropertyIdentifier.SUBSCRIPTION_IDENTIFIER          ] = function(val)
+            if val == 0 then
+                throw(MQTTException("The subscription identifier data is malformed", ReasonCode.PROTOCOL_ERROR))
+            end
+            return val
+        end,
         [PropertyIdentifier.SESSION_EXPIRY_INTERVAL          ] = nil,
         [PropertyIdentifier.ASSIGNED_CLIENT_IDENTIFIER       ] = nil,
         [PropertyIdentifier.SERVER_KEEP_ALIVE                ] = nil,
@@ -386,7 +449,7 @@ PLoop(function(_ENV)
                 throw(MQTTException("The maximum packet size data is malformed", ReasonCode.PROTOCOL_ERROR))
             end
             return val
-        end,,
+        end,
         [PropertyIdentifier.WILDCARD_SUBSCRIPTION_AVAILABLE  ] = function(val)
             if val ~= 0 and val ~= 1 then
                 throw(MQTTException("The wildcard subscription available data is malformed", ReasonCode.PROTOCOL_ERROR))
@@ -436,6 +499,7 @@ PLoop(function(_ENV)
         [PropertyIdentifier.SUBSCRIPTION_IDENTIFIER_AVAILABLE] = PROPERTY_SINGLE_DATA,
         [PropertyIdentifier.SHARED_SUBSCRIPTION_AVAILABLE    ] = PROPERTY_SINGLE_DATA,
     }
+
     -- Gets the single byte from data
     function parseByte(data, offset)
         return strbyte(data, offset), offset + 1
@@ -585,28 +649,209 @@ PLoop(function(_ENV)
         return temp, nxtoffset
     end
 
-    function makeLength(length)
-        local msb, lsb          = rshift(length, 8), band(length, 0xff)
-        return strchar(msb), strchar(lsb)
+    --- Generate the packet
+    function makeByte(cache, data)
+        tinsert(cache, strchar(data))
+        return 1
     end
 
-    function makeVarLength(length)
+    function makeLength(cache, length)
+        local msb, lsb          = rshift(length, 8), band(length, 0xff)
+        local offset            = #cache
+        cache[offset + 1]       = strchar(msb)
+        cache[offset + 2]       = strchar(lsb)
+        return 2
+    end
+
+    function makeFourBytes(cache, data)
+        local b1                = rshift(data, 24)
+        local b2                = band(rshift(data, 16), 0xff)
+        local b3                = band(rshift(data, 8), 0xff)
+        local b4                = band(data, 0xff)
+
+        local offset            = #cache
+        cache[offset + 1]       = strchar(b1)
+        cache[offset + 2]       = strchar(b2)
+        cache[offset + 3]       = strchar(b3)
+        cache[offset + 4]       = strchar(b4)
+
+        return 4
+    end
+
+    -- Also works for the UTF-8 string
+    function makeBinaryData(cache, data)
+        local length            = #data
+
+        local msb, lsb          = rshift(length, 8), band(length, 0xff)
+        local offset            = #cache
+        cache[offset + 1]       = strchar(msb)
+        cache[offset + 2]       = strchar(lsb)
+        cache[offset + 3]       = data
+
+        return 2 + length
+    end
+
+    makeUTF8String = makeBinaryData
+
+    function makeVarLength(cache, length)
+        local result
+
+        if not length and type(cache) == "number" then
+            length              = cache
+            cache               = nil
+            result              = ""
+        end
+
         if length < 0 or length > MAX_VAR_LENGTH then
             throw(MQTTException("value is invalid for encoding as variable length field: "..tostring(length), ReasonCode.MALFORMED_PACKET))
         end
 
-        local bytes             = {}
-        local i                 = 1
+        local offset            = cache and #cache
+        local i                 = 0
         repeat
             local byte          = length % 128
             length              = rshift(length, 7)
             if length > 0 then
                 byte            = bor(byte, 128)
             end
-            bytes[i]            = byte
             i                   = i + 1
+            if cache then
+                cache[offset+i] = strchar(byte)
+            else
+                result          = result .. strchar(byte)
+            end
         until length <= 0
-        return strchar(unpack(bytes))
+        if cache then
+            return i
+        else
+            return result, i
+        end
+    end
+
+    function makeProperties(cache, data)
+        if not type(data) == "table" then return 0 end
+
+        -- Keep the property id in order
+        local keys              = XDictionary(data).Keys:ToList():Sort()
+        if #keys == 0 then return 0 end
+
+        local lengidx           = #cache + 1
+        local total             = 0
+        local lencnt
+
+        cache[lengidx]          = ""    -- wait for the real value
+
+        for _, id in keys:GetIterator() do
+            local ptype         = PROPERTY_ID_TYPE[id]
+            local make          = PROPERTY_ID_MAP[id]
+
+            if make then
+                make            = PROPERTY_MAKE[make]
+
+                -- just skip the malformed property id for now
+                if ptype == PROPERTY_SINGLE_DATA then
+                    total       = total + makeVarLength(cache, id)
+                    total       = total + make(cache, data[id])
+                elseif ptype == PROPERTY_ARRAY_DATA then
+                    local temp  = data[id]
+                    if type(temp) == "table" and #temp > 0 then
+                        for _, val in ipairs(temp) do
+                            total = total + makeVarLength(cache, id)
+                            total = total + make(cache, val)
+                        end
+                    end
+                elseif ptype == PROPERTY_HASH_DATA then
+                    local temp  = data[id]
+                    if type(temp) == "table" then
+                        for key, val in pairs(temp) do
+                            total = total + makeVarLength(cache, id)
+                            total = total + make(cache, key, val)
+                        end
+                    end
+                end
+            end
+        end
+
+        cache[lengidx], lencnt  = makeVarLength(total)
+
+        return total + lencnt
+    end
+
+    -- For Mutli packet type
+    function parsePubAckAndEtc(data, flag, version)
+        local packet            = AckPacket()
+        local offset            = 1
+
+        packet.packetID, offset = parseLength(data, offset)
+        if not packet.packetID then
+            throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
+        end
+
+        if version == MQTTVersion.V5_0 then
+            -- Reason Code
+            packet.reasonCode, offset = parseByte(data, offset)
+            if not packet.reasonCode then
+                packet.reasonCode = 0 -- Success
+            else
+                if not PubAckReasonCode[packet.reasonCode] then
+                    throw(MQTTException("The reason code is malformed", ReasonCode.PROTOCOL_ERROR))
+                end
+
+                -- PubAck Properties
+                if #data >= 4 then
+                    packet.properties, offset = parseProperties(data, offset)
+                end
+            end
+        end
+
+        return packet
+    end
+
+    function parsePubRelAndEtc(data, flag, version)
+        local packet            = AckPacket()
+        local offset            = 1
+
+        packet.packetID, offset = parseLength(data, offset)
+        if not packet.packetID then
+            throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
+        end
+
+        if version == MQTTVersion.V5_0 then
+            -- Reason Code
+            packet.reasonCode, offset = parseByte(data, offset)
+            if not packet.reasonCode then
+                packet.reasonCode = 0 -- Success
+            else
+                if not PubRelReasonCode[packet.reasonCode] then
+                    throw(MQTTException("The reason code is malformed", ReasonCode.PROTOCOL_ERROR))
+                end
+
+                -- PubAck Properties
+                if #data >= 4 then
+                    packet.properties, offset = parseProperties(data, offset)
+                end
+            end
+        end
+
+        return packet
+    end
+
+    function makePubAckAndEtc(packet, version, cache)
+        local total             = 0
+
+        -- Packet Identifier
+        if not packet.packetID then
+            throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
+        end
+        total                   = total + makeLength(cache, packet.packetID)
+
+        if version == MQTTVersion.V5_0 and (packet.reasonCode or packet.properties) then
+            -- Reason Code
+            total               = total + makeByte(cache, packet.reasonCode or 0)
+            total               = total + makeProperties(cache, packet.properties)
+        end
+
+        return total
     end
 
     PROPERTY_PARSE              = {
@@ -631,7 +876,15 @@ PLoop(function(_ENV)
     }
 
     PROPERTY_MAKE               = {
-
+        [PROPERTY_SINGLE_BYTE ] = makeByte,
+        [PROPERTY_TWO_BYTE    ] = makeLength,
+        [PROPERTY_FOUR_BYTE   ] = makeFourBytes,
+        [PROPERTY_UTF8_STRING ] = makeUTF8String,
+        [PROPERTY_BINARY_DATA ] = makeBinaryData,
+        [PROPERTY_VAR_BYTE    ] = makeVarLength,
+        [PROPERTY_STRING_PAIR ] = function(cache, key, val)
+            return makeBinaryData(cache, key) + makeBinaryData(cache, val)
+        end,
     }
 
     PACKET_PARSE_MAP            = {
@@ -676,10 +929,10 @@ PLoop(function(_ENV)
             -- Keep Alive
             packet.keepAlive, offset = parseLength(data, offset)
 
-            -- CONNECT Properties
             if packet.version == MQTTVersion.V5_0 then -- MQTT 5.0 Only
                 packet.cleanStart = band(cflags, 2)   == 2
 
+                -- CONNECT Properties
                 packet.properties, offset = parseProperties(data, offset)
             else
                 packet.cleanSession = band(cflags, 2)   == 2
@@ -806,63 +1059,34 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.PUBACK]     = function(data, flag)
-            local packet        = PubAckPacket()
-
-            packet.packetID     = parseLength(data, 1)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
-            end
-
-            return packet
-        end,
-        [PacketType.PUBREC]     = function(data, flag)
-            local packet        = PubAckPacket()
-
-            packet.packetID     = parseLength(data, 1)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
-            end
-
-            return packet
-        end,
-        [PacketType.PUBREL]     = function(data, flag)
+        [PacketType.PUBACK]     = parsePubAckAndEtc,
+        [PacketType.PUBREC]     = parsePubAckAndEtc,
+        [PacketType.PUBREL]     = function(data, flag, version)
             if flag ~= 2 then
-                throw(MQTTException("The pubrel flag is malformed", ReasonCode.MALFORMED_PACKET))
+                throw(MQTTException("The PUBREL flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
 
-            local packet        = PubAckPacket()
-
-            packet.packetID     = parseLength(data, 1)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
-            end
-
-            return packet
+            return parsePubRelAndEtc(data, flag, version)
         end,
-        [PacketType.PUBCOMP]    = function(data, flag)
-            local packet        = PubAckPacket()
-
-            packet.packetID     = parseLength(data, 1)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
-            end
-
-            return packet
-        end,
-        [PacketType.SUBSCRIBE]  = function(data, flag)
+        [PacketType.PUBCOMP]    = parsePubRelAndEtc,
+        [PacketType.SUBSCRIBE]  = function(data, flag, version)
             if flag ~= 2 then
                 throw(MQTTException("The subscribe flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
 
             local packet        = SubscribePacket()
             local count         = #data
-            local offset, length
+            local offset        = 1
 
             packet.packetID, offset = parseLength(data, 1)
 
             if not packet.packetID then
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
+            end
+
+            if version == MQTTVersion.V5_0 then
+                -- SUBSCRIBE Properties
+                packet.properties, offset = parseProperties(data, offset)
             end
 
             -- Topic Filters
@@ -871,24 +1095,50 @@ PLoop(function(_ENV)
             local packetIdx     = 0
 
             while offset < count do
-                length, offset  = parseLength(data, offset)
-
-                if not length then
-                    throw(MQTTException("The topic filter length can't be found", ReasonCode.MALFORMED_PACKET))
-                end
-
                 local filter    = {}
-                filter.topicFilter = data:sub(offset, offset + length - 1)
-                if not (filter.topicFilter and #filter.topicFilter == length) then
-                    throw(MQTTException("The topic filter don't match the length", ReasonCode.MALFORMED_PACKET))
-                end
-                offset          = offset + length
 
-                filter.requestedQoS = strbyte(data, offset)
-                if not filter.requestedQoS or filter.requestedQoS > 2 then
-                    throw(MQTTException("The topic filter's requested QoS level is malformed", ReasonCode.MALFORMED_PACKET))
+                filter.topicFilter, offset = parseUTF8String(data, offset)
+                if not filter.topicFilter then
+                    throw(MQTTException("The topic filter data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
-                offset          = offset + 1
+
+                if version == MQTTVersion.V5_0 then
+                    local options   = parseByte(data, offset)
+                    if not options then
+                        throw(MQTTException("The subscription options is malformed", ReasonCode.MALFORMED_PACKET))
+                    end
+
+                    packet.options  = {}
+
+                    -- Maximum QoS
+                    packet.options.qos = band(options, 3)
+
+                    if packet.options.qos == 3 then
+                        throw(MQTTException("The maximum QoS level in subscription options is malformed", ReasonCode.PROTOCOL_ERROR))
+                    end
+
+                    -- No Local
+                    packet.options.nolocal = band(options, 4) == 4
+
+                    -- Retain as Published
+                    packet.options.rap     = band(options, 8) == 8
+
+                    -- Retain Handling
+                    packet.options.retain = rshift(band(options, 48), 4)
+                    if packet.options.retain == 3 then
+                        throw(MQTTException("The retain handling in subscription options is malformed", ReasonCode.PROTOCOL_ERROR))
+                    end
+
+                    -- reserved
+                    if rshift(options, 6) ~= 0 then
+                        throw(MQTTException("The reserved bytes in subscription options is malformed", ReasonCode.PROTOCOL_ERROR))
+                    end
+                else
+                    filter.requestedQoS, offset = parseByte(data, offset)
+                    if not filter.requestedQoS or filter.requestedQoS > 2 then
+                        throw(MQTTException("The topic filter's requested QoS level is malformed", ReasonCode.MALFORMED_PACKET))
+                    end
+                end
 
                 packetIdx       = packetIdx + 1
                 packet.topicFilters[packetIdx] = filter
@@ -900,14 +1150,19 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.SUBACK]     = function(data, flag)
+        [PacketType.SUBACK]     = function(data, flag, version)
             local packet        = SubAckPacket()
-            local offset, length
+            local offset        = 1
 
-            packet.packetID, offset = parseLength(data, 1)
+            packet.packetID, offset = parseLength(data, offset)
 
             if not packet.packetID then
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
+            end
+
+            if version == MQTTVersion.V5_0 then
+                -- SUBACK Properties
+                packet.properties, offset = parseProperties(data, offset)
             end
 
             -- Payload - SubAck Return Code
@@ -916,7 +1171,7 @@ PLoop(function(_ENV)
 
             local byte          = strbyte(data, offset)
             while byte do
-                if (byte >= 0 and byte <= 2) or byte == 0x80 then
+                if SubAckReturnCode(byte) then
                     rcidx       = rcidx + 1
                     packet.returnCodes[rcidx] = byte
                 else
@@ -927,21 +1182,25 @@ PLoop(function(_ENV)
                 byte            = strbyte(data, offset)
             end
 
-            return packetIdx
+            return packet
         end,
-        [PacketType.UNSUBSCRIBE]= function(data, flag)
+        [PacketType.UNSUBSCRIBE]= function(data, flag, version)
             if flag ~= 2 then
                 throw(MQTTException("The unsubscribe flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
 
             local packet        = SubscribePacket()
             local count         = #data
-            local offset, length
+            local offset        = 1
 
-            packet.packetID, offset = parseLength(data, 1)
+            packet.packetID, offset = parseLength(data, offset)
 
             if not packet.packetID then
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
+            end
+
+            if version == MQTTVersion.V5_0 then
+                packet.properties, offset = parseProperties(data, offset)
             end
 
             -- Topic Filters
@@ -950,18 +1209,11 @@ PLoop(function(_ENV)
             local packetIdx     = 0
 
             while offset < count do
-                length, offset  = parseLength(data, offset)
-
-                if not length then
-                    throw(MQTTException("The topic filter length can't be found", ReasonCode.MALFORMED_PACKET))
-                end
-
                 local filter    = {}
-                filter.topicFilter = data:sub(offset, offset + length - 1)
-                if not (filter.topicFilter and #filter.topicFilter == length) then
-                    throw(MQTTException("The topic filter don't match the length", ReasonCode.MALFORMED_PACKET))
+                filter.topicFilter, offset = parseUTF8String(data, offset)
+                if not filter.topicFilter then
+                    throw(MQTTException("The topic filter data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
-                offset          = offset + length
 
                 packetIdx       = packetIdx + 1
                 packet.topicFilters[packetIdx] = filter
@@ -973,40 +1225,103 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.UNSUBACK]   = function(data, flag)
-            local packet        = PubAckPacket()
+        [PacketType.UNSUBACK]   = function(data, flag, version)
+            local packet        = SubAckPacket()
+            local offset        = 1
 
-            packet.packetID     = parseLength(data, 1)
+            packet.packetID, offset = parseLength(data, offset)
             if not packet.packetID then
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
             end
 
+            if version == MQTTVersion.V5_0 then
+                packet.properties, offset = parseProperties(data, offset)
+
+                -- Payload - Return Code
+                packet.returnCodes  = {}
+                local rcidx         = 0
+
+                local byte          = strbyte(data, offset)
+                while byte do
+                    if UnsubAckReasonCode[byte] then
+                        rcidx       = rcidx + 1
+                        packet.returnCodes[rcidx] = byte
+                    else
+                        throw(MQTTException("The sub ack return code is malformed", ReasonCode.MALFORMED_PACKET))
+                    end
+
+                    offset          = offset + 1
+                    byte            = strbyte(data, offset)
+                end
+            end
+
             return packet
         end,
-        [PacketType.PINGREQ]    = function(data, flag)
+        [PacketType.PINGREQ]    = function(data, flag, version)
             return {}
         end,
-        [PacketType.PINGRESP]   = function(data, flag)
+        [PacketType.PINGRESP]   = function(data, flag, version)
             return {}
         end,
-        [PacketType.DISCONNECT] = function(data, flag)
-            return {}
+        [PacketType.DISCONNECT] = function(data, flag, version)
+            if version == MQTTVersion.V5_0 then
+                local offset    = 1
+                local packet    = AckPacket()
+
+                packet.reasonCode, offset = parseByte(data, offset)
+                if not packet.reasonCode then
+                    packet.reasonCode = ReasonCode.SUCCESS
+                elseif #data > offset then
+                    packet.properties, offset = parseProperties(data, offset)
+                end
+            else
+                return {}
+            end
         end,
+        [PacketType.AUTH]       = function(data, flag, version)
+            if version == MQTTVersion.V5_0 then
+                if flag ~= 0 then
+                    throw(MQTTException("The flag in auth packet is malformed", ReasonCode.MALFORMED_PACKET))
+                end
+
+                local offset    = 1
+                local packet    = AckPacket()
+
+                packet.reasonCode, offset = parseByte(data, offset)
+                if not packet.reasonCode then
+                    packet.reasonCode = ReasonCode.SUCCESS
+                else
+                    if not AuthReasonCode[packet.reasonCode] then
+                        throw(MQTTException("The authentication reason code is malformed", ReasonCode.MALFORMED_PACKET))
+                    end
+
+                    if #data > offset then
+                        packet.properties, offset = parseProperties(data, offset)
+                    end
+                end
+
+                return packet
+            else
+                throw(MQTTException("The auth packet type can't be used in MQTT v3.1.1", ReasonCode.PROTOCOL_ERROR))
+            end
+        end
     }
 
     PACKET_MAKE_MAP             = {
-        [PacketType.CONNECT]    = function(packet)
+        [PacketType.CONNECT]    = function(packet, version, cache)
+            local total         = 0
+
             -- Protocol Name
-            local chars         = { strchar(0), strchar(4), "M", "Q", "T", "T" }
+            total               = total + makeBinaryData(cache, "MQTT")
 
             -- Protocol Level
-            chars[7]            = packet.version or 4 -- default 3.1.1
+            total               = total + makeByte(cache, packet.version or MQTTVersion.V3_1_1)
 
             -- Connect Flags
             local cflags        = 0
             if packet.cleanSession or packet.cleanStart then cflags = bor(cflags, 2)   end
-            if packet.password     then cflags = bor(cflags, 64)  end
-            if packet.userName     then cflags = bor(cflags, 128) end
+            if packet.password then cflags = bor(cflags, 64)  end
+            if packet.userName then cflags = bor(cflags, 128) end
 
             if packet.will then
                 cflags          = bor(cflags, 4)
@@ -1014,214 +1329,261 @@ PLoop(function(_ENV)
                 if packet.will.retain then cflags = bor(cflags, 32)  end
             end
 
-            chars[8]            = strchar(cflags)
+            total               = total + makeByte(cache, cflags)
 
             -- Keep Alive
-            local msb, lsb      = makeLength(packet.keepAlive or 0)
-            chars[9]            = msb
-            chars[10]           = lsb
+            total               = total + makeLength(cache, packet.keepAlive or 0)
+
+            if packet.version == MQTTVersion.V5_0 then -- MQTT 5.0 Only
+                -- CONNECT Properties
+                total           = total + makeProperties(cache, packet.properties)
+            end
 
             --- Payload
-            local offset        = 11
-            local length
-
             -- Client Identifier
             if not packet.clientID then
                 throw(MQTTException("The client identifier data is required", ReasonCode.MALFORMED_PACKET))
             end
-            length              = #packet.clientID
-            msb, lsb            = makeLength(length)
-            chars[offset]       = msb
-            chars[offset + 1]   = lsb
-            chars[offset + 2]   = packet.clientID
-            offset              = offset + 3
+            total               = total + makeUTF8String(cache, packet.clientID)
 
             if packet.will then
-                -- Will Topic
-                length              = packet.will.topic and #packet.will.topic or 0
-                msb, lsb            = makeLength(length)
-                chars[offset]       = msb
-                chars[offset + 1]   = lsb
-                chars[offset + 2]   = packet.will.topic or ""
-                offset              = offset + 3
+                -- Will Property
+                if packet.version == MQTTVersion.V5_0 then
+                    total       = total + makeProperties(cache, packet.will.properties)
+                end
 
-                -- Will Message
-                length              = packet.will.message and #packet.will.message or 0
-                msb, lsb            = makeLength(length)
-                chars[offset]       = msb
-                chars[offset + 1]   = lsb
-                chars[offset + 2]   = packet.will.message or ""
-                offset              = offset + 3
+                -- Will Topic
+                total           = total + makeUTF8String(cache, packet.will.topic or "")
+
+                -- Will Message|Payload
+                if packet.version == MQTTVersion.V5_0 then
+                    total       = total + (packet.will.properties and packet.will.properties[PropertyIdentifier.PAYLOAD_FORMAT_INDICATOR] == 1 and makeUTF8String or makeBinaryData)(cache, packet.will.payload or "")
+                else
+                    total       = total + makeBinaryData(cache, packet.will.message)
+                end
             end
 
             -- User Name
             if packet.userName then
-                length              = packet.userName and #packet.userName or 0
-                msb, lsb            = makeLength(length)
-                chars[offset]       = msb
-                chars[offset + 1]   = lsb
-                chars[offset + 2]   = packet.userName or ""
-                offset              = offset + 3
+                total           = total + makeUTF8String(cache, packet.userName)
             end
 
             -- Password
             if packet.password then
-                length              = packet.password and #packet.password or 0
-                msb, lsb            = makeLength(length)
-                chars[offset]       = msb
-                chars[offset + 1]   = lsb
-                chars[offset + 2]   = packet.password or ""
-                offset              = offset + 3
+                total           = total + makeUTF8String(cache, packet.password)
             end
 
-            return tconcat(chars)
+            return total
         end,
-        [PacketType.CONNACK]    = function(packet)
-            return strchar(packet.sessionPresent and 1 or 0, packet.returnCode)
+        [PacketType.CONNACK]    = function(packet, version, cache)
+            local total         = 0
+
+            -- Connect Acknowledge Flags
+            total               = total + makeByte(cache, packet.sessionPresent or 0)
+
+            -- Reason Code
+            total               = total + makeByte(cache, packet.returnCode or ReasonCode.SUCCESS)
+
+            -- CONNACK Properties
+            if version == MQTTVersion.V5_0 then
+                total           = total + makeProperties(cache, packet.properties)
+            end
+
+            return total
         end,
-        [PacketType.PUBLISH]    = function(packet)
+        [PacketType.PUBLISH]    = function(packet, version, cache)
+            local total         = 0
+
             local flags         = 0
 
             if packet.dupFlag    then flags = bor(flags, 8) end
             if packet.qos        then flags = bor(flags, lshift(packet.qos, 1)) end
             if packet.retainFlag then flags = bor(flags, 1) end
 
-            local chars         = {}
-
             -- Topic name
-            if not packet.topicName then
-                throw(MQTTException("The topic name is required", ReasonCode.MALFORMED_PACKET))
-            end
-            local length        = #packet.topicName
-            chars[1], chars[2]  = makeLength(length)
-            chars[3]            = packet.topicName
-
-            local offset        = 4
+            total               = total + makeUTF8String(cache, packet.topicName or "")
 
             -- Packet Identifier
             if packet.qos > 0 then
                 if not packet.packetID then
                     throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
                 end
+                total           = total + makeLength(cache, packet.packetID)
+            end
 
-                local msb, lsb  = makeLength(packet.packetID)
-                chars[offset]   = msb
-                chars[offset+1] = lsb
-                offset          = offset + 2
+            -- Publish Properties
+            if version == MQTTVersion.V5_0 then
+                total           = total + makeProperties(cache, packet.properties)
             end
 
             -- Payload
-            chars[offset]       = packet.payload
+            tinsert(cache, packet.payload or "")
+            total               = total + packet.payload and #packet.payload or 0
 
-            return tconcat(chars), flags
+            return total, flags
         end,
-        [PacketType.PUBACK]     = function(packet)
+        [PacketType.PUBACK]     = makePubAckAndEtc,
+        [PacketType.PUBREC]     = makePubAckAndEtc,
+        [PacketType.PUBREL]     = function(packet, version, cache)
+            return makePubAckAndEtc(packet, version, cache), 2
+        end,
+        [PacketType.PUBCOMP]    = makePubAckAndEtc,
+        [PacketType.SUBSCRIBE]  = function(packet, version, cache)
+            local total         = 0
+
+            -- Packet Identifier
             if not packet.packetID then
                 throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
             end
+            total               = total + makeLength(cache, packet.packetID)
 
-            return strchar(makeLength(packet.packetID))
-        end,
-        [PacketType.PUBREC]     = function(packet)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
+            if version == MQTTVersion.V5_0 then
+                -- SUBSCRIBE Properties
+                total           = total + makeProperties(cache, packet.properties)
             end
 
-            return strchar(makeLength(packet.packetID))
-        end,
-        [PacketType.PUBREL]     = function(packet)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
+            -- Topic Filters
+            if type(packet.topicFilters) ~= "table" or #packet.topicFilters == 0 then
+                throw(MQTTException("The topic filters request at least one filter", ReasonCode.MALFORMED_PACKET))
             end
-
-            return strchar(makeLength(packet.packetID)), 2
-        end,
-        [PacketType.PUBCOMP]    = function(packet)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
-            end
-
-            return strchar(makeLength(packet.packetID))
-        end,
-        [PacketType.SUBSCRIBE]  = function(packet)
-            if not packet.packetID then
-                throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
-            elseif not (packet.topicFilters and #packet.topicFilters > 0) then
-                throw(MQTTException("The topic filters are required", ReasonCode.MALFORMED_PACKET))
-            end
-
-            local chars         = { makeLength(packet.packetID) }
-            local offset        = 3
-            local length, msb, lsb
 
             for _, filter in ipairs(packet.topicFilters) do
                 if not filter.topicFilter then
-                    throw(MQTTException("The topic filter is required", ReasonCode.MALFORMED_PACKET))
+                    throw(MQTTException("The topic filter data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
-                length          = #filter.topicFilter
-                msb, lsb        = makeLength(length)
-                chars[offset]   = msb
-                chars[offset+1] = lsb
-                chars[offset+2] = filter.topicFilter
-                chars[offset+3] = strchar(filter.requestedQoS or 0)
-                offset          = offset + 4
+
+                total           = total + makeUTF8String(cache, filter.topicFilter)
+
+                if version == MQTTVersion.V5_0 then
+                    local options   = 0
+
+                    if type(packet.options) == "table" then
+                        -- Maximum QoS
+                        options     = bor(options, packet.options.qos or 0)
+
+                        -- No Local
+                        if packet.options.nolocal then options = bor(options, 4) end
+
+                        -- Retain as Published
+                        if packet.options.rap then options = bor(options, 8) end
+
+                        -- Retain Handling
+                        options     = bor(options, lshift(packet.options.retain or 0, 4))
+                    end
+
+                    total       = total + makeByte(cache, options)
+                else
+                    -- Requested QoS Level
+                    total       = total + makeByte(cache, filter.requestedQoS or 0)
+                end
             end
 
-            return tconcat(chars), 2
+            return total, 2
         end,
-        [PacketType.SUBACK]     = function(packet)
+        [PacketType.SUBACK]     = function(packet, version, cache)
+            local total         = 0
+
             if not packet.packetID then
                 throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
-            elseif not (packet.returnCodes and #packet.returnCodes > 0) then
-                throw(MQTTException("The return codes are required", ReasonCode.MALFORMED_PACKET))
+            end
+            total               = total + makeLength(cache, packet.packetID)
+
+            if version == MQTTVersion.V5_0 then
+                -- SUBACK Properties
+                total           = total + makeProperties(cache, packet.properties)
             end
 
-            local chars         = { makeLength(packet.packetID) }
-            chars[3]            = strchar(unpack(packet.returnCodes))
+            -- Payload - SubAck Return Code
+            if packet.returnCodes then
+                for _, code in ipairs(packet.returnCodes) do
+                    total       = total + makeByte(cache, code)
+                end
+            end
 
-            return tconcat(chars)
+            return total
         end,
-        [PacketType.UNSUBSCRIBE]= function(packet)
+        [PacketType.UNSUBSCRIBE]= function(packet, version, cache)
+            local total         = 0
+
             if not packet.packetID then
                 throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
-            elseif not (packet.topicFilters and #packet.topicFilters > 0) then
-                throw(MQTTException("The topic filters are required", ReasonCode.MALFORMED_PACKET))
+            end
+            total               = total + makeLength(cache, packet.packetID)
+
+            if version == MQTTVersion.V5_0 then
+                total           = total + makeProperties(cache, packet.properties)
             end
 
-            local chars         = { makeLength(packet.packetID) }
-            local offset        = 3
-            local length, msb, lsb
+            -- Topic Filters
+            if type(packet.topicFilters) ~= "table" or #packet.topicFilters == 0 then
+                throw(MQTTException("The topic filters request at least one filter", ReasonCode.MALFORMED_PACKET))
+            end
 
             for _, filter in ipairs(packet.topicFilters) do
                 if not filter.topicFilter then
-                    throw(MQTTException("The topic filter is required", ReasonCode.MALFORMED_PACKET))
+                    throw(MQTTException("The topic filter data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
-                length          = #filter.topicFilter
-                msb, lsb        = makeLength(length)
-                chars[offset]   = msb
-                chars[offset+1] = lsb
-                chars[offset+2] = filter.topicFilter
-                offset          = offset + 3
+
+                total           = total + makeUTF8String(cache, filter.topicFilter)
             end
 
-            return tconcat(chars), 2
+            return total, 2
         end,
-        [PacketType.UNSUBACK]   = function(packet)
+        [PacketType.UNSUBACK]   = function(packet, version, cache)
+            local total         = 0
+
             if not packet.packetID then
                 throw(MQTTException("The packet identifier is required", ReasonCode.MALFORMED_PACKET))
             end
+            total               = total + makeLength(cache, packet.packetID)
 
-            return strchar(makeLength(packet.packetID))
+            if version == MQTTVersion.V5_0 then
+                total           = total + makeProperties(cache, packet.properties)
+
+                -- Payload - Return Code
+                if type(packet.returnCodes) == "table" then
+                    for _, code in ipairs(packet.returnCodes) do
+                        total   = total + makeByte(cache, code)
+                    end
+                end
+            end
+
+            return total
         end,
-        [PacketType.PINGREQ]    = function(packet)
-            return ""
+        [PacketType.PINGREQ]    = function(packet, version, cache)
+            return 0
         end,
-        [PacketType.PINGRESP]   = function(packet)
-            return ""
+        [PacketType.PINGRESP]   = function(packet, version, cache)
+            return 0
         end,
-        [PacketType.DISCONNECT] = function(packet)
-            return ""
+        [PacketType.DISCONNECT] = function(packet, version, cache)
+            if version == MQTTVersion.V5_0 then
+                local total     = 0
+
+                if packet.reasonCode or packet.properties then
+                    total       = total + makeByte(cache, packet.reasonCode or ReasonCode.SUCCESS)
+                    total       = total + makeProperties(cache, packet.properties)
+                end
+
+                return total
+            else
+                return 0
+            end
         end,
+        [PacketType.AUTH]       = function(packet, version, cache)
+            if version == MQTTVersion.V5_0 then
+                local total     = 0
+
+                if packet.reasonCode or packet.properties then
+                    total       = total + makeByte(cache, packet.reasonCode or ReasonCode.SUCCESS)
+                    total       = total + makeProperties(cache, packet.properties)
+                end
+
+                return total
+            else
+                throw(MQTTException("The auth packet type can't be used in MQTT v3.1.1", ReasonCode.PROTOCOL_ERROR))
+            end
+        end
     }
 
     ---------------------------------------------------
@@ -1232,10 +1594,12 @@ PLoop(function(_ENV)
             local map           = PACKET_MAKE_MAP[ptype]
             if not map then return nil end
 
-            local data, flags   = map(packet, version)
-            local control       = lshift(ptype, 4) + band(flags or 0, 0xf)
+            local cache         = { "" }
 
-            return strchar(control) .. makeVarLength(#data) .. data
+            local count, flags  = map(packet, version, cache)
+            cache[1]            = strchar(lshift(ptype, 4) + band(flags or 0, 0xf)) .. makeVarLength(count)
+
+            return tconcat(cache)
         end,
         parse                   =  function(socket, version)
             -- Parse the Fixed Header
