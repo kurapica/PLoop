@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/08/14                                               --
--- Version      :   1.6.11                                                   --
+-- Update Date  :   2020/08/18                                               --
+-- Version      :   1.6.12                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5357,6 +5357,7 @@ do
     local MOD_SEALED_ENUM       = newflags(true)    -- SEALED
     local MOD_FLAGS_ENUM        = newflags()        -- FLAGS
     local MOD_NOT_FLAGS         = newflags()        -- NOT FLAG
+    local MOD_SHARE_VALUE       = newflags()        -- ALLOW THE SAME VALUE
 
     -- FIELD INDEX
     local FLD_ENUM_MOD          = newindex(0)       -- FIELD MODIFIER
@@ -5429,12 +5430,18 @@ do
                     if not def then error(strformat("Usage: enum.AddElement(enumeration, key, value[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     if type(key) ~= "string" then error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key must be a string", stack) end
 
-                    for k, v in pairs, info[FLD_ENUM_ITEMS] do
-                        if k == key then
-                            if v == value then return end
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key already existed", stack)
-                        elseif v == value then
-                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value already existed", stack)
+                    if validateflags(MOD_SHARE_VALUE, info[FLD_ENUM_MOD]) then
+                        if info[FLD_ENUM_ITEMS][key] ~= nil and info[FLD_ENUM_ITEMS][key] ~= value then
+                            error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key " .. tostring(key) .. " already existed", stack)
+                        end
+                    else
+                        for k, v in pairs, info[FLD_ENUM_ITEMS] do
+                            if k == key then
+                                if v == value then return end
+                                error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The key " .. tostring(key) .. " already existed", stack)
+                            elseif v == value then
+                                error("Usage: enum.AddElement(enumeration, key, value[, stack]) - The value for key " .. tostring(key) .. " already existed", stack)
+                            end
                         end
                     end
 
@@ -5574,6 +5581,17 @@ do
                 return info and validateflags(MOD_SEALED_ENUM, info[FLD_ENUM_MOD]) or false
             end;
 
+            -- Whether the enumeration allow multiple enum name share the same value
+            -- @static
+            -- @member IsValueShareable
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  boolean                     true if the enumeration can share the same value
+            ["IsValueShareable"]= function(target)
+                local info      = getEnumTargetInfo(target)
+                return info and validateflags(MOD_SHARE_VALUE, info[FLD_ENUM_MOD]) or false
+            end;
+
             --- Whether the enumeration is sub-type of others, always false, needed by struct system
             -- @static
             -- @method  IsSubType
@@ -5662,6 +5680,26 @@ do
                     end
                 else
                     error("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The enumeration is not valid", stack)
+                end
+            end;
+
+            -- Set the enumeration whether allow multiple enum name share the same value
+            -- @static
+            -- @member SetValueShareable
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  boolean                     true if the enumeration can share the same value
+            ["SetValueShareable"]= function(target, stack)
+                local info, def = getEnumTargetInfo(target)
+                stack           = parsestack(stack) + 1
+
+                if info then
+                    if not validateflags(MOD_SHARE_VALUE, info[FLD_ENUM_MOD]) then
+                        if not def then error(strformat("Usage: enum.SetFlagsEnum(enumeration[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                        info[FLD_ENUM_MOD] = turnonflags(MOD_SHARE_VALUE, info[FLD_ENUM_MOD])
+                    end
+                else
+                    error("Usage: enum.SetValueShareable(enumeration[, stack]) - The enumeration is not valid", stack)
                 end
             end;
 
@@ -13112,6 +13150,21 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Set the enum as value shareable
+    --
+    -- @attribute   System.__Shareable__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__Shareable__",             prototype {
+        __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                enum.SetValueShareable(target, parsestack(stack) + 1)
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = attribute.Register, __newindex = readonly, __tostring = namespace.GetNamespaceName
+    })
+
+    -----------------------------------------------------------------------
     -- Modify the property's get process
     --
     -- @attribute   System.__Get__
@@ -16045,9 +16098,8 @@ do
         }
     end)
 
-    --- Represents the interface of using coroutine context, which will
-    -- cache all sharable datas for the coroutine, if the platform is
-    -- single os thread, the context will be the same one
+    --- Represents the interface of thread related context, which will
+    -- cache all sharable datas in the same os-thread
     __Sealed__()
     interface "System.IContext" (function(_ENV)
         export {

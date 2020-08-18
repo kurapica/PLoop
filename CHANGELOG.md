@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.18] - 2020-08-18 WangXH <kurapica125@outlook.com>
+### Added
+- The `System.__Shareable__` attribute is added for enumeration, so the enum type'll allow the same value for different enum names.
+
 
 ## [1.6.11] - 2020-08-14 WangXH <kurapica125@outlook.com>
 ### Changed
