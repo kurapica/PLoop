@@ -50,6 +50,7 @@ PLoop(function(_ENV)
     --- The MQTT Version
     __Sealed__()
     enum "MQTTVersion" {
+        V3_1                    = 3,
         V3_1_1                  = 4,
         V5_0                    = 5,
     }
@@ -898,8 +899,8 @@ PLoop(function(_ENV)
 
             --- Variable Header
             -- Protocol Name
-            protocol, offset    = parseBinaryData(data, offset)
-            if protocol ~= "MQTT" then
+            protocol, offset    = parseUTF8String(data, offset)
+            if protocol ~= "MQIsdp" and protocol ~= "MQTT" then
                 throw(MQTTException("The protocol is not supported", ReasonCode.PROTOCOL_ERROR))
             end
 
@@ -1316,7 +1317,11 @@ PLoop(function(_ENV)
             local total         = 0
 
             -- Protocol Name
-            total               = total + makeBinaryData(cache, "MQTT")
+            if version == MQTTVersion.V3_1 then
+                total           = total + makeUTF8String(cache, "MQIsdp")
+            else
+                total           = total + makeUTF8String(cache, "MQTT")
+            end
 
             -- Protocol Level
             total               = total + makeByte(cache, packet.version or MQTTVersion.V3_1_1)
