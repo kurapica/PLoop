@@ -154,6 +154,7 @@ PLoop(function(_ENV)
 
     --- the http session
     __Sealed__() class "System.Web.HttpSession" (function (_ENV)
+        inherit "System.Context.Session"
 
         export { System.Web.ISessionIDManager, System.Web.ISessionStorageProvider, System.Date, HttpSession, "rawset" }
 
@@ -166,45 +167,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- Gets a value storage table
-        __Indexer__()
-        __Final__() property "Items"            {
-            set = function(self, key, value)
-                if self.RawItems[key]  ~= value then
-                    self.ItemsChanged   = true
-                    self.RawItems[key]  = value
-                end
-            end,
-            get = function(self, key)
-                return self.RawItems[key]
-            end,
-        }
-
-        --- Gets the unique identifier for the session
-        __Final__() property "SessionID"        { field = 1, set = false }
-
-        --- The raw item table
-        __Final__() property "RawItems"         { field = 2, set = false, default = function(self) return {} end }
-
-        --- Gets or sets the date time, allowed the next request access the session
-        __Set__ (PropertySet.Clone)
-        __Final__() property "Timeout"          { field = 3, type = Date, handler = function(self) self.TimeoutChanged = true end }
-
-        --- Whether the time out is changed
-        __Final__() property "TimeoutChanged"   { field = 4, type = Boolean }
-
-        --- Whether the current session is canceled
-        __Final__() property "Canceled"         { field = 5, type = Boolean }
-
-        --- Gets a value indicating whether the session was created with the current request or its timeout is changed
-        __Final__() property "IsNewSession"     { field = 6, type = Boolean }
-
-        --- Whether the session items changed
-        __Final__() property "ItemsChanged"     { field = 7, type = Boolean }
-
         --- Whether the session is temporary
-        __Final__() property "IsTemporary"      {
-            field               = 8,
+        property "IsTemporary"  {
             type                = Boolean,
             default             = function(self)
                 return self.Items[HttpSession.TemporaryField] and true or false
@@ -221,7 +185,7 @@ PLoop(function(_ENV)
         }
 
         --- The http context
-        __Final__() property "Context"          { field = 0, type = HttpContext }
+        property "Context"      { type = HttpContext }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -237,34 +201,33 @@ PLoop(function(_ENV)
         --- Get or generate the session for a http context
         __Arguments__{ System.Web.HttpContext }
         function __ctor(self, context)
-            rawset(self, 0, context)
+            self.Context        = context
 
             -- Build Session
-            local manager   = context.Application[ISessionIDManager]       or ISessionIDManager.Default
-            local provider  = context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default
+            local manager       = context.Application[ISessionIDManager]       or ISessionIDManager.Default
+            local provider      = context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default
 
             if not manager  then throw("No SessionIDManager Installed")       end
             if not provider then throw("No SessionStorageProvider Installed") end
 
-            local id        = manager:GetSessionID(context)
-            local item      = id and provider:GetItems(id)
+            local id            = manager:GetSessionID(context)
+            local item          = id and provider:GetItems(id)
 
             if item then
-                rawset(self, 1, id)
-                rawset(self, 2, item)
+                self.SessionID  = id
+                self.RawItems   = item
 
                 if manager.KeepAlive and not self.IsTemporary then
                     self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
                 end
             else
-                id, item    = nil, {}
+                id, item        = nil, {}
                 while not (id and provider:TrySetItems(id, item)) do
-                    id      = manager:CreateSessionID(context)
+                    id          = manager:CreateSessionID(context)
                 end
 
-                rawset(self, 1, id)
-                rawset(self, 2, item)
-
+                self.SessionID  = id
+                self.RawItems   = item
                 self.IsNewSession = true
                 self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
             end

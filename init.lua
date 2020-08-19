@@ -11,6 +11,7 @@ require "PLoop.System.Date"
 require "PLoop.System.Logger"
 require "PLoop.System.Recycle"
 require "PLoop.System.Observer"
+require "PLoop.System.Context"
 
 -- System.Collections
 require "PLoop.System.Collections.List"
