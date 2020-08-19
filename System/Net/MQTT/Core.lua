@@ -909,7 +909,7 @@ PLoop(function(_ENV)
 
             -- Protocol Level
             packet.version, offset = parseByte(data, offset)
-            if packet.version ~= MQTTVersion.V3_1_1 and packet.version ~= MQTTVersion.V5_0 then
+            if not (packet.version and MQTTVersion(packet.version)) then
                 throw(MQTTException("The protocol version is not supported", ReasonCode.UNSUPPORTED_PROTOCOL_VERSION))
             end
 
