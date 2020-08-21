@@ -566,7 +566,7 @@ PLoop(function(_ENV)
 
         --- represents the serializable values
         __Sealed__()
-        struct "Serializable"       { function(val) return not isSerializable(val) and (onlyvalid or "the %s must be serializable") or nil end }
+        struct "Serializable"       { function(val, onlyvalid) return not isSerializable(val) and (onlyvalid or "the %s must be serializable") or nil end }
 
         --- represents the serializable types
         __Sealed__()
