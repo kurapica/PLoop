@@ -36,7 +36,7 @@ PLoop(function(_ENV)
 
             local ret, err      = self[0]:accept()
             if err == "timeout" then throw(TimeoutException()) end
-            if not ret then throw(err) end
+            if not ret then throw(SocketException(err)) end
 
             return Socket(ret)
         end
@@ -45,14 +45,14 @@ PLoop(function(_ENV)
         __Arguments__{ NEString/"*", NaturalNumber/0 }:Throwable()
         function Bind(self, address, port)
             local ret, err      = self[0]:bind(address, port)
-            if not ret then throw(err) end
+            if not ret then throw(SocketException(err)) end
         end
 
         --- Places a Socket in a listening state
         __Arguments__{ NaturalNumber/nil }:Throwable()
         function Listen(self, backlog)
             local ret, err      = self[0]:listen(backlog)
-            if not ret then throw(err) end
+            if not ret then throw(SocketException(err)) end
         end
 
         --- Establishes a connection to a remote host
@@ -62,7 +62,7 @@ PLoop(function(_ENV)
 
             local ret, err      = self[0]:connect(address, port)
             if err == "timeout" then throw(TimeoutException()) end
-            if not ret then throw(err) end
+            if not ret then throw(SocketException(err)) end
             return true
         end
 
@@ -78,7 +78,7 @@ PLoop(function(_ENV)
             local ret, err     = self[0]:receive(...)
             if not ret then
                 if err == "timeout" then throw(TimeoutException()) end
-                throw(err)
+                throw(SocketException(err))
             end
 
             return ret
@@ -104,7 +104,7 @@ PLoop(function(_ENV)
                 ret, err        = self[0]:shutdown("both")
             end
 
-            if not ret then throw(err) end
+            if not ret then throw(SocketException(err)) end
             return true
         end
 
@@ -114,7 +114,7 @@ PLoop(function(_ENV)
         __Arguments__{}
         function __ctor(self)
             local tcp, err      = socket.tcp()
-            if not tcp then throw(err) end
+            if not tcp then throw(SocketException(err)) end
 
             self[0]             = tcp
         end

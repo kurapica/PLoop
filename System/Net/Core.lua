@@ -32,6 +32,9 @@ PLoop(function(_ENV)
         __Sealed__()
         class "TimeoutException" { Exception, Message = { type = String, default = "The operation has timed-out" } }
 
+        __Sealed__()
+        class "SocketException" { Exception }
+
         --- The socket interface
         __Sealed__()
         interface "ISocket" (function(_ENV)
