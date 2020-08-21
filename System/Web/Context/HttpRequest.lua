@@ -22,10 +22,10 @@ PLoop(function(_ENV)
         __Abstract__() property "Headers"               { default = defcache }
 
         --- Specifies the length, in bytes, of content sent by the client
-        __Abstract__() property "ContentLength"         { default = function() return self.Headers["content-length"] end }
+        __Abstract__() property "ContentLength"         { default = function(self) return self.Headers["content-length"] end }
 
         --- Gets the MIME content type of the incoming request
-        __Abstract__() property "ContentType"           { default = function() return self.Headers["content-type"] end }
+        __Abstract__() property "ContentType"           { default = function(self) return self.Headers["content-type"] end }
 
         --- Gets a collection of cookies sent by the client
         __Abstract__() property "Cookies"               { default = defcache }
