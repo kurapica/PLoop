@@ -177,7 +177,7 @@ PLoop(function(_ENV)
             cache               = cache or isselfreferenced(type) and {}
             if cache then cache[type] = true end
             local ktype         = getdictkey(type)
-            if not (isstruct(ktype) and getstructcategory(ktype) == CUSTOM and isSerializableType(ktype)) then return false end
+            if not (isenum(ktype) or isstruct(ktype) and getstructcategory(ktype) == CUSTOM and isSerializableType(ktype)) then return false end
             local vtype         = getdictval(type)
             if not (vtype and isSerializableType(vtype, cache)) then return false end
             return true

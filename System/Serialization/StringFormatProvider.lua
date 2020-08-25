@@ -322,4 +322,23 @@ PLoop(function(_ENV)
             return loadsnippet("return " .. data)()
         end
     end)
+
+
+    __Static__()
+    function Toolset.tostring(data, type, pretty)
+        if type then
+            return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data, type)
+        else
+            return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data)
+        end
+    end
+
+    __Static__()
+    function Toolset.parsestring(string, type)
+        if type then
+            return Deserialize(StringFormatProvider(), string, type)
+        else
+            return Deserialize(StringFormatProvider(), string)
+        end
+    end
 end)

@@ -108,6 +108,12 @@ PLoop(function(_ENV)
             return true
         end
 
+        -- Sleep for several seconds
+        __Arguments__{ Number }
+        function Sleep(self, time)
+            socket.sleep(time)
+        end
+
         ---------------------------------------------------
         --                  constructor                  --
         ---------------------------------------------------

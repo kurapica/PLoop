@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.19] - 2020-08-18 WangXH <kurapica125@outlook.com>
+### Added
+- The `tostring`, `parsestring` api is added in the `System.Toolset`, they can be used to serialize/deserialize the data object.
+- The `System.Net` namespace is added.
+- The `System.Net.MQTT` namespace is added to support MQTT protocol.
+
+
 ## [1.6.18] - 2020-08-18 WangXH <kurapica125@outlook.com>
 ### Added
 - The `System.__Shareable__` attribute is added for enumeration, so the enum type'll allow the same value for different enum names.
