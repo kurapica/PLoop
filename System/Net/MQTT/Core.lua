@@ -326,19 +326,22 @@ PLoop(function(_ENV)
         { name = "qos",    type = Number },
     }
 
+    __Sealed__()
+    struct "TopicFilter" {
+        { name = "topicFilter",  type = String, require = true },
+        { name = "requestedQoS", type = Number },
+        { name = "options", type = TopicFilterOption },
+    }
+
+    __Sealed__()
+    struct "TopicFilters" { TopicFilter }
+
     --- The SUBSCRIBE Packet
     __Sealed__()
     struct "SubscribePacket" {
         { name = "packetID",     type = Number },
         { name = "properties",   type = PropertySet },
-        { name = "topicFilters", type = struct {
-                struct {
-                    { name = "topicFilter",  type = String },
-                    { name = "requestedQoS", type = Number },
-                    { name = "options", type = TopicFilterOption },
-                }
-            }
-        }
+        { name = "topicFilters", type = TopicFilters },
     }
 
     --- The SUBACK Packet

@@ -161,7 +161,6 @@ PLoop(function(_ENV)
             end
 
             self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet))
-            self.Socket:Close()
 
             self.State          = ClientState.DISCONNECTED
         end
@@ -177,6 +176,19 @@ PLoop(function(_ENV)
                 topicFilters    = {
                     { topicFilter = filter, requestedQoS = qos or QosLevel.EXACTLY_ONCE, options = options }
                 }
+            }
+
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet))
+        end
+
+        __Arguments__{ TopicFilters, PropertySet/nil }
+        function Subscribe(self, topicFilters, properties)
+            if self.State ~= ClientState.CONNECTED then return end
+
+            local packet        = {
+                packetID        = self:GetPacketId(),
+                properties      = properties,
+                topicFilters    = topicFilters,
             }
 
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet))
@@ -244,6 +256,20 @@ PLoop(function(_ENV)
                 packetID        = packetid,
                 properties      = properties,
                 returnCodes     = { returncode or SubAckReturnCode.MAX_QOS_2 }
+            }
+
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet))
+        end
+
+        --- Send the subscribe ack message to the client
+        __Arguments__{ Number, struct { SubAckReturnCode }, PropertySet/nil }
+        function SubAck(self, packetid, returncodes, properties)
+            if self.State ~= ClientState.CONNECTED then return end
+
+            local packet        = {
+                packetID        = packetid,
+                properties      = properties,
+                returnCodes     = returncodes,
             }
 
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet))
