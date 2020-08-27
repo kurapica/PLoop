@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/06/10                                               --
--- Update Date  :   2020/06/29                                               --
--- Version      :   1.3.2                                                    --
+-- Update Date  :   2020/08/27                                               --
+-- Version      :   1.3.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -180,6 +180,9 @@ PLoop(function(_ENV)
             local res           = self.Context.Response
             if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
             self.IsFinished     = true
+
+            -- As deafult handler
+            object              = type(object) == "table" and object or { object }
 
             local context       = self.Context
             if context.IsInnerRequest then --and context.RawContext.ProcessPhase == HEAD_PHASE then
