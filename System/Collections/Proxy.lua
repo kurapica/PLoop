@@ -240,6 +240,15 @@ PLoop(function(_ENV)
             return { [RAW_HOLDER] = dict }, true
         end
 
+        __Arguments__{ RawTable + IList, Any }
+        function __new(_, lstKey, value)
+            local dict  = {}
+            for _, key in (lstKey.GetIterator or ipairs)(lstKey) do
+                dict[key] = value
+            end
+            return { [RAW_HOLDER] = dict }, true
+        end
+
         __Arguments__{ IDictionary }
         function __new(_, dict)
             local dict  = {}
