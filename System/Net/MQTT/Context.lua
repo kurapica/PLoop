@@ -26,7 +26,6 @@ PLoop(function(_ENV)
         "DISCONNECTED",
     }
 
-    class "Server" {}
 
     --- Represents the MQTT client object used to connect to the server or the
     -- client that returned by the server's Accept method
@@ -37,7 +36,7 @@ PLoop(function(_ENV)
             MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode, MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier, MQTT.ReasonCode,
             MQTT.ConnectPacket, MQTT.ConnackPacket, MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket, MQTT.SubAckPacket, MQTT.MQTTException,
 
-            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Client, Context.Session,
+            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Client,
 
             isObjectType        = Class.IsObjectType,
             pcall               = pcall,
@@ -50,8 +49,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- The client session, server side only
-        property "Session"          { type = Session, default = function(self) return Session(self) end }
+        --- Whether the client is server side
+        property "IsServerSide"     { type = Boolean }
 
         --- The server address to be connected
         property "Address"          { type = String, default = "127.0.0.1" }
@@ -289,6 +288,19 @@ PLoop(function(_ENV)
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
         end
 
+        __Arguments__{ Number, struct { ReasonCode }, PropertySet/nil }
+        function UnsubAck(self, packetid, returncodes, properties)
+            if self.State ~= ClientState.CONNECTED then return end
+
+            local packet        = {
+                packetID        = packetid,
+                properties      = properties,
+                returnCodes     = returncodes
+            }
+
+            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
+        end
+
         --- Send ping to the client as the response to the pingreq packet
         function PingResp(self)
             if self.State ~= ClientState.CONNECTED then return end
@@ -473,10 +485,10 @@ PLoop(function(_ENV)
         --- Gets or sets a value that specifies the amount of time after which a synchronous Accept call will time out
         property "AcceptTimeout"    { type = Integer }
 
-        --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out
+        --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out to the accepted client
         property "ReceiveTimeout"   { type = Integer }
 
-        --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out
+        --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out to the accepted client
         property "SendTimeout"      { type = Integer }
 
         -----------------------------------------------------------------------
@@ -514,7 +526,7 @@ PLoop(function(_ENV)
 
             return Client {
                 Socket          = client,
-                Context         = context,
+                IsServerSide    = true,
                 ReceiveTimeout  = self.ReceiveTimeout,
                 SendTimeout     = self.SendTimeout,
             }
