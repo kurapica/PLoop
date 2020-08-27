@@ -181,7 +181,7 @@ PLoop(function(_ENV)
             if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
             self.IsFinished     = true
 
-            -- As deafult handler
+            -- Fix the data not existed
             object              = type(object) == "table" and object or { object }
 
             local context       = self.Context
