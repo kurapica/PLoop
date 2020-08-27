@@ -179,10 +179,9 @@ PLoop(function(_ENV)
         function ProcessInnerRequest(self, url, params, method, directly)
             local rawreq        = self.Request
 
-            self.ResponseDirectly = directly
-
             local ctx           = InnerContext(self.Application)
             ctx.RawContext      = self
+            ctx.ResponseDirectly= directly
 
             local request       = InnerRequest(ctx)
             request.RawRequest  = rawreq
