@@ -37,6 +37,7 @@ PLoop(function(_ENV)
         type                    = type,
         ipairs                  = ipairs,
         pairs                   = pairs,
+        tblconcat               = table.concat,
 
         throw                   = throw,
 
@@ -1329,7 +1330,7 @@ PLoop(function(_ENV)
             local total         = 0
 
             -- Protocol Name
-            if version == ProtocolLevel.V3_1 then
+            if version == ProtocolLevel.V3_1 or packet.version == ProtocolLevel.V3_1 then
                 total           = total + makeUTF8String(cache, "MQIsdp")
             else
                 total           = total + makeUTF8String(cache, "MQTT")

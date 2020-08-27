@@ -37,7 +37,7 @@ PLoop(function(_ENV)
             MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode, MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier, MQTT.ReasonCode,
             MQTT.ConnectPacket, MQTT.ConnackPacket, MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket, MQTT.SubAckPacket, MQTT.MQTTException,
 
-            TimeoutException, ClientState, Protocol.MQTT, Guid, Client, Context.Session,
+            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Client, Context.Session,
 
             isObjectType        = Class.IsObjectType,
             pcall               = pcall,
@@ -131,9 +131,9 @@ PLoop(function(_ENV)
                     packet.cleanSession = self.CleanSession
                 end
 
-                self.Socket:Send(MQTT.MakePacket(PacketType.CONNECT, packet))
+                self.Socket:Send(MQTT.MakePacket(PacketType.CONNECT, packet, self.ProtocolLevel))
 
-                local ptype, packet     = Protocol.MQTT.ParsePacket(self.Socket)
+                local ptype, packet     = Protocol.MQTT.ParsePacket(self.Socket, self.ProtocolLevel)
 
                 if ptype == PacketType.CONNACK then
                     self.State  = ClientState.CONNECTED
@@ -160,7 +160,7 @@ PLoop(function(_ENV)
                 packet.properties = properties
             end
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet, self.ProtocolLevel))
 
             self.State          = ClientState.DISCONNECTED
         end
@@ -178,7 +178,7 @@ PLoop(function(_ENV)
                 }
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
         __Arguments__{ TopicFilters, PropertySet/nil }
@@ -191,7 +191,7 @@ PLoop(function(_ENV)
                 topicFilters    = topicFilters,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
         --- Send Unsubscribe message to the server
@@ -207,14 +207,14 @@ PLoop(function(_ENV)
                 }
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
         end
 
         --- Send ping to the server
         function PingReq(self)
             if self.State ~= ClientState.CONNECTED then return end
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PINGREQ, {}))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PINGREQ, {}, self.ProtocolLevel))
         end
 
         -----------------------------------------------------------------------
@@ -237,7 +237,7 @@ PLoop(function(_ENV)
             packet.returnCode   = returnCode or ConnectReturnCode.ACCEPTED
             packet.properties   = properties
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.CONNACK, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.CONNACK, packet, self.ProtocolLevel))
 
             if packet.returnCode == ConnectReturnCode.ACCEPTED then
                 self.State      = ClientState.CONNECTED
@@ -258,7 +258,7 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or SubAckReturnCode.MAX_QOS_2 }
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
         end
 
         --- Send the subscribe ack message to the client
@@ -272,7 +272,7 @@ PLoop(function(_ENV)
                 returnCodes     = returncodes,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
         end
 
         --- Send the unsubscribe ack message to the client
@@ -286,14 +286,14 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or ReasonCode.SUCCESS }
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
         end
 
         --- Send ping to the client as the response to the pingreq packet
         function PingResp(self)
             if self.State ~= ClientState.CONNECTED then return end
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PINGRESP, {}))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PINGRESP, {}, self.ProtocolLevel))
         end
 
         -----------------------------------------------------------------------
@@ -305,9 +305,9 @@ PLoop(function(_ENV)
             local ok, ptype, packet
 
             if self.ReceiveTimeout and self.ReceiveTimeout > 0 then
-                ok, ptype, packet = pcall(MQTT.ParsePacket, self.Socket)
+                ok, ptype, packet = pcall(MQTT.ParsePacket, self.Socket, self.ProtocolLevel)
             else
-                ok, ptype, packet = true, MQTT.ParsePacket(self.Socket)
+                ok, ptype, packet = true, MQTT.ParsePacket(self.Socket, self.ProtocolLevel)
             end
             if not ok then
                 if not isObjectType(ptype, TimeoutException) then
@@ -319,6 +319,7 @@ PLoop(function(_ENV)
                     self.PublishPackets[packet.packetID] = nil
                 elseif ptype == PacketType.CONNECT then
                     -- Get the client ID into the session id
+                    self.ClientID = packet.clientID
                     self.Session.SessionID = packet.clientID
                 end
 
@@ -354,7 +355,7 @@ PLoop(function(_ENV)
                 self.PublishPackets[pid] = packet
             end
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
         end
 
         --- Re-publish the message to the server or client
@@ -366,7 +367,7 @@ PLoop(function(_ENV)
             if not packet then return end
 
             packet.dupFlag      = true
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Ack message to the server or client, should only be used on publish packet with QoS level 1
@@ -380,7 +381,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBACK, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBACK, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish receive message to the server or client, should only be used on public packet with QoS level 2
@@ -394,7 +395,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREC, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREC, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
@@ -408,7 +409,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREL, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREL, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
@@ -422,7 +423,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBCOMP, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.PUBCOMP, packet, self.ProtocolLevel))
         end
 
         --- Send the extended authentication exchange data between the client and the server
@@ -435,7 +436,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.AUTH, packet))
+            self.Socket:Send(MQTT.MakePacket(PacketType.AUTH, packet, self.ProtocolLevel))
         end
 
         --- Close the connection
@@ -450,7 +451,7 @@ PLoop(function(_ENV)
     __Sealed__() class "Server" (function(_ENV)
         extend "IAutoClose"
 
-        export { Context, Client, ClientState }
+        export { Context, Client, ClientState, Net.TimeoutException }
 
         local SocketType        = System.Net.Socket
 

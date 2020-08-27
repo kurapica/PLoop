@@ -24,13 +24,12 @@ PLoop(function(_ENV)
     __Sealed__() class "Socket" (function(_ENV)
         extend "ISocket"
 
-        export { "throw", Socket, SocketShutdown, TimeoutException }
+        export { "throw", Socket, SocketShutdown, Net.TimeoutException }
 
         ---------------------------------------------------
         --                    method                     --
         ---------------------------------------------------
         --- Creates a new Socket for a newly created connection
-        __Arguments__{}:Throwable()
         function Accept(self)
             self[0]:settimeout(self.AcceptTimeout)
 
@@ -42,21 +41,21 @@ PLoop(function(_ENV)
         end
 
         --- Associates a Socket with a local endpoint
-        __Arguments__{ NEString/"*", NaturalNumber/0 }:Throwable()
+        __Arguments__{ NEString/"*", NaturalNumber/0 }
         function Bind(self, address, port)
             local ret, err      = self[0]:bind(address, port)
             if not ret then throw(SocketException(err)) end
         end
 
         --- Places a Socket in a listening state
-        __Arguments__{ NaturalNumber/nil }:Throwable()
+        __Arguments__{ NaturalNumber/nil }
         function Listen(self, backlog)
             local ret, err      = self[0]:listen(backlog)
             if not ret then throw(SocketException(err)) end
         end
 
         --- Establishes a connection to a remote host
-        __Arguments__{ NEString, NaturalNumber }:Throwable()
+        __Arguments__{ NEString, NaturalNumber }
         function Connect(self, address, port)
             self[0]:settimeout(self.ConnectTimeout)
 
@@ -72,7 +71,6 @@ PLoop(function(_ENV)
         end
 
         --- Receives data from a bound Socket
-        __Arguments__.Rest():Throwable()
         function Receive(self, ...)
             self[0]:settimeout(self.ReceiveTimeout)
             local ret, err     = self[0]:receive(...)
@@ -92,7 +90,7 @@ PLoop(function(_ENV)
         end
 
         --- Disables sends and receives on a Socket
-        __Arguments__{ SocketShutdown }:Throwable()
+        __Arguments__{ SocketShutdown }
         function Shutdown(self, socketShutdown)
             local ret, err
 
