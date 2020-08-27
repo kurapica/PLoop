@@ -70,13 +70,17 @@ PLoop(function(_ENV)
 
             export {
                 ProcessHttpRequest = IHttpContextHandler.ProcessHttpRequest,
+                serialize          = Serialization.Serialize,
 
-                InnerContext,
+                InnerContext, JsonFormatProvider
             }
 
             -----------------------------------------------------------
             --                       property                        --
             -----------------------------------------------------------
+            --- Send the response directly
+            property "ResponseDirectly" { type = Boolean }
+
             --- This an inner request
             property "IsInnerRequest"   { set = false, default = true }
 
@@ -101,13 +105,33 @@ PLoop(function(_ENV)
                 ProcessHttpRequest(self)
 
                 -- So we don't need to serialize and deserialize the json data
-                local json = self[InnerContext]
-                if json then
-                    return self.Response.StatusCode, json[1], json[2]
-                elseif self.Response.RequestRedirected then
-                    return self.Response.StatusCode, self.Response.RedirectLocation
+                if self.ResponseDirectly then
+                    local res   = self.Response.RawResponse
+                    local json  = self[InnerContext]
+
+                    if json then
+                        res.StatusCode  = self.Response.StatusCode
+                        res.ContentType = "application/json"
+                        res:SendHeaders()
+
+                        serialize(JsonFormatProvider(), json, res.Write)
+                    elseif self.Response.RequestRedirected then
+                        res.StatusCode       = self.Response.StatusCode
+                        res.RedirectLocation = self.Response.RedirectLocation
+                        res:SendHeaders()
+                    else
+                        res.StatusCode  = self.Response.StatusCode
+                        res:SendHeaders()
+                    end
                 else
-                    return self.Response.StatusCode
+                    local json = self[InnerContext]
+                    if json then
+                        return self.Response.StatusCode, json[1], json[2]
+                    elseif self.Response.RequestRedirected then
+                        return self.Response.StatusCode, self.Response.RedirectLocation
+                    else
+                        return self.Response.StatusCode
+                    end
                 end
             end
         end)
@@ -150,9 +174,12 @@ PLoop(function(_ENV)
         -- @param   url             the inner request url
         -- @param   params          the request querystring or form table
         -- @param   method          the request method
-        __Arguments__{ NEString, Table/nil, HttpMethod/nil}
-        function ProcessInnerRequest(self, url, params, method)
+        -- @param   directly        whether send the result to the client directly
+        __Arguments__{ NEString, Table/nil, HttpMethod/nil, Boolean/nil}
+        function ProcessInnerRequest(self, url, params, method, directly)
             local rawreq        = self.Request
+
+            self.ResponseDirectly = directly
 
             local ctx           = InnerContext(self.Application)
             ctx.RawContext      = self
