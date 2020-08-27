@@ -16104,7 +16104,7 @@ do
         --                   static property                     --
         -----------------------------------------------------------
         --- The session used to save session items
-         __Abstract__()  property "Session" { type = Session, default = function(self) return Session(self) end }
+        __Abstract__()  property "Session" { type = Session, default = function(self) return Session(self) end }
     end)
 
     --- Represents the interface of thread related context, which will
