@@ -239,10 +239,10 @@ PLoop(function(_ENV)
                 return entity
             end
 
-            __Arguments__{ QueryData }
+            __Arguments__{ QueryData }:Throwable()
             function Get(self, query)
                 local key, main = getKey(self, query)
-                if not key then error("The primary key or unique keys are needed in the query data", 2) end
+                if not key then throw("The primary key or unique keys are needed in the query data", 2) end
                 local entity
 
                 if self.Cache then
