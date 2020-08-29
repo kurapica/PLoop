@@ -13,8 +13,10 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
+    namespace "System.Web"
+
     --- Represents the interface of session id manager
-    __Sealed__() interface "System.Web.ISessionIDManager" (function (_ENV)
+    __Sealed__() interface "ISessionIDManager" (function (_ENV)
         extend "IHttpContextHandler"
 
         export { ISessionIDManager }
@@ -85,8 +87,8 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the interface of sessio1n storage provider
-    __Sealed__() interface "System.Web.ISessionStorageProvider" (function (_ENV)
-        extend "IHttpContextHandler"
+    __Sealed__() interface "ISessionStorageProvider" (function (_ENV)
+        extend "IHttpContextHandler" "System.Context.ISessionStorageProvider"
 
         export { ISessionStorageProvider }
 
@@ -107,38 +109,8 @@ PLoop(function(_ENV)
         --                          inherit method                           --
         -----------------------------------------------------------------------
         function Process(self, context)
-            local session = context.RawSession
-            if session then
-                if session.Canceled then
-                    return self:RemoveItems(session.SessionID)
-                elseif session.IsNewSession or session.ItemsChanged then
-                    return self:SetItems(session.SessionID, session.RawItems, session.Timeout)
-                elseif session.TimeoutChanged then
-                    return self:ResetItems(session.SessionID, session.Timeout)
-                end
-            end
+            return self:SaveContextSession(context)
         end
-
-        -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- Whether the session ID existed in the storage.
-        __Abstract__() function Contains(self, id) end
-
-        --- Get session item
-        __Abstract__() function GetItems(self, id) end
-
-        --- Remove session item
-        __Abstract__() function RemoveItems(self, id) end
-
-        --- Try sets the item with an un-existed key, return true if success
-        __Abstract__() function TrySetItems(self, id, time, timeout) end
-
-        --- Update the item with current session data
-        __Abstract__() function SetItems(self, id, item, timeout) end
-
-        --- Update the item's timeout
-        __Abstract__() function ResetItems(self, id, timeout) end
 
         -----------------------------------------------------------------------
         --                           initializer                            --
@@ -153,7 +125,7 @@ PLoop(function(_ENV)
     end)
 
     --- the http session
-    __Sealed__() class "System.Web.HttpSession" (function (_ENV)
+    __Sealed__() class "HttpSession" (function (_ENV)
         inherit "System.Context.Session"
 
         export { System.Web.ISessionIDManager, System.Web.ISessionStorageProvider, System.Date, HttpSession, "rawset" }
@@ -175,11 +147,8 @@ PLoop(function(_ENV)
             end,
             handler             = function(self, val)
                 self.Items[HttpSession.TemporaryField] = val and 1 or nil
-                if val then
-                    self.Timeout= nil
-                else
-                    local man   = self.Context.Application[ISessionIDManager] or ISessionIDManager.Default
-                    self.Timeout= Date.Now:AddMinutes(man.TimeoutMinutes)
+                if not val then
+                    self:RefreshTimeout()
                 end
             end
         }
@@ -217,20 +186,24 @@ PLoop(function(_ENV)
                 self.SessionID  = id
                 self.RawItems   = item
 
-                if manager.KeepAlive and not self.IsTemporary then
+                if manager.KeepAlive then
                     self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
                 end
             else
-                id, item        = nil, {}
+                id, item        = nil, self.RawItems
                 while not (id and provider:TrySetItems(id, item)) do
                     id          = manager:CreateSessionID(context)
                 end
 
                 self.SessionID  = id
-                self.RawItems   = item
-                self.IsNewSession = true
-                self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
+                self.Timeout    = Date.Now:AddMinutes(manager.TimeoutMinutes)
             end
         end
     end)
+
+    --- A test session storage provider
+    __Sealed__() class "System.Web.TableSessionStorageProvider" {
+        System.Context.TableSessionStorageProvider,
+        System.Web.ISessionStorageProvider
+    }
 end)

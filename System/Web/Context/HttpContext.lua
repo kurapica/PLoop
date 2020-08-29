@@ -30,8 +30,7 @@ PLoop(function(_ENV)
             combinepath         = IO.Path.CombinePath,
             HttpMethod_GET      = HttpMethod.GET,
 
-            Date, HttpSession, ISessionIDManager, ISessionStorageProvider,
-            HttpContext, HttpRequest, HttpResponse, HttpMethod
+            Date, HttpSession, HttpContext, HttpRequest, HttpResponse, HttpMethod
         }
 
         -----------------------------------------------------------

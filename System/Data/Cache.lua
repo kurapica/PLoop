@@ -207,4 +207,49 @@ PLoop(function(_ENV)
         --- Return an iterator to get elements with scores from the given start and count by order(from largest to smallest)
         __Abstract__() __Iterator__() function ZSPairsDesc(self, zset, start, count, type) end
     end)
+
+    __Sealed__() interface "System.Context.ICacheSessionStorageProvider" (function (_ENV)
+        extend "System.Context.ISessionStorageProvider"
+
+        export { with = with }
+
+        -----------------------------------------------------------------------
+        --                          abstract method                          --
+        -----------------------------------------------------------------------
+        --- Used to return a new cache object
+        __Abstract__() function GetCache(self) end
+
+        -----------------------------------------------------------------------
+        --                          inherit method                           --
+        -----------------------------------------------------------------------
+        --- Whether the session ID existed in the storage.
+        function Contains(self, id)
+            return (with(self:GetCache())(function(cache) return cache:Exist(id) end)) or false
+        end
+
+        --- Get session item
+        function GetItems(self, id)
+            return with(self:GetCache())(function(cache) return cache:Get(id) end)
+        end
+
+        --- Remove session item
+        function RemoveItems(self, id)
+            return with(self:GetCache())(function(cache) return cache:Delete(id) end)
+        end
+
+        --- Update the item with current session data
+        function SetItems(self, id, item, timeout)
+           return  with(self:GetCache())(function(cache) return cache:Set(id, item, timeout) end)
+        end
+
+        --- Update the item's timeout
+        function ResetItems(self, id, timeout)
+            return with(self:GetCache())(function(cache) return cache:SetExpireTime(id, timeout) end)
+        end
+
+        --- Try sets the item with an un-existed key, return true if success
+        function TrySetItems(self, id, item, timeout)
+            return with(self:GetCache())(function(cache) return cache:TrySet(id, item, timeout) end)
+        end
+    end)
 end)

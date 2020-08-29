@@ -41,10 +41,6 @@ require "PLoop.System.Web.Resource.LuaServerPageLoader"
 -- Context Worker
 require "PLoop.System.Web.ContextHandler.Route"
 
--- SessionStorageProvider
-require "PLoop.System.Web.ContextHandler.ICacheSessionStorageProvider"
-require "PLoop.System.Web.ContextHandler.TableSessionStorageProvider"
-
 -- SessionIDManager
 require "PLoop.System.Web.ContextHandler.GuidSessionIDManager"
 
