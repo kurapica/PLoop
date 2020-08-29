@@ -51,7 +51,7 @@ PLoop(function(_ENV)
     __Sealed__() class "DataEntityCache" (function(_ENV, clsEntity, clsCache, defaultTimeout)
         extend "IDataCache"
 
-        export { "tostring", "ipairs", "tonumber", "select", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet }
+        export { "tostring", "ipairs", "pairs", "tonumber", "select", "error", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet, clone = Toolset.clone }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsEntity):match("^(.*)%.[%P_]+$"))
         local CACHE_KEY         = PLOOP_CACHE_KEY_PREFIX .. clsEntity .. ":"
@@ -71,17 +71,55 @@ PLoop(function(_ENV)
         end
 
         local primaryflds       = List()
+        local primarymap        = {}
 
         for _, index in ipairs(set.indexes) do
             if index.primary then
                 for i, fld in ipairs(index.fields) do
-                    primaryflds[i] = { name = props[fld], type = Class.GetFeature(clsEntity, props[fld]):GetType() or Any, require = true }
+                    fld         = props[fld]
+                    primarymap[fld] = i
+                    primaryflds[i]  = { name = fld, type = Class.GetFeature(clsEntity, fld):GetType() or Any, require = true }
                 end
                 break
             end
         end
 
         if #primaryflds == 0 then error("The " .. clsEntity .. " has no data table primary index settings") end
+
+        -- Check the unique indexes
+        local uniques
+        local uniqueflds
+
+        for idx, index in ipairs(set.indexes) do
+            if index.unique then
+                local u         = {}
+                local p         = 0
+
+                for i, fld in ipairs(index.fields) do
+                    fld         = props[fld]
+                    u[i]        = fld
+
+                    if primarymap[fld] then
+                        p       = p + 1
+                    end
+                end
+
+                -- Skip the unique index that contains full primary fields
+                if p ~= #primaryflds then
+                    uniques     = uniques or {}
+                    uniques[idx]= u
+
+                    uniqueflds  = uniqueflds or primaryflds:Map(function(item) item = clone(item) item.require = nil return item end):ToList()
+
+                    for i, fld in ipairs(u) do
+                        if not primarymap[fld] and not uniqueflds[fld] then
+                            uniqueflds[fld] = true
+                            uniqueflds:Insert{ name = fld, type = Class.GetFeature(clsEntity, fld):GetType() or Any }
+                        end
+                    end
+                end
+            end
+        end
 
         local KeyCollection     = set.collection
         props                   = nil
@@ -121,9 +159,48 @@ PLoop(function(_ENV)
         local entityKey         = '"' .. CACHE_KEY .. '" .. ' .. List(#primaryflds, "i=>'tostring(arg' .. i .. ')'"):Join(" .. '^' .. ")
         local queryMap          = List(#primaryflds, function(i) return primaryflds[i].name .. " = " .. "arg" .. i end):Join(", ")
         local argMap            = List(#primaryflds, function(i) return "arg" .. i end):Join(", ") .. " = " .. List(#primaryflds, function(i) return "query." .. primaryflds[i].name end):Join(", ")
+        local indexKeys         = List{ '"' .. CACHE_KEY .. '" .. ' .. List(#primaryflds, function(i) return "tostring(entity." .. primaryflds[i].name .. ")" end):Join(" .. '^' .. ") }
+        local indexCond         = List{ "if " .. List(#primaryflds, function(i) return "entity." .. primaryflds[i].name .. " ~= nil" end):Join(" and ") .. " then " }
+
+        if uniques then
+            for idx, unique in pairs(uniques) do
+                indexKeys:Insert( '"' .. CACHE_KEY .. idx  .. ':" .. ' .. List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") )
+                indexCond:Insert("if " .. List(#unique, function(i) return "entity." .. unique[i] .. " ~= nil" end):Join(" and ") .. " then ")
+            end
+        end
 
         local autoGenCode       = [[
             local primaryflds, clsEntity, clsContext, clsCache, QueryData  = ...
+
+            local function saveEntity(self, cache, entity)
+                cache:Set(]] .. indexKeys[1] .. [[, entity, self.Timeout)
+                ]] .. (
+                    uniques and (
+                        "local key =" .. List(#primaryflds, function(i) return "tostring(entity." .. primaryflds[i].name .. ")" end):Join(" .. '^' .. ") .. "\n"..
+                        List(#indexKeys - 1, function(i) return indexCond[i + 1] .. "cache:Set(" .. indexKeys[i + 1] .. ", key, self.Timeout) end" end):Join("\n")
+                    ) or ""
+                ) .. [[
+            end
+
+            local function refreshTimeout(self, cache, entity)
+                ]] .. List(#indexKeys, function(i) return indexCond[i] .. "cache:SetExpireTime(" .. indexKeys[i] .. ", self.Timeout) end" end):Join("\n") .. [[
+            end
+
+            local function removeEntity(self, cache, entity)
+                ]] .. List(#indexKeys, function(i) return indexCond[i] .. "cache:Delete(" .. indexKeys[i] .. ") end" end):Join("\n") .. [[
+            end
+
+            local function getKey(self, entity)
+                ]] .. indexCond[1] .. [[return ]] .. indexKeys[1] .. [[, true end
+                ]] .. (
+                    uniques and (
+                        XDictionary(uniques).Keys:Map(function(idx)
+                            local unique = uniques[idx]
+                            return "if " .. List(#unique, function(i) return "entity." .. unique[i] .. " ~= nil" end):Join(" and ") .. " then return " .. '"' .. CACHE_KEY .. idx  .. ':" .. ' .. List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") .. ", false end" end)
+                        :Join("\n")
+                    ) or ""
+                ) .. [[
+            end
 
             --- Get the entity object with the index key
             __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
@@ -137,10 +214,10 @@ PLoop(function(_ENV)
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query{]] .. queryMap .. [[ }:First()
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            saveEntity(self, self.Cache, entity)
                         end
                     elseif self.Timeout then
-                        self.Cache:SetExpireTime(key, self.Timeout)
+                        refreshTimeout(self, self.Cache, entity)
                     end
                 else
                     with(clsCache())(function(cache)
@@ -151,10 +228,10 @@ PLoop(function(_ENV)
                             end)
 
                             if entity then
-                                cache:Set(key, entity, self.Timeout)
+                                saveEntity(self, cache, entity)
                             end
                         elseif self.Timeout then
-                            cache:SetExpireTime(key, self.Timeout)
+                            refreshTimeout(self, cache, entity)
                         end
                     end)
                 end
@@ -164,34 +241,44 @@ PLoop(function(_ENV)
 
             __Arguments__{ QueryData }
             function Get(self, query)
-                local ]] .. argMap .. [[
-                local key       = ]] .. entityKey .. [[
+                local key, main = getKey(self, query)
+                if not key then error("The primary key or unique keys are needed in the query data", 2) end
                 local entity
 
                 if self.Cache then
-                    entity      = self.Cache:Get(key, clsEntity)
+                    if not main then
+                        local v = self.Cache:Get(key)
+                        key     = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
+                    end
+
+                    entity      = key and self.Cache:Get(key, clsEntity)
 
                     if entity == nil then
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(query):First()
                         if entity then
-                            self.Cache:Set(key, entity, self.Timeout)
+                            saveEntity(self, self.Cache, entity)
                         end
                     elseif self.Timeout then
-                        self.Cache:SetExpireTime(key, self.Timeout)
+                        refreshTimeout(self, self.Cache, entity)
                     end
                 else
                     with(clsCache())(function(cache)
-                        entity  = cache:Get(key, clsEntity)
+                        if not main then
+                            local v = cache:Get(key)
+                            key = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
+                        end
+
+                        entity  = key and cache:Get(key, clsEntity)
                         if entity == nil then
                             with(clsContext())(function(ctx)
                                 entity = ctx.]] .. KeyCollection .. [[:Query(query):First()
                             end)
 
                             if entity then
-                                cache:Set(key, entity, self.Timeout)
+                                saveEntity(self, cache, entity)
                             end
                         elseif self.Timeout then
-                            cache:SetExpireTime(key, self.Timeout)
+                            refreshTimeout(self, cache, entity)
                         end
                     end)
                 end
@@ -201,30 +288,24 @@ PLoop(function(_ENV)
 
             --- Set the entity to the cache
             __Arguments__{ clsEntity }
-            function Save(self, query)
-                local ]] .. argMap .. [[
-                local key       = ]] .. entityKey .. [[
-
+            function Save(self, entity)
                 if self.Cache then
-                    self.Cache:Set(key, query, self.Timeout)
+                    saveEntity(self, self.Cache, entity)
                 else
                     with(clsCache())(function(cache)
-                        cache:Set(key, query, self.Timeout)
+                        saveEntity(self, cache, entity)
                     end)
                 end
             end
 
             --- Delete the entity from the cache
             __Arguments__{ clsEntity }
-            function Delete(self, query)
-                local ]] .. argMap .. [[
-                local key       = ]] .. entityKey .. [[
-
+            function Delete(self, entity)
                 if self.Cache then
-                    self.Cache:Delete(key)
+                    removeEntity(self, self.Cache, entity)
                 else
                     with(clsCache())(function(cache)
-                        cache:Delete(key)
+                        removeEntity(self, cache, entity)
                     end)
                 end
             end
@@ -241,23 +322,9 @@ PLoop(function(_ENV)
                     end)
                 end
             end
-
-            __Arguments__{ QueryData }
-            function Delete(self, query)
-                local ]] .. argMap .. [[
-                local key       = ]] .. entityKey .. [[
-
-                if self.Cache then
-                    self.Cache:Delete(key)
-                else
-                    with(clsCache())(function(cache)
-                        cache:Delete(key)
-                    end)
-                end
-            end
         ]]
 
-        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) })
+        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack((uniqueflds or primaryflds):Map(Toolset.clone):ToList()) })
     end)
 
     --- The bindings between the data object and the data cache
@@ -558,45 +625,20 @@ PLoop(function(_ENV)
                 for _, index in ipairs(set.indexes) do
                     if index.primary then
                         for i, fld in ipairs(index.fields) do
-                            fld = props[fld]
-                            primary[fld]    = i
-                            primary[i]      = fld
+                            fld         = props[fld]
+                            primary[fld]= i
+                            primary[i]  = fld
                         end
                         break
                     end
                 end
 
+
                 if #primary == 0 then error("The " .. target .. " has no data table primary index settings", stack + 1) end
 
                 -- Check depends
                 if settings.depends then
-                    for depcls, map in pairs(settings.depends) do
-                        local count = 0
-                        local convertor = {}
-
-                        if getRootNamespace(depcls) ~= root then
-                            error(("The %s isn't in the same data context of %s"):format(tostring(depcls), tostring(target)), stack + 1)
-                        end
-
-                        for dprop, sprop in pairs(map) do
-                            if not isDataField(depcls, dprop) then
-                                error(("The %s isn't a data field property of the %s"):format(dprop, tostring(depcls)), stack + 1)
-                            end
-                            if not primary[sprop] then
-                                error(("The %s isn't a primary data field property of the %s"):format(sprop, tostring(target)), stack + 1)
-                            end
-
-                            convertor[primary[sprop]] = dprop
-
-                            count = count + 1
-                        end
-
-                        if count ~= #primary then
-                            error(("The mapping of the %s don't match all parimay field of the %s"):format(tostring(depcls), tostring(target)), stack + 1)
-                        end
-
-                        settings.depends[depcls] = convertor
-                    end
+                    error("The " .. target .. " is a data entity, can't have depends", stack + 1)
                 end
 
                 settings.primary= { unpack(primary) }
@@ -612,7 +654,7 @@ PLoop(function(_ENV)
                 -- Check depends
                 if settings.depends then
                     for depcls, map in pairs(settings.depends) do
-                        local count = 0
+                        local count     = 0
                         local convertor = {}
 
                         if getRootNamespace(depcls) ~= root then
@@ -706,26 +748,39 @@ PLoop(function(_ENV)
         local function onEntitySaved(self, entities)
             local map           = {}
 
+            local objCache      = {}
+
             for entity, status in pairs(entities) do
                 local cls                   = GetObjectClass(entity)
                 local depends               = _EntityDepends[cls]
 
                 if depends then
                     for target, convertor in pairs(depends) do
-                        local count         = #convertor
-                        local cache         = map[convertor]
-                        if not cache then
-                            cache           = {}
-                            map[convertor]  = cache
+                        if target == cls then
+                            local cachecls  = convertor[0]
+                            local object    = objCache[cachecls] or cachecls()
+                            objCache[cachecls] = object
+
+                            -- Clear self with primary and unique index, so we must pass the entity
+                            object:Delete(entity)
+                        else
+                            local count         = #convertor
+                            local cache         = map[convertor]
+                            if not cache then
+                                cache           = {}
+                                map[convertor]  = cache
+                            end
+                            _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
                         end
-                        _SaveEntityPrimary[count](cache, _PrimaryMap[count](convertor, entity))
                     end
                 end
             end
 
             for convertor, cache in pairs(map) do
                 local count     = #convertor
-                local object    = convertor[0]()
+                local cls       = convertor[0]
+                local object    = objCache[cls] or cls()
+                objCache[cls]   = object
 
                 for i = 1, #cache, count do
                     object:Delete(unpack(cache, i, i + count - 1))
