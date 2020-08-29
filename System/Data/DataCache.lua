@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/11/08                                               --
--- Update Date  :   2020/07/06                                               --
--- Version      :   1.3.4                                                    --
+-- Update Date  :   2020/08/29                                               --
+-- Version      :   1.4.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)

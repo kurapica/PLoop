@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.20] = 2020-08-29 WangXH <kurapica125@outlook.com>
+### Changed
+- The `__DataCacheEnable__` will also works for the data entity's unique indeses, works like `UserDataContext.UserCache:Get{ org = 1, seqno = 5 }`.
+
 ## [1.6.19] - 2020-08-18 WangXH <kurapica125@outlook.com>
 ### Added
 - The `tostring`, `parsestring` api is added in the `System.Toolset`, they can be used to serialize/deserialize the data object.
