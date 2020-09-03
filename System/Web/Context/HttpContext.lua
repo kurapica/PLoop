@@ -87,12 +87,7 @@ PLoop(function(_ENV)
             property "RawContext"       { type = HttpContext }
 
             --- Proxy session
-            __Final__()
             property "Session"          { set = false, default = function(self) return self.RawContext.Session end }
-
-            --- The raw session if existed
-            __Final__()
-            property "RawSession"       { set = false, default = function(self) return self.RawContext.RawSession end }
 
             -----------------------------------------------------------
             --                        method                         --
@@ -144,29 +139,26 @@ PLoop(function(_ENV)
         --- The http response
         __Abstract__()  property "Response" { type = HttpResponse }
 
+        --- The http session type
+        __Abstract__()  property "SessionType"  { type = -HttpSession, default = HttpSession }
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         --- The http session
-        __Final__()     property "Session"      { set = false, field = "__Session", default = function(self) return self.SessionType(self) end }
-
-        --- The raw session if existed
-        __Final__()     property "RawSession"   { set = false, field = "__Session" }
+        property "Session"      { set = false, default = function(self) return self.SessionType(self) end }
 
         --- The current process phase
-        __Final__()     property "ProcessPhase" { type = IHttpContextHandler.ProcessPhase }
+        property "ProcessPhase" { type = IHttpContextHandler.ProcessPhase }
 
         --- The current web application
-        __Final__()     property "Application"  { type = Application }
-
-        --- The http session type
-        __Abstract__()  property "SessionType"  { type = -HttpSession, default = HttpSession }
+        property "Application"  { type = Application }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Process the http request
-        Process = ProcessHttpRequest
+        Process                 = ProcessHttpRequest
 
         --- Process an inner request
         -- @format  (url[, method[, params]])

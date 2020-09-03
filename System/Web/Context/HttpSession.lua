@@ -46,13 +46,14 @@ PLoop(function(_ENV)
         --                          inherit method                           --
         -----------------------------------------------------------------------
         function Process(self, context)
-            local session = context.RawSession
-            if session then
-                if session.Canceled then
-                    return self:RemoveSessionID(context)
-                elseif session.IsNewSession or session.TimeoutChanged then
-                    return self:SaveSessionID(context, session)
-                end
+            if context.IsInnerRequest then return end
+
+            local session = context.Session
+
+            if session.Canceled then
+                return self:RemoveSessionID(context)
+            elseif session.IsNewSession or session.TimeoutChanged then
+                return self:SaveSessionID(context, session)
             end
         end
 
@@ -109,6 +110,7 @@ PLoop(function(_ENV)
         --                          inherit method                           --
         -----------------------------------------------------------------------
         function Process(self, context)
+            if context.IsInnerRequest then return end
             return context.Session:SaveSessionItems()
         end
 
