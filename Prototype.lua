@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/08/29                                               --
--- Version      :   1.6.20                                                   --
+-- Update Date  :   2020/09/03                                               --
+-- Version      :   1.6.21                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -14244,7 +14244,7 @@ do
 
             token               = 0
 
-            if not ismulti and CTOR_METHOD[name] and Class.Validate(owner) then
+            if not ismulti and CTOR_METHOD[name] and (Class.Validate(owner) or Interface.Validate(owner)) then
                 isctor          = true
                 token           = turnonflags(FLG_TYP_CONTOR, token)
             end
@@ -16067,10 +16067,6 @@ do
             end
         end or fakefunc
 
-        --- Represents the session to be used in the Context
-        -- Since it require Date class, the real class will be decalred later
-        Session                 = class "Session" {}
-
         -----------------------------------------------------------
         --                     static method                     --
         -----------------------------------------------------------
@@ -16099,12 +16095,6 @@ do
         -----------------------------------------------------------
         --- Process the operations under the context
         __Abstract__() function Process(self) end
-
-        -----------------------------------------------------------
-        --                   static property                     --
-        -----------------------------------------------------------
-        --- The session used to save session items
-        __Abstract__()  property "Session" { type = Session, default = function(self) return Session(self) end }
     end)
 
     --- Represents the interface of thread related context, which will

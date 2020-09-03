@@ -109,7 +109,7 @@ PLoop(function(_ENV)
         --                          inherit method                           --
         -----------------------------------------------------------------------
         function Process(self, context)
-            return self:SaveContextSession(context)
+            return context.Session:SaveSessionItems()
         end
 
         -----------------------------------------------------------------------
@@ -156,6 +156,9 @@ PLoop(function(_ENV)
         --- The http context
         property "Context"      { type = HttpContext }
 
+        --- The Session Storage Provider
+        property "SessionStorageProvider" { set = false, default = function(self) return self.Context.Application[ISessionStorageProvider] or ISessionStorageProvider.Default end }
+
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
@@ -187,15 +190,17 @@ PLoop(function(_ENV)
                 self.RawItems   = item
 
                 if manager.KeepAlive then
-                    self.Timeout = Date.Now:AddMinutes(manager.TimeoutMinutes)
+                    self.Timeout= Date.Now:AddMinutes(manager.TimeoutMinutes)
                 end
             else
-                id, item        = nil, self.RawItems
+                id, item        = nil, {}
                 while not (id and provider:TrySetItems(id, item)) do
                     id          = manager:CreateSessionID(context)
                 end
 
                 self.SessionID  = id
+                self.RawItems   = item
+                self.IsNewSession = true
                 self.Timeout    = Date.Now:AddMinutes(manager.TimeoutMinutes)
             end
         end

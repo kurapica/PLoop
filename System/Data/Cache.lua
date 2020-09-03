@@ -213,6 +213,13 @@ PLoop(function(_ENV)
 
         export { with = with }
 
+
+        -----------------------------------------------------------------------
+        --                         abstract property                         --
+        -----------------------------------------------------------------------
+        --- The prefix that appends to the session id
+        __Abstract__() property "Prefix"    { type = String }
+
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
@@ -224,31 +231,37 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Whether the session ID existed in the storage.
         function Contains(self, id)
+            id                 = self.Prefix and (self.Prefix .. id) or id
             return (with(self:GetCache())(function(cache) return cache:Exist(id) end)) or false
         end
 
         --- Get session item
         function GetItems(self, id)
+            id                 = self.Prefix and (self.Prefix .. id) or id
             return with(self:GetCache())(function(cache) return cache:Get(id) end)
         end
 
         --- Remove session item
         function RemoveItems(self, id)
+            id                 = self.Prefix and (self.Prefix .. id) or id
             return with(self:GetCache())(function(cache) return cache:Delete(id) end)
         end
 
         --- Update the item with current session data
         function SetItems(self, id, item, timeout)
+            id                 = self.Prefix and (self.Prefix .. id) or id
            return  with(self:GetCache())(function(cache) return cache:Set(id, item, timeout) end)
         end
 
         --- Update the item's timeout
         function ResetItems(self, id, timeout)
+            id                 = self.Prefix and (self.Prefix .. id) or id
             return with(self:GetCache())(function(cache) return cache:SetExpireTime(id, timeout) end)
         end
 
         --- Try sets the item with an un-existed key, return true if success
         function TrySetItems(self, id, item, timeout)
+            id                 = self.Prefix and (self.Prefix .. id) or id
             return with(self:GetCache())(function(cache) return cache:TrySet(id, item, timeout) end)
         end
     end)

@@ -13,12 +13,83 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    --- Represents the session to be used in the Context
-    __Sealed__() class "System.Context.Session" (function(_ENV)
+    namespace "System.Context"
+
+    --- Represents the session item storage provider, normally a single object works for all sessions
+    __Sealed__() interface "ISessionStorageProvider" (function(_ENV)
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- Whether update the time out of the session when accessed
+        __Abstract__() property "KeepAlive"     { type = Boolean }
+
+        --- The minute count before session time out, this will be used if the session's timeout is not set
+        __Abstract__() property "TimeoutMinutes"{ type = NaturalNumber, default = 30 }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        --- Whether the session ID existed in the storage.
+        __Abstract__() function Contains(self, id) end
+
+        --- Get session item
+        __Abstract__() function GetItems(self, id) end
+
+        --- Remove session item
+        __Abstract__() function RemoveItems(self, id) end
+
+        --- Try sets the item with an un-existed key, return true if success, this should be a mutex operation
+        __Abstract__() function TrySetItems(self, id, time, timeout) end
+
+        --- Update the item with current session data
+        __Abstract__() function SetItems(self, id, item, timeout) end
+
+        --- Update the item's timeout
+        __Abstract__() function ResetItems(self, id, timeout) end
+    end)
+
+    --- Represents the session to be used in the Context
+    __Sealed__() __AnonymousClass__()
+    class "Session" (function(_ENV)
+
+        export { Date }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        --- Save the session items
+        __Abstract__() function SaveSessionItems(self)
+            local provider      = self.SessionStorageProvider
+            if not provider then return end
+
+            if self.Canceled then
+                -- Clear the session items
+                return provider:RemoveItems(self.SessionID)
+            elseif self.IsNewSession or self.ItemsChanged then
+                -- Set teh session items
+                return provider:SetItems(self.SessionID, self.RawItems, self.Timeout or Date.Now:AddMinutes(provider.TimeoutMinutes))
+            elseif self.TimeoutChanged then
+                -- Reset the timeout with the settings
+                return provider:ResetItems(self.SessionID, self.Timeout)
+            elseif self.KeepAlive then
+                -- Keep the session alive
+                return provider:ResetItems(self.SessionID, Date.Now:AddMinutes(provider.TimeoutMinutes))
+            end
+        end
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- Gets the unique identifier for the session
+        __Abstract__() property "SessionID"     { type = Any, handler = function(self) self.RawItems, self.IsNewSession, self.ItemsChanged = nil, false, false end }
+
+        --- The context
+        __Abstract__() property "Context"       { type = Context }
+
+        --- The Session Storage Provider, this should be provided by the session class
+        __Abstract__() property "SessionStorageProvider" { type = ISessionStorageProvider }
+
         --- Gets or sets the session items
         __Indexer__()
         __Abstract__() property "Items"         {
@@ -33,11 +104,22 @@ PLoop(function(_ENV)
             end,
         }
 
-        --- Gets the unique identifier for the session
-        __Abstract__() property "SessionID"     { type = Any }
-
         --- The raw item table to be used for serialization
-        __Abstract__() property "RawItems"      { default = function(self) self.IsNewSession = true return {} end }
+        __Abstract__() property "RawItems"      {
+            default                     = function(self)
+                if self.SessionID and self.SessionStorageProvider then
+                    -- Load the session items
+                    local items         = self.SessionStorageProvider:GetItems(self.SessionID)
+                    if items then
+                        self.IsNewSession = false
+                        return items
+                    end
+                end
+
+                self.IsNewSession       = true
+                return {}
+            end
+         }
 
         --- Gets or sets the date time, allowed the next request access the session
         __Set__ (PropertySet.Clone)
@@ -55,61 +137,18 @@ PLoop(function(_ENV)
         --- Whether the session items has changed
         __Abstract__() property "ItemsChanged"  { type = Boolean, default = false }
 
-        --- The context
-        __Abstract__() property "Context"       { type = Context }
-
         -----------------------------------------------------------------------
-        --                            constructor                            --
+        --                           constructor                             --
         -----------------------------------------------------------------------
-        --- Get or generate the session for a http context
-        __Arguments__{ System.Context/nil }
+        __Abstract__() __Arguments__{ Context/nil }
         function __ctor(self, context)
             self.Context        = context
         end
     end)
 
-    --- Represents the session item storage provider
-    __Sealed__() interface "System.Context.ISessionStorageProvider" (function(_ENV)
-
-        -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- Process the context with session to save the items
-        function SaveContextSession(self, context)
-            local session       = context.RawSession
-            if session then
-                if session.Canceled then
-                    return self:RemoveItems(session.SessionID)
-                elseif session.IsNewSession or session.ItemsChanged then
-                    return self:SetItems(session.SessionID, session.RawItems, session.Timeout)
-                elseif session.TimeoutChanged then
-                    return self:ResetItems(session.SessionID, session.Timeout)
-                end
-            end
-        end
-
-        --- Whether the session ID existed in the storage.
-        __Abstract__() function Contains(self, id) end
-
-        --- Get session item
-        __Abstract__() function GetItems(self, id) end
-
-        --- Remove session item
-        __Abstract__() function RemoveItems(self, id) end
-
-        --- Try sets the item with an un-existed key, return true if success
-        __Abstract__() function TrySetItems(self, id, time, timeout) end
-
-        --- Update the item with current session data
-        __Abstract__() function SetItems(self, id, item, timeout) end
-
-        --- Update the item's timeout
-        __Abstract__() function ResetItems(self, id, timeout) end
-    end)
-
     --- A test session storage provider based on the Lua table
-    __Sealed__() class "System.Context.TableSessionStorageProvider" (function (_ENV)
-        extend "System.Context.ISessionStorageProvider"
+    __Sealed__() class "TableSessionStorageProvider" (function (_ENV)
+        extend "ISessionStorageProvider"
 
         export {
             ostime              = _G.os and os.time or _G.time,

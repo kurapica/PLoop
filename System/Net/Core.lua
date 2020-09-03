@@ -16,10 +16,6 @@ PLoop(function(_ENV)
     --- The web namespace
     __Final__() __Sealed__()
     interface "System.Net" (function(_ENV)
-        -- Declare first
-        interface "ISocket" {}
-        interface "IProtocol" {}
-
         --- Defines constants that are used by the Shutdown method
         __Sealed__()
         enum "SocketShutdown" {
@@ -81,6 +77,7 @@ PLoop(function(_ENV)
             __Abstract__() function Shutdown(self, socketShutdown) end
         end)
 
+        -----------------------------------------------------------------------------------
         --- The protocol to be used by the Socket object
         -- The protocols are special prototypes, to be created like
         --
@@ -88,6 +85,7 @@ PLoop(function(_ENV)
         --
         -- So we have System.Net.Protocol.MQTT represents a socket protocol.
         -- The prototype will provide two methods : MakePacket(make), ParsePacket(parse)
+        -----------------------------------------------------------------------------------
         local protocol
         local newProtocol       = function (name, settings)
             if type(settings) ~= "table" or type(settings.parse) ~= "function" or type(settings.make) ~= "function" then
