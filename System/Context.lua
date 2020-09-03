@@ -50,8 +50,7 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the session to be used in the Context
-    __Sealed__() __AnonymousClass__()
-    class "Session" (function(_ENV)
+    __Sealed__() class "Session" (function(_ENV)
 
         export { Date }
 
