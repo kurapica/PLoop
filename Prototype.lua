@@ -14730,31 +14730,10 @@ do
             return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
-        if TYPE_VALD_DISD then
-            -- Add the release method to clear the useless cache for types
-            __Static__() function ClearOverloads(ttype)
-                if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
-
-                local storage   = _OverloadStorage[ttype]
-                if not storage then return end
-
-                local keep      = false
-
-                for name, overload in pairs, storage do
-                    if #overload == 1 and overload[1][FLD_VAR_IMMTBL] and not overload[1][FLD_VAR_THRABL] then
-                        -- should be clear now since the type is sealed, the overload won't be changed
-                        storage[name] = nil
-                    else
-                        keep    = true
-                    end
-                end
-
-                if not keep then
-                    _OverloadStorage[type] = nil
-                end
-            end
-        else
-            __Static__() function ClearOverloads(ttype) end
+        -- Add the release method to clear the useless cache for types
+        __Static__() function ClearOverloads(ttype)
+            if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
+            _OverloadStorage[ttype] = nil
         end
 
         -----------------------------------------------------------
