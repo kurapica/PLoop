@@ -149,9 +149,7 @@ PLoop(function(_ENV)
             end,
             handler             = function(self, val)
                 self.Items[HttpSession.TemporaryField] = val and 1 or nil
-                if not val then
-                    self:RefreshTimeout()
-                end
+                if not val then self:RefreshTimeout() end
             end
         }
 

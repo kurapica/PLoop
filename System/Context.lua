@@ -58,7 +58,7 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         --- Save the session items
-        __Abstract__() function SaveSessionItems(self)
+        function SaveSessionItems(self)
             local provider      = self.SessionStorageProvider
             if not provider then return end
 
@@ -71,10 +71,25 @@ PLoop(function(_ENV)
             elseif self.TimeoutChanged then
                 -- Reset the timeout with the settings
                 return provider:ResetItems(self.SessionID, self.Timeout)
-            elseif self.KeepAlive then
+            elseif provider.KeepAlive then
                 -- Keep the session alive
                 return provider:ResetItems(self.SessionID, Date.Now:AddMinutes(provider.TimeoutMinutes))
             end
+        end
+
+        --- Load the Session Items
+        function LoadSessionItems(self)
+            local items
+            if self.SessionID and self.SessionStorageProvider then
+                -- Load the session items
+                items           = self.SessionStorageProvider:GetItems(self.SessionID)
+            end
+
+            self.IsNewSession   = not items
+            items               = items or {}
+
+            self.RawItems       = items
+            return items
         end
 
         -----------------------------------------------------------------------
@@ -104,21 +119,7 @@ PLoop(function(_ENV)
         }
 
         --- The raw item table to be used for serialization
-        __Abstract__() property "RawItems"      {
-            default                     = function(self)
-                if self.SessionID and self.SessionStorageProvider then
-                    -- Load the session items
-                    local items         = self.SessionStorageProvider:GetItems(self.SessionID)
-                    if items then
-                        self.IsNewSession = false
-                        return items
-                    end
-                end
-
-                self.IsNewSession       = true
-                return {}
-            end
-         }
+        __Abstract__() property "RawItems"      { default = LoadSessionItems }
 
         --- Gets or sets the date time, allowed the next request access the session
         __Set__ (PropertySet.Clone)

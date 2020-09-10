@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/09/03                                               --
+-- Update Date  :   2020/09/09                                               --
 -- Version      :   1.6.21                                                   --
 --===========================================================================--
 
@@ -14730,6 +14730,36 @@ do
             return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
+        if TYPE_VALD_DISD then
+            -- Add the release method to clear the useless cache for types
+            __Static__() function ClearOverloads(ttype)
+                if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
+
+                local storage   = _OverloadStorage[ttype]
+                if not storage then return end
+
+                local keep      = false
+
+                for name, overload in pairs, storage do
+                    if #overload == 1 and overload[1][FLD_VAR_IMMTBL] and not overload[1][FLD_VAR_THRABL] then
+                        -- should be clear now since the type is sealed, the overload won't be changed
+                        storage[name] = nil
+                    else
+                        keep    = true
+                    end
+                end
+
+                if not keep then
+                    _OverloadStorage[type] = nil
+                end
+            end
+        else
+            __Static__() function ClearOverloads(ttype) end
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
         --- Mark the target function as throwable
         function Throwable(self)
             self.IsThrowable    = true
@@ -14741,9 +14771,6 @@ do
             self.IsThisUsable   = true
         end
 
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
         --- modify the target's definition
         -- @param   target                      the target
         -- @param   targettype                  the target type
@@ -16131,15 +16158,15 @@ do
     --- Represents the informations of the runtime
     __Final__() __Sealed__() __Abstract__()
     class (_PLoopEnv, "System.Runtime", function(_ENV)
-        export{ Enum, Struct, Class, Interface }
+        export{ Enum, Struct, Class, Interface, __Arguments__ }
 
         --- Fired when a new type is generated
         __Static__() event "OnTypeDefined"
 
         _PLoopEnv.enumdefined       = function(target) OnTypeDefined(Enum, target) end
-        _PLoopEnv.structdefined     = function(target) OnTypeDefined(Struct, target) end
-        _PLoopEnv.interfacedefined  = function(target) OnTypeDefined(Interface, target) end
-        _PLoopEnv.classdefined      = function(target) OnTypeDefined(Class, target) end
+        _PLoopEnv.structdefined     = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Struct, target) end
+        _PLoopEnv.interfacedefined  = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Interface, target) end
+        _PLoopEnv.classdefined      = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Class, target) end
     end)
 end
 
