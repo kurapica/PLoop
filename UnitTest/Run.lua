@@ -17,6 +17,7 @@ PLOOP_PLATFORM_SETTINGS = {
     MULTI_OS_THREAD     = false,
     TYPE_VALIDATION_DISABLED = false,
     ENV_ALLOW_GLOBAL_VAR_BE_NIL = true,
+    REDUCE_UPVALUES_TO_SAVE_MEMORY = true,
 }
 
 require "PLoop"(function(_ENV)

@@ -143,14 +143,14 @@ PLoop(function(_ENV)
             --- Checks that the message should match the pattern
             __Static__() function Match(pattern, msg)
                 if type(msg) ~= "string" or not msg:match(pattern) then
-                    throw(TestFailureException("Should match " .. strformat("%q", pattern) .. ", got " .. strformat("%q", msg or "nil")))
+                    throw(TestFailureException("Should match " .. strformat("%q", pattern) .. ", got " .. strformat("%q", tostring(msg or "nil"))))
                 end
             end
 
             --- Checks that the message should contains the pattern as plain text
             __Static__() function Find(pattern, msg)
                 if type(msg) ~= "string" or not msg:find(pattern, 1, true) then
-                    throw(TestFailureException("Should find " .. strformat("%q", pattern) .. ", got " .. strformat("%q", msg or "nil")))
+                    throw(TestFailureException("Should find " .. strformat("%q", pattern) .. ", got " .. strformat("%q", tostring(msg or "nil"))))
                 end
             end
 

@@ -179,6 +179,10 @@ do
         -- ignore the value valiation in several conditions for speed.
         TYPE_VALIDATION_DISABLED            = false,
 
+        --- Whether reduce the upvalues in the core system to save more memories.
+        -- Default false
+        REDUCE_UPVALUES_TO_SAVE_MEMORY      = false,
+
         --- Whether allow accessing non-existent value from namespace
         -- Default true
         NAMESPACE_NIL_VALUE_ACCESSIBLE      = true,
@@ -308,7 +312,7 @@ do
     loadinittable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
-    uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
+    uinsert                     = PLOOP_PLATFORM_SETTINGS.REDUCE_UPVALUES_TO_SAVE_MEMORY and fakefunc or function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     disposeObj                  = function (obj) obj:Dispose() end
     newindex                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k + 1 end return k end end)()
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
@@ -1978,7 +1982,10 @@ do
             -- @param   namespace                   the target namespace
             ["RegisterGlobalNamespace"] = function(ns)
                 local ns        = namespace.Validate(ns)
-                if ns then uinsert(_GlobalNS, ns) end
+                if ns then
+                    for _, v in ipairs, _GlobalNS, 0 do if v == ns then return end end
+                    tinsert(_GlobalNS, ns)
+                end
             end;
 
             --- Register a context keyword, like property must be used in the
@@ -6409,11 +6416,11 @@ do
     -----------------------------------------------------------------------
     --                          private helpers                          --
     -----------------------------------------------------------------------
-    local getICTargetInfo       = function (target) local info  = _ICBuilderInfo[target] if info then return info, true else return _ICInfo[target], false end end
+    local getICTargetInfo       = function (target) local info = _ICBuilderInfo[target] if info then return info, true else return _ICInfo[target], false end end
 
     local saveICInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
                                     and function(target, info) rawset(target, FLD_IC_META, info) end
-                                    or  function(target, info) _ICInfo = savestorage(_ICInfo, target, info) end
+                                    or  function(target, info) _ICInfo = savestorage(_ICInfo, target, clone(info)) end -- keep clone here, the memory can be reduced
 
     local saveSuperMap          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
                                     and function(super, target) rawset(super, FLD_IC_TYPE, target) end
@@ -7898,6 +7905,7 @@ do
     interface                   = prototype {
         __tostring              = "interface",
         __index                 = {
+            Get = function(self) return _ICInfo[self] end,
             --- Add an interface to be extended
             -- @static
             -- @method  AddExtend
@@ -14335,7 +14343,7 @@ do
 
                 if isctor then
                     uinsert(apis, "throw")
-                    tinsert(body, [[error = throw]])
+                    tinsert(body, [[local error = throw]])
                 end
 
                 if isbuilder then
@@ -14343,7 +14351,7 @@ do
                     uinsert(apis, "setfenv")
                     uinsert(apis, "throw")
 
-                    tinsert(body, [[error = throw]])
+                    tinsert(body, [[local error = throw]])
                     tinsert(body, [[setfenv(func, getfenv(1))]])
                 end
 
@@ -14730,7 +14738,7 @@ do
             return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
-        -- Add the release method to clear the useless cache for types
+        -- Add the release method to clear the useless cache for sealed types
         __Static__() function ClearOverloads(ttype)
             if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
             _OverloadStorage[ttype] = nil
