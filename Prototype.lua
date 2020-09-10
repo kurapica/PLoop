@@ -6419,8 +6419,8 @@ do
     local getICTargetInfo       = function (target) local info = _ICBuilderInfo[target] if info then return info, true else return _ICInfo[target], false end end
 
     local saveICInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function(target, info) rawset(target, FLD_IC_META, clone(info)) end
-                                    or  function(target, info) _ICInfo = savestorage(_ICInfo, target, clone(info)) end -- keep clone here, the memory can be reduced
+                                    and function(target, info, init) rawset(target, FLD_IC_META, init and info or clone(info)) end
+                                    or  function(target, info, init) _ICInfo = savestorage(_ICInfo, target, init and info or clone(info)) end -- keep clone here, the memory can be reduced
 
     local saveSuperMap          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
                                     and function(super, target) rawset(super, FLD_IC_TYPE, target) end
@@ -8579,7 +8579,7 @@ do
             if not target then error("Usage: interface([env, ][name, ][definition, ][keepenv, ][stack]) - the interface type can't be created", stack) end
 
             if not _ICInfo[target] then
-                saveICInfo(target, getInitICInfo(target, false))
+                saveICInfo(target, getInitICInfo(target, false), true)
             end
 
             stack               = stack + 1
@@ -9518,7 +9518,7 @@ do
             if not target then error("Usage: class([env, ][name, ][definition, ][keepenv, ][stack]) - the class type can't be created", stack) end
 
             if not _ICInfo[target] then
-                saveICInfo(target, getInitICInfo(target, true))
+                saveICInfo(target, getInitICInfo(target, true), true)
             end
 
             stack               = stack + 1
