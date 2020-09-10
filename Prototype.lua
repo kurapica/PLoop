@@ -6419,7 +6419,7 @@ do
     local getICTargetInfo       = function (target) local info = _ICBuilderInfo[target] if info then return info, true else return _ICInfo[target], false end end
 
     local saveICInfo            = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE
-                                    and function(target, info) rawset(target, FLD_IC_META, info) end
+                                    and function(target, info) rawset(target, FLD_IC_META, clone(info)) end
                                     or  function(target, info) _ICInfo = savestorage(_ICInfo, target, clone(info)) end -- keep clone here, the memory can be reduced
 
     local saveSuperMap          = PLOOP_PLATFORM_SETTINGS.UNSAFE_MOD
