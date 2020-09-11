@@ -179,10 +179,6 @@ do
         -- ignore the value valiation in several conditions for speed.
         TYPE_VALIDATION_DISABLED            = false,
 
-        --- Whether reduce the upvalues in the core system to save more memories.
-        -- Default false
-        REDUCE_UPVALUES_TO_SAVE_MEMORY      = false,
-
         --- Whether allow accessing non-existent value from namespace
         -- Default true
         NAMESPACE_NIL_VALUE_ACCESSIBLE      = true,
@@ -312,7 +308,7 @@ do
     loadinittable               = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
     getprototypemethod          = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
     getobjectvalue              = function (target, method, useobjectmethod, ...) local func = useobjectmethod and safeget(target, method) or safeget(getmetatable(target), method) if type(func) == "function" then return func(target, ...) end end
-    uinsert                     = PLOOP_PLATFORM_SETTINGS.REDUCE_UPVALUES_TO_SAVE_MEMORY and fakefunc or function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
+    uinsert                     = function (self, val) for _, v in ipairs, self, 0 do if v == val then return end end tinsert(self, val) end
     disposeObj                  = function (obj) obj:Dispose() end
     newindex                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k + 1 end return k end end)()
     newflags                    = (function() local k return function(init) if init then k = type(init) == "number" and init or 1 else k = k * 2 end return k end end)()
