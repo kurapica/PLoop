@@ -12951,6 +12951,41 @@ do
     })
 
     -----------------------------------------------------------------------
+    -- Create a enum on a based value like 1100, so the list only allow
+    -- the enum value between 1 and 99, and the base value will be added to them.
+    --
+    -- @attribute   System.__BaseIndex__
+    -- @usage       __BaseIndex__(1100)
+    --              enum "Test" { A = 1, C = 2 } -- The value must in (0, 100)
+    --              print(Test.A, Test.C) -- 1101, 1102
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__BaseIndex__",             prototype {
+        __index                 = {
+            ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
+                local base      = self[1]
+                base            = base and tonumber(base)
+                base            = base and floor(base)
+                if not base or base < 10 then error("The __BaseIndex__ only won't accept the base value less than 10", stack + 1) end
+
+                local newdef    = {}
+                local max       = tostring(base):match("0+$")
+                max             = max and tonumber((max:gsub("0", "9"))) or 0
+
+                for name, value in pairs, definition do
+                    if value < 1 or value > max then
+                        error("The " .. name .. " 's value must in [1-" .. max .. "]", stack + 1)
+                    end
+                    newdef[name]= base + value
+                end
+
+                return newdef
+            end,
+            ["AttributeTarget"] = ATTRTAR_ENUM,
+        },
+        __call = regValue, __newindex = readonly, __tostring = getAttributeName
+    })
+
+    -----------------------------------------------------------------------
     -- Set the target struct's base struct, works like
     --
     --          struct "Number" { function (val) return type(val) ~= "number" and "the %s must be number" end }
