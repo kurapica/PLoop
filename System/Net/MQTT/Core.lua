@@ -38,6 +38,7 @@ PLoop(function(_ENV)
         ipairs                  = ipairs,
         pairs                   = pairs,
         tblconcat               = table.concat,
+        Trace                   = Logger.Default[Logger.LogLevel.Trace],
 
         throw                   = throw,
 
@@ -278,7 +279,7 @@ PLoop(function(_ENV)
     --- The MQTT CONNECT Packet
     __Sealed__()
     struct "ConnectPacket" {
-        { name = "version",      type = Number },
+        { name = "level",        type = Number },
         { name = "cleanSession", type = Boolean },      -- MQTT v3.1.1
         { name = "cleanStart",   type = Boolean },      -- MQTT v5.0
         { name = "keepAlive",    type = Number },
@@ -796,7 +797,7 @@ PLoop(function(_ENV)
     end
 
     -- For Mutli packet type
-    function parsePubAckAndEtc(data, flag, version)
+    function parsePubAckAndEtc(data, flag, level)
         local packet            = AckPacket()
         local offset            = 1
 
@@ -805,7 +806,7 @@ PLoop(function(_ENV)
             throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
         end
 
-        if version == ProtocolLevel.V5_0 then
+        if level == ProtocolLevel.V5_0 then
             -- Reason Code
             packet.reasonCode, offset = parseByte(data, offset)
             if not packet.reasonCode then
@@ -825,7 +826,7 @@ PLoop(function(_ENV)
         return packet
     end
 
-    function parsePubRelAndEtc(data, flag, version)
+    function parsePubRelAndEtc(data, flag, level)
         local packet            = AckPacket()
         local offset            = 1
 
@@ -834,7 +835,7 @@ PLoop(function(_ENV)
             throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
         end
 
-        if version == ProtocolLevel.V5_0 then
+        if level == ProtocolLevel.V5_0 then
             -- Reason Code
             packet.reasonCode, offset = parseByte(data, offset)
             if not packet.reasonCode then
@@ -854,7 +855,7 @@ PLoop(function(_ENV)
         return packet
     end
 
-    function makePubAckAndEtc(packet, version, cache)
+    function makePubAckAndEtc(packet, level, cache)
         local total             = 0
 
         -- Packet Identifier
@@ -863,7 +864,7 @@ PLoop(function(_ENV)
         end
         total                   = total + makeUInt16(cache, packet.packetID)
 
-        if version == ProtocolLevel.V5_0 and (packet.reasonCode or packet.properties) then
+        if level == ProtocolLevel.V5_0 and (packet.reasonCode or packet.properties) then
             -- Reason Code
             total               = total + makeByte(cache, packet.reasonCode or 0)
             total               = total + makeProperties(cache, packet.properties)
@@ -921,9 +922,9 @@ PLoop(function(_ENV)
             local packet        = ConnectPacket()
 
             -- Protocol Level
-            packet.version, offset = parseByte(data, offset)
-            if not (packet.version and ProtocolLevel(packet.version)) then
-                throw(MQTTException("The protocol version is not supported", ReasonCode.UNSUPPORTED_PROTOCOL_VERSION))
+            packet.level, offset = parseByte(data, offset)
+            if not (packet.level and ProtocolLevel(packet.level)) then
+                throw(MQTTException("The protocol level is not supported", ReasonCode.UNSUPPORTED_PROTOCOL_VERSION))
             end
 
             -- Connect Flags
@@ -947,7 +948,7 @@ PLoop(function(_ENV)
             -- Keep Alive
             packet.keepAlive, offset = parseUInt16(data, offset)
 
-            if packet.version == ProtocolLevel.V5_0 then -- MQTT 5.0 Only
+            if packet.level == ProtocolLevel.V5_0 then -- MQTT 5.0 Only
                 packet.cleanStart = band(cflags, 2)   == 2
 
                 -- CONNECT Properties
@@ -965,7 +966,7 @@ PLoop(function(_ENV)
 
             if packet.will then
                 -- Will Property
-                if packet.version == ProtocolLevel.V5_0 then
+                if packet.level == ProtocolLevel.V5_0 then
                     packet.will.properties, offset   = parseProperties(data, offset)
                 end
 
@@ -976,7 +977,7 @@ PLoop(function(_ENV)
                 end
 
                 -- Will Message|Payload
-                if packet.version == ProtocolLevel.V5_0 then
+                if packet.level == ProtocolLevel.V5_0 then
                     packet.will.payload, offset = (packet.will.properties[PropertyIdentifier.PAYLOAD_FORMAT_INDICATOR] == 1 and parseUTF8String or parseBinaryData)(data, offset)
                     if not packet.will.payload then
                         throw(MQTTException("The will payload is malformed", ReasonCode.MALFORMED_PACKET))
@@ -1007,7 +1008,7 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.CONNACK]    = function(data, flag, version)
+        [PacketType.CONNACK]    = function(data, flag, level)
             local offset        = 1
             local ack
 
@@ -1025,7 +1026,7 @@ PLoop(function(_ENV)
             packet.returnCode, offset = parseByte(data, offset)
             if not (packet.returnCode and ConnectReturnCode(packet.returnCode)) then
                 throw(MQTTException("The connack return code is malformed", ReasonCode.MALFORMED_PACKET))
-            elseif version == ProtocolLevel.V5_0 then
+            elseif level == ProtocolLevel.V5_0 then
                 if packet.returnCode > 0 and packet.returnCode < 128 then
                     throw(MQTTException("The connack return code is malformed", ReasonCode.MALFORMED_PACKET))
                 end
@@ -1034,13 +1035,13 @@ PLoop(function(_ENV)
             end
 
             -- CONNACK Properties
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 packet.properties, offset = parseProperties(data, offset)
             end
 
             return packet
         end,
-        [PacketType.PUBLISH]    = function(data, flag, version)
+        [PacketType.PUBLISH]    = function(data, flag, level)
             local packet        = PublishPacket()
 
             packet.dupFlag      = band(flag, 8) == 8        -- byte 4
@@ -1068,7 +1069,7 @@ PLoop(function(_ENV)
             end
 
             -- Publish Properties
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 packet.properties, offset = parseProperties(data, offset)
             end
 
@@ -1079,15 +1080,15 @@ PLoop(function(_ENV)
         end,
         [PacketType.PUBACK]     = parsePubAckAndEtc,
         [PacketType.PUBREC]     = parsePubAckAndEtc,
-        [PacketType.PUBREL]     = function(data, flag, version)
+        [PacketType.PUBREL]     = function(data, flag, level)
             if flag ~= 2 then
                 throw(MQTTException("The PUBREL flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
 
-            return parsePubRelAndEtc(data, flag, version)
+            return parsePubRelAndEtc(data, flag, level)
         end,
         [PacketType.PUBCOMP]    = parsePubRelAndEtc,
-        [PacketType.SUBSCRIBE]  = function(data, flag, version)
+        [PacketType.SUBSCRIBE]  = function(data, flag, level)
             if flag ~= 2 then
                 throw(MQTTException("The subscribe flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
@@ -1102,7 +1103,7 @@ PLoop(function(_ENV)
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
             end
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 -- SUBSCRIBE Properties
                 packet.properties, offset = parseProperties(data, offset)
             end
@@ -1120,7 +1121,7 @@ PLoop(function(_ENV)
                     throw(MQTTException("The topic filter data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
-                if version == ProtocolLevel.V5_0 then
+                if level == ProtocolLevel.V5_0 then
                     local options   = parseByte(data, offset)
                     if not options then
                         throw(MQTTException("The subscription options is malformed", ReasonCode.MALFORMED_PACKET))
@@ -1168,7 +1169,7 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.SUBACK]     = function(data, flag, version)
+        [PacketType.SUBACK]     = function(data, flag, level)
             local packet        = SubAckPacket()
             local offset        = 1
 
@@ -1178,7 +1179,7 @@ PLoop(function(_ENV)
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
             end
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 -- SUBACK Properties
                 packet.properties, offset = parseProperties(data, offset)
             end
@@ -1202,7 +1203,7 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.UNSUBSCRIBE]= function(data, flag, version)
+        [PacketType.UNSUBSCRIBE]= function(data, flag, level)
             if flag ~= 2 then
                 throw(MQTTException("The unsubscribe flag is malformed", ReasonCode.MALFORMED_PACKET))
             end
@@ -1217,7 +1218,7 @@ PLoop(function(_ENV)
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
             end
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 packet.properties, offset = parseProperties(data, offset)
             end
 
@@ -1243,7 +1244,7 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.UNSUBACK]   = function(data, flag, version)
+        [PacketType.UNSUBACK]   = function(data, flag, level)
             local packet        = SubAckPacket()
             local offset        = 1
 
@@ -1252,7 +1253,7 @@ PLoop(function(_ENV)
                 throw(MQTTException("The packet identifier can't be found", ReasonCode.MALFORMED_PACKET))
             end
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 packet.properties, offset = parseProperties(data, offset)
 
                 -- Payload - Return Code
@@ -1275,14 +1276,14 @@ PLoop(function(_ENV)
 
             return packet
         end,
-        [PacketType.PINGREQ]    = function(data, flag, version)
+        [PacketType.PINGREQ]    = function(data, flag, level)
             return {}
         end,
-        [PacketType.PINGRESP]   = function(data, flag, version)
+        [PacketType.PINGRESP]   = function(data, flag, level)
             return {}
         end,
-        [PacketType.DISCONNECT] = function(data, flag, version)
-            if version == ProtocolLevel.V5_0 then
+        [PacketType.DISCONNECT] = function(data, flag, level)
+            if level == ProtocolLevel.V5_0 then
                 local offset    = 1
                 local packet    = AckPacket()
 
@@ -1296,8 +1297,8 @@ PLoop(function(_ENV)
                 return {}
             end
         end,
-        [PacketType.AUTH]       = function(data, flag, version)
-            if version == ProtocolLevel.V5_0 then
+        [PacketType.AUTH]       = function(data, flag, level)
+            if level == ProtocolLevel.V5_0 then
                 if flag ~= 0 then
                     throw(MQTTException("The flag in auth packet is malformed", ReasonCode.MALFORMED_PACKET))
                 end
@@ -1326,18 +1327,18 @@ PLoop(function(_ENV)
     }
 
     PACKET_MAKE_MAP             = {
-        [PacketType.CONNECT]    = function(packet, version, cache)
+        [PacketType.CONNECT]    = function(packet, level, cache)
             local total         = 0
 
             -- Protocol Name
-            if version == ProtocolLevel.V3_1 or packet.version == ProtocolLevel.V3_1 then
+            if level == ProtocolLevel.V3_1 or packet.level == ProtocolLevel.V3_1 then
                 total           = total + makeUTF8String(cache, "MQIsdp")
             else
                 total           = total + makeUTF8String(cache, "MQTT")
             end
 
             -- Protocol Level
-            total               = total + makeByte(cache, packet.version or ProtocolLevel.V3_1_1)
+            total               = total + makeByte(cache, packet.level or ProtocolLevel.V3_1_1)
 
             -- Connect Flags
             local cflags        = 0
@@ -1356,7 +1357,7 @@ PLoop(function(_ENV)
             -- Keep Alive
             total               = total + makeUInt16(cache, packet.keepAlive or 0)
 
-            if packet.version == ProtocolLevel.V5_0 then -- MQTT 5.0 Only
+            if packet.level == ProtocolLevel.V5_0 then -- MQTT 5.0 Only
                 -- CONNECT Properties
                 total           = total + makeProperties(cache, packet.properties)
             end
@@ -1370,7 +1371,7 @@ PLoop(function(_ENV)
 
             if packet.will then
                 -- Will Property
-                if packet.version == ProtocolLevel.V5_0 then
+                if packet.level == ProtocolLevel.V5_0 then
                     total       = total + makeProperties(cache, packet.will.properties)
                 end
 
@@ -1378,7 +1379,7 @@ PLoop(function(_ENV)
                 total           = total + makeUTF8String(cache, packet.will.topic or "")
 
                 -- Will Message|Payload
-                if packet.version == ProtocolLevel.V5_0 then
+                if packet.level == ProtocolLevel.V5_0 then
                     total       = total + (packet.will.properties and packet.will.properties[PropertyIdentifier.PAYLOAD_FORMAT_INDICATOR] == 1 and makeUTF8String or makeBinaryData)(cache, packet.will.payload or "")
                 else
                     total       = total + makeBinaryData(cache, packet.will.message)
@@ -1397,7 +1398,7 @@ PLoop(function(_ENV)
 
             return total
         end,
-        [PacketType.CONNACK]    = function(packet, version, cache)
+        [PacketType.CONNACK]    = function(packet, level, cache)
             local total         = 0
 
             -- Connect Acknowledge Flags
@@ -1407,13 +1408,13 @@ PLoop(function(_ENV)
             total               = total + makeByte(cache, packet.returnCode or ConnectReturnCode.ACCEPTED)
 
             -- CONNACK Properties
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 total           = total + makeProperties(cache, packet.properties)
             end
 
             return total
         end,
-        [PacketType.PUBLISH]    = function(packet, version, cache)
+        [PacketType.PUBLISH]    = function(packet, level, cache)
             local total         = 0
 
             local flags         = 0
@@ -1434,7 +1435,7 @@ PLoop(function(_ENV)
             end
 
             -- Publish Properties
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 total           = total + makeProperties(cache, packet.properties)
             end
 
@@ -1446,11 +1447,11 @@ PLoop(function(_ENV)
         end,
         [PacketType.PUBACK]     = makePubAckAndEtc,
         [PacketType.PUBREC]     = makePubAckAndEtc,
-        [PacketType.PUBREL]     = function(packet, version, cache)
-            return makePubAckAndEtc(packet, version, cache), 2
+        [PacketType.PUBREL]     = function(packet, level, cache)
+            return makePubAckAndEtc(packet, level, cache), 2
         end,
         [PacketType.PUBCOMP]    = makePubAckAndEtc,
-        [PacketType.SUBSCRIBE]  = function(packet, version, cache)
+        [PacketType.SUBSCRIBE]  = function(packet, level, cache)
             local total         = 0
 
             -- Packet Identifier
@@ -1459,7 +1460,7 @@ PLoop(function(_ENV)
             end
             total               = total + makeUInt16(cache, packet.packetID)
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 -- SUBSCRIBE Properties
                 total           = total + makeProperties(cache, packet.properties)
             end
@@ -1476,7 +1477,7 @@ PLoop(function(_ENV)
 
                 total           = total + makeUTF8String(cache, filter.topicFilter)
 
-                if version == ProtocolLevel.V5_0 then
+                if level == ProtocolLevel.V5_0 then
                     local options   = 0
 
                     if type(packet.options) == "table" then
@@ -1502,7 +1503,7 @@ PLoop(function(_ENV)
 
             return total, 2
         end,
-        [PacketType.SUBACK]     = function(packet, version, cache)
+        [PacketType.SUBACK]     = function(packet, level, cache)
             local total         = 0
 
             if not packet.packetID then
@@ -1510,7 +1511,7 @@ PLoop(function(_ENV)
             end
             total               = total + makeUInt16(cache, packet.packetID)
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 -- SUBACK Properties
                 total           = total + makeProperties(cache, packet.properties)
             end
@@ -1524,7 +1525,7 @@ PLoop(function(_ENV)
 
             return total
         end,
-        [PacketType.UNSUBSCRIBE]= function(packet, version, cache)
+        [PacketType.UNSUBSCRIBE]= function(packet, level, cache)
             local total         = 0
 
             if not packet.packetID then
@@ -1532,7 +1533,7 @@ PLoop(function(_ENV)
             end
             total               = total + makeUInt16(cache, packet.packetID)
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 total           = total + makeProperties(cache, packet.properties)
             end
 
@@ -1551,7 +1552,7 @@ PLoop(function(_ENV)
 
             return total, 2
         end,
-        [PacketType.UNSUBACK]   = function(packet, version, cache)
+        [PacketType.UNSUBACK]   = function(packet, level, cache)
             local total         = 0
 
             if not packet.packetID then
@@ -1559,7 +1560,7 @@ PLoop(function(_ENV)
             end
             total               = total + makeUInt16(cache, packet.packetID)
 
-            if version == ProtocolLevel.V5_0 then
+            if level == ProtocolLevel.V5_0 then
                 total           = total + makeProperties(cache, packet.properties)
 
                 -- Payload - Return Code
@@ -1572,14 +1573,14 @@ PLoop(function(_ENV)
 
             return total
         end,
-        [PacketType.PINGREQ]    = function(packet, version, cache)
+        [PacketType.PINGREQ]    = function(packet, level, cache)
             return 0
         end,
-        [PacketType.PINGRESP]   = function(packet, version, cache)
+        [PacketType.PINGRESP]   = function(packet, level, cache)
             return 0
         end,
-        [PacketType.DISCONNECT] = function(packet, version, cache)
-            if version == ProtocolLevel.V5_0 then
+        [PacketType.DISCONNECT] = function(packet, level, cache)
+            if level == ProtocolLevel.V5_0 then
                 local total     = 0
 
                 if packet.reasonCode or packet.properties then
@@ -1592,8 +1593,8 @@ PLoop(function(_ENV)
                 return 0
             end
         end,
-        [PacketType.AUTH]       = function(packet, version, cache)
-            if version == ProtocolLevel.V5_0 then
+        [PacketType.AUTH]       = function(packet, level, cache)
+            if level == ProtocolLevel.V5_0 then
                 local total     = 0
 
                 if packet.reasonCode or packet.properties then
@@ -1612,18 +1613,20 @@ PLoop(function(_ENV)
     --        The MQTT Protocol v3.1.1 & v5.0        --
     ---------------------------------------------------
     System.Net.Protocol "MQTT" {
-        make                    = function(ptype, packet, version)
+        make                    = function(ptype, packet, level)
+            Trace("[MQTT][SEND]%s - %s", PacketType(ptype), packet)
+
             local map           = PACKET_MAKE_MAP[ptype]
             if not map then return nil end
 
             local cache         = { "" }
 
-            local count, flags  = map(packet, version, cache)
+            local count, flags  = map(packet, level, cache)
             cache[1]            = strchar(lshift(ptype, 4) + band(flags or 0, 0xf)) .. makeVarLength(count)
 
             return tconcat(cache)
         end,
-        parse                   =  function(socket, version)
+        parse                   =  function(socket, level)
             if type(socket) == "string" then
                 -- Parse the Fixed Header
                 local control       = strbyte(socket)
@@ -1647,7 +1650,11 @@ PLoop(function(_ENV)
                     throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
                 end
 
-                return ptype, map(vlength == 0 and "" or socket:sub(offset, offset + vlength -1), flags, version)
+                local packet        = map(vlength == 0 and "" or socket:sub(offset, offset + vlength -1), flags, level)
+
+                Trace("[MQTT][RECEIVE]%s - %s", PacketType(ptype), packet)
+
+                return ptype, packet
             else
                 if not isObjectType(socket, ISocket) then
                     throw(MQTTException("The protocol can't read data from the given object"), ReasonCode.MALFORMED_PACKET)
@@ -1673,7 +1680,11 @@ PLoop(function(_ENV)
                     throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
                 end
 
-                return ptype, map(vlength == 0 and "" or socket:Receive(vlength), flags, version)
+                local packet        = map(vlength == 0 and "" or socket:Receive(vlength), flags, level)
+
+                Trace("[MQTT][RECEIVE]%s - %s", PacketType(ptype), packet)
+
+                return ptype, packet
             end
         end
     }

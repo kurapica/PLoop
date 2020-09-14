@@ -20,37 +20,61 @@ PLoop(function(_ENV)
     --- The client state
     __Sealed__() __AutoIndex__()
     enum "ClientState" {
+        "DISCONNECTED",
         "CONNECTING",
         "CONNECTED",
-        "DISCONNECTING",
-        "DISCONNECTED",
+        "CLOSED",           -- Server Side Only
     }
-
 
     --- Represents the MQTT client object used to connect to the server or the
     -- client that returned by the server's Accept method
     __Sealed__() class "Client" (function(_ENV)
         inherit "System.Context"
+        extend "System.IAutoClose"
 
         export {
             MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode, MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier, MQTT.ReasonCode,
             MQTT.ConnectPacket, MQTT.ConnackPacket, MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket, MQTT.SubAckPacket, MQTT.MQTTException,
 
-            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Client,
+            MQTT.ConnectWill, System.Context.Session,
+
+            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Date,
 
             isObjectType        = Class.IsObjectType,
+            valEnumValue        = Enum.ValidateValue,
             pcall               = pcall,
             error               = error,
+            ipairs              = ipairs,
+            type                = type,
+            min                 = math.min,
+            floor               = math.floor,
+            yield               = coroutine.yield,
         }
 
         -- Only use this for test or client side only
         local SocketType        = System.Net.Socket
 
         -----------------------------------------------------------------------
+        --                               event                               --
+        -----------------------------------------------------------------------
+        --- Fired when a message packet is received
+        event "OnMessageReceived"
+
+        -----------------------------------------------------------------------
+        --                        abstract property                          --
+        -----------------------------------------------------------------------
+        --- The Message Publisher
+        __Abstract__()
+        property "MessagePublisher" { type = System.Net.MQTT.IMQTTPublisher }
+
+        -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- The server side session
+        property "Session"          { type = Session, default = function(self) return Session(self) end }
+
         --- Whether the client is server side
-        property "IsServerSide"     { type = Boolean }
+        property "IsServerSide"     { type = Boolean, default = true }
 
         --- The server address to be connected
         property "Address"          { type = String, default = "127.0.0.1" }
@@ -69,6 +93,15 @@ PLoop(function(_ENV)
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Connect call will time out
         property "ConnectTimeout"   { type = Integer, handler = function(self, timeout) if self.Socket then self.Socket.ConnectTimeout = timeout end end }
+
+        --- Whether auto send the ping to the server to keep connection, not works for the server side client
+        property "KeepConnection"   { type = Boolean, default = true }
+
+        --- The maximum qos level can be subscribed
+        property "MaximumQosLevel"  { type = QosLevel, default = QosLevel.EXACTLY_ONCE }
+
+        --- Whether auto yield during the process
+        property "AutoYield"        { type = Boolean, default = false }
 
         --- The client state
         property "State"            { type = ClientState, default = ClientState.DISCONNECTED }
@@ -97,12 +130,255 @@ PLoop(function(_ENV)
         --- The last used packet ID
         property "LastPacketID"     { type = Number, default = 0 }
 
+        --- The will message
+        property "WillMessage"      { type = ConnectWill }
+
+        --- The last active time that received the packet
+        property "LastActiveTime"   { type = Date }
+
+        --- The subscribed topics and requested qos levels, used both for server side and client side
+        property "TopicFilters"     { set = false, default = function() return {} end }
+
+        --- The subscription topic filters
+        property "SubscribeTopicFilters"    { set = false, default = function() return {} end }
+
+        --- The unsubscribe topic filters
+        property "UnsubscribeTopicFilters"  { set = false, default = function() return {} end }
+
+        -----------------------------------------------------------------------
+        --                         abstract method                           --
+        -----------------------------------------------------------------------
+        --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result
+        __Abstract__() function Authenticate(self, packet) end
+
+        -----------------------------------------------------------------------
+        --                           Common Method                           --
+        -----------------------------------------------------------------------
+        --- Start process the packet data until the client is closed
+        -- This method could be overridden to add features like yield and etc
+        -- it's also very simple to create custom processing method
+        function Process(self)
+            while self.State ~= ClientState.CLOSED do
+                if self.IsServerSide and self.MessagePublisher then
+                    -- Check the published message
+                    local topic, message, qos = self.MessagePublisher:ReceiveMessage()
+
+                    if topic and message then
+                        self:Publish(topic, message, qos)
+                    end
+                end
+
+                local ptype, packet = self:ParsePacket()
+
+                if ptype then
+                    self:ProcessPacket(ptype, packet)
+                end
+
+                if self.AutoYield then yield(ptype or false, packet) end
+            end
+        end
+
+        --- Parse the MQTT Packet from the incoming message and return the packet type and packet data if existed.
+        -- The method will return false if timeout.
+        --
+        -- the server may close the client if the keep alive timeout or the client will send pingreq to keep connection
+        -- automatically in this method
+        function ParsePacket(self)
+            if self.State == ClientState.CLOSED then return end
+
+            local ok, ptype, packet
+            if self.ReceiveTimeout and self.ReceiveTimeout > 0 then
+                ok, ptype, packet   = pcall(MQTT.ParsePacket, self.Socket, self.ProtocolLevel)
+            else
+                ok, ptype, packet   = true, MQTT.ParsePacket(self.Socket, self.ProtocolLevel)
+            end
+
+            if ok then
+                self.LastActiveTime = Date.Now
+
+                if ptype == PacketType.PUBACK or ptype == PacketType.PUBCOMP then
+                    -- Release the published packet
+                    self.PublishPackets[packet.packetID] = nil
+                end
+
+                return ptype, packet
+            elseif not isObjectType(ptype, TimeoutException) then
+                error(ptype)
+            elseif self.IsServerSide then
+                -- Close the client if pass the time out
+                if self.LastActiveTime and ( Date.Now.Time >= self.LastActiveTime.Time + self.KeepAlive ) then
+                    self:CloseClient()
+                    return -- keep return nil here to stop the iterator if existed
+                end
+            elseif self.KeepConnection and self.LastActiveTime and ( Date.Now.Time + self.ReceiveTimeout * 2 >= self.LastActiveTime.Time + self.KeepAlive ) then
+                -- Auto ping to keep connection
+                self:PingReq()
+            end
+
+            -- return false so the iterator may continue
+            return false
+        end
+
+        -- Process the packet with default behaviors, this is the default for the automatically processing
+        function ProcessPacket(self, ptype, packet)
+            if ptype == PacketType.CONNECT then
+                -- CLIENT -> SERVER
+                self.ProtocolLevel  = packet.level
+
+                -- Will Message
+                self.WillMessage    = packet.will
+
+                -- Handle the session part
+                self.ClientID       = packet.selfID
+                self.CleanSession   = packet.cleanStart or packet.cleanSession
+                self.KeepAlive      = packet.keepAlive and floor(packet.keepAlive * 1.5) or nil
+
+                self.Session.SessionID    = self.clientID
+
+                if self.CleanSession then
+                    self.Session.RawItems = {}
+                    self.Session.Canceled = true        -- Don't save at last
+                else
+                    self.Session:LoadSessionItems()     -- Load the session items
+                end
+
+                -- Authenticate and Ack with the code
+                local ok, ret       = self:Authenticate()
+                if ok == false then
+                    if not (type(ret) == "number" and valEnumValue(ConnectReturnCode, ret)) then
+                        ret         = ConnectReturnCode.AUTHORIZE_FAILED
+                    end
+                elseif type(ok) == "number" and valEnumValue(ConnectReturnCode, ok) then
+                    ret             = ok
+                else
+                    ret             = ConnectReturnCode.ACCEPTED
+                end
+
+                self:ConnectAck(ret)
+
+            elseif ptype == PacketType.PUBLISH then
+                -- Publish the message
+                if self.IsServerSide and self.MessagePublisher then
+                    -- Only the server side client should use the message publisher
+                    self.MessagePublisher:PublishMessage(packet.topicName, packet.payload, packet.qos, packet.retainFlag)
+                end
+
+                -- Send out the message for other operations
+                -- We need several methods to send out the message packets
+                OnMessageReceived(self, packet.topicName, packet.payload)
+
+                -- Send the ack based on the qos
+                if packet.qos == QosLevel.AT_LEAST_ONCE then
+                    self:PubAck(packet.packetID)
+                elseif packet.qos == QosLevel.EXACTLY_ONCE then
+                    self:PubRec(packet.packetID)
+                end
+
+            elseif ptype == PacketType.PUBACK then
+                -- already handled
+            elseif ptype == PacketType.PUBREC then
+                self:PubRel(packet.packetID)
+
+            elseif ptype == PacketType.PUBREL then
+                self:PubComp(packet.packetID)
+
+            elseif ptype == PacketType.PUBCOMP then
+                -- already handled
+            elseif ptype == PacketType.SUBSCRIBE then
+                -- Subscribe the topic filter
+                local returnCodes   = {}
+                local publisher     = self.MessagePublisher
+
+                for i, filter in ipairs(packet.topicFilters) do
+                    returnCodes[i]  = publisher and publisher:SubscribeTopic(filter.topicFilter, min(self.MaximumQosLevel, filter.requestedQoS or QosLevel.AT_MOST_ONCE)) or SubAckReturnCode.FAILURE
+                    self.TopicFilters[filter.topicFilter] = returnCodes[i]
+                end
+
+                self:SubAck(packet.packetID, returnCodes)
+
+            elseif ptype == PacketType.SUBACK then
+                -- Check the subscription result
+                local filters               =  self.SubscribeTopicFilters[packet.packetID]
+                self.SubscribeTopicFilters[packet.packetID] = nil
+
+                if filters then
+                    for i, filter in ipairs(filters) do
+                        self.TopicFilters[filter.topicFilter] = packet.returnCodes[i]
+                    end
+                end
+
+            elseif ptype == PacketType.UNSUBSCRIBE then
+                -- Subscribe the topic filter
+                local returnCodes   = {}
+                local publisher     = self.MessagePublisher
+
+                for i, filter in ipairs(packet.topicFilters) do
+                    self.TopicFilters[filter.topicFilter] = nil
+                    returnCodes[i]  = publish and publisher:UnsubscribeTopic(filter.topicFilter) or ReasonCode.UNSPECIFIED_ERROR
+                end
+
+                self:UnsubAck(packet.packetID, returnCodes)
+
+            elseif ptype == PacketType.UNSUBACK then
+                -- Check the unsubscribe request
+                local filters               =  self.UnsubscribeTopicFilters[packet.packetID]
+                self.UnsubscribeTopicFilters[packet.packetID] = nil
+
+                if filters then
+                    for i, filter in ipairs(filters) do
+                        self.TopicFilters[filter.topicFilter] = nil
+                    end
+                end
+
+            elseif ptype == PacketType.PINGREQ then
+                -- Send the PINGRESP back
+                self:PingResp()
+
+            elseif ptype == PacketType.DISCONNECT then
+                -- Manually remove the will message
+                self.WillMessage  = nil
+                self:CloseClient()
+
+            elseif ptype == PacketType.AUTH then
+                -- Not supported here
+            end
+        end
+
+        --- Gets a new packet id
+        function GetNewPacketId(self)
+            local packetid      = self.LastPacketID + 1
+            if packetid >= 2^15 - 1 then packetid = 1 end
+
+            self.LastPacketID   = packetid
+            return packetid
+        end
+
+        --- Open the message publisher on the server side client, do nothing for the client side
+        function Open(self)
+            if self.IsServerSide and self.MessagePublisher then
+                self.MessagePublisher:Open()
+            end
+        end
+
+        --- Close the message publisher on the server side client and close the socket
+        function Close(self)
+            if self.IsServerSide and self.MessagePublisher then
+                self.MessagePublisher:Close()
+            end
+            self.Socket:Close()
+        end
+
         -----------------------------------------------------------------------
         --                        Client Side Method                         --
         -----------------------------------------------------------------------
         --- Connect to the MQTT server, return true if successful connected
         __Arguments__{ ConnectWill/nil, PropertySet/nil }
         function Connect(self, will, properties)
+            -- Reset teh state before connecting
+            if self.State == ClientState.CLOSED and not self.IsServerSide then
+                self.State      = ClientState.DISCONNECTED
+            end
+
             if self.State == ClientState.DISCONNECTED then
                 -- Init the socket with timeout
                 self.Socket.ConnectTimeout  = self.ConnectTimeout
@@ -132,9 +408,9 @@ PLoop(function(_ENV)
 
                 self.Socket:Send(MQTT.MakePacket(PacketType.CONNECT, packet, self.ProtocolLevel))
 
-                local ptype, packet     = Protocol.MQTT.ParsePacket(self.Socket, self.ProtocolLevel)
+                local ptype, packet = self:ParsePacket()
 
-                if ptype == PacketType.CONNACK then
+                if ptype == PacketType.CONNACK and packet.returnCode == ReasonCode.SUCCESS then
                     self.State  = ClientState.CONNECTED
                     return true
                 else
@@ -148,20 +424,21 @@ PLoop(function(_ENV)
         --- DisConnect to the server
         __Arguments__{ ReasonCode/nil, PropertySet/nil }
         function DisConnect(self, reason, properties)
-            if self.State == ClientState.DISCONNECTED or self.State == ClientState.DISCONNECTING then return end
+            if self.State == ClientState.CLOSED then return end
 
-            self.State          = ClientState.DISCONNECTING
+            if self.State == ClientState.CONNECTED then
+                local packet    = {}
 
-            local packet        = {}
+                if self.ProtocolLevel == ProtocolLevel.V5_0 then
+                    packet.reasonCode = reason or ReasonCode.SUCCESS
+                    packet.properties = properties
+                end
 
-            if self.ProtocolLevel == ProtocolLevel.V5_0 then
-                packet.reasonCode = reason or ReasonCode.SUCCESS
-                packet.properties = properties
+                self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet, self.ProtocolLevel))
             end
 
-            self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet, self.ProtocolLevel))
-
-            self.State          = ClientState.DISCONNECTED
+            self.State          = ClientState.CLOSED
+            self.Socket:Close()
         end
 
         --- Send subscribe message to the server
@@ -170,13 +447,15 @@ PLoop(function(_ENV)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
-                packetID        = self:GetPacketId(),
+                packetID        = self:GetNewPacketId(),
                 properties      = properties,
                 topicFilters    = {
                     { topicFilter = filter, requestedQoS = qos or QosLevel.EXACTLY_ONCE, options = options }
                 }
             }
 
+            -- Keep tracking the packet id with the filters
+            self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -185,27 +464,44 @@ PLoop(function(_ENV)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
-                packetID        = self:GetPacketId(),
+                packetID        = self:GetNewPacketId(),
                 properties      = properties,
                 topicFilters    = topicFilters,
             }
 
+            self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
         --- Send Unsubscribe message to the server
         __Arguments__{ NEString, PropertySet/nil }
-        function Unsubscribe(self, filter, properties, options)
+        function Unsubscribe(self, filter, properties)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
-                packetID        = self:GetPacketId(),
+                packetID        = self:GetNewPacketId(),
                 properties      = properties,
                 topicFilters    = {
                     { topicFilter = filter }
                 }
             }
 
+            -- Keep tracking the packet id with the filters
+            self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
+            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
+        end
+
+        __Arguments__{ TopicFilters, PropertySet/nil }
+        function Unsubscribe(self, topicFilters, properties)
+            if self.State ~= ClientState.CONNECTED then return end
+
+            local packet        = {
+                packetID        = self:GetNewPacketId(),
+                properties      = properties,
+                topicFilters    = topicFilters,
+            }
+
+            self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -242,6 +538,7 @@ PLoop(function(_ENV)
                 self.State      = ClientState.CONNECTED
             else
                 -- Close the server side client
+                self.State      = ClientState.CLOSED
                 self.Socket:Close()
             end
         end
@@ -308,45 +605,29 @@ PLoop(function(_ENV)
             self.Socket:Send(MQTT.MakePacket(PacketType.PINGRESP, {}, self.ProtocolLevel))
         end
 
+        --- Close the Server side client
+        function CloseClient(self)
+            if self.State == ClientState.CLOSED or not self.IsServerSide then return end
+
+            -- Check the will message
+            local will          = self.WillMessage
+            if will and self.MessagePublisher then
+                -- Publish the will message
+                self.MessagePublisher:PublishMessage(will.topic, will.message or will.payload, will.qos, will.retain)
+            end
+
+            self.State          = ClientState.CLOSED
+            self.Socket:Close()
+
+            -- Save the session
+            if not self.CleanSession then
+                self.Session:SaveSessionItems()
+            end
+        end
+
         -----------------------------------------------------------------------
         --                    Server & Client Side Method                    --
         -----------------------------------------------------------------------
-        --- Start receive the packet data until the client is closed, the packet
-        -- can be handled within the OnPacketReceived event
-        function Process(self)
-            local ok, ptype, packet
-
-            if self.ReceiveTimeout and self.ReceiveTimeout > 0 then
-                ok, ptype, packet = pcall(MQTT.ParsePacket, self.Socket, self.ProtocolLevel)
-            else
-                ok, ptype, packet = true, MQTT.ParsePacket(self.Socket, self.ProtocolLevel)
-            end
-            if not ok then
-                if not isObjectType(ptype, TimeoutException) then
-                    error(ptype)
-                end
-            else
-                if ptype == PacketType.PUBACK then
-                    -- Clear the published packet
-                    self.PublishPackets[packet.packetID] = nil
-                elseif ptype == PacketType.CONNECT then
-                    -- Get the client ID into the session id
-                    self.ClientID = packet.clientID
-                    self.Session.SessionID = packet.clientID
-                end
-
-                return ptype, packet
-            end
-        end
-
-        --- Gets a new packet id
-        function GetPacketId(self)
-            local packetid      = self.LastPacketID + 1
-            if packetid >= 2^15 - 1 then packetid = 1 end
-            self.LastPacketID   = packetid
-            return packetid
-        end
-
         --- Publish the message to the server or client
         __Arguments__{ NEString, NEString, QosLevel/nil, Boolean/nil, PropertySet/nil }
         function Publish(self, topic, payload, qos, retain, properties)
@@ -362,7 +643,8 @@ PLoop(function(_ENV)
             }
 
             if packet.qos > QosLevel.AT_MOST_ONCE then
-                local pid       = self:GetPacketId()
+                -- Should keep until ack
+                local pid       = self:GetNewPacketId()
                 packet.packetID = pid
                 self.PublishPackets[pid] = packet
             end
@@ -450,20 +732,24 @@ PLoop(function(_ENV)
 
             self.Socket:Send(MQTT.MakePacket(PacketType.AUTH, packet, self.ProtocolLevel))
         end
-
-        --- Close the connection
-        function Close(self)
-            return self.Socket:Close()
-        end
     end)
 
     --- Represents the MQTT server object used to listen and serve the clients
-    -- The MQTT server may have many implementations based on the platform, this
-    -- is only a sample class
+    -- The MQTT server may have many implementations based on the platform
+    -- This is only an example based on the Socket
     __Sealed__() class "Server" (function(_ENV)
         extend "IAutoClose"
 
-        export { Context, Client, ClientState, Net.TimeoutException }
+        export {
+            MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode, MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier, MQTT.ReasonCode,
+            MQTT.ConnectPacket, MQTT.ConnackPacket, MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket, MQTT.SubAckPacket, MQTT.MQTTException,
+
+            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Client, MQTT.MQTTPublisher,
+
+            isObjectType        = Class.IsObjectType,
+            pcall               = pcall,
+            error               = error,
+        }
 
         local SocketType        = System.Net.Socket
 
@@ -471,25 +757,40 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The socket object used to accept connections
-        property "Socket"           { type = ISocket, default = SocketType and function(self) return SocketType() end }
+        property "Socket"                   { type = ISocket, default = SocketType and function(self) return SocketType() end }
 
         --- The server address to be bind
-        property "Address"          { type = String, default = "*" }
+        property "Address"                  { type = String, default = "*" }
 
         --- The server port to be bind
-        property "Port"             { type = NaturalNumber, default = 1883 }
+        property "Port"                     { type = NaturalNumber, default = 1883 }
 
         --- The number of client connections that can be queued
-        property "Backlog"          { type = NaturalNumber }
+        property "Backlog"                  { type = NaturalNumber }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Accept call will time out
-        property "AcceptTimeout"    { type = Integer }
+        property "AcceptTimeout"            { type = NaturalNumber }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out to the accepted client
-        property "ReceiveTimeout"   { type = Integer }
+        property "ReceiveTimeout"           { type = NaturalNumber }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out to the accepted client
-        property "SendTimeout"      { type = Integer }
+        property "SendTimeout"              { type = NaturalNumber }
+
+        --- The Session Storage Provider for the server side client, with a default session provider only for testing purposes
+        property "SessionStorageProvider"   { type = System.Context.ISessionStorageProvider, default = function(self) return TableSessionStorageProvider() end }
+
+        --- The MQTT Message Publisher type to be used for the server side client
+        property "MessagePublisherType"     { type = - System.Net.MQTT.IMQTTPublisher, default = System.Net.MQTT.MQTTPublisher }
+
+        -----------------------------------------------------------------------
+        --                         abstract method                           --
+        -----------------------------------------------------------------------
+        --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result or true/false  and with a return code if failed
+        __Abstract__() function Authenticate(self, packet) end
+
+        --- Return a new message publisher to the client
+        __Abstract__() function NewMessagePublisher(self) return MQTTPublisher() end
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -502,7 +803,7 @@ PLoop(function(_ENV)
 
         --- Close the server
         function Close(self)
-            self.Socket:Shutdown()
+            self.Socket:Close()
         end
 
         --- Try get the client from the socket object, maybe nil if time out
@@ -524,11 +825,19 @@ PLoop(function(_ENV)
                 return
             end
 
-            return Client {
+            return Client       {
                 Socket          = client,
+                Server          = self,
                 IsServerSide    = true,
                 ReceiveTimeout  = self.ReceiveTimeout,
                 SendTimeout     = self.SendTimeout,
+                SessionStorageProvider = self.SessionStorageProvider,
+
+                -- Override then method
+                Authenticate    = self.Authenticate,
+
+                -- The message publisher
+                MessagePublisher= self.MessagePublisherType and self.MessagePublisherType(),
             }
         end
     end)

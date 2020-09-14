@@ -38,4 +38,7 @@ require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Subject"
 require "PLoop.System.Reactive.Operator"
 
+-- System.Message
+require "PLoop.System.Message"
+
 return root

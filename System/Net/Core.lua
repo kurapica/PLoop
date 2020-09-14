@@ -38,16 +38,16 @@ PLoop(function(_ENV)
             --                   property                    --
             ---------------------------------------------------
             --- Gets or sets a value that specifies the amount of time after which a synchronous Accept call will time out
-            __Abstract__() property "AcceptTimeout"     { type = Integer }
+            __Abstract__() property "AcceptTimeout"     { type = NaturalNumber }
 
             --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out
-            __Abstract__() property "ReceiveTimeout"    { type = Integer }
+            __Abstract__() property "ReceiveTimeout"    { type = NaturalNumber }
 
             --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out
-            __Abstract__() property "SendTimeout"       { type = Integer }
+            __Abstract__() property "SendTimeout"       { type = NaturalNumber }
 
             --- Gets or sets a value that specifies the amount of time after which a synchronous Connect call will time out
-            __Abstract__() property "ConnectTimeout"    { type = Integer }
+            __Abstract__() property "ConnectTimeout"    { type = NaturalNumber }
 
             ---------------------------------------------------
             --                    method                     --
