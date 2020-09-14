@@ -28,7 +28,12 @@ PLoop(function(_ENV)
             tblconcat           = table.concat,
             rawset              = rawset,
             pcall               = pcall,
+            tostring            = tostring,
             throw               = throw,
+            Toolset             = Toolset,
+            isValidValue        = Struct.ValidateValue,
+
+            Serialization.Serializable
         }
 
         export { Logger }
@@ -54,7 +59,7 @@ PLoop(function(_ENV)
                 -- Prefix and TimeStamp
                 local tfmt      = self.UseTimeFormat and self.TimeFormat
                 if select("#", ...) > 0 then
-                    local ok, r = pcall(strformat, msg, ...)
+                    local ok, r = pcall(strformat, msg, Toolset.tostringall(...))
                     if not ok then throw(r) end
                     msg         = r
                 end

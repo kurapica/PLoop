@@ -99,10 +99,9 @@ PLoop(function(_ENV)
             select              = select,
             pairs               = pairs,
             loadsnippet         = Toolset.loadsnippet,
+            tostringall         = Toolset.tostringall,
             otime               = os and (os.clock or os.time) or GetTime, -- GetTime for WOW temporary
             unpack              = unpack or table.unpack,
-            isValidValue        = Struct.ValidateValue,
-            serialize           = Serialization.Serialize,
             isObjectType        = Class.IsObjectType,
             running             = coroutine.running,
             yield               = coroutine.yield,
@@ -116,7 +115,7 @@ PLoop(function(_ENV)
             LOCK_KEY            = "PLOOP_RX_%s",
 
             Operator, IObservable, Observer, Threading, Guid, Exception, Dictionary, Subject, List,
-            Serialization.Serializable, Serialization.StringFormatProvider, PublishSubject, ReplaySubject
+            PublishSubject, ReplaySubject
         }
 
         local function safeNext(observer, flag, item, ...)
@@ -134,13 +133,7 @@ PLoop(function(_ENV)
         __Arguments__{ NEString/"Dump" }
         function Dump(self, name)
             self:Subscribe(function(...)
-                Info("%s-->%s", name, List{ ... }:Map(function(value)
-                    if isValidValue(Serializable, value) then
-                        return serialize(StringFormatProvider{ ObjectTypeIgnored = true }, value)
-                    else
-                        return tostring(value)
-                    end
-                end):Join(", "))
+                Info("%s-->%s", name, List{ Toolset.tostringall(...) }:Join(", "))
             end, function(ex)
                 Info("%s failed-->%s", name, tostring(ex))
             end, function()
