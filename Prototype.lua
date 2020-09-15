@@ -591,15 +591,15 @@ do
     --                                log                                --
     -----------------------------------------------------------------------
     local generateLogger        = function (prefix, loglvl)
-        local handler = PLOOP_PLATFORM_SETTINGS.CORE_LOG_HANDLER
+        local handler           = PLOOP_PLATFORM_SETTINGS.CORE_LOG_HANDLER
         return PLOOP_PLATFORM_SETTINGS.CORE_LOG_LEVEL > loglvl and fakefunc or
             function(msg, stack, ...)
                 if type(stack) == "number" then
-                    msg = prefix .. strformat(msg, ...) .. (getcallline(stack + 1) or "")
+                    msg         = prefix .. strformat(msg, ...) .. (getcallline(stack + 1) or "")
                 elseif stack then
-                    msg = prefix .. strformat(msg, stack, ...)
+                    msg         = prefix .. strformat(msg, stack, ...)
                 else
-                    msg = prefix .. msg
+                    msg         = prefix .. msg
                 end
                 return handler(msg, loglvl)
             end
@@ -3797,7 +3797,6 @@ do
             end
 
             tinsert(body, [[end]])
-
             tinsert(body, [[end]])
 
             if #apis > 0 then
