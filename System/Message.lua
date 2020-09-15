@@ -21,6 +21,12 @@ PLoop(function(_ENV)
         extend "System.IAutoClose"
 
         -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- The timeout protection for receiving message operations(in seconds)
+         __Abstract__() property "Timeout" { type = Number }
+
+        -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         --- Subscribe a message filter, topic-based, return true if successful, otherwise false and error code is needed

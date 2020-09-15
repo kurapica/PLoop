@@ -18,13 +18,11 @@ PLoop(function(_ENV)
     local ok, socket            = pcall(require, "socket")
     if not socket then return end
 
-    namespace "System.Net"
-
     --- The socket implementation based on LuaSocket
-    __Sealed__() class "Socket" (function(_ENV)
-        extend "ISocket"
+    __Sealed__() class "System.Net.Socket" (function(_ENV)
+        extend "System.Net.ISocket"
 
-        export { "throw", Socket, SocketShutdown, Net.TimeoutException }
+        export { "throw", Socket, System.Net.SocketShutdown, System.Net.TimeoutException, System.Net.SocketException }
 
         ---------------------------------------------------
         --                    method                     --

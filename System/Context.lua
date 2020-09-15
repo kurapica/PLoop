@@ -140,9 +140,10 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                           constructor                             --
         -----------------------------------------------------------------------
-        __Abstract__() __Arguments__{ Context/nil }
-        function __ctor(self, context)
+        __Abstract__() __Arguments__{ Context/nil, ISessionStorageProvider/nil }
+        function __ctor(self, context, provider)
             self.Context        = context
+            self.SessionStorageProvider = provider
         end
     end)
 

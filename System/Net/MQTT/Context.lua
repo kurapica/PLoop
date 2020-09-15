@@ -55,95 +55,89 @@ PLoop(function(_ENV)
         local SocketType        = System.Net.Socket
 
         -----------------------------------------------------------------------
-        --                               event                               --
-        -----------------------------------------------------------------------
-        --- Fired when a message packet is received
-        event "OnMessageReceived"
-
-        -----------------------------------------------------------------------
         --                        abstract property                          --
         -----------------------------------------------------------------------
-        --- The Message Publisher
-        __Abstract__()
-        property "MessagePublisher" { type = System.Net.MQTT.IMQTTPublisher }
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
         --- The server side session
-        property "Session"          { type = Session, default = function(self) return Session(self) end }
+        __Abstract__() property "Session"          { type = Session, default = function(self) return Session(self) end }
+
+        --- The Message Publisher
+        __Abstract__() property "MessagePublisher" { type = System.Net.MQTT.IMQTTPublisher, handler = function(self, publisher) if publisher then publisher.Timeout = self.MessageReceiveTimeout end end }
 
         --- Whether the client is server side
-        property "IsServerSide"     { type = Boolean, default = true }
+        __Abstract__() property "IsServerSide"     { type = Boolean, default = false }
 
         --- The server address to be connected
-        property "Address"          { type = String, default = "127.0.0.1" }
+        __Abstract__() property "Address"          { type = String, default = "127.0.0.1" }
 
         --- The server port to be connected
-        property "Port"             { type = NaturalNumber, default = 1883 }
+        __Abstract__() property "Port"             { type = NaturalNumber, default = 1883 }
 
         --- The socket object
-        property "Socket"           { type = ISocket, default = SocketType and function(self) return SocketType() end }
+        __Abstract__() property "Socket"           { type = ISocket, default = SocketType and function(self) return SocketType() end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out
-        property "ReceiveTimeout"   { type = Integer, handler = function(self, timeout) if self.Socket then self.Socket.ReceiveTimeout = timeout end end }
+        __Abstract__() property "ReceiveTimeout"   { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ReceiveTimeout = timeout end end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out
-        property "SendTimeout"      { type = Integer, handler = function(self, timeout) if self.Socket then self.Socket.SendTimeout = timeout end end }
+        __Abstract__() property "SendTimeout"      { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.SendTimeout = timeout end end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Connect call will time out
-        property "ConnectTimeout"   { type = Integer, handler = function(self, timeout) if self.Socket then self.Socket.ConnectTimeout = timeout end end }
+        __Abstract__() property "ConnectTimeout"   { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ConnectTimeout = timeout end end }
+
+        --- Gets or sets a value that specifies the amount of time for the message published after which a synchronous Receive call will time out
+        __Abstract__() property "MessageReceiveTimeout" { type = Number, handler = function(self, timeout) if self.MessagePublisher then self.MessagePublisher.Timeout = timeout end end }
 
         --- Whether auto send the ping to the server to keep connection, not works for the server side client
-        property "KeepConnection"   { type = Boolean, default = true }
+        __Abstract__() property "KeepConnection"   { type = Boolean, default = true }
 
         --- The maximum qos level can be subscribed
-        property "MaximumQosLevel"  { type = QosLevel, default = QosLevel.EXACTLY_ONCE }
-
-        --- Whether auto yield during the process
-        property "AutoYield"        { type = Boolean, default = false }
+        __Abstract__() property "MaximumQosLevel"  { type = QosLevel, default = QosLevel.EXACTLY_ONCE }
 
         --- The client state
-        property "State"            { type = ClientState, default = ClientState.DISCONNECTED }
+        __Abstract__() property "State"            { type = ClientState, default = ClientState.DISCONNECTED }
 
         --- The MQTT Protocol Level
-        property "ProtocolLevel"    { type = ProtocolLevel, default = ProtocolLevel.V3_1_1 }
+        __Abstract__() property "ProtocolLevel"    { type = ProtocolLevel, default = ProtocolLevel.V3_1_1 }
 
         --- The keep alive time(in sec), default 1 min
-        property "KeepAlive"        { type = Number, default = 60 }
+        __Abstract__() property "KeepAlive"        { type = Number, default = 60 }
 
         --- The clean session flag
-        property "CleanSession"     { type = Boolean, default = false }
+        __Abstract__() property "CleanSession"     { type = Boolean, default = false }
 
         --- The client ID
-        property "ClientID"         { type = String, default = Guid.New():gsub("-", ""):sub(23) }
+        __Abstract__() property "ClientID"         { type = String, default = Guid.New():gsub("-", ""):sub(23) }
 
         --- The user name
-        property "UserName"         { type = String }
+        __Abstract__() property "UserName"         { type = String }
 
         --- The password
-        property "Password"         { type = String }
+        __Abstract__() property "Password"         { type = String }
 
         --- The publiced packet, keep until the ack is received
-        property "PublishPackets"   { set = false, default = function(self) return {} end }
+        __Abstract__() property "PublishPackets"   { set = false, default = function(self) return {} end }
 
         --- The last used packet ID
-        property "LastPacketID"     { type = Number, default = 0 }
+        __Abstract__() property "LastPacketID"     { type = Number, default = 0 }
 
         --- The will message
-        property "WillMessage"      { type = ConnectWill }
+        __Abstract__() property "WillMessage"      { type = ConnectWill }
 
         --- The last active time that received the packet
-        property "LastActiveTime"   { type = Date }
+        property "LastActiveTime"                   { type = Date }
 
         --- The subscribed topics and requested qos levels, used both for server side and client side
-        property "TopicFilters"     { set = false, default = function() return {} end }
+        property "TopicFilters"                     { set = false, default = function() return {} end }
 
         --- The subscription topic filters
-        property "SubscribeTopicFilters"    { set = false, default = function() return {} end }
+        property "SubscribeTopicFilters"            { set = false, default = function() return {} end }
 
         --- The unsubscribe topic filters
-        property "UnsubscribeTopicFilters"  { set = false, default = function() return {} end }
+        property "UnsubscribeTopicFilters"          { set = false, default = function() return {} end }
 
         -----------------------------------------------------------------------
         --                         abstract method                           --
@@ -151,13 +145,16 @@ PLoop(function(_ENV)
         --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result
         __Abstract__() function Authenticate(self, packet) end
 
+        --- Handle the published message from the client
+        __Abstract__() function ProcessClientMessage(self, topic, payload) end
+
         -----------------------------------------------------------------------
         --                           Common Method                           --
         -----------------------------------------------------------------------
         --- Start process the packet data until the client is closed
         -- This method could be overridden to add features like yield and etc
         -- it's also very simple to create custom processing method
-        function Process(self)
+        __Abstract__() function Process(self)
             while self.State ~= ClientState.CLOSED do
                 if self.IsServerSide and self.MessagePublisher then
                     -- Check the published message
@@ -173,8 +170,6 @@ PLoop(function(_ENV)
                 if ptype then
                     self:ProcessPacket(ptype, packet)
                 end
-
-                if self.AutoYield then yield(ptype or false, packet) end
             end
         end
 
@@ -231,7 +226,7 @@ PLoop(function(_ENV)
                 -- Handle the session part
                 self.ClientID       = packet.selfID
                 self.CleanSession   = packet.cleanStart or packet.cleanSession
-                self.KeepAlive      = packet.keepAlive and floor(packet.keepAlive * 1.5) or nil
+                self.KeepAlive      = packet.keepAlive and floor(packet.keepAlive * 1.5) or 0
 
                 self.Session.SessionID    = self.clientID
 
@@ -263,9 +258,8 @@ PLoop(function(_ENV)
                     self.MessagePublisher:PublishMessage(packet.topicName, packet.payload, packet.qos, packet.retainFlag)
                 end
 
-                -- Send out the message for other operations
-                -- We need several methods to send out the message packets
-                OnMessageReceived(self, packet.topicName, packet.payload)
+                -- Process the client message, should be implemented by the child classes
+                self:ProcessClientMessage(packet.topicName, packet.payload)
 
                 -- Send the ack based on the qos
                 if packet.qos == QosLevel.AT_LEAST_ONCE then
@@ -825,13 +819,11 @@ PLoop(function(_ENV)
                 return
             end
 
-            return Client       {
+            local client        = Client {
                 Socket          = client,
-                Server          = self,
                 IsServerSide    = true,
                 ReceiveTimeout  = self.ReceiveTimeout,
                 SendTimeout     = self.SendTimeout,
-                SessionStorageProvider = self.SessionStorageProvider,
 
                 -- Override then method
                 Authenticate    = self.Authenticate,
@@ -839,6 +831,8 @@ PLoop(function(_ENV)
                 -- The message publisher
                 MessagePublisher= self.MessagePublisherType and self.MessagePublisherType(),
             }
+
+            client.Session.SessionStorageProvider = self.SessionStorageProvider
         end
     end)
 end)
