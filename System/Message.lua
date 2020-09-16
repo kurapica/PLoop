@@ -21,10 +21,20 @@ PLoop(function(_ENV)
         extend "System.IAutoClose"
 
         -----------------------------------------------------------------------
+        --                               event                               --
+        -----------------------------------------------------------------------
+        --- Fired when the publisher has topic subscribed
+        event "OnTopicSubscribed"
+
+        -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
         --- The timeout protection for receiving message operations(in seconds)
-         __Abstract__() property "Timeout" { type = Number }
+        __Abstract__() property "Timeout"           { type = Number }
+
+        --- When the publisher has topics subscribed, it's a difficult to manage this flag since we can use pattern in those topic filters
+        -- So normally should be managed in the implementation
+        __Abstract__() property "TopicSubscribed"   { type = Boolean, handler = function(self, flag) return flag and OnTopicSubscribed(self) end }
 
         -----------------------------------------------------------------------
         --                              method                               --

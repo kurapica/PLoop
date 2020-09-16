@@ -38,7 +38,6 @@ PLoop(function(_ENV)
         ipairs                  = ipairs,
         pairs                   = pairs,
         tblconcat               = table.concat,
-        Trace                   = Logger.Default[Logger.LogLevel.Trace],
 
         throw                   = throw,
 
@@ -1614,8 +1613,6 @@ PLoop(function(_ENV)
     ---------------------------------------------------
     System.Net.Protocol "MQTT" {
         make                    = function(ptype, packet, level)
-            Trace("[MQTT][SEND]%s - %s", PacketType(ptype), packet)
-
             local map           = PACKET_MAKE_MAP[ptype]
             if not map then return nil end
 
@@ -1650,11 +1647,7 @@ PLoop(function(_ENV)
                     throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
                 end
 
-                local packet        = map(vlength == 0 and "" or socket:sub(offset, offset + vlength -1), flags, level)
-
-                Trace("[MQTT][RECEIVE]%s - %s", PacketType(ptype), packet)
-
-                return ptype, packet
+                return ptype, map(vlength == 0 and "" or socket:sub(offset, offset + vlength -1), flags, level)
             else
                 if not isObjectType(socket, ISocket) then
                     throw(MQTTException("The protocol can't read data from the given object"), ReasonCode.MALFORMED_PACKET)
@@ -1680,11 +1673,7 @@ PLoop(function(_ENV)
                     throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
                 end
 
-                local packet        = map(vlength == 0 and "" or socket:Receive(vlength), flags, level)
-
-                Trace("[MQTT][RECEIVE]%s - %s", PacketType(ptype), packet)
-
-                return ptype, packet
+                return ptype, map(vlength == 0 and "" or socket:Receive(vlength), flags, level)
             end
         end
     }

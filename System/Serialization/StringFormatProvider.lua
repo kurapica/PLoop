@@ -28,8 +28,9 @@ PLoop(function(_ENV)
         validnamespace          = Namespace.Validate,
         isValidValue            = Struct.ValidateValue,
         isanonymous             = Namespace.IsAnonymousNamespace,
+        Serialize               = Serialization.Serialize,
 
-        Serialization.Serializable, Serialization.SerializableType, List
+        Serialization.Serializable, Serialization.SerializableType, List, Toolset, Serialization
     }
 
     -----------------------------------------------------------------------

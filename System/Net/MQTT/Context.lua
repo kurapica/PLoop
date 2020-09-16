@@ -49,6 +49,8 @@ PLoop(function(_ENV)
             min                 = math.min,
             floor               = math.floor,
             yield               = coroutine.yield,
+
+            Trace                = Logger.Default[Logger.LogLevel.Trace],
         }
 
         -- Only use this for test or client side only
@@ -189,6 +191,8 @@ PLoop(function(_ENV)
             end
 
             if ok then
+                Trace("[MQTT][CLIENT]%s [Receive][%s] %s", self.ClientID, PacketType(ptype), packet)
+
                 self.LastActiveTime = Date.Now
 
                 if ptype == PacketType.PUBACK or ptype == PacketType.PUBCOMP then
@@ -201,6 +205,7 @@ PLoop(function(_ENV)
                 error(ptype)
             elseif self.IsServerSide then
                 -- Close the client if pass the time out
+                Trace("[MQTT][Timeout] [Now] %d [KeepAlive] %d", Date.Now.Time - self.LastActiveTime.Time, self.KeepAlive)
                 if self.LastActiveTime and ( Date.Now.Time >= self.LastActiveTime.Time + self.KeepAlive ) then
                     self:CloseClient()
                     return -- keep return nil here to stop the iterator if existed
@@ -224,11 +229,11 @@ PLoop(function(_ENV)
                 self.WillMessage    = packet.will
 
                 -- Handle the session part
-                self.ClientID       = packet.selfID
+                self.ClientID       = packet.clientID
                 self.CleanSession   = packet.cleanStart or packet.cleanSession
                 self.KeepAlive      = packet.keepAlive and floor(packet.keepAlive * 1.5) or 0
 
-                self.Session.SessionID    = self.clientID
+                self.Session.SessionID    = self.ClientID
 
                 if self.CleanSession then
                     self.Session.RawItems = {}
@@ -400,6 +405,7 @@ PLoop(function(_ENV)
                     packet.cleanSession = self.CleanSession
                 end
 
+                Trace("[MQTT][CLIENT]%s [SEND][CONNECT] - %s", self.ClientID, packet)
                 self.Socket:Send(MQTT.MakePacket(PacketType.CONNECT, packet, self.ProtocolLevel))
 
                 local ptype, packet = self:ParsePacket()
@@ -428,6 +434,7 @@ PLoop(function(_ENV)
                     packet.properties = properties
                 end
 
+                Trace("[MQTT][CLIENT]%s [SEND][DISCONNECT] - %s", self.ClientID, packet)
                 self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet, self.ProtocolLevel))
             end
 
@@ -450,6 +457,8 @@ PLoop(function(_ENV)
 
             -- Keep tracking the packet id with the filters
             self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
+
+            Trace("[MQTT][CLIENT]%s [SEND][SUBSCRIBE] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -464,6 +473,8 @@ PLoop(function(_ENV)
             }
 
             self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
+
+            Trace("[MQTT][CLIENT]%s [SEND][SUBSCRIBE] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -482,6 +493,8 @@ PLoop(function(_ENV)
 
             -- Keep tracking the packet id with the filters
             self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
+
+            Trace("[MQTT][CLIENT]%s [SEND][UNSUBSCRIBE] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -496,6 +509,8 @@ PLoop(function(_ENV)
             }
 
             self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
+
+            Trace("[MQTT][CLIENT]%s [SEND][UNSUBSCRIBE] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
         end
 
@@ -503,6 +518,7 @@ PLoop(function(_ENV)
         function PingReq(self)
             if self.State ~= ClientState.CONNECTED then return end
 
+            Trace("[MQTT][CLIENT]%s [SEND][PINGREQ] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PINGREQ, {}, self.ProtocolLevel))
         end
 
@@ -526,10 +542,12 @@ PLoop(function(_ENV)
             packet.returnCode   = returnCode or ConnectReturnCode.ACCEPTED
             packet.properties   = properties
 
+            Trace("[MQTT][CLIENT]%s [SEND][CONNACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.CONNACK, packet, self.ProtocolLevel))
 
             if packet.returnCode == ConnectReturnCode.ACCEPTED then
                 self.State      = ClientState.CONNECTED
+                self.LastActiveTime = Date.Now
             else
                 -- Close the server side client
                 self.State      = ClientState.CLOSED
@@ -548,6 +566,7 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or SubAckReturnCode.MAX_QOS_2 }
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][SUBACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
         end
 
@@ -562,6 +581,7 @@ PLoop(function(_ENV)
                 returnCodes     = returncodes,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][SUBACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
         end
 
@@ -576,6 +596,7 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or ReasonCode.SUCCESS }
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][UNSUBACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
         end
 
@@ -589,6 +610,7 @@ PLoop(function(_ENV)
                 returnCodes     = returncodes
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][UNSUBACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
         end
 
@@ -596,6 +618,7 @@ PLoop(function(_ENV)
         function PingResp(self)
             if self.State ~= ClientState.CONNECTED then return end
 
+            Trace("[MQTT][CLIENT]%s [SEND][PINGRESP] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PINGRESP, {}, self.ProtocolLevel))
         end
 
@@ -609,6 +632,8 @@ PLoop(function(_ENV)
                 -- Publish the will message
                 self.MessagePublisher:PublishMessage(will.topic, will.message or will.payload, will.qos, will.retain)
             end
+
+            Trace("[MQTT][CLIENT]%s [CLOSE]", self.ClientID)
 
             self.State          = ClientState.CLOSED
             self.Socket:Close()
@@ -643,6 +668,7 @@ PLoop(function(_ENV)
                 self.PublishPackets[pid] = packet
             end
 
+            Trace("[MQTT][CLIENT]%s [SEND][PUBLISH] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
         end
 
@@ -655,12 +681,14 @@ PLoop(function(_ENV)
             if not packet then return end
 
             packet.dupFlag      = true
+
+            Trace("[MQTT][CLIENT]%s [SEND][PUBLISH] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Ack message to the server or client, should only be used on publish packet with QoS level 1
         __Arguments__{ Number, ReasonCode/nil, PropertySet/nil}
-        function PubAck(self, packetid, reasoncode, properties)
+        function PubAck(self, packetid, reasonCode, properties)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
@@ -669,12 +697,13 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][PUBACK] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBACK, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish receive message to the server or client, should only be used on public packet with QoS level 2
         __Arguments__{ Number, ReasonCode/nil, PropertySet/nil}
-        function PubRec(self, packetid, reasoncode, properties)
+        function PubRec(self, packetid, reasonCode, properties)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
@@ -683,12 +712,13 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][PUBREC] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBREC, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
         __Arguments__{ Number, ReasonCode/nil, PropertySet/nil}
-        function PubRel(self, packetid, reasoncode, properties)
+        function PubRel(self, packetid, reasonCode, properties)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
@@ -697,12 +727,13 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][PUBREL] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBREL, packet, self.ProtocolLevel))
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
         __Arguments__{ Number, ReasonCode/nil, PropertySet/nil}
-        function PubComp(self, packetid, reasoncode, properties)
+        function PubComp(self, packetid, reasonCode, properties)
             if self.State ~= ClientState.CONNECTED then return end
 
             local packet        = {
@@ -711,6 +742,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][PUBCOMP] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.PUBCOMP, packet, self.ProtocolLevel))
         end
 
@@ -724,6 +756,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
+            Trace("[MQTT][CLIENT]%s [SEND][AUTH] - %s", self.ClientID, packet)
             self.Socket:Send(MQTT.MakePacket(PacketType.AUTH, packet, self.ProtocolLevel))
         end
     end)
