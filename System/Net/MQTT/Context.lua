@@ -243,7 +243,7 @@ PLoop(function(_ENV)
                 end
 
                 -- Authenticate and Ack with the code
-                local ok, ret       = self:Authenticate()
+                local ok, ret       = self:Authenticate(packet)
                 if ok == false then
                     if not (type(ret) == "number" and valEnumValue(ConnectReturnCode, ret)) then
                         ret         = ConnectReturnCode.AUTHORIZE_FAILED
@@ -816,6 +816,9 @@ PLoop(function(_ENV)
         --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result or true/false  and with a return code if failed
         __Abstract__() function Authenticate(self, packet) end
 
+        --- Handle the published message from the client
+        __Abstract__() function ProcessClientMessage(self, topic, payload) end
+
         --- Return a new message publisher to the client
         __Abstract__() function NewMessagePublisher(self) return MQTTPublisher() end
 
@@ -860,6 +863,7 @@ PLoop(function(_ENV)
 
                 -- Override then method
                 Authenticate    = self.Authenticate,
+                ProcessClientMessage = self.ProcessClientMessage,
 
                 -- The message publisher
                 MessagePublisher= self.MessagePublisherType and self.MessagePublisherType(),
