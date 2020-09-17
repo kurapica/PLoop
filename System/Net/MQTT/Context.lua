@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                     System.Net.Protocol.MQTT.Context                      --
+--                          System.Net.MQTT.Context                          --
 --                                                                           --
 --===========================================================================--
 
@@ -50,15 +50,20 @@ PLoop(function(_ENV)
             floor               = math.floor,
             yield               = coroutine.yield,
 
-            Trace                = Logger.Default[Logger.LogLevel.Trace],
+            Trace               = Logger.Default[Logger.LogLevel.Trace],
         }
 
         -- Only use this for test or client side only
         local SocketType        = System.Net.Socket
 
         -----------------------------------------------------------------------
-        --                        abstract property                          --
+        --                               event                               --
         -----------------------------------------------------------------------
+        --- Fired when a topic filter is subscribed
+        event "OnTopicSubscribed"
+
+        --- Fired when a message is received
+        event "OnMessageReceived"
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -147,9 +152,6 @@ PLoop(function(_ENV)
         --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result
         __Abstract__() function Authenticate(self, packet) end
 
-        --- Handle the published message from the client
-        __Abstract__() function ProcessClientMessage(self, topic, payload) end
-
         -----------------------------------------------------------------------
         --                           Common Method                           --
         -----------------------------------------------------------------------
@@ -205,7 +207,7 @@ PLoop(function(_ENV)
                 error(ptype)
             elseif self.IsServerSide then
                 -- Close the client if pass the time out
-                Trace("[MQTT][Timeout] [Now] %d [KeepAlive] %d", Date.Now.Time - self.LastActiveTime.Time, self.KeepAlive)
+                -- Trace("[MQTT][Timeout] [Now] %d [KeepAlive] %d", Date.Now.Time - self.LastActiveTime.Time, self.KeepAlive)
                 if self.LastActiveTime and ( Date.Now.Time >= self.LastActiveTime.Time + self.KeepAlive ) then
                     self:CloseClient()
                     return -- keep return nil here to stop the iterator if existed
@@ -263,8 +265,8 @@ PLoop(function(_ENV)
                     self.MessagePublisher:PublishMessage(packet.topicName, packet.payload, packet.qos, packet.retainFlag)
                 end
 
-                -- Process the client message, should be implemented by the child classes
-                self:ProcessClientMessage(packet.topicName, packet.payload)
+                -- Send out the client message
+                OnMessageReceived(self, packet.topicName, packet.payload)
 
                 -- Send the ack based on the qos
                 if packet.qos == QosLevel.AT_LEAST_ONCE then
@@ -289,8 +291,13 @@ PLoop(function(_ENV)
                 local publisher     = self.MessagePublisher
 
                 for i, filter in ipairs(packet.topicFilters) do
-                    returnCodes[i]  = publisher and publisher:SubscribeTopic(filter.topicFilter, min(self.MaximumQosLevel, filter.requestedQoS or QosLevel.AT_MOST_ONCE)) or SubAckReturnCode.FAILURE
+                    local qos       = min(self.MaximumQosLevel, filter.requestedQoS or QosLevel.AT_MOST_ONCE)
+                    returnCodes[i]  = publisher and publisher:SubscribeTopic(filter.topicFilter, qos) or SubAckReturnCode.FAILURE
                     self.TopicFilters[filter.topicFilter] = returnCodes[i]
+
+                    if returnCodes[i] == SubAckReturnCode.SUCCESS then
+                        OnTopicSubscribed(self, filter.topicFilter, qos)
+                    end
                 end
 
                 self:SubAck(packet.packetID, returnCodes)
@@ -390,7 +397,7 @@ PLoop(function(_ENV)
 
             if self.State == ClientState.CONNECTING then
                 local packet    = {
-                    version     = self.ProtocolLevel,
+                    level       = self.ProtocolLevel,
                     keepAlive   = self.KeepAlive,
                     clientID    = self.ClientID,
                     userName    = self.UserName,
@@ -816,12 +823,6 @@ PLoop(function(_ENV)
         --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result or true/false  and with a return code if failed
         __Abstract__() function Authenticate(self, packet) end
 
-        --- Handle the published message from the client
-        __Abstract__() function ProcessClientMessage(self, topic, payload) end
-
-        --- Return a new message publisher to the client
-        __Abstract__() function NewMessagePublisher(self) return MQTTPublisher() end
-
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
@@ -861,15 +862,16 @@ PLoop(function(_ENV)
                 ReceiveTimeout  = self.ReceiveTimeout,
                 SendTimeout     = self.SendTimeout,
 
-                -- Override then method
+                -- Override the method
                 Authenticate    = self.Authenticate,
-                ProcessClientMessage = self.ProcessClientMessage,
 
                 -- The message publisher
                 MessagePublisher= self.MessagePublisherType and self.MessagePublisherType(),
             }
 
             client.Session.SessionStorageProvider = self.SessionStorageProvider
+
+            return client
         end
     end)
 end)
