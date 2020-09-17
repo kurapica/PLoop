@@ -193,7 +193,7 @@ PLoop(function(_ENV)
             end
 
             if ok then
-                Trace("[MQTT][CLIENT]%s [Receive][%s] %s", self.ClientID, PacketType(ptype), packet)
+                Trace("[MQTT][CLIENT]%s [RECEIVE][%s] %s", self.ClientID, PacketType(ptype), packet)
 
                 self.LastActiveTime = Date.Now
 
@@ -295,7 +295,7 @@ PLoop(function(_ENV)
                     returnCodes[i]  = publisher and publisher:SubscribeTopic(filter.topicFilter, qos) or SubAckReturnCode.FAILURE
                     self.TopicFilters[filter.topicFilter] = returnCodes[i]
 
-                    if returnCodes[i] == SubAckReturnCode.SUCCESS then
+                    if returnCodes[i] <= SubAckReturnCode.MAX_QOS_2 then
                         OnTopicSubscribed(self, filter.topicFilter, qos)
                     end
                 end
@@ -348,6 +348,12 @@ PLoop(function(_ENV)
             elseif ptype == PacketType.AUTH then
                 -- Not supported here
             end
+        end
+
+        -- Send the packet to the client
+        function SendPacket(self, ptype, packet)
+            Trace("[MQTT][CLIENT]%s [SEND][%s] - %s", self.ClientID, PacketType(ptype), packet)
+            self.Socket:Send(MQTT.MakePacket(ptype, packet, self.ProtocolLevel))
         end
 
         --- Gets a new packet id
@@ -412,8 +418,7 @@ PLoop(function(_ENV)
                     packet.cleanSession = self.CleanSession
                 end
 
-                Trace("[MQTT][CLIENT]%s [SEND][CONNECT] - %s", self.ClientID, packet)
-                self.Socket:Send(MQTT.MakePacket(PacketType.CONNECT, packet, self.ProtocolLevel))
+                self:SendPacket(PacketType.CONNECT, packet)
 
                 local ptype, packet = self:ParsePacket()
 
@@ -441,8 +446,7 @@ PLoop(function(_ENV)
                     packet.properties = properties
                 end
 
-                Trace("[MQTT][CLIENT]%s [SEND][DISCONNECT] - %s", self.ClientID, packet)
-                self.Socket:Send(MQTT.MakePacket(PacketType.DISCONNECT, packet, self.ProtocolLevel))
+                self:SendPacket(PacketType.DISCONNECT, packet)
             end
 
             self.State          = ClientState.CLOSED
@@ -465,8 +469,7 @@ PLoop(function(_ENV)
             -- Keep tracking the packet id with the filters
             self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
 
-            Trace("[MQTT][CLIENT]%s [SEND][SUBSCRIBE] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.SUBSCRIBE, packet)
         end
 
         __Arguments__{ TopicFilters, PropertySet/nil }
@@ -481,8 +484,7 @@ PLoop(function(_ENV)
 
             self.SubscribeTopicFilters[packet.packetID] = packet.topicFilters
 
-            Trace("[MQTT][CLIENT]%s [SEND][SUBSCRIBE] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBSCRIBE, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.SUBSCRIBE, packet)
         end
 
         --- Send Unsubscribe message to the server
@@ -501,8 +503,7 @@ PLoop(function(_ENV)
             -- Keep tracking the packet id with the filters
             self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
 
-            Trace("[MQTT][CLIENT]%s [SEND][UNSUBSCRIBE] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.UNSUBSCRIBE, packet)
         end
 
         __Arguments__{ TopicFilters, PropertySet/nil }
@@ -517,16 +518,14 @@ PLoop(function(_ENV)
 
             self.UnsubscribeTopicFilters[packet.packetID] = packet.topicFilters
 
-            Trace("[MQTT][CLIENT]%s [SEND][UNSUBSCRIBE] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBSCRIBE, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.UNSUBSCRIBE, packet)
         end
 
         --- Send ping to the server
         function PingReq(self)
             if self.State ~= ClientState.CONNECTED then return end
 
-            Trace("[MQTT][CLIENT]%s [SEND][PINGREQ] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PINGREQ, {}, self.ProtocolLevel))
+            self:SendPacket(PacketType.PINGREQ, {})
         end
 
         -----------------------------------------------------------------------
@@ -549,8 +548,7 @@ PLoop(function(_ENV)
             packet.returnCode   = returnCode or ConnectReturnCode.ACCEPTED
             packet.properties   = properties
 
-            Trace("[MQTT][CLIENT]%s [SEND][CONNACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.CONNACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.CONNACK, packet)
 
             if packet.returnCode == ConnectReturnCode.ACCEPTED then
                 self.State      = ClientState.CONNECTED
@@ -573,8 +571,7 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or SubAckReturnCode.MAX_QOS_2 }
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][SUBACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.SUBACK, packet)
         end
 
         --- Send the subscribe ack message to the client
@@ -588,8 +585,7 @@ PLoop(function(_ENV)
                 returnCodes     = returncodes,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][SUBACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.SUBACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.SUBACK, packet)
         end
 
         --- Send the unsubscribe ack message to the client
@@ -603,8 +599,7 @@ PLoop(function(_ENV)
                 returnCodes     = { returncode or ReasonCode.SUCCESS }
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][UNSUBACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.UNSUBACK, packet)
         end
 
         __Arguments__{ Number, struct { ReasonCode }, PropertySet/nil }
@@ -617,16 +612,14 @@ PLoop(function(_ENV)
                 returnCodes     = returncodes
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][UNSUBACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.UNSUBACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.UNSUBACK, packet)
         end
 
         --- Send ping to the client as the response to the pingreq packet
         function PingResp(self)
             if self.State ~= ClientState.CONNECTED then return end
 
-            Trace("[MQTT][CLIENT]%s [SEND][PINGRESP] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PINGRESP, {}, self.ProtocolLevel))
+            self:SendPacket(PacketType.PINGRESP, {})
         end
 
         --- Close the Server side client
@@ -675,8 +668,7 @@ PLoop(function(_ENV)
                 self.PublishPackets[pid] = packet
             end
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBLISH] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBLISH, packet)
         end
 
         --- Re-publish the message to the server or client
@@ -689,8 +681,7 @@ PLoop(function(_ENV)
 
             packet.dupFlag      = true
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBLISH] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBLISH, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBLISH, packet)
         end
 
         --- Send the Publish Ack message to the server or client, should only be used on publish packet with QoS level 1
@@ -704,8 +695,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBACK] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBACK, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBACK, packet)
         end
 
         --- Send the Publish receive message to the server or client, should only be used on public packet with QoS level 2
@@ -719,8 +709,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBREC] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREC, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBREC, packet)
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
@@ -734,8 +723,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBREL] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBREL, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBREL, packet)
         end
 
         --- Send the Publish Release message to the server or client, should only be used on public packet with QoS level 2
@@ -749,8 +737,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][PUBCOMP] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.PUBCOMP, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.PUBCOMP, packet)
         end
 
         --- Send the extended authentication exchange data between the client and the server
@@ -763,8 +750,7 @@ PLoop(function(_ENV)
                 properties      = properties,
             }
 
-            Trace("[MQTT][CLIENT]%s [SEND][AUTH] - %s", self.ClientID, packet)
-            self.Socket:Send(MQTT.MakePacket(PacketType.AUTH, packet, self.ProtocolLevel))
+            self:SendPacket(PacketType.AUTH, packet)
         end
     end)
 
