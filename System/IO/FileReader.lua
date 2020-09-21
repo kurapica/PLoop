@@ -62,8 +62,8 @@ PLoop(function(_ENV)
 
         function ReadToEnd(self) return self[0]:read("*a") end
 
-        function ReadBlock(self, index, count)
-            self[0]:seek("set", index)
+        function ReadBlock(self, count, index)
+            if index then self[0]:seek("set", index) end
             return self[0]:read(count)
         end
 

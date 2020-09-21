@@ -81,7 +81,9 @@ PLoop(function(_ENV)
             end
         end
 
-        function ReadBlock(self, index, count)
+        function ReadBlock(self, count, index)
+            if index then self.Position = index end
+
             local pos           = self.__seekpos
             if pos <= self.__length then
                 self.__seekpos      = pos + count
