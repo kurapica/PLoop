@@ -233,6 +233,8 @@ PLoop(function(_ENV)
             GetStructCategory   = Struct.GetStructCategory,
             GetMembers          = Struct.GetMembers,
             GetArrayElement     = Struct.GetArrayElement,
+            GetDictionaryKey    = Struct.GetDictionaryKey,
+            GetDictionaryValue  = Struct.GetDictionaryValue,
             IsSubStruct         = Struct.IsSubType,
             IsStruct            = Struct.Validate,
             IsEnum              = Enum.Validate,
@@ -370,6 +372,43 @@ PLoop(function(_ENV)
             end
         end
 
+        local function validateDictValue(config, value)
+            if type(value) == "string" then
+                local ok, val   = pcall(Deserialize, JsonFormatProvider(), value)
+                if ok then value= val end
+            end
+
+            if type(value) ~= "table" then
+                if value == nil then
+                    return nil, config.require and __Form__.RequireMessage or nil
+                else
+                    return value, __Form__.TabelMessage
+                end
+            else
+                local errs
+                local kvalid    = config.keyconfig
+                local vvalid    = config.valconfig
+
+                for k, v in pairs(value) do
+                    local _, err= kvalid:validate(k)
+                    if err then
+                        errs    = errs or {}
+                        errs[k] = err
+                    else
+                        local val, err = vvalid:validate(v)
+                        if err then
+                            errs    = errs or {}
+                            errs[k] = err
+                        else
+                            value[k]= val
+                        end
+                    end
+                end
+
+                return value, errs
+            end
+        end
+
         local function parseType(vtype, require, stack)
             if vtype then
                 if IsEnum(vtype) then
@@ -393,7 +432,7 @@ PLoop(function(_ENV)
 
                         return { memberconfigs = memconfigs, validate = validateMemberValue, require = require }
                     elseif category == DICTIONARY then
-                        error("The dictionary struct type isn't supported", stack + 1)
+                        return { keyconfig = parseType(GetDictionaryKey(vtype), nil, stack + 1), valconfig = parseType(GetDictionaryValue(vtype), nil, stack + 1), validate = validateDictValue, require = require  }
                     end
                 end
             end
@@ -462,10 +501,13 @@ PLoop(function(_ENV)
         --                    static property                    --
         -----------------------------------------------------------
         --- the message for require items
-        __Static__() property "RequireMessage" { type = String, default = "the %s can't be nil" }
+        __Static__() property "RequireMessage"  { type = String, default = "the %s can't be nil" }
 
         --- the message for number errors
-        __Static__() property "NumberMessage"  { type = String, default = "the %s must be number" }
+        __Static__() property "NumberMessage"   { type = String, default = "the %s must be number" }
+
+        --- The message for table errors
+        __Static__() property "TableMessage"    { type = String, default = "the %s must be a table" }
 
         -----------------------------------------------------------
         --                       property                        --
