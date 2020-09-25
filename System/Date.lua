@@ -71,76 +71,78 @@ PLoop(function(_ENV)
         extend "ICloneable" "ISerializable"
 
         export {
-            date        = _G.os and os.date or _G.date,
-            time        = _G.os and os.time or _G.time,
-            diff        = _G.os and os.difftime or _G.difftime,
-            pairs       = pairs,
-            type        = type,
-            getmetatable= getmetatable,
-            strfind     = strfind,
-            rawset      = rawset,
-            tonumber    = tonumber,
+            date                = _G.os and os.date or _G.date,
+            time                = _G.os and os.time or _G.time,
+            diff                = _G.os and os.difftime or _G.difftime,
+            pairs               = pairs,
+            type                = type,
+            getmetatable        = getmetatable,
+            strfind             = strfind,
+            rawset              = rawset,
+            tonumber            = tonumber,
         }
 
-        local offset    = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
-        local r2Time    = function (self) self.time = time(self) end
-        local r4Time    = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
-        local getnow    = time
+        local offset            = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
+        local r2Time            = function (self) self.time = time(self) end
+        local r4Time            = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
+        local getnow            = time
 
         -----------------------------------------------------------
         --                    static property                    --
         -----------------------------------------------------------
         --- Gets a DateTime object that is set to the current date and time on this computer, expressed as the local time.
-        __Static__() property "Now" { get = function() return Date() end }
+        __Static__()
+        property "Now"          { get = function() return Date() end }
 
         --- Gets and Sets the function that return the current time value(the total second from 1970/1/1 00:00:00)
-        __Static__() property "GetTimeOfDay" { type = Function, set = function(self, val) getnow = val end, get = function() return getnow end }
+        __Static__()
+        property "GetTimeOfDay" { type = Function, set = function(self, val) getnow = val end, get = function() return getnow end }
 
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         --- The year of the date
-        property "Year" { type = Integer,   field = "year", handler = r2Time }
+        property "Year"         { type = Integer,   field = "year", handler = r2Time }
 
         --- The month of the year, 1-12
-        property "Month" { type = Integer,  field = "month",handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
+        property "Month"        { type = Integer,  field = "month",handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
 
         --- The day of the month, 1-31
-        property "Day" { type = Integer,    field = "day",  handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
+        property "Day"          { type = Integer,    field = "day",  handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
 
         --- The hour of the day, 0-23
-        property "Hour" { type = Integer,   field = "hour", handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
+        property "Hour"         { type = Integer,   field = "hour", handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
 
         --- The minute of the hour, 0-59
-        property "Minute" { type = Integer, field = "min",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Minute"       { type = Integer, field = "min",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
         --- The Second of the minute, 0-61
-        property "Second" { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Second"       { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
         --- The weekday, Sunday is 1
-        property "DayOfWeek" { get = function(self) return date("*t", self.time).wday end }
+        property "DayOfWeek"    { get = function(self) return date("*t", self.time).wday end }
 
         --- The day of the year
-        property "DayOfYear" { get = function(self) return date("*t", self.time).yday end }
+        property "DayOfYear"    { get = function(self) return date("*t", self.time).yday end }
 
         --- Indicates whether this instance of DateTime is within the daylight saving time range for the current time zone.
         property "IsDaylightSavingTime" { get = function(self) return date("*t", self.time).isdst end }
 
         --- Gets the time that represent the date and time of this instance.
-        property "Time" { type = Integer, field = "time", handler = r4Time }
+        property "Time"         { type = Integer, field = "time", handler = r4Time }
 
         -----------------------------------------------------------
         --                     static method                     --
         -----------------------------------------------------------
         --- Parse a string data to Date object
-        __Static__() __Arguments__{ NEString, TimeFormat/"%Y-%m-%d %X", Boolean/false }
+        __Static__() __Arguments__{ NEString, TimeFormat, Boolean/false }
         function Parse(s, format, isutc)
             local year, month, day, hour, min, sec
-            local index = 1
+            local index         = 1
 
             if format:find("^!") then
-                isutc   = true
-                format  = format:sub(2)
+                isutc           = true
+                format          = format:sub(2)
             end
 
             -- %d  Day of the month, zero-padded (01-31)                                        23
@@ -150,41 +152,41 @@ PLoop(function(_ENV)
             -- %S  Second (00-61)                                                               02
             -- %X  Time representation                                                          14:55:02
             -- %Y  Year                                                                         2001
-            local pattern   = format:gsub("%%(.)", function(w)
+            local pattern       = format:gsub("%%(.)", function(w)
                 if w == "d" then
-                    day     = index
-                    index   = index + 1
+                    day         = index
+                    index       = index + 1
                     return "(%d?%d)"
                 elseif w == "H" then
-                    hour    = index
-                    index   = index + 1
+                    hour        = index
+                    index       = index + 1
                     return "(%d?%d)"
                 elseif w == "m" then
-                    month   = index
-                    index   = index + 1
+                    month       = index
+                    index       = index + 1
                     return "(%d?%d)"
                 elseif w == "M" then
-                    min     = index
-                    index   = index + 1
+                    min         = index
+                    index       = index + 1
                     return "(%d?%d)"
                 elseif w == "S" then
-                    sec     = index
-                    index   = index + 1
+                    sec         = index
+                    index       = index + 1
                     return "(%d?%d)"
                 elseif w == "X" then
-                    hour    = index
-                    index   = index + 1
+                    hour        = index
+                    index       = index + 1
 
-                    min     = index
-                    index   = index + 1
+                    min         = index
+                    index       = index + 1
 
-                    sec     = index
-                    index   = index + 1
+                    sec         = index
+                    index       = index + 1
 
                     return "(%d?%d):(%d?%d):(%d?%d)"
                 elseif w == "Y" then
-                    year    = index
-                    index   = index + 1
+                    year        = index
+                    index       = index + 1
                     return "(%d%d%d%d)"
                 end
             end)
@@ -193,15 +195,15 @@ PLoop(function(_ENV)
                 error("Usage: Date.Parse(s[, format][,isutc]) - the format isn't valid", 2)
             end
 
-            local rs        = { s:match(pattern) }
-            year            = tonumber(rs[year])
-            month           = tonumber(rs[month])
-            day             = tonumber(rs[day])
+            local rs            = { s:match(pattern) }
+            year                = tonumber(rs[year])
+            month               = tonumber(rs[month])
+            day                 = tonumber(rs[day])
 
             if hour then
-                hour        = tonumber(rs[hour])
-                min         = tonumber(rs[min])
-                sec         = tonumber(rs[sec])
+                hour            = tonumber(rs[hour])
+                min             = tonumber(rs[min])
+                sec             = tonumber(rs[sec])
             end
 
             if not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
@@ -209,6 +211,37 @@ PLoop(function(_ENV)
             end
 
             return Date(year, month, day, hour, min, sec, isutc)
+        end
+
+        __Static__() __Arguments__{ NEString, Boolean/false, Boolean/false }
+        function Parse(s, isEndOfDay, isutc)
+            local year, month, day, hour, min, sec
+            local index         = 0
+
+            for n in s:gmatch("%d+") do
+                index           = index + 1
+                if index == 1 then
+                    year        = tonumber(n)
+                elseif index == 2 then
+                    month       = tonumber(n)
+                elseif index == 3 then
+                    day         = tonumber(n)
+                elseif index == 4 then
+                    hour        = tonumber(n)
+                elseif index == 5 then
+                    min         = tonumber(n)
+                elseif index == 6 then
+                    sec         = tonumber(n)
+                    break
+                end
+            end
+
+            if (year and month and day and year >= 1970 and month >= 1 and month <= 12 and day >= 1 and day <= 31)
+                and (not hour or (hour >= 0 and hour < 24))
+                and (not min  or (min  >= 0 and min < 60))
+                and (not sec  or (sec  >= 0 and sec < 60)) then
+                return Date(year, month, day, hour or isEndOfDay and 23 or 0, min or isEndOfDay and 59 or 0, sec or isEndOfDay and 59 or 0, isutc)
+            end
         end
 
         -----------------------------------------------------------
@@ -282,7 +315,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ SerializationInfo }
         function __new(_, info)
-            local self = { time = info:GetValue("time") or 0 }
+            local self          = { time = info:GetValue("time") or 0 }
             r4Time(self)
             return self, true
         end
@@ -295,7 +328,7 @@ PLoop(function(_ENV)
 
         __Arguments__{ Variable("time", Integer, true) }
         function __new(_, tm)
-            local self = { time = tm or getnow() }
+            local self          = { time = tm or getnow() }
             r4Time(self)
             return self, true
         end
@@ -310,13 +343,13 @@ PLoop(function(_ENV)
             Variable("utc",   Boolean, true, false)
         }
         function __new(_, year, month, day, hour, min, sec, utc)
-            local self  = {
-                year    = year,
-                month   = month,
-                day     = day,
-                hour    = hour,
-                min     = min,
-                sec     = utc and (sec + offset) or sec,
+            local self          = {
+                year            = year,
+                month           = month,
+                day             = day,
+                hour            = hour,
+                min             = min,
+                sec             = utc and (sec + offset) or sec,
             }
 
             r2Time(self)
@@ -337,8 +370,8 @@ PLoop(function(_ENV)
         __Arguments__{ Date }
         function __le(self, obj) return self.time <= obj.time end
 
-        __sub       = Diff
-        __tostring  = ToString
+        __sub                   = Diff
+        __tostring              = ToString
 
         export { Date }
     end)
