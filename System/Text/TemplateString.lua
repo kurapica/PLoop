@@ -492,8 +492,10 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            meta-method                            --
         -----------------------------------------------------------------------
-        __Arguments__{ RawTable }
+        __Arguments__{ RawTable/nil }
         function __call(self, items)
+            items               = items or {}
+
             for k, v in pairs(self.APIs) do
                 items[k]        = v
             end
