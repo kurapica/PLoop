@@ -4,7 +4,6 @@ local root = require "PLoop.Prototype"
 -- System
 require "PLoop.System.Collections"
 require "PLoop.System.Text"
-require "PLoop.System.IO.TextAccessor"
 require "PLoop.System.Threading"
 require "PLoop.System.Serialization"
 require "PLoop.System.Date"
@@ -28,8 +27,11 @@ require "PLoop.System.Serialization.LuaFormatProvider"
 require "PLoop.System.Serialization.StringFormatProvider"
 
 -- System.Text
+require "PLoop.System.Text.StringReader"
+require "PLoop.System.Text.StringWriter"
 require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
+require "PLoop.System.Text.TemplateString"
 
 -- System.Reactive
 require "PLoop.System.Observer"

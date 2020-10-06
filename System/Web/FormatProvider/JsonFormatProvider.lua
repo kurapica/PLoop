@@ -1278,7 +1278,7 @@ PLoop(function(_ENV)
             end
         end
 
-        __Arguments__{ Any, System.IO.TextWriter }
+        __Arguments__{ Any, System.Text.TextWriter }
         function Serialize(self, data, writer)
             if type(data) == "table" and getmetatable(data) == nil then
                 if self.Indent then
@@ -1296,7 +1296,7 @@ PLoop(function(_ENV)
         __Arguments__{ String }
         Deserialize             = LoadJson
 
-        __Arguments__{ System.IO.TextReader }
+        __Arguments__{ System.Text.TextReader }
         function Deserialize(self, reader)
             local data          = reader:ReadToEnd()
             if data then return LoadJson(self, data) end

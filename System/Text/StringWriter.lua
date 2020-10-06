@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                          System.IO.StringWriter                           --
+--                         System.Text.StringWriter                          --
 --                                                                           --
 --===========================================================================--
 
@@ -13,12 +13,10 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    namespace "System.IO"
-
     --- Represents a writer that can write a sequential series of characters to files
     __Sealed__()
-    class "StringWriter" (function(_ENV)
-        inherit "TextWriter"
+    class "System.Text.StringWriter" (function(_ENV)
+        inherit "System.Text.TextWriter"
 
         export {
             tconcat             = table.concat,
