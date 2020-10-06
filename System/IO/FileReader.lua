@@ -18,10 +18,10 @@ PLoop(function(_ENV)
     --- Represents a writer that can write a sequential series of characters to files
     __Sealed__()
     class "FileReader" (function(_ENV)
-        inherit "TextReader"
+        inherit "System.Text.TextReader"
 
         export {
-            fopen               = io.open,
+            fopen               = _G.io and _G.io.open or Toolset.fakefunc,
             floor               = math.floor,
             error               = error,
         }

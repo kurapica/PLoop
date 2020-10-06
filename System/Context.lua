@@ -202,8 +202,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        property "Storage"  { type = Table, default = function() return {} end }
-        property "Timeout"  { type = Table, default = function() return {} end }
+        property "Storage"  { type = Table, default = Toolset.newtable }
+        property "Timeout"  { type = Table, default = Toolset.newtable }
 
         -----------------------------------------------------------------------
         --                              method                               --

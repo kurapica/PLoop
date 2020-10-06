@@ -22,11 +22,9 @@ PLoop(function(_ENV)
     --- Represents the operation system
     __Abstract__() __Final__() __Sealed__()
     class "OperationSystem" (function(_ENV)
-        local OS_TYPE
-
         export {
-            popen                   = _G.io.popen,
-            ftyle                   = _G.io.type,
+            popen                   = _G.io and _G.io.popen or Toolset.fakefunc,
+            ftyle                   = _G.io and _G.io.type  or Toolset.fakefunc,
             loadsnippet             = Toolset.loadsnippet,
         }
 
@@ -37,32 +35,30 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- The current Operation system
         __Static__() property "Current" {
-            get = function()
-                if OS_TYPE then return OS_TYPE end
+            default                 = function()
 
                 -- Check for windows
-                local f = popen("echo %OS%", "r")
+                local f             = popen("echo %OS%", "r")
                 if f then
-                    local ct = f:lines()()
+                    local ct        = f:lines()()
                     if ct and ct:match("^%w+") then
-                        OS_TYPE = OperationSystemType.Windows
-                        return OS_TYPE
+                        return OperationSystemType.Windows
                     end
                 end
 
                 -- Check for unix
-                f = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
+                f                   = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
                 if f then
-                    local ct = f:lines()()
+                    local ct        = f:lines()()
                     f:close()
-                    if ct then ct = ct:match("^%w+") end
+                    if ct then ct   = ct:match("^%w+") end
 
-                    OS_TYPE = ct == "Darwin" and OperationSystemType.MacOS
+                    return ct == "Darwin" and OperationSystemType.MacOS
                         or ct == "Linux" and OperationSystemType.Linux
                         or OperationSystemType.Unknown
                 end
 
-                return OS_TYPE
+                return OperationSystemType.Unknown
             end,
         }
     end)
@@ -73,19 +69,19 @@ PLoop(function(_ENV)
         extend "IInitAttribute"
 
         export {
-            popen                   = _G.io.popen,
-            ftype                   = _G.io.type,
+            popen                   = _G.io and _G.io.popen or Toolset.fakefunc,
+            ftype                   = _G.io and _G.io.type or Toolset.fakefunc,
             loadsnippet             = Toolset.loadsnippet,
 
-            Enum, OperationSystem,
+            Enum, OperationSystem, OperationSystemType,
 
-            _PipeFunc = [[
+            _PipeFunc               = [[
                 local popen, ftype, definition, command, result = ...
                 return function (%s)
-                    local f = popen(%s, "r")
+                    local f         = popen(%s, "r")
                     if ftype(f) == "file" then
                         --f:flush()
-                        local ct = f:read("*all")
+                        local ct    = f:read("*all")
                         f:close()
                         if ct then
                             return definition(%s)
@@ -108,17 +104,17 @@ PLoop(function(_ENV)
         -- @param   stack                       the stack level
         -- @return  definition                  the new definition
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            if self.OperationSystem and not Enum.ValidateFlags(OperationSystem.Current, self.OperationSystem) then return end
+            if self.OperationSystem and not (OperationSystem.Current ~= OperationSystemType.Unknown and Enum.ValidateFlags(OperationSystem.Current, self.OperationSystem)) then return end
             if not (self.CommandFormat or self.CommandProvider) then return end
 
-            local args = ""
+            local args          = ""
             if self.ArgumetCount > 0 then
-                args = "arg1"
+                args            = "arg1"
                 for i = 2, self.ArgumetCount do args = args .. ", arg" .. i end
             end
 
-            local commandCode = self.CommandFormat and "command:format(" .. args .. ")" or self.CommandProvider and "command(" .. args .. ")"
-            local resultCode = self.ResultFormat and "ct:match(result)" or self.ResultProvider and "result(ct)" or "ct"
+            local commandCode   = self.CommandFormat and "command:format(" .. args .. ")" or self.CommandProvider and "command(" .. args .. ")"
+            local resultCode    = self.ResultFormat and "ct:match(result)" or self.ResultProvider and "result(ct)" or "ct"
             if args ~= "" then resultCode = args .. ", " .. resultCode end
 
             return loadsnippet(_PipeFunc:format(args, commandCode, resultCode, args)) (popen, ftype, definition, self.CommandFormat or self.CommandProvider, self.ResultFormat or self.ResultProvider)

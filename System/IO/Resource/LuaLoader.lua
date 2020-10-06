@@ -39,26 +39,28 @@ PLoop(function(_ENV)
 
             local ontypedefined = function(ftype, target)
                 if strlower(getname(target, true)) == name then
-                    type = target
+                    type        = target
                 end
             end
 
-            Runtime.OnTypeDefined   = Runtime.OnTypeDefined + ontypedefined
+            Runtime.OnTypeDefined = Runtime.OnTypeDefined + ontypedefined
 
             local func, msg
 
             if reader then
-                func, msg               = loadsnippet(reader:ReadToEnd(), path, env)
-                if func then func, msg  = pcall(func) end
+                func, msg       = loadsnippet(reader:ReadToEnd(), path, env)
+                if func then
+                    func, msg   = pcall(func)
+                end
             else
-                func, msg               = loadfile(path, nil, env)
+                func, msg       = loadfile(path, nil, env)
                 if func then
                     if setfenv and env then setfenv(func, env) end
-                    func, msg           = pcall(func)
+                    func, msg   = pcall(func)
                 end
             end
 
-            Runtime.OnTypeDefined   = Runtime.OnTypeDefined - ontypedefined
+            Runtime.OnTypeDefined = Runtime.OnTypeDefined - ontypedefined
 
             if not func then error(msg, 0) end
 

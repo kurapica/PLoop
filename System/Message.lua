@@ -64,7 +64,7 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The topic filters
-        property "TopicFilters" { set = false, default = function() return {} end }
+        property "TopicFilters" { set = false, default = Toolset.newtable }
 
         --- The received message queue
         property "ReceivedMessageQueue" { set = false, default = function() return Queue() end }

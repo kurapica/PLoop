@@ -18,9 +18,11 @@ PLoop(function(_ENV)
     --- Represents a writer that can write a sequential series of characters to files
     __Sealed__()
     class "FileWriter" (function(_ENV)
-        inherit "TextWriter"
+        inherit "System.Text.TextWriter"
 
-        export { fopen          = _G.io.open }
+        export {
+            fopen               = _G.io and _G.io.open or Toolset.fakefunc
+        }
 
         __Sealed__() __Default__"w"
         enum "FileWriteMode" {

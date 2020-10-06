@@ -18,7 +18,7 @@ PLoop(function(_ENV)
     __Final__() __Sealed__() __Abstract__()
     class "File" (function (_ENV)
         export {
-            fopen               = _G.io.open,
+            fopen               = _G.io and _G.io.open or Toolset.fakefunc,
             strmatch            = string.match,
             strformat           = string.format,
             strgsub             = string.gsub,

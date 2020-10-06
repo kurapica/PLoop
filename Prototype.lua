@@ -14035,6 +14035,12 @@ do
 
         --- Trim the string
         trim                    = strtrim,
+
+        --- A fake function that do nothing
+        fakefunc                = fakefunc,
+
+        --- A function used to return an empty table
+        newtable                = function() return {} end,
     }
 
     -----------------------------------------------------------------------

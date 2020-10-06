@@ -57,10 +57,10 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The registered topic filters
-        property "TopicFilters"         { set = false, default = function() return {} end }
+        property "TopicFilters"         { set = false, default = Toolset.newtable }
 
         --- The new registered topic filters used to get the retawin messages
-        property "NewTopicFilters"      { set = false, default = function() return {} end }
+        property "NewTopicFilters"      { set = false, default = Toolset.newtable }
 
         --- The retain message quque
         property "RetainMessageQuque"   { set = false, default = function() return Queue() end }

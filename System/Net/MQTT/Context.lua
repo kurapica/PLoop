@@ -126,7 +126,7 @@ PLoop(function(_ENV)
         __Abstract__() property "Password"         { type = String }
 
         --- The publiced packet, keep until the ack is received
-        __Abstract__() property "PublishPackets"   { set = false, default = function(self) return {} end }
+        __Abstract__() property "PublishPackets"   { set = false, default = Toolset.newtable }
 
         --- The last used packet ID
         __Abstract__() property "LastPacketID"     { type = Number, default = 0 }
@@ -138,13 +138,13 @@ PLoop(function(_ENV)
         property "LastActiveTime"                   { type = Date }
 
         --- The subscribed topics and requested qos levels, used both for server side and client side
-        property "TopicFilters"                     { set = false, default = function() return {} end }
+        property "TopicFilters"                     { set = false, default = Toolset.newtable }
 
         --- The subscription topic filters
-        property "SubscribeTopicFilters"            { set = false, default = function() return {} end }
+        property "SubscribeTopicFilters"            { set = false, default = Toolset.newtable }
 
         --- The unsubscribe topic filters
-        property "UnsubscribeTopicFilters"          { set = false, default = function() return {} end }
+        property "UnsubscribeTopicFilters"          { set = false, default = Toolset.newtable }
 
         -----------------------------------------------------------------------
         --                         abstract method                           --
