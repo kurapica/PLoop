@@ -128,7 +128,8 @@ PLoop(function(_ENV)
 
                 local count     = #data
 
-                for i, v in ipairs(data) do
+                for i = 1, count do
+                    local v     = data[i]
                     if type(v) == "table" and getmetatable(v) == nil then
                         SerializeDataWithWriteNoIndent(v, write)
                         if i < count then write(",") end
@@ -177,7 +178,8 @@ PLoop(function(_ENV)
                 local subIndentChar = preIndentChar .. indentChar
                 local count     = #data
 
-                for i, v in ipairs(data) do
+                for i = 1, count do
+                    local v     = data[i]
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(subIndentChar)
                         SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak)
@@ -235,7 +237,8 @@ PLoop(function(_ENV)
 
                 local count     = #data
 
-                for i, v in ipairs(data) do
+                for i = 1, count do
+                    local v     = data[i]
                     if type(v) == "table" and getmetatable(v) == nil then
                         SerializeDataWithWriterNoIndent(v, write, object)
                         if i < count then write(object, ",") end
@@ -284,7 +287,8 @@ PLoop(function(_ENV)
                 local subIndentChar = preIndentChar .. indentChar
                 local count     = #data
 
-                for i, v in ipairs(data) do
+                for i = 1, count do
+                    local v     = data[i]
                     if type(v) == "table" and getmetatable(v) == nil then
                         write(object, subIndentChar)
                         SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak)

@@ -386,7 +386,7 @@ PLoop(function(_ENV)
             RCT_LuaCode         = TemplateStringRenderType.LuaCode,
             RCT_Expression      = TemplateStringRenderType.Expression,
 
-            StringReader, StringWriter, DefaultTemplateStringLoader,
+            StringReader, StringWriter, DefaultTemplateStringLoader, TextWriter,
         }
 
         --- Convert the error to the real position
@@ -397,6 +397,25 @@ PLoop(function(_ENV)
                 err             = ("template string:%d: %s"):format(self.CodeLineMap[line], msg)
             end
             error(err, 0)
+        end
+
+        local function prepareGenerator(self, items)
+            for k, v in pairs(self.APIs) do
+                items[k]        = v
+            end
+
+            setmetatable(items, META_ITEMS)
+
+            local func, err     = pcall(self.Generator)
+            if not func then
+                raiseError(self, err)
+            else
+                func            = err
+            end
+
+            setfenv(func, items)
+
+            return func
         end
 
         -----------------------------------------------------------------------
@@ -495,22 +514,7 @@ PLoop(function(_ENV)
         __Arguments__{ RawTable/nil }
         function __call(self, items)
             items               = items or {}
-
-            for k, v in pairs(self.APIs) do
-                items[k]        = v
-            end
-
-            setmetatable(items, META_ITEMS)
-
-            local func, err     = pcall(self.Generator)
-            if not func then
-                raiseError(self, err)
-            else
-                func            = err
-            end
-
-            setfenv(func, items)
-
+            local func          = prepareGenerator(self, items)
             return with(StringWriter())(function(writer)
                 func(items, writer)
 
@@ -518,6 +522,30 @@ PLoop(function(_ENV)
             end, function(err)
                 raiseError(self, err)
             end).Result
+        end
+
+        __Arguments__{ TextWriter, RawTable/nil }
+        function __call(self, writer, items)
+            items               = items or {}
+            local func          = prepareGenerator(self, items)
+            with(writer)(function(writer)
+                func(items, writer)
+
+                return writer
+            end, function(err)
+                raiseError(self, err)
+            end)
+        end
+
+        __Arguments__{ Callable, RawTable/nil }
+        function __call(self, write, items)
+            items               = items or {}
+            local func          = prepareGenerator(self, items)
+            with(TextWriter{ Write = function(self, ...) return write(...) end })(function(writer)
+                func(items, writer)
+            end, function(err)
+                raiseError(self, err)
+            end)
         end
     end)
 end)
