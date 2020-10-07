@@ -199,7 +199,7 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceLoader.LoadResource,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
-            IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web
+            IHttpContextHandler, Controller, IHttpOutput, Text.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web
         }
 
         local processView       = function(self, default, path, data)
@@ -581,7 +581,7 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceLoader.LoadResource,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
-            IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web, Date, Guid
+            IHttpContextHandler, Controller, IHttpOutput, Text.StringReader, AttributeTargets, __View__, HTTP_STATUS, Web, Date, Guid
         }
 
         local processFileView   = function(self, default, dfname, path, name, data)
@@ -808,7 +808,7 @@ PLoop(function(_ENV)
             SWITCH_CASE_JSON    = 2,
             SWITCH_CASE_TEXT    = 3,
 
-            JsonFormatProvider, IHttpContextHandler, Controller, IHttpOutput, IO.StringReader, AttributeTargets, __Switch__, HTTP_STATUS, Web
+            JsonFormatProvider, IHttpContextHandler, Controller, IHttpOutput, Text.StringReader, AttributeTargets, __Switch__, HTTP_STATUS, Web
         }
 
         local processView       = function(self, default, path, data)
