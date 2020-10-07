@@ -105,7 +105,7 @@ PLoop(function(_ENV)
     }
 
     --- Represents a writer that can write a sequential series of characters
-    __Abstract__() __Sealed__()
+    __Sealed__()
     class "System.Text.TextWriter" (function (_ENV)
         extend "IAutoClose"
 
@@ -126,7 +126,7 @@ PLoop(function(_ENV)
     end)
 
     --- Represents a reader that can read a sequential series of characters
-    __Abstract__()  __Sealed__()
+    __Sealed__()
     class "System.Text.TextReader" (function (_ENV)
         extend "IAutoClose"
 
