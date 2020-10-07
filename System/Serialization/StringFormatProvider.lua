@@ -16,10 +16,12 @@ PLoop(function(_ENV)
     namespace "System.Serialization"
 
     export {
+        pairs                   = pairs,
         type                    = type,
         tostring                = tostring,
         next                    = next,
         select                  = select,
+        floor                   = math.floor,
         tinsert                 = table.insert,
         tblconcat               = table.concat,
         strformat               = string.format,
@@ -30,48 +32,100 @@ PLoop(function(_ENV)
         isanonymous             = Namespace.IsAnonymousNamespace,
         Serialize               = Serialization.Serialize,
         Deserialize             = Serialization.Deserialize,
+        isListType              = Class.IsSubType,
+        isstruct                = Struct.Validate,
+        getstructcategory       = Struct.GetStructCategory,
 
-        Serialization.Serializable, Serialization.SerializableType, List, Toolset, Serialization
+        Serialization.Serializable, Serialization.SerializableType, List, IIndexedList, Toolset, Serialization
     }
 
     -----------------------------------------------------------------------
     --                              prepare                              --
     -----------------------------------------------------------------------
-    export {
-        SerializeSimpleData     = function (data)
-            local dtType = type(data)
+    function isArray(data)
+        -- Check the data type
+        local objField          = data[Serialization.ObjectTypeField]
 
-            if dtType == "string" then
-                return strformat("%q", data)
-            elseif dtType == "number" or dtType == "boolean" then
-                return tostring(data)
-            elseif validnamespace(data) and not isanonymous(data) then
-                return strformat("%q", tostring(data))
+        if objField then
+            if isListType(objField, IIndexedList) then return true end
+            if isstruct(objField) then
+                local stype     = getstructcategory(objField)
+                if stype == "ARRAY" then
+                    return true
+                elseif stype == "MEMBER" or stype == "DICTIONARY" then
+                    return false
+                end
             end
-        end,
+        end
 
-        SerializeDataWithWriteNoIndent = function (data, write, objectTypeIgnored)
-            write("{")
+        -- Check the data
+        local count             = #data
 
-            local field = Serialization.ObjectTypeField
-            local val   = data[field]
-            if val then
-                data[field] = nil
+        for k in pairs(data) do
+            if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
+                return false
+            end
+        end
 
-                if not objectTypeIgnored and not isanonymous(val) then
-                    if next(data) then
-                        write(strformat("%s=%q,", field, tostring(val)))
+        for i = 1, count do
+            if data[i] == nil then return false end
+        end
+
+        return true
+    end
+
+    function SerializeSimpleData(data)
+        local dtType            = type(data)
+
+        if dtType == "string" then
+            return strformat("%q", data)
+        elseif dtType == "number" or dtType == "boolean" then
+            return tostring(data)
+        elseif validnamespace(data) and not isanonymous(data) then
+            return strformat("%q", tostring(data))
+        end
+    end
+
+    function SerializeDataWithWriteNoIndent(data, write, objectTypeIgnored)
+        write("{")
+
+        local isarray           = isArray(data)
+        local field             = Serialization.ObjectTypeField
+        local val               = data[field]
+        if val then
+            data[field]         = nil
+
+            if not objectTypeIgnored and not isanonymous(val) then
+                if next(data) then
+                    write(strformat("%s=%q,", field, tostring(val)))
+                else
+                    write(strformat("%s=%q",  field, tostring(val)))
+                end
+            end
+        end
+
+        if isarray then
+            local count         = #data
+
+            for i = 1, count do
+                local v         = data[i]
+                if type(v) == "table" and getmetatable(v) == nil then
+                    SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
+                    if i < count then write(",") end
+                else
+                    if i < count then
+                        write(strformat("%s,", SerializeSimpleData(v)))
                     else
-                        write(strformat("%s=%q",  field, tostring(val)))
+                        write(strformat("%s", SerializeSimpleData(v)))
                     end
                 end
             end
-
-            local k, v = next(data)
+        else
+            local k, v          = next(data)
             local nk, nv
 
             while k do
-                nk, nv = next(data, k)
+                nk, nv          = next(data, k)
 
                 if type(v) == "table" then
                     write(strformat("[%s]=", SerializeSimpleData(k)))
@@ -85,36 +139,61 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v = nk, nv
+                k, v            = nk, nv
             end
+        end
 
-            write("}")
-        end,
+        write("}")
+    end
 
-        SerializeDataWithWrite  = function (data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
-            write("{" .. lineBreak)
+    function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
+        write("{" .. lineBreak)
 
+        local subIndentChar     = preIndentChar .. indentChar
+
+        local isarray           = isArray(data)
+        local field             = Serialization.ObjectTypeField
+        local val               = data[field]
+        if val then
+            data[field]         = nil
+
+            if not objectTypeIgnored and not isanonymous(val) then
+                if next(data) then
+                    write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+                else
+                    write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+                end
+            end
+        end
+
+        if isarray then
             local subIndentChar = preIndentChar .. indentChar
+            local count         = #data
 
-            local field = Serialization.ObjectTypeField
-            local val = data[field]
-            if val then
-                data[field] = nil
-
-                if not objectTypeIgnored and not isanonymous(val) then
-                    if next(data) then
-                        write(strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+            for i = 1, count do
+                local v     = data[i]
+                if type(v) == "table" and getmetatable(v) == nil then
+                    write(subIndentChar)
+                    SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if i < count then
+                        write("," .. lineBreak)
                     else
-                        write(strformat("%s%s = %q%s", subIndentChar, field, tostring(val), lineBreak))
+                        write(lineBreak)
+                    end
+                else
+                    if i < count then
+                        write(strformat("%s%s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(strformat("%s%s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                     end
                 end
             end
-
-            local k, v = next(data)
+        else
+            local k, v          = next(data)
             local nk, nv
 
             while k do
-                nk, nv = next(data, k)
+                nk, nv          = next(data, k)
 
                 if type(v) == "table" then
                     write(strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
@@ -132,34 +211,53 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v = nk, nv
+                k, v            = nk, nv
             end
+        end
 
-            write(preIndentChar .. "}")
-        end,
+        write(preIndentChar .. "}")
+    end
 
-        SerializeDataWithWriterNoIndent = function (data, write, object, objectTypeIgnored)
-            write(object, "{")
+    function SerializeDataWithWriterNoIndent(data, write, object, objectTypeIgnored)
+        write(object, "{")
 
-            local field = Serialization.ObjectTypeField
-            local val   = data[field]
-            if val then
-                data[field] = nil
+        local isarray           = isArray(data)
+        local field             = Serialization.ObjectTypeField
+        local val               = data[field]
+        if val then
+            data[field]         = nil
 
-                if not objectTypeIgnored and not isanonymous(val) then
-                    if next(data) then
-                        write(object, strformat("%s=%q,", field, tostring(val)))
+            if not objectTypeIgnored and not isanonymous(val) then
+                if next(data) then
+                    write(object, strformat("%s=%q,", field, tostring(val)))
+                else
+                    write(object, strformat("%s=%q",  field, tostring(val)))
+                end
+            end
+        end
+
+        if isarray then
+            local count         = #data
+
+            for i = 1, count do
+                local v         = data[i]
+                if type(v) == "table" and getmetatable(v) == nil then
+                    SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
+                    if i < count then write(object, ",") end
+                else
+                    if i < count then
+                        write(object, strformat("%s,", SerializeSimpleData(v)))
                     else
-                        write(object, strformat("%s=%q",  field, tostring(val)))
+                        write(object, strformat("%s", SerializeSimpleData(v)))
                     end
                 end
             end
-
-            local k, v = next(data)
+        else
+            local k, v          = next(data)
             local nk, nv
 
             while k do
-                nk, nv = next(data, k)
+                nk, nv          = next(data, k)
 
                 if type(v) == "table" then
                     write(object, strformat("[%s]=", SerializeSimpleData(k)))
@@ -173,36 +271,61 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v = nk, nv
+                k, v            = nk, nv
             end
+        end
 
-            write(object, "}")
-        end,
+        write(object, "}")
+    end
 
-        SerializeDataWithWriter = function (data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
-            write(object, "{" .. lineBreak)
+    function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
+        write(object, "{" .. lineBreak)
 
+        local subIndentChar     = preIndentChar .. indentChar
+
+        local isarray           = isArray(data)
+        local field             = Serialization.ObjectTypeField
+        local val               = data[field]
+        if val then
+            data[field]         = nil
+
+            if not objectTypeIgnored and not isanonymous(val) then
+                if next(data) then
+                    write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+                else
+                    write(object, strformat("%s%s = %q%s",  subIndentChar, field, tostring(val), lineBreak))
+                end
+            end
+        end
+
+        if isarray then
             local subIndentChar = preIndentChar .. indentChar
+            local count         = #data
 
-            local field = Serialization.ObjectTypeField
-            local val   = data[field]
-            if val then
-                data[field] = nil
-
-                if not objectTypeIgnored and not isanonymous(val) then
-                    if next(data) then
-                        write(object, strformat("%s%s = %q,%s", subIndentChar, field, tostring(val), lineBreak))
+            for i = 1, count do
+                local v         = data[i]
+                if type(v) == "table" and getmetatable(v) == nil then
+                    write(object, subIndentChar)
+                    SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if i < count then
+                        write(object, "," .. lineBreak)
                     else
-                        write(object, strformat("%s%s = %q%s",  subIndentChar, field, tostring(val), lineBreak))
+                        write(object, lineBreak)
+                    end
+                else
+                    if i < count then
+                        write(object, strformat("%s%s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(object, strformat("%s%s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
                     end
                 end
             end
-
-            local k, v = next(data)
+        else
+            local k, v          = next(data)
             local nk, nv
 
             while k do
-                nk, nv = next(data, k)
+                nk, nv          = next(data, k)
 
                 if type(v) == "table" then
                     write(object, strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
@@ -220,14 +343,15 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v = nk, nv
+                k, v            = nk, nv
             end
+        end
 
-            write(object, preIndentChar .. "}")
-        end,
-    }
+        write(object, preIndentChar .. "}")
+    end
 
     --- Serialization format provider for string
+    __Final__() __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
     class "StringFormatProvider" (function(_ENV)
         inherit "FormatProvider"
 
