@@ -35,6 +35,8 @@ PLoop(function(_ENV)
         isListType              = Class.IsSubType,
         isstruct                = Struct.Validate,
         getstructcategory       = Struct.GetStructCategory,
+        getClass                = Class.GetObjectClass,
+        getMetaMethod           = Class.GetMetaMethod,
 
         Serialization.Serializable, Serialization.SerializableType, List, IIndexedList, Toolset, Serialization
     }
@@ -452,12 +454,17 @@ PLoop(function(_ENV)
         end
     end)
 
-
     --- Convert the data to string
     __Static__()
     function Toolset.tostring(data, dtype, pretty)
         if data == nil then return "nil" end
         if type(data) ~= "table" then return tostring(data) end
+
+        -- Check __tostring
+        local cls               = getClass(data)
+        if cls and getMetaMethod(cls, "__tostring", true) then
+            return tostring(data)
+        end
 
         if dtype then
             if isValidValue(SerializableType, type) then
