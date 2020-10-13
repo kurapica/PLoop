@@ -220,9 +220,9 @@ PLoop(function(_ENV)
                 [strbyte(')')]  = true,
             },
 
-            _Space = strbyte(' '),
+            _Space              = strbyte(' '),
 
-            _EncodeMap = {
+            _EncodeMap          = {
                 [strbyte('<')]  = "&lt;",
                 [strbyte('>')]  = "&gt;",
                 [strbyte('"')]  = "&quot;",
@@ -230,7 +230,7 @@ PLoop(function(_ENV)
                 [strbyte('&')]  = "&amp;",
             },
 
-            _EntityMap = {
+            _EntityMap          = {
                 ["quot"]        = strchar(0x22),
                 ["amp"]         = strchar(0x26),
                 ["apos"]        = strchar(0x27),
@@ -488,20 +488,20 @@ PLoop(function(_ENV)
         }
 
         local function encodeChar(c)
-            local byte = strbyte(c)
+            local byte          = strbyte(c)
             if byte == _Space then return '+' end
             if not _SafeByte[byte] then return strformat("%%%X", byte) end
         end
 
         local function decodeVal(v)
-            v = tonumber(v, 16)
+            v                   = tonumber(v, 16)
             if v then return strchar(v) end
         end
 
         --- Set string value for special data value
         __Arguments__{ Any, String }
         __Static__() function SetValueString(value, str)
-            SPECIAL_MAP[value] = str
+            SPECIAL_MAP[value]  = str
         end
 
         --- Encodes a URL string
@@ -522,93 +522,10 @@ PLoop(function(_ENV)
         end
 
         --- Encodes a string to be displayed in a browser
-        __Arguments__{ String, System.Text.Encoding/nil }
-        __Static__() function HtmlEncode(text, encode)
-            local iter, tar, idx= (encode or UTF8Encoding).Decodes(text)
-            local byte
-            local prev          = idx or 1
-
-            idx, byte           = iter(tar, idx)
-
-            -- Check whether need encode
-            while idx do
-                if _EncodeMap[byte] then break end
-                if byte >= 160 and byte < 256 then break end
-                if byte >= 0x10000 then break end
-                prev            = idx
-                idx, byte       = iter(tar, idx)
-            end
-
-            -- There is no need to convert
-            if not idx then return text end
-
-            local cache         = {}
-            local cnt           = 0
-            local start         = 1
-
-            while idx do
-                if _EncodeMap[byte] or (byte >= 160 and byte < 256) or byte >= 0x10000 then
-                    if prev > start then
-                        cnt = cnt + 1
-                        cache[cnt]  = strsub(text, start, prev - 1)
-                        start       = prev
-                    end
-                    cnt         = cnt + 1
-                    cache[cnt]  = _EncodeMap[byte] or "&#" .. byte .. ";"
-                    start       = idx
-                end
-
-                prev            = idx
-                idx, byte       = iter(tar, idx)
-            end
-
-            if prev > start then
-                cnt             = cnt + 1
-                cache[cnt]      = strsub(text, start, prev - 1)
-                start           = prev
-            end
-
-            return tblconcat(cache, "", 1, cnt)
-        end
+        __Static__() HtmlEncode = System.Text.XmlEncode
 
         --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-        __Arguments__{ String, System.Text.Encoding/nil, Boolean/nil }
-        __Static__() function HtmlDecode(text, encode, discard)
-            encode              = (encode or UTF8Encoding).Encode
-            return (strgsub(text, "&(#?)([xX]?)([^&]+);", function(isNumber, isHex, entity)
-                isNumber        = isNumber and #isNumber > 0
-                if not isNumber then
-                    if isHex then entity = isHex .. entity end
-                else
-                    isHex = isHex and #isHex > 0
-                end
-
-                -- entity
-                if not isNumber then
-                    local rs    = _EntityMap[entity]
-
-                    if discard then
-                        local b = strbyte(rs)
-                        if #rs > 1 or b >= 0x80 then
-                            return b == 0xa0 and " " or ""
-                        end
-                    end
-
-                    return rs
-                else
-                    -- code
-                    if isHex then
-                        entity = tonumber(entity, 16)
-                    else
-                        entity = tonumber(entity)
-                    end
-
-                    if discard and entity >= 0x80 then return "" end
-
-                    return entity and encode(entity)
-                end
-            end))
-        end
+        __Static__() HtmlDecode = System.Text.XmlDecode
 
         --- Get the physical path
         __Arguments__{ String, Context/nil }

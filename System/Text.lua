@@ -15,6 +15,13 @@
 PLoop(function(_ENV)
     export { "type", "error", "ipairs", tconcat = table.concat, istype = Class.IsObjectType, Prototype, Namespace, Toolset, Iterable }
 
+    __Sealed__() __Final__() interface "System.Text" {}
+
+    namespace "System.Text"
+
+    -----------------------------------------------------------------------
+    --                             Encoding                              --
+    -----------------------------------------------------------------------
     local encoder
     local newEncoder            = function (name, settings)
         if type(settings) ~= "table" or type(settings.decode) ~= "function" or type(settings.encode) ~= "function" then
@@ -104,9 +111,12 @@ PLoop(function(_ENV)
         decode                  = string.byte,
     }
 
+    -----------------------------------------------------------------------
+    --                          Reader & Writer                          --
+    -----------------------------------------------------------------------
     --- Represents a writer that can write a sequential series of characters
     __Sealed__()
-    class "System.Text.TextWriter" (function (_ENV)
+    class "TextWriter" (function (_ENV)
         extend "IAutoClose"
 
         --- Gets the character encoding in which the output is written.
@@ -127,7 +137,7 @@ PLoop(function(_ENV)
 
     --- Represents a reader that can read a sequential series of characters
     __Sealed__()
-    class "System.Text.TextReader" (function (_ENV)
+    class "TextReader" (function (_ENV)
         extend "IAutoClose"
 
         --- Gets the character encoding in which the input is read.

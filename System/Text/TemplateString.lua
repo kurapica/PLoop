@@ -123,6 +123,7 @@ PLoop(function(_ENV)
             ['"']               = false,
             ["+"]               = false,
             ["-"]               = false,
+            ["\\"]              = System.Text.XmlEncode,
         }
 
         -------------------------------
@@ -478,16 +479,16 @@ PLoop(function(_ENV)
                         pushcode(wNewLine)
                     elseif ty == RCT_Expression then
                         if wrap then
-                            if not text[wrap] then
+                            if not temp[wrap] then
                                 local name  = "_PL_" .. strformat("%04X", random(0xffff))
                                 while apis[name] do
                                     name    = "_PL_" .. strformat("%04X", random(0xffff))
                                 end
-                                text[wrap]  = name
+                                temp[wrap]  = name
                                 apis[name]  = wrap
                             end
 
-                            pushcode(wWrapExp:format(name, ct))
+                            pushcode(wWrapExp:format(temp[wrap], ct))
                         else
                             pushcode(wExpression:format(ct))
                         end

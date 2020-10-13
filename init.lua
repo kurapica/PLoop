@@ -31,6 +31,7 @@ require "PLoop.System.Text.StringReader"
 require "PLoop.System.Text.StringWriter"
 require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
+require "PLoop.System.Text.Encoder"
 require "PLoop.System.Text.TemplateString"
 
 -- System.Reactive
