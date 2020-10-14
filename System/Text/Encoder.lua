@@ -279,16 +279,12 @@ PLoop(function(_ENV)
         ["diams"]               = strchar(0x26, 0x66),
     }
 
-    local _Space                = strbyte(" ")
-    local _SpaceMap             = "&nbsp;"
-
     --- Encodes a string to be displayed in a browser
     __Static__() __Arguments__{ String, System.Text.Encoding/nil }
     function System.Text.XmlEncode(text, encode)
         local iter, tar, idx    = (encode or UTF8Encoding).Decodes(text)
         local byte
         local prev              = idx or 1
-        local prevspcnt         = 0
 
         idx, byte               = iter(tar, idx)
 
@@ -297,7 +293,6 @@ PLoop(function(_ENV)
             if _EncodeMap[byte] then break end
             if byte >= 160 and byte < 256 then break end
             if byte >= 0x10000 then break end
-            if byte == _Space then if prevspcnt > 0 then break else prevspcnt = prevspcnt + 1 end end
             prev                = idx
             idx, byte           = iter(tar, idx)
         end
@@ -319,26 +314,6 @@ PLoop(function(_ENV)
                 cnt             = cnt + 1
                 cache[cnt]      = _EncodeMap[byte] or "&#" .. byte .. ";"
                 start           = idx
-                prevspcnt       = 0
-            elseif byte == _Space then
-                prevspcnt       = prevspcnt + 1
-
-                if prevspcnt == 2 then
-                    cnt         = cnt + 1
-                    cache[cnt]  = _SpaceMap
-
-                    cnt         = cnt + 1
-                    cache[cnt]  = _SpaceMap
-
-                    start       = idx
-                elseif prevspcnt > 2 then
-                    cnt         = cnt + 1
-                    cache[cnt]  = _SpaceMap
-
-                    start       = idx
-                end
-            else
-                prevspcnt       = 0
             end
 
             prev                = idx
