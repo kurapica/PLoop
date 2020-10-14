@@ -74,7 +74,7 @@ PLoop(function(_ENV)
     end)
 
     --- Provide the Connect mechanism for observable queues
-    __Sealed__() interface "IConnectableObservable" (function(_ENV)
+    __Sealed__() interface "System.IConnectableObservable" (function(_ENV)
         extend "IObservable"
 
         -----------------------------------------------------------------------
