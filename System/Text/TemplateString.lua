@@ -431,7 +431,7 @@ PLoop(function(_ENV)
         property "CodeLineMap"      { set = false, default = Toolset.newtable }
 
         --- The apis could be used in the template string
-        property "APIs"             { set = false, default = function() return { _PL_tostring = _PL_tostring } end }
+        property "APIs"             { set = false, default = function() return { _PL_tostring = function(val) return val == nil and "" or _PL_tostring(val) end } end }
 
         --- The function used to return the generator of the result
         property "Generator"        { }
