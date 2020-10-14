@@ -80,7 +80,7 @@ PLoop(function(_ENV)
                     @expression
                 Example :
                     @x
-                    @(x+y)
+                    @(x+y:%3d)
                     @"test"
                     @[[test]]
                     @self.Data[1].Name:lower()
@@ -216,8 +216,12 @@ PLoop(function(_ENV)
             end
 
             if code ~= "" then
-                if loadstring("return " .. code) then
-                    return code, startp + #code - 1, prefix
+                -- Check format
+                local prev, fmt = code:match("^%((.+):(%%[^%(]+)%)$")
+                local rcode     = prev and ("(" .. prev .. ")") or code
+
+                if loadstring("return " .. rcode) then
+                    return rcode, startp + #code - 1, fmt, prefix
                 end
             end
         end
@@ -280,7 +284,7 @@ PLoop(function(_ENV)
                     pos         = line:find("@", pos + 1, true)
                 else
                     -- expression
-                    local exp, endp, prefix = parseExpression(line, pos + 1)
+                    local exp, endp, format, prefix = parseExpression(line, pos + 1)
 
                     if exp then
                         --- The previous text should be output directly
@@ -292,11 +296,7 @@ PLoop(function(_ENV)
                         startp  = pos
 
                         -- Expression
-                        if prefix then
-                            yield(RCT_Expression, exp, _PrefixMap[prefix])
-                        else
-                            yield(RCT_Expression, exp)
-                        end
+                        yield(RCT_Expression, exp, format, prefix and _PrefixMap[prefix])
 
                         -- Continue
                         startp  = endp + 1
@@ -454,6 +454,8 @@ PLoop(function(_ENV)
                 local wStaticText           = [[writer:Write(%q)]]
                 local wExpression           = [[writer:Write(_PL_tostring(%s))]]
                 local wWrapExp              = [[writer:Write(%s(_PL_tostring(%s)))]]
+                local wFmtExpression        = [[writer:Write((%q):format(_PL_tostring(%s)))]]
+                local wFmtWrapExp           = [[writer:Write(%s((%q):format(_PL_tostring(%s))))]]
 
                 local sourceCount           = 1
                 local defineCount           = 1
@@ -466,7 +468,7 @@ PLoop(function(_ENV)
                     lineMap[sourceCount]    = recordCount
                 end
 
-                for ty, ct, wrap in engine:GetIterator(reader) do
+                for ty, ct, fmt, wrap in engine:GetIterator(reader) do
                     if ty == RCT_RecordLine then
                         recordCount         = recordCount + 1
                     elseif ty == RCT_LuaCode then
@@ -478,19 +480,36 @@ PLoop(function(_ENV)
                     elseif ty == RCT_NewLine then
                         pushcode(wNewLine)
                     elseif ty == RCT_Expression then
-                        if wrap then
-                            if not temp[wrap] then
-                                local name  = "_PL_" .. strformat("%04X", random(0xffff))
-                                while apis[name] do
-                                    name    = "_PL_" .. strformat("%04X", random(0xffff))
+                        if fmt then
+                            if wrap then
+                                if not temp[wrap] then
+                                    local name  = "_PL_" .. strformat("%04X", random(0xffff))
+                                    while apis[name] do
+                                        name    = "_PL_" .. strformat("%04X", random(0xffff))
+                                    end
+                                    temp[wrap]  = name
+                                    apis[name]  = wrap
                                 end
-                                temp[wrap]  = name
-                                apis[name]  = wrap
-                            end
 
-                            pushcode(wWrapExp:format(temp[wrap], ct))
+                                pushcode(wFmtWrapExp:format(temp[wrap], fmt, ct))
+                            else
+                                pushcode(wFmtExpression:format(fmt, ct))
+                            end
                         else
-                            pushcode(wExpression:format(ct))
+                            if wrap then
+                                if not temp[wrap] then
+                                    local name  = "_PL_" .. strformat("%04X", random(0xffff))
+                                    while apis[name] do
+                                        name    = "_PL_" .. strformat("%04X", random(0xffff))
+                                    end
+                                    temp[wrap]  = name
+                                    apis[name]  = wrap
+                                end
+
+                                pushcode(wWrapExp:format(temp[wrap], ct))
+                            else
+                                pushcode(wExpression:format(ct))
+                            end
                         end
                     end
                 end
