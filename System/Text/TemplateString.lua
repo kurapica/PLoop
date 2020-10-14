@@ -141,7 +141,7 @@ PLoop(function(_ENV)
             if not startp then return end
 
             -- Check the prefix
-            local prest, prend  = line:find("^%p+", startp)
+            local prest, prend  = line:find("^%p", startp)
             local prefix
             if prest and prend then
                 prefix          = line:sub(prest, prend)
@@ -321,7 +321,7 @@ PLoop(function(_ENV)
         --- The prefix to function map like `\=>Encode`, so the `@\test => Encode(test)`
         __Indexer__(struct { __base = NEString,
             function (val, onlyvalid)
-                if not val:match("^%p+$") then
+                if not val:match("^%p$") then
                     return onlyvalid or "%s must all be punctuation"
                 end
             end
