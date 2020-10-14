@@ -365,6 +365,7 @@ PLoop(function(_ENV)
             error               = error,
             assert              = assert,
             tonumber            = tonumber,
+            tostring            = tostring,
             random              = math.random,
             strlower            = string.lower,
             strformat           = string.format,
@@ -392,6 +393,7 @@ PLoop(function(_ENV)
 
         --- Convert the error to the real position
         local function raiseError(self, err)
+            err                 = tostring(err)
             local line, msg     = err:match("%b[]:(%d+):(.-)$")
             line                = tonumber(line)
             if line and self.CodeLineMap[line] then
