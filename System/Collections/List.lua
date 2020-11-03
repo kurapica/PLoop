@@ -843,4 +843,40 @@ PLoop(function(_ENV)
             return sum
         end
     end)
+
+    -----------------------------------------------------------------------
+    --                       Serialization Extend                        --
+    -----------------------------------------------------------------------
+    export {
+        isListType              = Class.IsSubType,
+        isstruct                = Struct.Validate,
+        getstructcategory       = Struct.GetStructCategory,
+        pairs                   = pairs,
+        type                    = type,
+        floor                   = math.floor,
+
+        Serialization
+    }
+
+    --- Whether the data is a list object
+    __Static__() function Serialization.IsArrayData(data)
+        -- Check the data type
+        local objField          = data[Serialization.ObjectTypeField]
+        if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
+
+        -- Check the data
+        local count             = #data
+
+        for k in pairs(data) do
+            if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
+                return false
+            end
+        end
+
+        for i = 1, count do
+            if data[i] == nil then return false end
+        end
+
+        return true
+    end
 end)

@@ -32,50 +32,16 @@ PLoop(function(_ENV)
         isanonymous             = Namespace.IsAnonymousNamespace,
         Serialize               = Serialization.Serialize,
         Deserialize             = Serialization.Deserialize,
-        isListType              = Class.IsSubType,
-        isstruct                = Struct.Validate,
-        getstructcategory       = Struct.GetStructCategory,
         getClass                = Class.GetObjectClass,
         getMetaMethod           = Class.GetMetaMethod,
+        isArray                 = Serialization.IsArrayData,
 
-        Serialization.Serializable, Serialization.SerializableType, List, IIndexedList, Toolset, Serialization
+        Serialization.Serializable, Serialization.SerializableType, List, Toolset, Serialization
     }
 
     -----------------------------------------------------------------------
     --                              prepare                              --
     -----------------------------------------------------------------------
-    function isArray(data)
-        -- Check the data type
-        local objField          = data[Serialization.ObjectTypeField]
-
-        if objField then
-            if isListType(objField, IIndexedList) then return true end
-            if isstruct(objField) then
-                local stype     = getstructcategory(objField)
-                if stype == "ARRAY" then
-                    return true
-                elseif stype == "MEMBER" or stype == "DICTIONARY" then
-                    return false
-                end
-            end
-        end
-
-        -- Check the data
-        local count             = #data
-
-        for k in pairs(data) do
-            if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
-                return false
-            end
-        end
-
-        for i = 1, count do
-            if data[i] == nil then return false end
-        end
-
-        return true
-    end
-
     function SerializeSimpleData(data)
         local dtType            = type(data)
 

@@ -39,18 +39,16 @@ PLoop(function(_ENV)
         strsub                  = string.sub,
         strformat               = string.format,
         strtrim                 = Toolset.trim,
-        isstruct                = Struct.Validate,
-        getstructcategory       = Struct.GetStructCategory,
-        isListType              = Class.IsSubType,
         isnamespace             = Namespace.Validate,
         Serialize               = Serialization.Serialize,
         Deserialize             = Serialization.Deserialize,
 
         LUA_VERSION             = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
-        Serialization, List, IIndexedList,
+        Serialization, List,
 
         -- Declare the global variables
-        isArray                 = false,
+        isArray                 = Serialization.IsArrayData,
+
         SerializeSimpleData     = false,
         SerializeDataWithWriteNoIndent = false,
         SerializeDataWithWrite  = false,
@@ -62,39 +60,6 @@ PLoop(function(_ENV)
     -- Serialize
     -----------------------------------
     do
-        function isArray(data)
-            -- Check the data type
-            local objField      = data[Serialization.ObjectTypeField]
-
-            if objField then
-                data[Serialization.ObjectTypeField] = nil
-                if isListType(objField, IIndexedList) then return true end
-                if isstruct(objField) then
-                    local stype = getstructcategory(objField)
-                    if stype == "ARRAY" then
-                        return true
-                    elseif stype == "MEMBER" or stype == "DICTIONARY" then
-                        return false
-                    end
-                end
-            end
-
-            -- Check the data
-            local count         = #data
-
-            for k in pairs(data) do
-                if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then
-                    return false
-                end
-            end
-
-            for i = 1, count do
-                if data[i] == nil then return false end
-            end
-
-            return true
-        end
-
         function SerializeSimpleData(data)
             if data == nil then return "null" end
 
