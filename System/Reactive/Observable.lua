@@ -44,14 +44,22 @@ PLoop(function(_ENV)
         end
 
         --- Creates a new objservable with initstate, condition checker, iterate and a result selector
-        __Static__() __Arguments__{ Any, Callable, Callable, Callable/"...=>..." }
+        __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
             return Observable(function(observer)
                 local value     = init
-                while condition(value) do
-                    observer:OnNext(resultselector(value))
-                    if observer.IsUnsubscribed then return end
-                    value       = iterate(value)
+                if resultselector then
+                    while value ~= nil and condition(value) do
+                        observer:OnNext(resultselector(value))
+                        if observer.IsUnsubscribed then return end
+                        value   = iterate(value)
+                    end
+                else
+                    while value ~= nil and condition(value) do
+                        observer:OnNext(value)
+                        if observer.IsUnsubscribed then return end
+                        value   = iterate(value)
+                    end
                 end
                 observer:OnCompleted()
             end)
@@ -60,7 +68,7 @@ PLoop(function(_ENV)
         --- Returns an Observable that just provide one value
         __Static__() function Just(value)
             return Observable(function(observer)
-                observer:OnNext(value)
+                if value ~= nil then observer:OnNext(value) end
                 observer:OnCompleted()
             end)
         end
@@ -80,8 +88,8 @@ PLoop(function(_ENV)
 
         --- Returns an Observable that immediately produces an error
         __Static__() function Throw(exception)
-            if not Class.IsObjectType(exception, Exception) then
-                exception       = Exception(tostring(exception) or "Unknown error")
+            if not (exception and IsObjectType(exception, Exception)) then
+                exception       = Exception(exception and tostring(exception) or "Unknown error")
             end
             return Observable(function(observer) return observer:OnError(exception) end)
         end
@@ -125,10 +133,10 @@ PLoop(function(_ENV)
         end
 
         --- Converts tables into Observables
-        __Static__() __Arguments__{ Table, Callable/pairs }
+        __Static__() __Arguments__{ Table, Callable/nil }
         function From(table, iter)
             return Observable(function(observer)
-                for key, value in iter(table) do
+                for key, value in (iter or pairs)(table) do
                     if observer.IsUnsubscribed then return end
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)

@@ -15,7 +15,6 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-
     --- The basic observable sequence operator
     __Sealed__() class "Operator" (function(_ENV)
         extend "System.IObservable" "System.IObserver"
@@ -100,7 +99,7 @@ PLoop(function(_ENV)
             pairs               = pairs,
             loadsnippet         = Toolset.loadsnippet,
             tostringall         = Toolset.tostringall,
-            otime               = os and (os.clock or os.time) or GetTime, -- GetTime for WOW temporary
+            otime               = os and (os.clock or os.time),
             unpack              = unpack or table.unpack,
             isObjectType        = Class.IsObjectType,
             running             = coroutine.running,
@@ -114,8 +113,8 @@ PLoop(function(_ENV)
 
             LOCK_KEY            = "PLOOP_RX_%s",
 
-            Operator, IObservable, Observer, Threading, Guid, Exception, Dictionary, Subject, List,
-            PublishSubject, ReplaySubject
+            Operator, IObservable, Observer, Observable, Threading, Guid, Exception, Dictionary, Queue, List,
+            PublishSubject, ReplaySubject, Subject
         }
 
         local function safeNext(observer, flag, item, ...)
@@ -133,7 +132,7 @@ PLoop(function(_ENV)
         __Arguments__{ NEString/"Dump" }
         function Dump(self, name)
             self:Subscribe(function(...)
-                Info("%s-->%s", name, List{ Toolset.tostringall(...) }:Join(", "))
+                Info("%s-->%s", name, List{ tostringall(...) }:Join(", "))
             end, function(ex)
                 Info("%s failed-->%s", name, tostring(ex))
             end, function()
@@ -271,44 +270,90 @@ PLoop(function(_ENV)
         --                              Filter                               --
         -----------------------------------------------------------------------
         --- Applying a filter to a sequence
-        __Arguments__{ Callable }
-        function Where(self, condition)
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(condition, ...)
-                if not ok then return observer:OnError(Exception(ret)) end
-                if ret then return observer:OnNext(...) end
-            end)
+        __Arguments__{ Callable, Boolean/nil }
+        function Where(self, condition, safe)
+            if safe then
+                return Operator(self, function(observer, ...)
+                    local ok, ret   = pcall(condition, ...)
+                    if not ok then return observer:OnError(Exception(ret)) end
+                    if ret then return observer:OnNext(...) end
+                end)
+            else
+                return Operator(self, function(observer, ...)
+                    if condition(...) then return observer:OnNext(...) end
+                end)
+            end
         end
         Filter                  = Where -- Alias
 
         --- Applying a filter that only allow distinct items
-        __Arguments__{ Callable/"...=>..." }
-        function Distinct(self, selector)
+        __Arguments__{ Callable/nil, Boolean/nil }
+        function Distinct(self, selector, safe)
             local cache         = {}
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(selector, ...)
-                if not (ok and ret ~= nil) then return observer:OnError(Exception(ret or "There is no value can be used for distinct")) end
+            if selector then
+                if safe then
+                    return Operator(self, function(observer, ...)
+                        local ok, ret   = pcall(selector, ...)
+                        if not (ok and ret ~= nil) then return observer:OnError(Exception(ret or "There is no value can be used for distinct")) end
 
-                if not cache[ret] then
-                    cache[ret]  = true
-                    return observer:OnNext(...)
+                        if ret ~= nil and not cache[ret] then
+                            cache[ret]  = true
+                            return observer:OnNext(...)
+                        end
+                    end)
+                else
+                    return Operator(self, function(observer, ...)
+                        local ret       = selector(...)
+
+                        if ret ~= nil and not cache[ret] then
+                            cache[ret]  = true
+                            return observer:OnNext(...)
+                        end
+                    end)
                 end
-            end)
+            else
+                return Operator(self, function(observer, ret, ...)
+                    if ret ~= nil and not cache[ret] then
+                        cache[ret]  = true
+                        return observer:OnNext(ret, ...)
+                    end
+                end)
+            end
         end
 
         --- Applying a filter that only value diff from the previous can pass
-        __Arguments__{ Callable/"...=>..." }
-        function DistinctUntilChanged(self, selector)
+        __Arguments__{ Callable/nil, Boolean/nil }
+        function DistinctUntilChanged(self, selector, safe)
             local previous
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(selector, ...)
-                if not (ok and ret ~= nil) then return observer:OnError(Exception(ret or "There is no value can be used for distinct")) end
+            if selector then
+                if safe then
+                    return Operator(self, function(observer, ...)
+                        local ok, ret   = pcall(selector, ...)
+                        if not (ok and ret ~= nil) then return observer:OnError(Exception(ret or "There is no value can be used for distinct")) end
 
-                if ret ~= previous then
-                    previous    = ret
-                    return observer:OnNext(...)
+                        if ret ~= nil and ret ~= previous then
+                            previous    = ret
+                            return observer:OnNext(...)
+                        end
+                    end)
+                else
+                    return Operator(self, function(observer, ...)
+                        local ret       = selector(...)
+
+                        if ret ~= nil and ret ~= previous then
+                            previous    = ret
+                            return observer:OnNext(...)
+                        end
+                    end)
                 end
-            end)
+            else
+                return Operator(self, function(observer, ret, ...)
+                    if ret ~= nil and ret ~= previous then
+                        previous    = ret
+                        return observer:OnNext(ret, ...)
+                    end
+                end)
+            end
         end
 
         --- Ignored all elements, only receive complete or error notifications
@@ -333,7 +378,7 @@ PLoop(function(_ENV)
                     if count <= 0 then
                         observer:OnCompleted()
                     end
-                elseif not observer.IsUnsubscribed then
+                else
                     observer:OnCompleted()
                 end
             end)
@@ -347,18 +392,28 @@ PLoop(function(_ENV)
         end
 
         --- return all values while the predicate passes, and when the first value fails the sequence will complete
-        __Arguments__{ Callable }
-        function TakeWhile(self, condition)
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(condition, ...)
-                if not ok then return observer:OnError(Exception(ret)) end
+        __Arguments__{ Callable, Boolean/nil }
+        function TakeWhile(self, condition, safe)
+            if safe then
+                return Operator(self, function(observer, ...)
+                    local ok, ret   = pcall(condition, ...)
+                    if not ok then return observer:OnError(Exception(ret)) end
 
-                if ret then
-                    observer:OnNext(...)
-                else
-                    observer:OnCompleted()
-                end
-            end)
+                    if ret then
+                        observer:OnNext(...)
+                    else
+                        observer:OnCompleted()
+                    end
+                end)
+            else
+                return Operator(self, function(observer, ...)
+                    if condition(...) then
+                        observer:OnNext(...)
+                    else
+                        observer:OnCompleted()
+                    end
+                end)
+            end
         end
 
         --- Skip the last elements of the given count
@@ -392,7 +447,7 @@ PLoop(function(_ENV)
                 end
             end, nil, function(observer)
                 local count     = queue:Dequeue()
-                while count and not observer.IsUnsubscribed do
+                while count do
                     observer:OnNext(queue:Dequeue(count))
                     count       = queue:Dequeue()
                 end
@@ -428,28 +483,37 @@ PLoop(function(_ENV)
         --                            Inspection                             --
         -----------------------------------------------------------------------
         --- Returns a single value sequence indicate whether the target observable sequence contains any value or value meet the predicate
-        __Arguments__{ Callable/"=>true" }
-        function Any(self, predicate)
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(predicate, ...)
-                if not ok then return observer:OnError(Exception(ret)) end
+        __Arguments__{ Callable/nil, Boolean/nil }
+        function Any(self, predicate, safe)
+            return Operator(self, predicate and (
+                safe and function(observer, ...)
+                    local ok, ret   = pcall(predicate, ...)
+                    if not ok then return observer:OnError(Exception(ret)) end
 
-                if ret then
+                    if ret then
+                        observer:OnNext(true)
+                        observer:OnCompleted()
+                    end
+                end or function(observer, ...)
+                    if predicate(...) then
+                        observer:OnNext(true)
+                        observer:OnCompleted()
+                    end
+                end) or function(observer, ...)
                     observer:OnNext(true)
                     observer:OnCompleted()
-                end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
+                end,
+                nil, function(observer)
                     observer:OnNext(false)
                     observer:OnCompleted()
                 end
-            end)
+            )
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence's all values meet the predicate
-        __Arguments__{ Callable }
-        function All(self, predicate)
-            return Operator(self, function(observer, ...)
+        __Arguments__{ Callable, Boolean/nil }
+        function All(self, predicate, safe)
+            return Operator(self, safe and function(observer, ...)
                 local ok, ret   = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
@@ -457,11 +521,14 @@ PLoop(function(_ENV)
                     observer:OnNext(false)
                     observer:OnCompleted()
                 end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    observer:OnNext(true)
+            end or function(observer, ...)
+                if not predicate(...) then
+                    observer:OnNext(false)
                     observer:OnCompleted()
                 end
+            end, nil, function(observer)
+                observer:OnNext(true)
+                observer:OnCompleted()
             end)
         end
 
@@ -473,7 +540,7 @@ PLoop(function(_ENV)
 
         --- Returns a sequence with single default value if the target observable sequence doesn't contains any item
         __Arguments__{ System.Any * 1 }
-        function DefaultIfEmpty(self, ...)
+        function Default(self, ...)
             local any           = false
             local default, ismany
 
@@ -489,15 +556,29 @@ PLoop(function(_ENV)
                 any             = true
                 observer:OnNext(...)
             end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    if not any then
-                        if ismany then
-                            observer:OnNext(unpack(default))
-                        else
-                            observer:OnNext(default)
-                        end
+                if not any then
+                    if ismany then
+                        observer:OnNext(unpack(default))
+                    else
+                        observer:OnNext(default)
                     end
-                    observer:OnCompleted()
+                end
+                observer:OnCompleted()
+            end)
+        end
+
+        --- Raise exception if the sequence don't provide any elements
+        function NotEmpty(self)
+            local hasElements   = false
+
+            return Operator(self, function(observer, ...)
+                hasElements     = true
+                return observer:OnNext(...)
+            end, nil, function(observer)
+                if not hasElements then
+                    return observer:OnError(Exception("The sequence doesn't provide any elements"))
+                else
+                    return observer:OnCompleted()
                 end
             end)
         end
@@ -512,44 +593,6 @@ PLoop(function(_ENV)
                     observer:OnCompleted()
                 else
                     index       = index - 1
-                end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    observer:OnError(Exception("The is no element at the given index"))
-                end
-            end)
-        end
-
-        --- Returns a sequence with the value at the given index(0-base) of the target observable sequence,
-        -- if the value doesn't existed, the default value should be returned
-        __Arguments__{ NaturalNumber, System.Any * 1 }
-        function ElementAtOrDefault(self, index, ...)
-            local default, ismany
-
-            if select("#", ...) > 1 then
-                default         = { ... }
-                ismany          = true
-            else
-                default         = ...
-                ismany          = false
-            end
-
-            index               = floor(index)
-            return Operator(self, function(observer, ...)
-                if index == 0 then
-                    observer:OnNext(...)
-                    observer:OnCompleted()
-                else
-                    index       = index - 1
-                end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    if ismany then
-                        observer:OnNext(unpack(default))
-                    else
-                        observer:OnNext(default)
-                    end
-                    observer:OnCompleted()
                 end
             end)
         end
@@ -616,9 +659,9 @@ PLoop(function(_ENV)
         --                            Aggregation                            --
         -----------------------------------------------------------------------
         --- Returns a sequence with a single value generated from the source sequence
-        __Arguments__{ Callable, System.Any/nil, Callable/nil }
-        function Aggregate(self, accumulator, seed, convertor)
-            return Operator(self, function(observer, ...)
+        __Arguments__{ Callable, System.Any/nil, Boolean/nil }
+        function Aggregate(self, accumulator, seed, safe)
+            return Operator(self, safe and function(observer, ...)
                 if seed == nil then
                     seed        = ...
                 else
@@ -626,18 +669,15 @@ PLoop(function(_ENV)
                     if not ok then observer:OnError(Exception(ret)) end
                     seed        = ret
                 end
-            end, nil, function(observer)
-                if seed and convertor then
-                    local ok, ret = pcall(convertor, seed)
-                    if not ok then return observer:OnError(Exception(ret)) end
-                    seed        = ret
-                end
+            end or function(observer, ...)
                 if seed == nil then
-                    observer:OnError(Exception("The source sequence doesn't provide valid elements"))
+                    seed        = ...
                 else
-                    observer:OnNext(seed)
-                    observer:OnCompleted()
+                    seed        = accumulator(seed, ...)
                 end
+            end, nil, function(observer)
+                if seed ~= nil then observer:OnNext(seed) end
+                observer:OnCompleted()
             end)
         end
 
@@ -665,17 +705,14 @@ PLoop(function(_ENV)
 
         --- Returns a sequence with a single value being the average value of the source sequence
         function Average(self)
-            return self:Aggregate(
-                function(seed, item) seed[1], seed[2] = seed[1] + tonumber(item), seed[2] + 1 return seed end,
-                { 0, 0 },
-                function(seed) if seed[2] > 0 then return seed[1]/seed[2] end end
-            )
+            return self:Aggregate(function(seed, item) seed[1], seed[2] = seed[1] + tonumber(item), seed[2] + 1 return seed end, { 0, 0 })
+                :Map(function(seed) if seed[2] > 0 then return seed[1]/seed[2] end end)
         end
 
         --- Returns a sequence with a single value being the first value of the source sequence
-        __Arguments__{ Callable/"=>true" }
-        function First(self, predicate)
-            return Operator(self, function(observer, ...)
+        __Arguments__{ Callable/nil, Boolean/nil }
+        function First(self, predicate, safe)
+            return Operator(self, predicate and (safe and function(observer, ...)
                 local ok, ret   = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
@@ -683,52 +720,23 @@ PLoop(function(_ENV)
                     observer:OnNext(...)
                     observer:OnCompleted()
                 end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    observer:OnError(Exception("There is no elements in the source sequence"))
-                end
-            end)
-        end
-
-        --- Returns a sequence with a single value being the first value of the source sequence,
-        -- or the default value if the source sequence is empty
-        __Arguments__{ Callable/"=>true", System.Any * 0  }
-        function FirstOrDefault(self, predicate, ...)
-            local default, ismany
-            if select("#", ...) > 1 then
-                default         = { ... }
-                ismany          = true
-            else
-                default         = ...
-                ismany          = false
-            end
-
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(predicate, ...)
-                if not ok then return observer:OnError(Exception(ret)) end
-
-                if ret then
+            end or function(observer, ...)
+                if predicate(...) then
                     observer:OnNext(...)
                     observer:OnCompleted()
                 end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    if ismany then
-                        observer:OnNext(unpack(default))
-                    else
-                        observer:OnNext(default)
-                    end
-                    observer:OnCompleted()
-                end
+            end) or function(observer, ...)
+                observer:OnNext(...)
+                observer:OnCompleted()
             end)
         end
 
         --- Returns a sequence with a single value being the last value of the source sequence
-        __Arguments__{ Callable/"=>true" }
-        function Last(self, predicate)
+        __Arguments__{ Callable/nil, Boolean/nil }
+        function Last(self, predicate, safe)
             local last          = {}
 
-            return Operator(self, function(observer, ...)
+            return Operator(self, predicate and (safe and function(observer, ...)
                 local ok, ret   = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
@@ -736,56 +744,38 @@ PLoop(function(_ENV)
                     last[0]     = select("#", ...)
                     for i = 1, last[0] do last[i] = select(i, ...) end
                 end
-            end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    if last[0] then
-                        observer:OnNext(unpack(last, 1, last[0]))
-                        observer:OnCompleted()
-                    else
-                        observer:OnError(Exception("There is no elements in the source sequence"))
-                    end
-                end
-            end)
-        end
-
-        --- Returns a sequence with a single value being the last value of the source sequence,
-        -- or the default value if the source sequence is empty
-        __Arguments__{ Callable/"=>true", System.Any * 0 }
-        function LastOrDefault(self, predicate, ...)
-            local last          = { ... }
-            last[0]             = #last
-
-            return Operator(self, function(observer, ...)
-                local ok, ret   = pcall(predicate, ...)
-                if not ok then return observer:OnError(Exception(ret)) end
-
-                if ret then
+            end or function(observer, ...)
+                if predicate(...) then
                     last[0]     = select("#", ...)
                     for i = 1, last[0] do last[i] = select(i, ...) end
                 end
+            end) or function(observer, ...)
+                last[0]         = select("#", ...)
+                for i = 1, last[0] do last[i] = select(i, ...) end
             end, nil, function(observer)
-                if not observer.IsUnsubscribed then
-                    if last[0] then
-                        observer:OnNext(unpack(last, 1, last[0]))
-                        observer:OnCompleted()
-                    else
-                        observer:OnError(Exception("There is no elements in the source sequence"))
-                    end
-                end
+                if last[0] then observer:OnNext(unpack(last, 1, last[0])) end
+                observer:OnCompleted()
             end)
         end
 
         --- Returns a sequence with calculated values from the source sequence,
         -- if emits the seed, the first value will be used as the seed
-        __Arguments__{ Callable, System.Any/nil }
-        function Scan(self, accumulator, seed)
-            return Operator(self, function(observer, ...)
+        __Arguments__{ Callable, System.Any/nil, Boolean/nil }
+        function Scan(self, accumulator, seed, safe)
+            return Operator(self, safe and function(observer, ...)
                 if seed == nil then
                     seed        = ...
                 else
                     local ok, ret = pcall(accumulator, seed, ...)
                     if not ok then observer:OnError(Exception(ret)) end
                     seed        = ret
+                    observer:OnNext(seed)
+                end
+            end or function(observer, ...)
+                if seed == nil then
+                    seed        = ...
+                else
+                    seed        = accumulator(seed, ...)
                     observer:OnNext(seed)
                 end
             end)
@@ -795,28 +785,42 @@ PLoop(function(_ENV)
         --                           Partitioning                            --
         -----------------------------------------------------------------------
         --- Returns a sequence with groups generated by the source sequence
-        __Arguments__{ Callable }
-        function GroupBy(self, selector)
-            local groups        = Dictionary()
+        __Arguments__{ Callable, Boolean/nil }
+        function GroupBy(self, selector, safe)
+            local groups                = Dictionary()
 
-            return Operator(self,
-                function(observer, ...)
-                    local ok, key = pcall(selector, ...)
+            return Operator(self, safe and function(observer, ...)
+                    local ok, key       = pcall(selector, ...)
                     if not (ok and key ~= nil) then
-                        local ex= Exception(key or "The key selector doesn't return a value")
+                        local ex        = Exception(key or "The key selector doesn't return a value")
                         groups.Values:Each("OnError", ex)
                         return observer:OnError(ex)
                     end
 
-                    local group = groups[key]
-                    if not group then
-                        group   = Subject()
-                        group.Key   = key
-                        groups[key] = group
-                        observer:OnNext(group)
+                    if key ~= nil then
+                        local group     = groups[key]
+                        if not group then
+                            group       = Subject()
+                            group.Key   = key
+                            groups[key] = group
+                            observer:OnNext(group)
+                        end
                     end
 
                     group:OnNext(...)
+                end or function(observer, ...)
+                    local key           = selector(...)
+                    if key ~= nil then
+                        local group     = groups[key]
+                        if not group then
+                            group       = Subject()
+                            group.Key   = key
+                            groups[key] = group
+                            observer:OnNext(group)
+                        end
+
+                        group:OnNext(...)
+                    end
                 end,
                 function(observer, exception)
                     groups.Values:Each("OnError", exception)
@@ -888,10 +892,12 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Returns an observable sequence with elements converted from the the
         -- source sequence
-        __Arguments__{ Callable }
-        function Select(self, selector)
-            return Operator(self, function(observer, ...)
+        __Arguments__{ Callable, Boolean/nil }
+        function Select(self, selector, safe)
+            return Operator(self, safe and function(observer, ...)
                 return safeNext(observer, pcall(selector, ...))
+            end or function(observer, ...)
+                return observer:OnNext(selector(...))
             end)
         end
         Map                     = Select
@@ -905,7 +911,7 @@ PLoop(function(_ENV)
 
             return Operator(self,
                 function(observer, ...)
-                    local ok, ret = pcall(selector, ...)
+                    local ok,ret= pcall(selector, ...)
                     if not (ok and isObjectType(ret, IObservable)) then
                         local ex= Exception(ret or "The key selector doesn't return an observable sequence")
                         for key in pairs(childobs) do
@@ -1018,11 +1024,11 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Amb(...)
             local observables   = { ... }
-            local choosed, oper
+            local choosed
             local subjects      = {}
             local rcompleted
 
-            oper                = Operator(Observable.Range(1, #observables),
+            return Operator(Observable.Range(1, #observables),
                 function(observer, index)
                     if choosed then return end
                     local subject
@@ -1075,8 +1081,6 @@ PLoop(function(_ENV)
                     end
                 end
             )
-
-            return oper
         end
         Amb                     = Observable.Amb
 
@@ -1084,13 +1088,11 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Merge(...)
             local observables   = { ... }
-            local choosed, oper
             local subjects      = {}
             local rcompleted
 
-            oper                = Operator(Observable.Range(1, #observables),
+            return Operator(Observable.Range(1, #observables),
                 function(observer, index)
-                    --if choosed then return end
                     local subject
                     subject     = Subject(observables[index], nil, nil, function(nobserver)
                             subjects[subject] = nil
@@ -1116,8 +1118,6 @@ PLoop(function(_ENV)
                     end
                 end
             )
-
-            return oper
         end
         Merge                   = Observable.Merge
 
@@ -1126,11 +1126,11 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Switch(...)
             local observables   = { ... }
-            local choosed, oper = 0
+            local choosed       = 0
             local subjects      = {}
             local rcompleted
 
-            oper                = Operator(Observable.Range(1, #observables),
+            return Operator(Observable.Range(1, #observables),
                 function(observer, index)
                     local subject
                     subject     = Subject(observables[index], function(nobserver, ...)
@@ -1178,14 +1178,12 @@ PLoop(function(_ENV)
                     end
                 end
             )
-
-            return oper
         end
         Switch                  = Observable.Switch
 
         --- The CombineLatest extension method allows you to take the most recent value from two sequences, and with a given
         --- function transform those into a value for the result sequence
-        __Arguments__{ IObservable, Callable/"...=>..." }
+        __Arguments__{ IObservable, Callable/nil }
         function CombineLatest(self, secseq, resultSelector)
             return Observable(function(observer)
                 local cache     = {}
@@ -1200,18 +1198,25 @@ PLoop(function(_ENV)
                     end
                 end
 
-                local process   = function(observer)
+                local process   = resultSelector and function(observer)
                     if start and stop then
-                        safeNext(observer, pcall(resultSelector, unpack(cache, start + 1, stop)))
+                        safeNext(observer, pcall(resultSelector, unpack(cache, start, stop)))
+                    end
+                end or function(observer)
+                    if start and stop then
+                        observer:OnNext(unpack(cache, start, stop))
                     end
                 end
 
                 Subject(self, function(observer, ...)
                     local count = select("#", ...)
-                    start       = 0 - count
-                    for i = 1, count do
-                        cache[start + i] = select(i, ...)
+                    start       = 1
+
+                    for i = 0, count - 1 do
+                        start   = start - 1
+                        cache[start] = select(count - i, ...)
                     end
+
                     return process(observer)
                 end, nil, complete):Subscribe(observer)
 
@@ -1227,7 +1232,7 @@ PLoop(function(_ENV)
         end
 
         --- the Zip method brings together two sequences of values as pairs
-        __Arguments__{ IObservable, Callable/"...=>..." }
+        __Arguments__{ IObservable, Callable/nil }
         function Zip(self, secseq, resultSelector)
             return Observable(function(observer)
                 local queuea    = Queue()
@@ -1238,7 +1243,7 @@ PLoop(function(_ENV)
                     if completed then
                         observer:OnCompleted()
                     else
-                        complete= true
+                        completed = true
                     end
                 end
 
@@ -1250,16 +1255,32 @@ PLoop(function(_ENV)
                     else
                         if count == 1 then
                             local a1= ...
-                            safeNext(observer, pcall(resultSelector, a1, queueb:Dequeue(second)))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, queueb:Dequeue(second)))
+                            else
+                                observer:OnNext(a1, queueb:Dequeue(second))
+                            end
                         elseif count == 2 then
                             local a1, a2 = ...
-                            safeNext(observer, pcall(resultSelector, a1, a2, queueb:Dequeue(second)))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, a2, queueb:Dequeue(second)))
+                            else
+                                observer:OnNext(a1, a2, queueb:Dequeue(second))
+                            end
                         elseif count == 3 then
                             local a1, a2, a3 = ...
-                            safeNext(observer, pcall(resultSelector, a1, a2, a3, queueb:Dequeue(second)))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, a2, a3, queueb:Dequeue(second)))
+                            else
+                                observer:OnNext(a1, a2, a3, queueb:Dequeue(second))
+                            end
                         else
                             local q = Queue():Enqueue(...):Enqueue(queueb:Dequeue(second))
-                            safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
+                            else
+                                observer:OnNext(q:Dequeue(q.Count))
+                            end
                         end
                     end
                 end, nil, complete):Subscribe(observer)
@@ -1272,16 +1293,32 @@ PLoop(function(_ENV)
                     else
                         if first == 1 then
                             local a1= queuea:Dequeue(first)
-                            safeNext(observer, pcall(resultSelector, a1, ...))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, ...))
+                            else
+                                observer:OnNext(a1, ...)
+                            end
                         elseif first == 2 then
                             local a1, a2 = queuea:Dequeue(first)
-                            safeNext(observer, pcall(resultSelector, a1, a2, ...))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, a2, ...))
+                            else
+                                observer:OnNext(a1, a2, ...)
+                            end
                         elseif first == 3 then
                             local a1, a2, a3 = queuea:Dequeue(first)
-                            safeNext(observer, pcall(resultSelector, a1, a2, a3, ...))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, a1, a2, a3, ...))
+                            else
+                                observer:OnNext(a1, a2, a3, ...)
+                            end
                         else
                             local q = Queue():Enqueue(queuea:Dequeue(first)):Enqueue(...)
-                            safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
+                            if resultSelector then
+                                safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
+                            else
+                                observer:OnNext(q:Dequeue(q.Count))
+                            end
                         end
                     end
                 end, nil, complete):Subscribe(observer)
@@ -1291,7 +1328,7 @@ PLoop(function(_ENV)
         --- combine items emitted by two Observables whenever an item from one
         -- Observable is emitted during a time window defined according to an
         -- item emitted by the other Observable
-        __Arguments__{ IObservable, Callable, Callable, Callable/"...=>..." }
+        __Arguments__{ IObservable, Callable, Callable, Callable/nil }
         function Join(self, right, leftDurationSelector, rightDurationSelector, resultSelector)
             local leftwindows   = List()
             local rightwindows  = List()
@@ -1304,22 +1341,38 @@ PLoop(function(_ENV)
                         if count == 1 then
                             local a1 = ...
                             for _, rwin in rightwindows:GetIterator() do
-                                observer:OnNext(resultSelector(a1, unpack(rwin)))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, unpack(rwin)))
+                                else
+                                    observer:OnNext(a1, unpack(rwin))
+                                end
                             end
                         elseif count == 2 then
                             local a1, a2 = ...
                             for _, rwin in rightwindows:GetIterator() do
-                                observer:OnNext(resultSelector(a1, a2, unpack(rwin)))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, a2, unpack(rwin)))
+                                else
+                                    observer:OnNext(a1, a2, unpack(rwin))
+                                end
                             end
                         elseif count == 3 then
                             local a1, a2, a3 = ...
                             for _, rwin in rightwindows:GetIterator() do
-                                observer:OnNext(resultSelector(a1, a2, a3, unpack(rwin)))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, a2, a3, unpack(rwin)))
+                                else
+                                    observer:OnNext(a1, a2, a3, unpack(rwin))
+                                end
                             end
                         else
                             for _, rwin in rightwindows:GetIterator() do
                                 local queue = Queue{ ... }:Enqueue(unpack(rwin))
-                                observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
+                                else
+                                    observer:OnNext(queue:Dequeue(queue.Count))
+                                end
                             end
                         end
                     end
@@ -1361,16 +1414,32 @@ PLoop(function(_ENV)
                             local lcnt = #lwin
                             if lcnt == 1 then
                                 local a1 = lwin[1]
-                                observer:OnNext(resultSelector(a1, ...))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, ...))
+                                else
+                                    observer:OnNext(a1, ...)
+                                end
                             elseif lcnt == 2 then
                                 local a1, a2 = lwin[1], lwin[2]
-                                observer:OnNext(resultSelector(a1, a2, ...))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, a2, ...))
+                                else
+                                    observer:OnNext(a1, a2, ...)
+                                end
                             elseif lcnt == 3 then
                                 local a1, a2, a3 = lwin[1], lwin[2], lwin[3]
-                                observer:OnNext(resultSelector(a1, a2, a3, ...))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(a1, a2, a3, ...))
+                                else
+                                    observer:OnNext(a1, a2, a3, ...)
+                                end
                             else
                                 local queue = Queue{ unpack(lwin) }:Enqueue(...)
-                                observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
+                                if resultSelector then
+                                    observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
+                                else
+                                    observer:OnNext(queue:Dequeue(queue.Count))
+                                end
                             end
                         end
                     end
@@ -1426,9 +1495,9 @@ PLoop(function(_ENV)
             return self
         end
 
-        __Arguments__{ Callable/"...=>..." }
+        __Arguments__{ Callable/nil }
         function Pattern:Then(resultSelector)
-            return Plan{ self, resultSelector }
+            return Plan{ self, resultSelector or false }
         end
 
         -- @todo: Multi-os thread support
@@ -1442,7 +1511,7 @@ PLoop(function(_ENV)
                 local count     = 0
                 local completed = 0
 
-                local process   = function(index)
+                local process   = selector and function(index)
                     count       = count + 1
 
                     if count == total then
@@ -1454,6 +1523,19 @@ PLoop(function(_ENV)
                         end)
 
                         safeNext(observer, pcall(selector, rs:Dequeue(rs.Count)))
+                    end
+                end or function(index)
+                    count       = count + 1
+
+                    if count == total then
+                        local rs= Queue()
+
+                        queues:Each(function(queue)
+                            rs:Enqueue(queue:Dequeue(queue:Dequeue()))
+                            if queue:Peek() == nil then count = count - 1 end
+                        end)
+
+                        observer:OnNext(rs:Dequeue(rs.Count))
                     end
                 end
 

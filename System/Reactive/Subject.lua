@@ -36,12 +36,13 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
-            if self.Observers[observer] then return observer end
-            local hasobs                = next(self.Observers)
+            local obs           = self.Observers
+            if obs[observer] then return observer end
+            local hasobs        = next(obs)
 
             Observable.From(observer.OnUnsubscribe):Subscribe(function()
-                self.Observers[observer]= nil
-                if not next(self.Observers) then self:Unsubscribe() end
+                obs[observer]   = nil
+                if not next(obs) then self:Unsubscribe() end
             end)
 
             self:Resubscribe()
@@ -52,7 +53,7 @@ PLoop(function(_ENV)
 
                 self[FIELD_NEW_SUBSCRIBE][observer] = true
             else
-                self.Observers[observer]    = true
+                obs[observer]   = true
             end
             if self.Observable and not hasobs then self.Observable:Subscribe(self) end
 
@@ -77,10 +78,14 @@ PLoop(function(_ENV)
             if not self.IsUnsubscribed then
                 self[FIELD_NEW_SUBSCRIBE] = self[FIELD_NEW_SUBSCRIBE] or true
 
-                self.Observers.Keys:Each(self.OnNextCore, ...)
+                local onNext    = self.OnNextCore
+                for k in self.Observers:GetIterator() do
+                    onNext(k, ...)
+                end
 
-                if type(self[FIELD_NEW_SUBSCRIBE]) == "table" then
-                    for observer in pairs(self[FIELD_NEW_SUBSCRIBE]) do
+                local newSubs   = self[FIELD_NEW_SUBSCRIBE]
+                if newSubs and type(newSubs) == "table" then
+                    for observer in pairs(newSubs) do
                         self.Observers[observer] = true
                     end
                 end
@@ -89,10 +94,24 @@ PLoop(function(_ENV)
         end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, exception) return not self.IsUnsubscribed and self.Observers.Keys:Each(self.OnErrorCore, exception) end
+        function OnError(self, exception)
+            if self.IsUnsubscribed then return end
+
+            local onError       = self.OnErrorCore
+            for k in self.Observers:GetIterator() do
+                onError(k, exception)
+            end
+        end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self) return not self.IsUnsubscribed and self.Observers.Keys:Each(self.OnCompletedCore) end
+        function OnCompleted(self)
+            if self.IsUnsubscribed then return end
+
+            local onComp        = self.OnCompletedCore
+            for k in self.Observers:GetIterator() do
+                onComp(k)
+            end
+        end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -161,9 +180,9 @@ PLoop(function(_ENV)
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self[0]         = select("#", ...)
+            self[0]             = select("#", ...)
             for i = 1, self[0] do
-                self[i]     = select(i, ...)
+                self[i]         = select(i, ...)
             end
             super.OnNext(self, ...)
         end
@@ -173,9 +192,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Any * nil }
         function __ctor(self, observable, ...)
-            self[0]         = select("#", ...)
+            self[0]             = select("#", ...)
             for i = 1, self[0] do
-                self[i]     = select(i, ...)
+                self[i]         = select(i, ...)
             end
 
             super(self, observable)
@@ -183,9 +202,9 @@ PLoop(function(_ENV)
 
         __Arguments__{ Any * nil }
         function __ctor(self, ...)
-            self[0]         = select("#", ...)
+            self[0]             = select("#", ...)
             for i = 1, self[0] do
-                self[i]     = select(i, ...)
+                self[i]         = select(i, ...)
             end
 
             super(self)
