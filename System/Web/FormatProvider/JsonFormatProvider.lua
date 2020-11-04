@@ -47,8 +47,9 @@ PLoop(function(_ENV)
         Serialization, List,
 
         -- Declare the global variables
-        isArray                 = Serialization.IsArrayData,
+        isArrayData             = Serialization.IsArrayData,
 
+        isArray                 = false,
         SerializeSimpleData     = false,
         SerializeDataWithWriteNoIndent = false,
         SerializeDataWithWrite  = false,
@@ -60,6 +61,12 @@ PLoop(function(_ENV)
     -- Serialize
     -----------------------------------
     do
+        function isArray(data)
+            local res           = isArrayData(data)
+            data[Serialization.ObjectTypeField] = nil
+            return res
+        end
+
         function SerializeSimpleData(data)
             if data == nil then return "null" end
 
