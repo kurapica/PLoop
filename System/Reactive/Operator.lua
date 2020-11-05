@@ -37,6 +37,9 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
+            -- Normally the Operator can't be re-used
+            if self.IsUnsubscribed then return end
+
             self.Observer       = observer
 
             Observable.From(observer.OnUnsubscribe):Subscribe(function() self:Unsubscribe() end)

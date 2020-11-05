@@ -40,11 +40,17 @@ PLoop(function(_ENV)
             if obs[observer] then return observer end
             local hasobs        = next(obs)
 
-            Observable.From(observer.OnUnsubscribe):Subscribe(function()
+            -- Bind the Unsubscribe event
+            local onUnsubscribe
+            onUnsubscribe       = function()
+                observer.OnUnsubscribe = observer.OnUnsubscribe - onUnsubscribe
+
                 obs[observer]   = nil
                 if not next(obs) then self:Unsubscribe() end
-            end)
+            end
+            observer.OnUnsubscribe = observer.OnUnsubscribe + onUnsubscribe
 
+            -- Subscribe the subject
             self:Resubscribe()
             if self[FIELD_NEW_SUBSCRIBE] then
                 if self[FIELD_NEW_SUBSCRIBE] == true then
