@@ -596,5 +596,20 @@ PLoop(function(_ENV)
                 return { key }
             end
         end)
+
+        -----------------------------------------------------------------------
+        --                           static method                           --
+        -----------------------------------------------------------------------
+        -- Run a function with arguments async
+        __Static__() __Async__() __Arguments__{ Function, Any * 0 }
+        function RunAsync(func, ...)
+            return func(...)
+        end
+
+        -- Run a function with arguments as iterator
+        __Static__() __Iterator__() __Arguments__{ Function, Any * 0 }
+        function RunIterator(func, ...)
+            return func(...)
+        end
     end)
 end)

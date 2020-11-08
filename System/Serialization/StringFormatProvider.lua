@@ -21,6 +21,7 @@ PLoop(function(_ENV)
         tostring                = tostring,
         next                    = next,
         select                  = select,
+        getmetatable            = getmetatable,
         floor                   = math.floor,
         tinsert                 = table.insert,
         tblconcat               = table.concat,

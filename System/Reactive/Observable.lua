@@ -15,10 +15,6 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    __Async__() function ProcessTask(func, ...)
-        return func(...)
-    end
-
     __Sealed__() class "Observable" (function(_ENV)
         extend "System.IObservable"
 
@@ -31,7 +27,7 @@ PLoop(function(_ENV)
             pcall               = pcall,
             IsObjectType        = Class.IsObjectType,
             Exception           = System.Exception,
-            ProcessTask         = ProcessTask,
+            RunAsync            = Threading.RunAsync,
         }
 
         -----------------------------------------------------------------------
@@ -66,13 +62,22 @@ PLoop(function(_ENV)
         end
 
         --- Returns an Observable that just provide one value
-        __Static__() function Just(value)
-            return Observable(function(observer)
-                if value ~= nil then observer:OnNext(value) end
+        __Static__() function Just(...)
+            local count         = select("#", ...)
+
+            local self
+            self                = Observable(function(observer)
+                if count > 0 then observer:OnNext(unpack(self)) end
                 observer:OnCompleted()
             end)
+
+            for i = 1, count do
+                self[i]         = select(i, ...)
+            end
+
+            return self
         end
-        __Static__() Return = Just
+        __Static__() Return     = Just
 
         --- Returns and Observable that immediately completes without producing a value
         __Static__() function Empty()
@@ -95,16 +100,24 @@ PLoop(function(_ENV)
         end
 
         --- Creates the Observable only when the observer subscribes
-        __Static__() __Arguments__{ Callable }
-        function Defer(ctor)
-            return Observable(function(observer)
-                local observable= ctor()
-                if not IsObjectType(observable, IObservable) then
-                    observable:OnError(Exception("The defer function doesn't provide valid observable"))
+        __Static__() __Arguments__{ Callable, Any * 0 }
+        function Defer(ctor, ...)
+            local self
+
+            self                = Observable(function(observer)
+                local obs       = ctor(unpack(self))
+                if not IsObjectType(obs, IObservable) then
+                    obs:OnError(Exception("The defer function doesn't provide valid observable"))
                 else
-                    return observable:Subscribe(observer)
+                    return obs:Subscribe(observer)
                 end
             end)
+
+            for i = 1, select("#", ...) do
+                self[i]         = select(i, ...)
+            end
+
+            return self
         end
 
         --- Converts collection objects into Observables
@@ -146,10 +159,10 @@ PLoop(function(_ENV)
         end
 
         --- Creates an Observable that emits a particular range of sequential integers
-        __Static__() __Arguments__{ Integer, Integer }
-        function Range(start, length)
+        __Static__() __Arguments__{ Number, Number, Number/nil }
+        function Range(start, stop, step)
             return Observable(function(observer)
-                for i = start, start + length - 1 do
+                for i = start, stop, step or 1 do
                     if observer.IsUnsubscribed then return end
                     observer:OnNext(i)
                 end
@@ -158,40 +171,43 @@ PLoop(function(_ENV)
         end
 
         --- Creates an Observable that emits a particular item multiple times
-        __Static__() __Arguments__{ Any, Number }
-        function Repeat(value, count)
-            return Observable(function(observer)
+        __Static__() __Arguments__{ Number, Any * 1 }
+        function Repeat(count, ...)
+            local self
+            self                = Observable(function(observer)
                 local i         = 0
 
                 while i < count do
                     if observer.IsUnsubscribed then return end
-                    observer:OnNext(value)
+                    observer:OnNext(unpack(self))
                     i           = i + 1
                 end
                 observer:OnCompleted()
             end)
+
+            for i = 1, select("#", ...) do
+                self[i]         = select(i, ...)
+            end
+
+            return self
         end
 
         --- Creates an Observable that emits the return value of a function-like directive
         __Static__() __Arguments__{ Callable, Any * 0 }
         function Start(func, ...)
-            local a1, a2, a3, a4
-            local args
-            if select("#", ...) > 4 then
-                args            = { ... }
-            else
-                a1, a2, a3, a4  = ...
-            end
-            return Observable(function(observer)
-                ProcessTask(function()
-                    if args then
-                        observer:OnNext(func(unpack(args)))
-                    else
-                        observer:OnNext(func(a1, a2, a3, a4))
-                    end
+            local self
+            self                = Observable(function(observer)
+                RunAsync(function()
+                    observer:OnNext(func(unpack(self)))
                     observer:OnCompleted()
                 end)
             end)
+
+            for i = 1, select("#", ...) do
+                self[i]         = select(i, ...)
+            end
+
+            return self
         end
 
         -----------------------------------------------------------------------
@@ -203,14 +219,7 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
-            local ok, ret       = pcall(self.SubscribeCore, observer)
-            if not ok then
-                if not IsObjectType(ret, Exception) then
-                    observer:OnError(Exception(tostring(ret)))
-                else
-                    observer:OnError(ret)
-                end
-            end
+            self.SubscribeCore(observer)
             return observer
         end
 
@@ -229,5 +238,28 @@ PLoop(function(_ENV)
         function __ctor(self, subscribe)
             self.SubscribeCore  = subscribe
         end
+    end)
+
+    --- The attribute used to wrap a function that return operator to be an Observable, so could be re-used
+    __Sealed__() class "__Observable__" (function(_ENV)
+        extend "IInitAttribute"
+
+        local Defer             = Observable.Defer
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            return function(...) return Defer(target, ...) end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
+
+        --- the attribute's priority
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lowest }
     end)
 end)

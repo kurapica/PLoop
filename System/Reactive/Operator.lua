@@ -42,7 +42,12 @@ PLoop(function(_ENV)
 
             self.Observer       = observer
 
-            Observable.From(observer.OnUnsubscribe):Subscribe(function() self:Unsubscribe() end)
+            local onUnsubscribe
+            onUnsubscribe       = function()
+                observer.OnUnsubscribe = observer.OnUnsubscribe - onUnsubscribe
+                self:Unsubscribe()
+            end
+            observer.OnUnsubscribe = observer.OnUnsubscribe + onUnsubscribe
 
             self.Observable:Subscribe(self)
             if self.RefOperator then self.RefOperator:Subscribe(observer) end
@@ -144,6 +149,7 @@ PLoop(function(_ENV)
         end
 
         --- Invokes actions with side effecting behavior for each element in the observable sequence
+        __Observable__()
         __Arguments__{ Callable, Callable/nil, Callable/nil }
         function Do(self, onNext, onError, onCompleted)
             return Operator(self, function(observer, ...)
@@ -161,6 +167,7 @@ PLoop(function(_ENV)
         end
 
         --- Catch the exception and replace with another sequence if provided
+        __Observable__()
         __Arguments__{ Callable }
         function Catch(self, onError)
             return Operator(self, nil, function(observer, ex)
@@ -174,6 +181,7 @@ PLoop(function(_ENV)
         end
 
         --- Process operations when the sequence is completed, error or unsubscribed
+        __Observable__()
         __Arguments__{ Callable }
         function Finally(self, finally)
             local oper          = Operator(self)
@@ -182,6 +190,7 @@ PLoop(function(_ENV)
         end
 
         --- Start the next observable sequence when the sequence is failed or completed
+        __Observable__()
         __Arguments__{ IObservable }
         function OnErrorResumeNext(self, observable)
             local resume        = function(observer) observable:Subscribe(observer) end
@@ -189,6 +198,7 @@ PLoop(function(_ENV)
         end
 
         --- Retry the sequence if failed
+        __Observable__()
         __Arguments__{ NaturalNumber/nil }
         function Retry(self, count)
             count               = count or huge
@@ -273,6 +283,7 @@ PLoop(function(_ENV)
         --                              Filter                               --
         -----------------------------------------------------------------------
         --- Applying a filter to a sequence
+        __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function Where(self, condition, safe)
             if safe then
@@ -291,6 +302,7 @@ PLoop(function(_ENV)
 
         --- Applying a filter that only allow distinct items
         __Arguments__{ Callable/nil, Boolean/nil }
+        __Observable__()
         function Distinct(self, selector, safe)
             local cache         = {}
             if selector then
@@ -325,6 +337,7 @@ PLoop(function(_ENV)
         end
 
         --- Applying a filter that only value diff from the previous can pass
+        __Observable__()
         __Arguments__{ Callable/nil, Boolean/nil }
         function DistinctUntilChanged(self, selector, safe)
             local previous
@@ -360,17 +373,20 @@ PLoop(function(_ENV)
         end
 
         --- Ignored all elements, only receive complete or error notifications
+        __Observable__()
         function IgnoreElements(self)
             return self:Where("=>false")
         end
 
         --- Skip the given count elements
+        __Observable__()
         __Arguments__{ Number }
         function Skip(self, count)
             return self:Where(function() count = count - 1 return count < 0 end)
         end
 
         --- Only take the elements of the given count
+        __Observable__()
         __Arguments__{ Number }
         function Take(self, count)
             return Operator(self, function(observer, ...)
@@ -388,6 +404,7 @@ PLoop(function(_ENV)
         end
 
         --- filter out all values until a value fails the predicate, then the remaining sequence can be returned
+        __Observable__()
         __Arguments__{ Callable }
         function SkipWhile(self, condition)
             local take          = false
@@ -395,6 +412,7 @@ PLoop(function(_ENV)
         end
 
         --- return all values while the predicate passes, and when the first value fails the sequence will complete
+        __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function TakeWhile(self, condition, safe)
             if safe then
@@ -420,6 +438,7 @@ PLoop(function(_ENV)
         end
 
         --- Skip the last elements of the given count
+        __Observable__()
         __Arguments__{ Number }
         function SkipLast(self, last)
             local count         = 0
@@ -436,6 +455,7 @@ PLoop(function(_ENV)
         end
 
         --- Take the last elements of the given count
+        __Observable__()
         __Arguments__{ Number }
         function TakeLast(self, last)
             local queue         = Queue()
@@ -459,6 +479,7 @@ PLoop(function(_ENV)
         end
 
         --- Skip all values until any value is produced by a secondary observable sequence
+        __Observable__()
         __Arguments__{ IObservable }
         function SkipUntil(self, other)
             local flag          = false
@@ -468,6 +489,7 @@ PLoop(function(_ENV)
         end
 
         --- Take all values until any value is produced by a secondary observable sequence
+        __Observable__()
         __Arguments__{ IObservable }
         function TakeUntil(self, other)
             local flag          = true
@@ -486,6 +508,7 @@ PLoop(function(_ENV)
         --                            Inspection                             --
         -----------------------------------------------------------------------
         --- Returns a single value sequence indicate whether the target observable sequence contains any value or value meet the predicate
+        __Observable__()
         __Arguments__{ Callable/nil, Boolean/nil }
         function Any(self, predicate, safe)
             return Operator(self, predicate and (
@@ -514,6 +537,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence's all values meet the predicate
+        __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function All(self, predicate, safe)
             return Operator(self, safe and function(observer, ...)
@@ -536,12 +560,14 @@ PLoop(function(_ENV)
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence contains a specific value
+        __Observable__()
         __Arguments__{ System.Any }
         function Contains(self, val)
             return self:Any(function(item) return item == val end)
         end
 
         --- Returns a sequence with single default value if the target observable sequence doesn't contains any item
+        __Observable__()
         __Arguments__{ System.Any * 1 }
         function Default(self, ...)
             local any           = false
@@ -571,6 +597,7 @@ PLoop(function(_ENV)
         end
 
         --- Raise exception if the sequence don't provide any elements
+        __Observable__()
         function NotEmpty(self)
             local hasElements   = false
 
@@ -587,6 +614,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns a sequence with the value at the given index(0-base) of the target observable sequence
+        __Observable__()
         __Arguments__{ NaturalNumber }
         function ElementAt(self, index)
             index               = floor(index)
@@ -601,6 +629,7 @@ PLoop(function(_ENV)
         end
 
         --- Compares two observable sequences whether those sequences has the same values in the same order and that the sequences are the same length
+        __Observable__()
         __Arguments__{ IObservable, Callable/"x,y=>x==y" }
         function SequenceEqual(self, other, compare)
             local fqueue        = Queue()
@@ -662,6 +691,7 @@ PLoop(function(_ENV)
         --                            Aggregation                            --
         -----------------------------------------------------------------------
         --- Returns a sequence with a single value generated from the source sequence
+        __Observable__()
         __Arguments__{ Callable, System.Any/nil, Boolean/nil }
         function Aggregate(self, accumulator, seed, safe)
             return Operator(self, safe and function(observer, ...)
@@ -685,34 +715,40 @@ PLoop(function(_ENV)
         end
 
         --- Returns a sequence with a single value being the count of the values in the source sequence
+        __Observable__()
         function Count(self)
             return self:Aggregate(function(seed, item) return seed + 1 end, 0)
         end
 
         --- Returns a sequence with a single value being the min value of the source sequence
+        __Observable__()
         __Arguments__{ Callable/"x,y=>x<y" }
         function Min(self, compare)
             return self:Aggregate(function(seed, item) if compare(item, seed) then return item else return seed end end)
         end
 
         --- Returns a sequence with a single value being the max value of the source sequence
+        __Observable__()
         __Arguments__{ Callable/"x,y=>x<y" }
         function Max(self, compare)
             return self:Aggregate(function(seed, item) if compare(item, seed) then return seed else return item end end)
         end
 
         --- Returns a sequence with a single value being the sum value of the source sequence
+        __Observable__()
         function Sum(self)
             return self:Aggregate(function(seed, item) return seed + tonumber(item) end, 0)
         end
 
         --- Returns a sequence with a single value being the average value of the source sequence
+        __Observable__()
         function Average(self)
             return self:Aggregate(function(seed, item) seed[1], seed[2] = seed[1] + tonumber(item), seed[2] + 1 return seed end, { 0, 0 })
                 :Map(function(seed) if seed[2] > 0 then return seed[1]/seed[2] end end)
         end
 
         --- Returns a sequence with a single value being the first value of the source sequence
+        __Observable__()
         __Arguments__{ Callable/nil, Boolean/nil }
         function First(self, predicate, safe)
             return Operator(self, predicate and (safe and function(observer, ...)
@@ -735,6 +771,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns a sequence with a single value being the last value of the source sequence
+        __Observable__()
         __Arguments__{ Callable/nil, Boolean/nil }
         function Last(self, predicate, safe)
             local last          = {}
@@ -763,6 +800,7 @@ PLoop(function(_ENV)
 
         --- Returns a sequence with calculated values from the source sequence,
         -- if emits the seed, the first value will be used as the seed
+        __Observable__()
         __Arguments__{ Callable, System.Any/nil, Boolean/nil }
         function Scan(self, accumulator, seed, safe)
             return Operator(self, safe and function(observer, ...)
@@ -788,6 +826,7 @@ PLoop(function(_ENV)
         --                           Partitioning                            --
         -----------------------------------------------------------------------
         --- Returns a sequence with groups generated by the source sequence
+        __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function GroupBy(self, selector, safe)
             local groups                = Dictionary()
@@ -837,6 +876,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns an observable sequence containing a list of zero or more elements that have a minimum key value
+        __Observable__()
         __Arguments__{ Callable, Callable/"x,y=>x<y" }
         function MinBy(self, selector, compare)
             local result        = List()
@@ -864,6 +904,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns an observable sequence containing a list of zero or more elements that have a maximum key value
+        __Observable__()
         __Arguments__{ Callable, Callable/"x,y=>x<y" }
         function MaxBy(self, selector, compare)
             local result        = List()
@@ -895,6 +936,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Returns an observable sequence with elements converted from the the
         -- source sequence
+        __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function Select(self, selector, safe)
             return Operator(self, safe and function(observer, ...)
@@ -907,6 +949,7 @@ PLoop(function(_ENV)
 
         --- Convert the source sequence's elements into several observable
         -- sequence, then combined those child sequence to produce a final sequence
+        __Observable__()
         __Arguments__{ Callable }
         function SelectMany(self, selector)
             local childobs      = {}
@@ -960,6 +1003,7 @@ PLoop(function(_ENV)
         --- Concatenates two or more observable sequences. Returns an observable
         -- sequence that contains the elements of the first sequence, followed by
         -- those of the second the sequence
+        __Observable__()
         __Arguments__{ IObservable * 1 }
         function Concat(self, ...)
             if select("#", ...) == 1 then
@@ -982,6 +1026,7 @@ PLoop(function(_ENV)
         end
 
         --- Repeats the observable sequence indefinitely and sequentially
+        __Observable__()
         __Arguments__{ NaturalNumber/nil }
         function Repeat(self, count)
             count               = count or huge
@@ -999,6 +1044,7 @@ PLoop(function(_ENV)
         end
 
         --- Prefix values to a sequence
+        __Observable__()
         __Arguments__{ System.Any * 0 }
         function StartWith(self, ...)
             local count         = select("#", ...)
@@ -1024,6 +1070,7 @@ PLoop(function(_ENV)
         end
 
         --- Return values from the sequence that is first to produce values, and ignore the other sequences
+        __Observable__()
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Amb(...)
             local observables   = { ... }
@@ -1088,6 +1135,7 @@ PLoop(function(_ENV)
         Amb                     = Observable.Amb
 
         --- Merge multi sequence, their results will be merged as the result sequence
+        __Observable__()
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Merge(...)
             local observables   = { ... }
@@ -1126,6 +1174,7 @@ PLoop(function(_ENV)
 
         --- Switch will subscribe to the outer sequence and as each inner sequence is
         -- yielded it will subscribe to the new inner sequence and dispose of the subscription to the previous inner sequence
+        __Observable__()
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Switch(...)
             local observables   = { ... }
@@ -1331,6 +1380,7 @@ PLoop(function(_ENV)
         --- combine items emitted by two Observables whenever an item from one
         -- Observable is emitted during a time window defined according to an
         -- item emitted by the other Observable
+        __Observable__()
         __Arguments__{ IObservable, Callable, Callable, Callable/nil }
         function Join(self, right, leftDurationSelector, rightDurationSelector, resultSelector)
             local leftwindows   = List()
@@ -1563,6 +1613,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- The Buffer operator allows you to store away a range of values and then
         -- re-publish them as a list once the buffer is full
+        __Observable__()
         __Arguments__{ NaturalNumber, NaturalNumber/nil }
         function Buffer(self, total, skip)
             local queue         = Queue()
@@ -1609,6 +1660,7 @@ PLoop(function(_ENV)
 
         --- periodically subdivide items from an Observable into Observable windows
         -- and emit these windows rather than emitting the items one at a time
+        __Observable__()
         __Arguments__{ NaturalNumber, NaturalNumber/nil }
         function Window(self, total, skip)
             skip                = skip or total
@@ -1663,6 +1715,7 @@ PLoop(function(_ENV)
             end)
         end
 
+        __Observable__()
         __Arguments__{ IObservable }
         function Window(self, sampler)
             local currsub
@@ -1697,6 +1750,7 @@ PLoop(function(_ENV)
 
         --- Returns a new Observable that produces its most recent value every time
         -- the specified observable produces a value
+        __Observable__()
         __Arguments__{ IObservable }
         function Sample(self, sampler)
             local queue         = Queue()
@@ -1727,6 +1781,7 @@ PLoop(function(_ENV)
 
         --- Ignores values from an observable sequence which are followed by another value before dueTime
         if otime then
+            __Observable__()
             __Arguments__{ Number }
             function Throttle(self, dueTime)
                 local lasttime  = 0
