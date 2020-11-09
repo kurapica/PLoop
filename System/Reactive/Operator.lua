@@ -148,6 +148,73 @@ PLoop(function(_ENV)
             end)
         end
 
+        --- Process all elements as they arrived, works like the Subscribe, but will block the current coroutine
+        __Arguments__{ Callable, Callable/nil, Callable/nil }
+        function ForEach(self, onNext, onError, onCompleted)
+            local curr, main    = running()
+            if not curr or main then return self:Subscribe(onNext, onError, onCompleted) end
+
+            local finished
+
+            self:Subscribe(onNext, function(ex)
+                finished        = true
+                if onError then onError(ex) end
+                return resume(curr)
+            end, function()
+                finished        = true
+                if onCompleted then onCompleted() end
+                return resume(curr)
+            end)
+
+            if not finished then return yield() end
+        end
+
+        --- Convert the observable sequence to an iterator, must be used in a coroutine
+        function ToIterator(self)
+            local curr, main    = running()
+            if not curr or main then error("Usage: ToIterator(self) - must be processed in a coroutine", 2) end
+            local inited, finished
+            local queue         = Queue()
+
+            return function()
+                if not inited then
+                    inited      = true
+
+                    self:Subscribe(function(...)
+                        queue(select("#", ...), ...)
+                        if status(curr) == "suspended" then
+                            resume(curr, queue:Dequeue(queue:Dequeue()))
+                        end
+                    end, function(ex)
+                        finished= ex
+                        if status(curr) == "suspended" then
+                            resume(curr, nil, ex)
+                        end
+                    end, function()
+                        finished= true
+                        if status(curr) == "suspended" then
+                            resume(curr)
+                        end
+                    end)
+                end
+
+                local count     = queue:Dequeue()
+                if count ~= nil then
+                    return queue:Dequeue(count)
+                elseif finished then
+                    return nil, finished ~= true and finished or nil
+                else
+                    return yield()
+                end
+            end
+        end
+
+        --- Encapsulate the sequence as a new observable sequence, so the outside can't
+        -- access the real sequece directly
+        function AsObservable(self)
+            return Observable(function(observer) return self:Subscribe(observer) end)
+        end
+
         --- Invokes actions with side effecting behavior for each element in the observable sequence
         __Observable__()
         __Arguments__{ Callable, Callable/nil, Callable/nil }
@@ -210,73 +277,6 @@ PLoop(function(_ENV)
                     observer:OnError(ex)
                 end
             end)
-        end
-
-        --- Encapsulate the sequence as a new observable sequence, so the outside can't
-        -- access the real sequece directly
-        function AsObservable(self)
-            return Observable(function(observer) return self:Subscribe(observer) end)
-        end
-
-        --- Process all elements as they arrived, works like the Subscribe, but will block the current coroutine
-        __Arguments__{ Callable, Callable/nil, Callable/nil }
-        function ForEach(self, onNext, onError, onCompleted)
-            local curr, main    = running()
-            if not curr or main then return self:Subscribe(onNext, onError, onCompleted) end
-
-            local finished
-
-            self:Subscribe(onNext, function(ex)
-                finished        = true
-                if onError then onError(ex) end
-                return resume(curr)
-            end, function()
-                finished        = true
-                if onCompleted then onCompleted() end
-                return resume(curr)
-            end)
-
-            if not finished then return yield() end
-        end
-
-        --- Convert the observable sequence to an iterator, must be used in a coroutine
-        function ToIterator(self)
-            local curr, main    = running()
-            if not curr or main then error("Usage: ToIterator(self) - must be processed in a coroutine", 2) end
-            local inited, finished
-            local queue         = Queue()
-
-            return function()
-                if not inited then
-                    inited      = true
-
-                    self:Subscribe(function(...)
-                        queue(select("#", ...), ...)
-                        if status(curr) == "suspended" then
-                            resume(curr, queue:Dequeue(queue:Dequeue()))
-                        end
-                    end, function(ex)
-                        finished= ex
-                        if status(curr) == "suspended" then
-                            resume(curr, nil, ex)
-                        end
-                    end, function()
-                        finished= true
-                        if status(curr) == "suspended" then
-                            resume(curr)
-                        end
-                    end)
-                end
-
-                local count     = queue:Dequeue()
-                if count ~= nil then
-                    return queue:Dequeue(count)
-                elseif finished then
-                    return nil, finished ~= true and finished or nil
-                else
-                    return yield()
-                end
-            end
         end
 
         -----------------------------------------------------------------------
@@ -560,40 +560,53 @@ PLoop(function(_ENV)
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence contains a specific value
+        local _ContainsGen      = setmetatable({}, {
+            __index             = function(self, count)
+
+                local func      = loadsnippet([[
+                    return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
+                        return self:Any(function(]] .. List(count):Map("i=>'brg' .. i"):Join(",") .. [[)
+                            return ]] .. List(count):Map("i=>'arg'..i..' == brg' .. i"):Join(" and ")  .. [[
+                        end)
+                    end
+                ]], "Contains_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
         __Observable__()
-        __Arguments__{ System.Any }
-        function Contains(self, val)
-            return self:Any(function(item) return item == val end)
+        __Arguments__{ System.Any * 1 }
+        function Contains(self, ...)
+            return _ContainsGen[select("#", ...)](self, ...)
         end
 
         --- Returns a sequence with single default value if the target observable sequence doesn't contains any item
+        local _DefaultGen       = setmetatable({}, {
+            __index             = function(self, count)
+                local func      = loadsnippet([[
+                    return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
+                        local e = false
+                        return Operator(self, function(observer, ...)
+                            e   = true
+                            observer:OnNext(...)
+                        end, nil, function(observer)
+                            if not e then
+                                observer:OnNext(]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
+                            end
+                            observer:OnCompleted()
+                        end)
+                    end
+                ]], "Default_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
         __Observable__()
         __Arguments__{ System.Any * 1 }
         function Default(self, ...)
-            local any           = false
-            local default, ismany
-
-            if select("#", ...) > 1 then
-                default         = { ... }
-                ismany          = true
-            else
-                default         = ...
-                ismany          = false
-            end
-
-            return Operator(self, function(observer, ...)
-                any             = true
-                observer:OnNext(...)
-            end, nil, function(observer)
-                if not any then
-                    if ismany then
-                        observer:OnNext(unpack(default))
-                    else
-                        observer:OnNext(default)
-                    end
-                end
-                observer:OnCompleted()
-            end)
+            return _DefaultGen[select("#", ...)](self, ...)
         end
 
         --- Raise exception if the sequence don't provide any elements

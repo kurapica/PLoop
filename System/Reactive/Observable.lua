@@ -19,12 +19,14 @@ PLoop(function(_ENV)
         extend "System.IObservable"
 
         export {
-            Observer, Observable, IObservable,
+            Observer, Observable, IObservable, List,
 
             tostring            = tostring,
             select              = select,
             unpack              = unpack,
             pcall               = pcall,
+            rawset              = rawset,
+            loadsnippet         = Toolset.loadsnippet,
             IsObjectType        = Class.IsObjectType,
             Exception           = System.Exception,
             RunAsync            = Threading.RunAsync,
@@ -62,20 +64,26 @@ PLoop(function(_ENV)
         end
 
         --- Returns an Observable that just provide one value
-        __Static__() function Just(...)
-            local count         = select("#", ...)
-
-            local self
-            self                = Observable(function(observer)
-                if count > 0 then observer:OnNext(unpack(self)) end
-                observer:OnCompleted()
-            end)
-
-            for i = 1, count do
-                self[i]         = select(i, ...)
+        local _JustAutoGen      = setmetatable({
+            [0]                 = function() return Observable(function(observer) observer:OnCompleted() end) end
+        }, {
+            __index             = function(self, count)
+                local args      = List(count):Map("i=>'arg' .. i"):Join(",")
+                local func      = loadsnippet([[
+                    return function(]] .. args .. [[)
+                        return Observable(function(observer)
+                            observer:OnNext(]] .. args .. [[)
+                            observer:OnCompleted()
+                        end)
+                    end
+                ]], "Just_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
             end
-
-            return self
+            }
+        )
+        __Static__() function Just(...)
+            return _JustAutoGen[select("#", ...)](...)
         end
         __Static__() Return     = Just
 
@@ -100,24 +108,29 @@ PLoop(function(_ENV)
         end
 
         --- Creates the Observable only when the observer subscribes
+        local _DeferAutoGen     = setmetatable({}, {
+            __index             = function(self, count)
+                local args      = List(count):Map("i=>'arg' .. i"):Join(",")
+                local func      = loadsnippet([[
+                    return function(ctor, ]] .. args .. [[)
+                        return Observable(function(observer)
+                            local obs   = ctor(]] .. args .. [[)
+                            if not IsObjectType(obs, IObservable) then
+                                observer:OnError(Exception("The defer function doesn't provide valid observable"))
+                            else
+                                return obs:Subscribe(observer)
+                            end
+                        end)
+                    end
+                ]], "Defer_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
         __Static__() __Arguments__{ Callable, Any * 0 }
         function Defer(ctor, ...)
-            local self
-
-            self                = Observable(function(observer)
-                local obs       = ctor(unpack(self))
-                if not IsObjectType(obs, IObservable) then
-                    obs:OnError(Exception("The defer function doesn't provide valid observable"))
-                else
-                    return obs:Subscribe(observer)
-                end
-            end)
-
-            for i = 1, select("#", ...) do
-                self[i]         = select(i, ...)
-            end
-
-            return self
+            return _DeferAutoGen[select("#", ...)](ctor, ...)
         end
 
         --- Converts collection objects into Observables
@@ -171,43 +184,64 @@ PLoop(function(_ENV)
         end
 
         --- Creates an Observable that emits a particular item multiple times
+        local _RepeatGen        = setmetatable({}, {
+            __index             = function(self, count)
+                local args      = List(count):Map("i=>'arg' .. i"):Join(",")
+                local func      = loadsnippet([[
+                    return function(count, ]] .. args .. [[)
+                        return Observable(function(observer)
+                            local i = 0
+
+                            while i < count do
+                                if observer.IsUnsubscribed then return end
+                                observer:OnNext(]] .. args .. [[)
+                                i   = i + 1
+                            end
+                            observer:OnCompleted()
+                        end)
+                    end
+                ]], "Repeat_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
         __Static__() __Arguments__{ Number, Any * 1 }
         function Repeat(count, ...)
-            local self
-            self                = Observable(function(observer)
-                local i         = 0
-
-                while i < count do
-                    if observer.IsUnsubscribed then return end
-                    observer:OnNext(unpack(self))
-                    i           = i + 1
-                end
-                observer:OnCompleted()
-            end)
-
-            for i = 1, select("#", ...) do
-                self[i]         = select(i, ...)
-            end
-
-            return self
+            return _RepeatGen[select("#", ...)](count, ...)
         end
 
         --- Creates an Observable that emits the return value of a function-like directive
+        local _StartGen         = setmetatable({
+            [0]                 = function(func)
+                return Observable(function(observer)
+                    RunAsync(function()
+                        observer:OnNext(func())
+                        observer:OnCompleted()
+                    end)
+                end)
+            end
+        }, {
+            __index             = function(self, count)
+                local args      = List(count):Map("i=>'arg' .. i"):Join(",")
+                local func      = loadsnippet([[
+                    return function(func, ]] .. args .. [[)
+                        return Observable(function(observer)
+                            RunAsync(function()
+                                observer:OnNext(func(]] .. args .. [[))
+                                observer:OnCompleted()
+                            end)
+                        end)
+                    end
+                ]], "Start_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
         __Static__() __Arguments__{ Callable, Any * 0 }
         function Start(func, ...)
-            local self
-            self                = Observable(function(observer)
-                RunAsync(function()
-                    observer:OnNext(func(unpack(self)))
-                    observer:OnCompleted()
-                end)
-            end)
-
-            for i = 1, select("#", ...) do
-                self[i]         = select(i, ...)
-            end
-
-            return self
+            return _StartGen[select("#", ...)](func, ...)
         end
 
         -----------------------------------------------------------------------
@@ -250,7 +284,9 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            return function(...) return Defer(target, ...) end
+            return function(...)
+                return Defer(target, ...)
+            end
         end
 
         -----------------------------------------------------------
