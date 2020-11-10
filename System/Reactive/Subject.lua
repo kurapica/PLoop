@@ -46,7 +46,7 @@ PLoop(function(_ENV)
                 observer.OnUnsubscribe = observer.OnUnsubscribe - onUnsubscribe
 
                 obs[observer]   = nil
-                if not next(obs) then self:Unsubscribe() end
+                if self.Observable and not next(obs) then self:Unsubscribe() end
             end
             observer.OnUnsubscribe = observer.OnUnsubscribe + onUnsubscribe
 
