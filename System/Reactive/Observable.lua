@@ -294,5 +294,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- the attribute target
         property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
+
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
+
+        property "SubLevel"         { type = Number, default = -9999 }
     end)
 end)
