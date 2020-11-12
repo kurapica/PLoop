@@ -137,7 +137,8 @@ PLoop(function(_ENV)
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Extend(self, iter, obj, idx)
                 local ins   = self.Insert
-                for _, item in iter, obj, idx do
+                for key, item in iter, obj, idx do
+                    if item == nil then item = key end
                     local ret, msg = valid(lsttype, item, true)
                     if not msg then ins(self, item) end
                 end
@@ -161,7 +162,10 @@ PLoop(function(_ENV)
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Extend(self, iter, obj, idx)
                 local ins   = self.Insert
-                for _, item in iter, obj, idx do ins(self, item) end
+                for key, item in iter, obj, idx do
+                    if item == nil then item = key end
+                    ins(self, item)
+                end
                 return self
             end
         end
