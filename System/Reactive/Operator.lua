@@ -1058,28 +1058,19 @@ PLoop(function(_ENV)
 
         --- Prefix values to a sequence
         __Observable__()
-        __Arguments__{ System.Any * 0 }
+        __Arguments__{ IObservable }
+        function StartWith(self, observable)
+            return Operator(observable, nil, nil, function(observer)
+                return self:Subscribe(observer)
+            end)
+        end
+
+        __Observable__()
+        __Arguments__{ System.Any * 1 }
         function StartWith(self, ...)
-            local count         = select("#", ...)
-
-            if count == 0 then
-                return self
-            elseif count == 1 then
-                return Operator(Observable.Just(...), nil, nil, function(observer)
-                    return self:Subscribe(observer)
-                end)
-            else
-                local data      = { ... }
-
-                return Operator(Observable(function(observer)
-                        for i = 1, #data do
-                            observer:OnNext(data[i])
-                        end
-                        observer:OnCompleted()
-                    end), nil, nil, function(observer)
-                    return self:Subscribe(observer)
-                end)
-            end
+            return Operator(Observable.From(List{ ... }), nil, nil, function(observer)
+                return self:Subscribe(observer)
+            end)
         end
 
         --- Return values from the sequence that is first to produce values, and ignore the other sequences
