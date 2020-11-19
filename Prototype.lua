@@ -289,6 +289,9 @@ do
         --- Use `this` keywords for all object methods
         -- Default false
         USE_THIS_FOR_OBJECT_METHODS         = false,
+
+        --- Whether use fake entity for data entity cache system, to avoid cache penetration
+        DATA_CACHE_USE_FAKE_ENTITY          = true,
     }
 
     -- Special constraint

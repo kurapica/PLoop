@@ -215,9 +215,17 @@ PLoop(function(_ENV)
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query{]] .. queryMap .. [[ }:First()
                         if entity then
                             saveEntity(self, self.Cache, entity)
+                        ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                        else
+                            self.Cache:Set(key, false, self.Timeout)
+                        ]] or "") .. [[
                         end
                     elseif self.Timeout then
-                        refreshTimeout(self, self.Cache, entity)
+                        if entity then
+                            refreshTimeout(self, self.Cache, entity)
+                        else
+                            self.Cache:SetExpireTime(key, self.Timeout)
+                        end
                     end
                 else
                     with(clsCache())(function(cache)
@@ -229,14 +237,22 @@ PLoop(function(_ENV)
 
                             if entity then
                                 saveEntity(self, cache, entity)
+                            ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                            else
+                                cache:Set(key, false, self.Timeout)
+                            ]] or "") .. [[
                             end
                         elseif self.Timeout then
-                            refreshTimeout(self, cache, entity)
+                            if entity then
+                                refreshTimeout(self, cache, entity)
+                            else
+                                cache:SetExpireTime(key, self.Timeout)
+                            end
                         end
                     end)
                 end
 
-                return entity
+                return entity or nil
             end
 
             __Arguments__{ QueryData }:Throwable()
@@ -257,9 +273,17 @@ PLoop(function(_ENV)
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(query):First()
                         if entity then
                             saveEntity(self, self.Cache, entity)
+                        ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                        else
+                            self.Cache:Set(key, false, self.Timeout)
+                        ]] or "") .. [[
                         end
                     elseif self.Timeout then
-                        refreshTimeout(self, self.Cache, entity)
+                        if entity then
+                            refreshTimeout(self, self.Cache, entity)
+                        else
+                            self.Cache:SetExpireTime(key, self.Timeout)
+                        end
                     end
                 else
                     with(clsCache())(function(cache)
@@ -276,14 +300,22 @@ PLoop(function(_ENV)
 
                             if entity then
                                 saveEntity(self, cache, entity)
+                            ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                            else
+                                cache:Set(key, false, self.Timeout)
+                            ]] or "") .. [[
                             end
                         elseif self.Timeout then
-                            refreshTimeout(self, cache, entity)
+                            if entity then
+                                refreshTimeout(self, cache, entity)
+                            else
+                                cache:SetExpireTime(key, self.Timeout)
+                            end
                         end
                     end)
                 end
 
-                return entity
+                return entity or nil
             end
 
             --- Set the entity to the cache
@@ -402,6 +434,10 @@ PLoop(function(_ENV)
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
                             self.Cache:Set(key, entity, self.Timeout)
+                        ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                        else
+                            self.Cache:Set(key, false, self.Timeout)
+                        ]] or "") .. [[
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -416,6 +452,10 @@ PLoop(function(_ENV)
                             end)
                             if entity then
                                 cache:Set(key, entity, self.Timeout)
+                            ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                            else
+                                cache:Set(key, false, self.Timeout)
+                            ]] or "") .. [[
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -423,7 +463,7 @@ PLoop(function(_ENV)
                     end)
                 end
 
-                return entity
+                return entity or nil
             end
 
             __Arguments__{ QueryData }
@@ -439,6 +479,10 @@ PLoop(function(_ENV)
                         entity  = self.DataContext.]] .. KeyCollection .. [[:Query(]] .. args .. [[)
                         if entity then
                             self.Cache:Set(key, entity, self.Timeout)
+                        ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                        else
+                            self.Cache:Set(key, false, self.Timeout)
+                        ]] or "") .. [[
                         end
                     elseif self.Timeout then
                         self.Cache:SetExpireTime(key, self.Timeout)
@@ -453,6 +497,10 @@ PLoop(function(_ENV)
                             end)
                             if entity then
                                 cache:Set(key, entity, self.Timeout)
+                            ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
+                            else
+                                cache:Set(key, false, self.Timeout)
+                            ]] or "") .. [[
                             end
                         elseif self.Timeout then
                             cache:SetExpireTime(key, self.Timeout)
@@ -460,7 +508,7 @@ PLoop(function(_ENV)
                     end)
                 end
 
-                return entity
+                return entity or nil
             end
 
             --- Set the entity to the cache
