@@ -33,6 +33,9 @@ PLoop(function(_ENV)
         --- The time out seconds
         __Abstract__() property "Timeout"       { type = NaturalNumber }
 
+        --- The timeout for fake entities
+        __Abstract__() property "FakeTimeout"   { type = NaturalNumber, default = Platform.DATA_CACHE_FAKE_ENTITY_TIMEOUT }
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -40,10 +43,10 @@ PLoop(function(_ENV)
         __Abstract__() function Get(self, ...) end
 
         --- Save the object to the cache
-         __Abstract__() function Save(self, object) end
+        __Abstract__() function Save(self, object) end
 
         --- Delete the object from the cache
-         __Abstract__() function Delete(self, object) end
+        __Abstract__() function Delete(self, object) end
     end)
 
     --- The bindings between the data entity and the data cache
@@ -217,15 +220,15 @@ PLoop(function(_ENV)
                             saveEntity(self, self.Cache, entity)
                         ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                         else
-                            self.Cache:Set(key, false, self.Timeout)
+                            self.Cache:Set(key, false, self.FakeTimeout)
                         ]] or "") .. [[
                         end
-                    elseif self.Timeout then
-                        if entity then
+                    elseif entity then
+                        if self.Timeout then
                             refreshTimeout(self, self.Cache, entity)
-                        else
-                            self.Cache:SetExpireTime(key, self.Timeout)
                         end
+                    else
+                        self.Cache:SetExpireTime(key, self.FakeTimeout)
                     end
                 else
                     with(clsCache())(function(cache)
@@ -239,15 +242,15 @@ PLoop(function(_ENV)
                                 saveEntity(self, cache, entity)
                             ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                             else
-                                cache:Set(key, false, self.Timeout)
+                                cache:Set(key, false, self.FakeTimeout)
                             ]] or "") .. [[
                             end
-                        elseif self.Timeout then
-                            if entity then
+                        elseif entity then
+                            if self.Timeout then
                                 refreshTimeout(self, cache, entity)
-                            else
-                                cache:SetExpireTime(key, self.Timeout)
                             end
+                        else
+                            cache:SetExpireTime(key, self.FakeTimeout)
                         end
                     end)
                 end
@@ -275,15 +278,15 @@ PLoop(function(_ENV)
                             saveEntity(self, self.Cache, entity)
                         ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                         else
-                            self.Cache:Set(key, false, self.Timeout)
+                            self.Cache:Set(key, false, self.FakeTimeout)
                         ]] or "") .. [[
                         end
-                    elseif self.Timeout then
-                        if entity then
+                    elseif entity then
+                        if self.Timeout then
                             refreshTimeout(self, self.Cache, entity)
-                        else
-                            self.Cache:SetExpireTime(key, self.Timeout)
                         end
+                    else
+                        self.Cache:SetExpireTime(key, self.FakeTimeout)
                     end
                 else
                     with(clsCache())(function(cache)
@@ -302,15 +305,15 @@ PLoop(function(_ENV)
                                 saveEntity(self, cache, entity)
                             ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                             else
-                                cache:Set(key, false, self.Timeout)
+                                cache:Set(key, false, self.FakeTimeout)
                             ]] or "") .. [[
                             end
-                        elseif self.Timeout then
-                            if entity then
+                        elseif entity then
+                            if self.Timeout then
                                 refreshTimeout(self, cache, entity)
-                            else
-                                cache:SetExpireTime(key, self.Timeout)
                             end
+                        else
+                            cache:SetExpireTime(key, self.FakeTimeout)
                         end
                     end)
                 end
@@ -436,11 +439,15 @@ PLoop(function(_ENV)
                             self.Cache:Set(key, entity, self.Timeout)
                         ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                         else
-                            self.Cache:Set(key, false, self.Timeout)
+                            self.Cache:Set(key, false, self.FakeTimeout)
                         ]] or "") .. [[
                         end
-                    elseif self.Timeout then
-                        self.Cache:SetExpireTime(key, self.Timeout)
+                    elseif entity then
+                        if self.Timeout then
+                            self.Cache:SetExpireTime(key, self.Timeout)
+                        end
+                    else
+                        self.Cache:SetExpireTime(key, self.FakeTimeout)
                     end
                 else
                     with(clsCache())(function(cache)
@@ -454,11 +461,15 @@ PLoop(function(_ENV)
                                 cache:Set(key, entity, self.Timeout)
                             ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                             else
-                                cache:Set(key, false, self.Timeout)
+                                cache:Set(key, false, self.FakeTimeout)
                             ]] or "") .. [[
                             end
-                        elseif self.Timeout then
-                            cache:SetExpireTime(key, self.Timeout)
+                        elseif entity then
+                            if self.Timeout then
+                                cache:SetExpireTime(key, self.Timeout)
+                            end
+                        else
+                            cache:SetExpireTime(key, self.FakeTimeout)
                         end
                     end)
                 end
@@ -481,11 +492,15 @@ PLoop(function(_ENV)
                             self.Cache:Set(key, entity, self.Timeout)
                         ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                         else
-                            self.Cache:Set(key, false, self.Timeout)
+                            self.Cache:Set(key, false, self.FakeTimeout)
                         ]] or "") .. [[
                         end
-                    elseif self.Timeout then
-                        self.Cache:SetExpireTime(key, self.Timeout)
+                    elseif entity then
+                        if self.Timeout then
+                            self.Cache:SetExpireTime(key, self.Timeout)
+                        end
+                    else
+                        self.Cache:SetExpireTime(key, self.FakeTimeout)
                     end
                 else
                     with(clsCache())(function(cache)
@@ -499,11 +514,15 @@ PLoop(function(_ENV)
                                 cache:Set(key, entity, self.Timeout)
                             ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                             else
-                                cache:Set(key, false, self.Timeout)
+                                cache:Set(key, false, self.FakeTimeout)
                             ]] or "") .. [[
                             end
-                        elseif self.Timeout then
-                            cache:SetExpireTime(key, self.Timeout)
+                        elseif entity then
+                            if self.Timeout then
+                                cache:SetExpireTime(key, self.Timeout)
+                            end
+                        else
+                            cache:SetExpireTime(key, self.FakeTimeout)
                         end
                     end)
                 end

@@ -292,6 +292,9 @@ do
 
         --- Whether use fake entity for data entity cache system, to avoid cache penetration
         DATA_CACHE_USE_FAKE_ENTITY          = true,
+
+        --- The time out of the fake entities(second)
+        DATA_CACHE_FAKE_ENTITY_TIMEOUT      = 3600,
     }
 
     -- Special constraint
