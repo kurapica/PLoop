@@ -263,10 +263,12 @@ PLoop(function(_ENV)
                 local key, main = getKey(self, query)
                 if not key then throw("The primary key or unique keys are needed in the query data", 2) end
                 local entity
+                local fkey      = key
 
                 if self.Cache then
                     if not main then
                         local v = self.Cache:Get(key)
+                        if v == false then return end -- fake entity
                         key     = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
                     end
 
@@ -278,7 +280,7 @@ PLoop(function(_ENV)
                             saveEntity(self, self.Cache, entity)
                         ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                         else
-                            self.Cache:Set(key, false, self.FakeTimeout)
+                            self.Cache:Set(fkey, false, self.FakeTimeout)
                         ]] or "") .. [[
                         end
                     elseif entity then
@@ -286,12 +288,13 @@ PLoop(function(_ENV)
                             refreshTimeout(self, self.Cache, entity)
                         end
                     else
-                        self.Cache:SetExpireTime(key, self.FakeTimeout)
+                        self.Cache:SetExpireTime(fkey, self.FakeTimeout)
                     end
                 else
                     with(clsCache())(function(cache)
                         if not main then
                             local v = cache:Get(key)
+                            if v == false then return end -- fake entity
                             key = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
                         end
 
@@ -305,7 +308,7 @@ PLoop(function(_ENV)
                                 saveEntity(self, cache, entity)
                             ]] .. (Platform.DATA_CACHE_USE_FAKE_ENTITY and [[
                             else
-                                cache:Set(key, false, self.FakeTimeout)
+                                cache:Set(fkey, false, self.FakeTimeout)
                             ]] or "") .. [[
                             end
                         elseif entity then
@@ -313,7 +316,7 @@ PLoop(function(_ENV)
                                 refreshTimeout(self, cache, entity)
                             end
                         else
-                            cache:SetExpireTime(key, self.FakeTimeout)
+                            cache:SetExpireTime(fkey, self.FakeTimeout)
                         end
                     end)
                 end
