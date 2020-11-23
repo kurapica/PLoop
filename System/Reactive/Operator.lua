@@ -504,6 +504,30 @@ PLoop(function(_ENV)
             end)
         end
 
+        --- Take all values that match the prefix elements
+        local _MatchPrefixGen   = setmetatable({}, {
+            __index             = function(self, count)
+
+                local func      = loadsnippet([[
+                    return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
+                        return Operator(self, function(observer, ]] .. List(count):Map("i=>'brg' .. i"):Join(",") .. [[, ...)
+                            if ]] .. List(count):Map("i=>'arg'..i..' == brg' .. i"):Join(" and ")  .. [[ then
+                                return observer:OnNext(]] .. List(count):Map("i=>'brg' .. i"):Join(",") .. [[, ...)
+                            end
+                        end)
+                    end
+                ]], "MatchPrefix_Gen_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+            }
+        )
+        __Observable__()
+        __Arguments__{ System.Any * 1 }
+        function MatchPrefix(self, ...)
+            return _MatchPrefixGen[select("#", ...)](self, ...)
+        end
+
         -----------------------------------------------------------------------
         --                            Inspection                             --
         -----------------------------------------------------------------------
