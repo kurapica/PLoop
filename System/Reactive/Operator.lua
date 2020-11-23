@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/04                                               --
--- Update Date  :   2019/12/04                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/11/23                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -1066,9 +1066,17 @@ PLoop(function(_ENV)
         end
 
         __Observable__()
-        __Arguments__{ System.Any * 1 }
+        __Arguments__{ System.Any * 2 }
         function StartWith(self, ...)
             return Operator(Observable.From(List{ ... }), nil, nil, function(observer)
+                return self:Subscribe(observer)
+            end)
+        end
+
+        __Observable__()
+        __Arguments__{ System.Any }
+        function StartWith(self, val)
+            return Operator(Observable.Just(val), nil, nil, function(observer)
                 return self:Subscribe(observer)
             end)
         end
