@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [1.6.23] - 2020-11-24 WangXH <kurapica125@outlook.com>
+## [1.6.24] - 2020-11-24 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the Delegate invoke error if remove handler from it.
 
