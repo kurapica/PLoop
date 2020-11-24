@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/11/20                                               --
+-- Update Date  :   2020/11/24                                               --
 -- Version      :   1.6.23                                                   --
 --===========================================================================--
 
@@ -15636,15 +15636,13 @@ do
         --- Invoke the handlers with arguments
         -- @param   ...                         the arguments
         function Invoke(self, ...)
-            local ret           = self[0] and self[0](...) or false
             -- Any func return true means to stop all
-            if ret then return end
+            if self[0] and self[0](...) then return end
 
             -- Call the stacked handlers
-            for _, func in ipairs, self, 0 do
-                ret             = func(...)
-
-                if ret then return end
+            for i = 1, #self do
+                local func      = self[i]
+                if func and func(...) then return end
             end
 
             -- Call the final func
@@ -15654,7 +15652,10 @@ do
         --- Whether the delegate has no handler
         -- @return  boolean                     true if no handler in the delegate
         function IsEmpty(self)
-            return not (self[-1] or self[1] or self[0])
+            for i = -1, #self do
+                if self[i] then return false end
+            end
+            return true
         end
 
         --- Set the init function to the delegate
@@ -15720,11 +15721,23 @@ do
                 Attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
             end
 
-            for _, f in ipairs, self, 0 do
-                if f == func then return self end
+            local slot
+
+            for i = 1, #self do
+                local f         = self[i]
+                if not f then
+                    slot        = i
+                elseif f == func then
+                    return self
+                end
             end
 
-            tinsert(self, func)
+            if slot then
+                self[slot]      = func
+            else
+                tinsert(self, func)
+            end
+
             OnChange(self)
             return self
         end
@@ -15733,9 +15746,9 @@ do
         -- @usage   obj.OnEvent = obj.OnEvent - func
         __Arguments__{ Function }
         function __sub(self, func)
-            for i, f in ipairs, self, 0 do
-                if f == func then
-                    tremove(self, i)
+            for i = 1, #self do
+                if self[i] == func then
+                    self[i] = false
                     OnChange(self)
                     break
                 end

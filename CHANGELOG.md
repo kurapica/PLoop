@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.23] - 2020-11-24 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the Delegate invoke error if remove handler from it.
+
+
 ## [1.6.22] - 2020-11-20 WangXH <kurapica125@outlook.com>
 ### Added
 - The `TemplateString` system is added in System.Text, it provided a new string generator.
