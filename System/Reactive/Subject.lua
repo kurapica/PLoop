@@ -233,6 +233,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function Connect(self)
             self.PublishObservable:Subscribe(self)
+            return self
         end
 
         function RefCount(self)
