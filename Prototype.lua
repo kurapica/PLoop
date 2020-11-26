@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/11/24                                               --
--- Version      :   1.6.24                                                   --
+-- Update Date  :   2020/11/26                                               --
+-- Version      :   1.6.25                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -276,6 +276,10 @@ do
         --- The max pool size of the thread pool
         -- Default 40
         THREAD_POOL_MAX_SIZE                = 40,
+
+        --- Wether disable the default thread pool, so each context has its own
+        -- thread pool, should be actived for http servers.
+        THREAD_POOL_CONTEXT_ONLY            = false,
 
         --- Whehther active safe thread iterator so it will stop for dead coroutine
         -- On some platforms like Openresty call a dead wrap won't raise error but

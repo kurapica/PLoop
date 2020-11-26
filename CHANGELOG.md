@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.25] - 2020-11-26 WangXH <kurapica125@outlook.com>
+### Added
+- A new platform setting `THREAD_POOL_CONTEXT_ONLY` is added, to be used in servers, so each context use its own thread pool, the default pool is disabled. Platform like OpenResty should turn on it, and the `MULTI_OS_THREAD` setting is no need to be used by OpenResty.
+
 ## [1.6.24] - 2020-11-24 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the Delegate invoke error if remove handler from it.
