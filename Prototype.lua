@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/11/26                                               --
--- Version      :   1.6.25                                                   --
+-- Update Date  :   2020/11/27                                               --
+-- Version      :   1.6.26                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -279,7 +279,7 @@ do
 
         --- Wether disable the default thread pool, so each context has its own
         -- thread pool, should be actived for http servers.
-        THREAD_POOL_CONTEXT_ONLY            = false,
+        ENABLE_CONTEXT_FEATURES             = false,
 
         --- Whehther active safe thread iterator so it will stop for dead coroutine
         -- On some platforms like Openresty call a dead wrap won't raise error but
@@ -12884,13 +12884,13 @@ do
                             return unpack(map[fakefunc])
                         end
                     end
-                end or getlocal and -- Use Context
+                end or PLOOP_PLATFORM_SETTINGS.ENABLE_CONTEXT_FEATURES and -- Use Context
                 function(self, target, targettype, definition, owner, name, stack)
                     if targettype == ATTRTAR_FUNCTION or targettype == ATTRTAR_METHOD then
                         local root      = setmetatable({}, WEAK_KEY)
 
                         return function(...)
-                            local ctx   = Context.GetContextFromStack()
+                            local ctx   = Context.GetCurrentContext()
                             if not ctx then return target(...) end
 
                             local map   = ctx[__AutoCache__]
@@ -12921,7 +12921,7 @@ do
                             return unpack(map[fakefunc])
                         end
                     end
-                end,
+                end or fakefunc,
             ["AttributeTarget"] = ATTRTAR_CLASS + ATTRTAR_INTERFACE + ATTRTAR_METHOD + ATTRTAR_FUNCTION,
             ["Priority"]        = -1,  -- Magic but the AttributePriority is defined later
         },
@@ -16117,12 +16117,14 @@ do
             isclass             = Class.IsSubType,
             isinterface         = Interface.IsSubType,
             pcall               = pcall,
-            type                = type,
+
+            Context, IContext
         }
 
-        export { Context, IContext }
+        local customGetContext  = fakefunc
+        local customSaveContext = fakefunc
 
-        local getCurrentContext = getlocal and function(stack)
+        local getStackContext   = getlocal and function(stack)
             local n, v          = getlocal(stack, 1)
 
             while true do
@@ -16140,27 +16142,31 @@ do
             end
         end or fakefunc
 
-        -----------------------------------------------------------
-        --                     static method                     --
-        -----------------------------------------------------------
-        --- Retrieve the context object from the begin stack to the top stack
-        -- @param   stack                           the begin stack to check
-        __Static__()
-        function GetContextFromStack(stack)
-            local ok, ret       = pcall(getCurrentContext, (type(stack) == "number" and stack or 1) + 3)
+        local getCurrentContext = function()
+            local context       = customGetContext()
+            if context then return context end
+
+            local ok, ret       = pcall(getStackContext, 4)
             return ok and ret or nil
         end
 
         -----------------------------------------------------------
         --                   static property                     --
         -----------------------------------------------------------
-        __Static__()
-        --- the current context object
-        property "Current" {
-            get = function ()
-                local ok, ret   = pcall(getCurrentContext, 5)
-                return ok and ret or nil
-            end
+        --- The API used to save the current context
+        __Static__() property "SaveCurrentContext" {
+            type                = Function,
+            set                 = function(_, func) customSaveContext = func end,
+            get                 = function() return customSaveContext end,
+            require             = true,
+        }
+
+        --- The API used to get the current context
+        __Static__() property "GetCurrentContext" {
+            type                = Function,
+            set                 = function(_, func) customGetContext = func end,
+            get                 = function() return getCurrentContext end,
+            require             = true,
         }
 
         -----------------------------------------------------------
@@ -16168,16 +16174,19 @@ do
         -----------------------------------------------------------
         --- Process the operations under the context
         __Abstract__() function Process(self) end
+
+        -----------------------------------------------------------
+        --                      initializer                      --
+        -----------------------------------------------------------
+        __Sealed__()
+        local contextSaver      = interface { __init = function(self) return customSaveContext(self) end }
+        extend (contextSaver)
     end)
 
     --- Represents the interface of thread related context, which will
     -- cache all sharable datas in the same os-thread
     __Sealed__()
     interface "System.IContext" (function(_ENV)
-        export {
-            getcontext          = Context.GetContextFromStack,
-        }
-
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -16186,14 +16195,11 @@ do
         -----------------------------------------------------------
         --                      initializer                      --
         -----------------------------------------------------------
-        if Platform.MULTI_OS_THREAD and getlocal then
-            function IContext(self)
-                if self.Context then return end
-                local context   = getcontext(5)
+        if Platform.ENABLE_CONTEXT_FEATURES then
+            export { getcontext = Context.GetCurrentContext }
 
-                if context then
-                    self.Context= context
-                end
+            function IContext(self)
+                self.Context    = self.Context or getcontext()
             end
         end
     end)

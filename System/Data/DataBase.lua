@@ -1858,34 +1858,44 @@ PLoop(function(_ENV)
                 extend (System.Data.IDataContext)
             end)
 
+            local _Classes              = {}
+
             for name, entityCls in Namespace.GetNamespaces(target) do
                 if Class.Validate(entityCls) then
                     if  Class.IsSubType(entityCls, IDataEntity) then
-                        local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
-                        if set then
-                            local name  = set.collection
-                            local cls   = DataCollection[entityCls]
-
-                            Environment.Apply(manager, function(_ENV)
-                                property (name) {
-                                    set     = false,
-                                    default = function(self) return cls(self) end,
-                                }
-                            end)
-                        end
+                        _Classes[entityCls] = true
                     elseif Class.IsSubType(entityCls, IDataObject) then
-                        local set       = Attribute.GetAttachedData(__DataObject__, entityCls)
-                        if set then
-                            local name  = set.collection
-                            local cls   = DataObjectCollection[entityCls]
+                        _Classes[entityCls] = false
+                    end
+                end
+            end
 
-                            Environment.Apply(manager, function(_ENV)
-                                property (name) {
-                                    set     = false,
-                                    default = function(self) return cls(self) end,
-                                }
-                            end)
-                        end
+            for entityCls, isEntityCls in pairs(_Classes) do
+                if isEntityCls then
+                    local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
+                    if set then
+                        local name  = set.collection
+                        local cls   = DataCollection[entityCls]
+
+                        Environment.Apply(manager, function(_ENV)
+                            property (name) {
+                                set     = false,
+                                default = function(self) return cls(self) end,
+                            }
+                        end)
+                    end
+                else
+                    local set       = Attribute.GetAttachedData(__DataObject__, entityCls)
+                    if set then
+                        local name  = set.collection
+                        local cls   = DataObjectCollection[entityCls]
+
+                        Environment.Apply(manager, function(_ENV)
+                            property (name) {
+                                set     = false,
+                                default = function(self) return cls(self) end,
+                            }
+                        end)
                     end
                 end
             end

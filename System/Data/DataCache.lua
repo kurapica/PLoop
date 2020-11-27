@@ -877,29 +877,35 @@ PLoop(function(_ENV)
         function AttachAttribute(self, target, targettype, owner, name, stack)
             local context           = Namespace.GetNamespaceName(target)
 
-            for name, entityCls in Namespace.GetNamespaces(target) do
+            local _Classes          = {}
+
+            for _, entityCls in Namespace.GetNamespaces(target) do
                 local isEntityCls   = Class.IsSubType(entityCls, IDataEntity)
 
                 if Class.Validate(entityCls) and (isEntityCls or Class.IsSubType(entityCls, IDataObject)) then
-                    local settings  = getAttachedData(__DataCacheEnable__, entityCls)
+                    _Classes[entityCls]     = isEntityCls
+                end
+            end
 
-                    if settings then
-                        --- Define the cache class
-                        local Cache = class (context .. "." .. settings.name) { (isEntityCls and DataEntityCache or DataObjectCache)[{ entityCls, self.CacheClass, settings.timeout or self.CacheTimeout }] }
+            for entityCls, isEntityCls in pairs(_Classes) do
+                local settings  = getAttachedData(__DataCacheEnable__, entityCls)
 
-                        -- Build the depend map
-                        if settings.depends then
-                            for depcls, convertor in pairs(settings.depends) do
-                                convertor[0]    = Cache
-                                _EntityDepends  = safeset(_EntityDepends, depcls, safeset(_EntityDepends[depcls] or {}, entityCls, convertor))
-                            end
+                if settings then
+                    --- Define the cache class
+                    local Cache = class (context .. "." .. settings.name) { (isEntityCls and DataEntityCache or DataObjectCache)[{ entityCls, self.CacheClass, settings.timeout or self.CacheTimeout }] }
+
+                    -- Build the depend map
+                    if settings.depends then
+                        for depcls, convertor in pairs(settings.depends) do
+                            convertor[0]    = Cache
+                            _EntityDepends  = safeset(_EntityDepends, depcls, safeset(_EntityDepends[depcls] or {}, entityCls, convertor))
                         end
+                    end
 
-                        if isEntityCls then
-                            local primary       = settings.primary
-                            primary[0]          = Cache
-                            _EntityDepends      = safeset(_EntityDepends, entityCls, safeset(_EntityDepends[entityCls] or {}, entityCls, primary))
-                        end
+                    if isEntityCls then
+                        local primary       = settings.primary
+                        primary[0]          = Cache
+                        _EntityDepends      = safeset(_EntityDepends, entityCls, safeset(_EntityDepends[entityCls] or {}, entityCls, primary))
                     end
                 end
             end

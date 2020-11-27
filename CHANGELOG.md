@@ -1,9 +1,15 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.26] - 2020-11-26 WangXH <kurapica125@outlook.com>
+### Changes
+- The Context System is re-designed, can use custom APIs to save and get the current context object, so no need use debug to fetch it from the stack.
+- The Thread system is modified to match the new context system.
+- That data collection and data cache for data entities won't be auto-created in some conditions, it's fixed now.
+
 ## [1.6.25] - 2020-11-26 WangXH <kurapica125@outlook.com>
 ### Added
-- A new platform setting `THREAD_POOL_CONTEXT_ONLY` is added, to be used in servers, so each context use its own thread pool, the default pool is disabled. Platform like OpenResty should turn on it, and the `MULTI_OS_THREAD` setting is no need to be used by OpenResty.
+- A new platform setting `ENABLE_CONTEXT_FEATURES` is added, to be used in servers, so each context use its own thread pool, the default pool is disabled. Platform like OpenResty should turn on it, and the `MULTI_OS_THREAD` setting is no need to be used by OpenResty.
 
 ## [1.6.24] - 2020-11-24 WangXH <kurapica125@outlook.com>
 ### Changed

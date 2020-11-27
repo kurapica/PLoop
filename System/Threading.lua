@@ -19,7 +19,9 @@ PLoop(function(_ENV)
         --- the thread pool used to generate and recycle coroutines
         __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
         class "ThreadPool" (function(_ENV)
-            extend "IContext" -- Keep the context for threads
+            if Platform.ENABLE_CONTEXT_FEATURES then
+                extend "System.IContext"   -- Only enable the context support when using in multi os thread
+            end
 
             export {
                 create              = coroutine.create,
@@ -42,43 +44,37 @@ PLoop(function(_ENV)
                 tblconcat           = table.concat,
                 strformat           = string.format,
 
-                PREPARE_CONFIRM     = function() end,
-            }
+                GetContext          = Context.GetCurrentContext,
 
-            export { ThreadPool, Platform, Context }
+                PREPARE_CONFIRM     = Toolset.fakefunc,
+
+                ThreadPool
+            }
 
             -----------------------------------------------------------
             --                        helpers                        --
             -----------------------------------------------------------
             local _PassArgs         = { [0] = function(thread, func) return func(yield(thread)) end }
-            local _PassGenCode      = [[
-                return function (thread, func, %s)
-                    return func(%s, yield(thread))
-                end
-            ]]
+            local _PassGenCode      = [[return function (thread, func, %s) return func(%s, yield(thread)) end]]
 
             local function newPass(count)
                 local args          = {}
 
                 for i = 1, count do args[i] = "arg" .. i end
-                args    = tblconcat(args, ", ")
+                args                = tblconcat(args, ", ")
 
-                local pass = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, _ENV)()
-
-                _PassArgs  = safeset(_PassArgs, count, pass)
+                local pass          = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, _ENV)()
+                _PassArgs           = safeset(_PassArgs, count, pass)
 
                 return pass
             end
 
             local function returnwithrecycle(pool, thread, asiter, ...)
-                if #pool < pool.PoolSize then
-                    tinsert(pool, thread)       -- recyle the thread
-                end
+                if #pool < pool.PoolSize then tinsert(pool, thread) end -- recyle the thread
+
                 if asiter then
-                    if select("#", ...) > 0 then
-                        yield(...)              -- return the value
-                    end
-                    yield()                     -- make sure the iterator don't resume again
+                    if select("#", ...) > 0 then yield(...) end         -- return the value
+                    yield()                                             -- make sure the iterator don't resume again
                     yield()
                 else
                     yield(...)
@@ -92,35 +88,25 @@ PLoop(function(_ENV)
             end
 
             local function recyclethread(pool, thread)
-                while true do
-                    preparefunc(pool, thread, yield(PREPARE_CONFIRM))
-                end
+                while true do preparefunc(pool, thread, yield(PREPARE_CONFIRM)) end
             end
 
             local function newrecyclethread(self)
                 local thread        = tremove(self)
 
-                if thread then
-                    for i = 1, 3 do
-                        if thread() == PREPARE_CONFIRM then
-                            return thread
-                        end
-                    end
-                end
+                -- Check Re-usable
+                if thread then for i= 1, 3 do if thread() == PREPARE_CONFIRM then return thread end end end
 
+                -- Create the new thread
                 thread              = wrap(recyclethread)
                 thread(self, thread)    -- pass the pool and thread to be recycled
                 return thread
             end
 
             -- make sure we can get the thread pool in the func
-            local function retresult(...)
-                return ...
-            end
+            local function retresult(...) return ... end
 
-            local function poolthread(pool, func)
-                return retresult(func(yield()))
-            end
+            local function poolthread(pool, func) return retresult(func(yield())) end
 
             local function newpoolthread(self, func, aswrap)
                 if aswrap then
@@ -149,7 +135,7 @@ PLoop(function(_ENV)
                     stack           = stack + 1
                     n, v            = getlocal(stack, 1)
                 end
-            end or function() end
+            end or Toolset.fakefunc
 
             -----------------------------------------------------------
             --                        method                         --
@@ -159,7 +145,7 @@ PLoop(function(_ENV)
             -- @param  func                 the target function
             -- @return wrap                 the wrap function or thread
             __Arguments__{ Function, Boolean/nil }
-            GetThread = newpoolthread
+            GetThread               = newpoolthread
 
             --- safe call the function within a coroutine, if the caller is already
             -- in a coroutine, no new coroutine will be used
@@ -233,18 +219,18 @@ PLoop(function(_ENV)
             -----------------------------------------------------------
             --                   static property                     --
             -----------------------------------------------------------
-            --- the default thread pool, can't be used in multi os thread mode
-            __Static__()
-            property "Default" { set = false, default = function() return ThreadPool{ PoolSize = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and 0 or nil } end }
+            local DEFAULT_POOL_SIZE = (Platform.MULTI_OS_THREAD or Platform.ENABLE_CONTEXT_FEATURES) and 0 or nil
 
-            --- the current thread pool
-            __Static__()
-            property "Current" {
-                get = function()
-                    local ok, ret = pcall(getCurrentPool)
+            --- the default thread pool, can't be used in multi os thread mode
+            __Static__() property "Default" { set = false, default = function() return ThreadPool{ PoolSize = DEFAULT_POOL_SIZE } end }
+
+            --- the current thread pool, should only be used when MULTI_OS_THREAD and ENABLE_CONTEXT_FEATURES all turn on
+            __Static__() property "Current" {
+                get                 = function()
+                    local ok, ret   = pcall(getCurrentPool)
                     if ok and ret then return ret end
 
-                    local context   = Context.Current
+                    local context   = GetContext()
                     if context then
                         local cpool = context[ThreadPool]
                         if not cpool then
@@ -262,12 +248,7 @@ PLoop(function(_ENV)
             --                       property                        --
             -----------------------------------------------------------
             --- the max pool size for idle coroutines
-            property "PoolSize" { type = NaturalNumber, default = Platform.THREAD_POOL_MAX_SIZE }
-        end)
-
-        --- represent a task type used to simplify the work of writing asynchronous code
-        __Sealed__() __Final__()
-        class "Task" (function(_ENV)
+            property "PoolSize"     { type = NaturalNumber, default = Platform.THREAD_POOL_MAX_SIZE }
         end)
 
         --- represent an interface for lock manager
@@ -275,7 +256,7 @@ PLoop(function(_ENV)
         interface "ILockManager" (function(_ENV)
 
             export {
-                GetContext          = Context.GetContextFromStack,
+                GetContext          = Context.GetCurrentContext,
                 fakeobj             = {},
                 error               = error,
                 tostring            = tostring,
@@ -289,7 +270,7 @@ PLoop(function(_ENV)
                     context[ILockManager][key] = nil
                 end
 
-                local ok, err = manager:Release(obj, key)
+                local ok, err       = manager:Release(obj, key)
 
                 if not result then error(..., 0) end
 
@@ -314,7 +295,7 @@ PLoop(function(_ENV)
             -- @param   func                the function
             -- @param   ...                 the function arguments
             __Static__() function RunWithLock(key, func, ...)
-                local context = GetContext()
+                local context       = GetContext()
                 if context and context[ILockManager] and context[ILockManager][key] then
                     -- Already locked, continue job
                     return func(...)
@@ -341,7 +322,7 @@ PLoop(function(_ENV)
             -- @param   func                the function
             -- @param   ...                 the function arguments
             __Static__() function TryRunWithLock(key, func, ...)
-                local context = GetContext()
+                local context       = GetContext()
                 if context and context[ILockManager] and context[ILockManager][key] then
                     -- Already locked, continue job
                     return func(...)
@@ -402,26 +383,18 @@ PLoop(function(_ENV)
         class "__Async__" (function(_ENV)
             extend "IInitAttribute"
 
-            export { ThreadPool, Context }
+            export { ThreadPool }
 
-            local wraptarget    = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and function(target)
-                return function(...)
-                    return ThreadPool.Current:ThreadCall(target, ...)
-                end
+            local wraptarget        = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+                return function(...) return ThreadPool.Current:ThreadCall(target, ...) end
             end or function(target)
-                return function(...)
-                    return ThreadPool.Default:ThreadCall(target, ...)
-                end
+                return function(...) return ThreadPool.Default:ThreadCall(target, ...) end
             end
 
-            local safewrap      = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and function(target)
-                return function(...)
-                    return ThreadPool.Current:SafeThreadCall(target, ...)
-                end
+            local safewrap          = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+                return function(...) return ThreadPool.Current:SafeThreadCall(target, ...) end
             end or function(target)
-                return function(...)
-                    return ThreadPool.Default:SafeThreadCall(target, ...)
-                end
+                return function(...) return ThreadPool.Default:SafeThreadCall(target, ...) end
             end
 
             -----------------------------------------------------------
@@ -466,16 +439,12 @@ PLoop(function(_ENV)
         class "__Iterator__" (function(_ENV)
             extend "IInitAttribute"
 
-            export { ThreadPool, Context }
+            export { ThreadPool }
 
-            local wraptarget = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and function(target)
-                return function(...)
-                    return ThreadPool.Current:GetIterator(target, ...)
-                end
+            local wraptarget        = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+                return function(...) return ThreadPool.Current:GetIterator(target, ...) end
             end or function(target)
-                return function(...)
-                    return ThreadPool.Default:GetIterator(target, ...)
-                end
+                return function(...) return ThreadPool.Default:GetIterator(target, ...) end
             end
 
             -----------------------------------------------------------
@@ -510,12 +479,9 @@ PLoop(function(_ENV)
 
             export { RunWithLock = ILockManager.RunWithLock }
 
-            local wraptarget = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and function(target, key)
-                return function(...)
-                    return RunWithLock(key, target, ...)
-                end
-            end or function(target)
-            end
+            local wraptarget        = Platform.MULTI_OS_THREAD and function(target, key)
+                return function(...) return RunWithLock(key, target, ...) end
+            end or Toolset.fakefunc
 
             -----------------------------------------------------------
             --                        method                         --
@@ -557,12 +523,9 @@ PLoop(function(_ENV)
 
             export { TryRunWithLock = ILockManager.TryRunWithLock }
 
-            local wraptarget = (Platform.MULTI_OS_THREAD or Platform.THREAD_POOL_CONTEXT_ONLY) and function(target, key)
-                return function(...)
-                    return TryRunWithLock(key, target, ...)
-                end
-            end or function(target)
-            end
+            local wraptarget        = Platform.MULTI_OS_THREAD and function(target, key)
+                return function(...) return TryRunWithLock(key, target, ...) end
+            end or Toolset.fakefunc
 
             -----------------------------------------------------------
             --                        method                         --

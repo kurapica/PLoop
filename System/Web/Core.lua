@@ -38,7 +38,7 @@ PLoop(function(_ENV)
             ispathrooted        = IO.Path.IsPathRooted,
             combinepath         = IO.Path.CombinePath,
             getdirectory        = IO.Path.GetDirectory,
-            getcontext          = Context.GetContextFromStack,
+            getcontext          = Context.GetCurrentContext,
             getresourcepath     = IO.Resource.IResourceManager.GetResourcePath,
             loadresource        = IO.Resource.IResourceManager.LoadResource,
             IsObjectType        = Class.IsObjectType,

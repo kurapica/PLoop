@@ -371,20 +371,11 @@ PLoop(function(_ENV)
         local rycIdleworkers
 
         if Platform.MULTI_OS_THREAD then
-            export { Context }
-
-            getIdleworkers      = function()
-                -- local context   = Context.Current
-                -- return context and context[DictionaryStreamWorker]
-            end
-
-            rycIdleworkers      = function(worker)
-                -- local context   = Context.Current
-                -- if context then context[DictionaryStreamWorker] = worker end
-            end
+            getIdleworkers      = Toolset.fakefunc
+            rycIdleworkers      = Toolset.fakefunc
         else
             -- Keep idle workers for re-usage
-            export { idleworkers= {} }
+            local idleworkers   = {}
             getIdleworkers      = function() return tremove(idleworkers) end
             rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
         end

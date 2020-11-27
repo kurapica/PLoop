@@ -51,7 +51,7 @@ PLoop(function(_ENV)
             BodyPhase               = ProcessPhase.Body,
             FinlPhase               = ProcessPhase.Final,
 
-            getContext              = Context.GetContextFromStack,
+            getContext              = Context.GetCurrentContext,
 
             IHttpContextHandler, HTTP_STATUS, Web
         }

@@ -242,7 +242,7 @@ PLoop(function(_ENV)
             GetRelativePath     = GetRelativePath,
             CombinePath         = IO.Path.CombinePath,
             GetFileName         = IO.Path.GetFileName,
-            getContext          = Context.GetContextFromStack,
+            getContext          = Context.GetCurrentContext,
             getnamespace        = Environment.GetNamespace,
             ApplyEnv            = Environment.Apply,
             _G                  = _G,
