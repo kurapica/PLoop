@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2020/08/18                                               --
--- Update Date  :   2020/08/18                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/12/03                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -18,13 +18,9 @@ PLoop(function(_ENV)
     import "System.Net"
 
     --- The client state
+    -- CLOSED is server side only
     __Sealed__() __AutoIndex__()
-    enum "ClientState" {
-        "DISCONNECTED",
-        "CONNECTING",
-        "CONNECTED",
-        "CLOSED",           -- Server Side Only
-    }
+    enum "ClientState" { "DISCONNECTED", "CONNECTING", "CONNECTED", "CLOSED" }
 
     --- Represents the MQTT client object used to connect to the server or the
     -- client that returned by the server's Accept method
@@ -33,12 +29,14 @@ PLoop(function(_ENV)
         extend "System.IAutoClose"
 
         export {
-            MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode, MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier, MQTT.ReasonCode,
-            MQTT.ConnectPacket, MQTT.ConnackPacket, MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket, MQTT.SubAckPacket, MQTT.MQTTException,
+            MQTT.ProtocolLevel, MQTT.PacketType, MQTT.ConnectReturnCode,
+            MQTT.QosLevel, MQTT.SubAckReturnCode, MQTT.PropertyIdentifier,
+            MQTT.ReasonCode, MQTT.ConnectPacket, MQTT.ConnackPacket,
+            MQTT.PublishPacket, MQTT.AckPacket, MQTT.SubscribePacket,
+            MQTT.SubAckPacket, MQTT.MQTTException, MQTT.ConnectWill,
 
-            MQTT.ConnectWill, System.Context.Session,
-
-            Net.TimeoutException, ClientState, Protocol.MQTT, Guid, Date,
+            System.Context.Session, Net.TimeoutException, ClientState,
+            Protocol.MQTT, Guid, Date,
 
             isObjectType        = Class.IsObjectType,
             valEnumValue        = Enum.ValidateValue,
@@ -69,70 +67,70 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The server side session
-        __Abstract__() property "Session"          { type = Session, default = function(self) return Session(self) end }
+        __Abstract__() property "Session"           { type = Session, default = function(self) return Session(self) end }
 
         --- The Message Publisher
-        __Abstract__() property "MessagePublisher" { type = System.Net.MQTT.IMQTTPublisher, handler = function(self, publisher) if publisher then publisher.Timeout = self.MessageReceiveTimeout end end }
+        __Abstract__() property "MessagePublisher"  { type = System.Net.MQTT.IMQTTPublisher, handler = function(self, publisher) if publisher then publisher.Timeout = self.MessageReceiveTimeout end end }
 
         --- Whether the client is server side
-        __Abstract__() property "IsServerSide"     { type = Boolean, default = false }
+        __Abstract__() property "IsServerSide"      { type = Boolean, default = false }
 
         --- The server address to be connected
-        __Abstract__() property "Address"          { type = String, default = "127.0.0.1" }
+        __Abstract__() property "Address"           { type = String, default = "127.0.0.1" }
 
         --- The server port to be connected
-        __Abstract__() property "Port"             { type = NaturalNumber, default = 1883 }
+        __Abstract__() property "Port"              { type = NaturalNumber, default = 1883 }
 
         --- The socket object
-        __Abstract__() property "Socket"           { type = ISocket, default = SocketType and function(self) return SocketType() end }
+        __Abstract__() property "Socket"            { type = ISocket, default = SocketType and function(self) return SocketType() end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Receive call will time out
-        __Abstract__() property "ReceiveTimeout"   { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ReceiveTimeout = timeout end end }
+        __Abstract__() property "ReceiveTimeout"    { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ReceiveTimeout = timeout end end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Send call will time out
-        __Abstract__() property "SendTimeout"      { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.SendTimeout = timeout end end }
+        __Abstract__() property "SendTimeout"       { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.SendTimeout = timeout end end }
 
         --- Gets or sets a value that specifies the amount of time after which a synchronous Connect call will time out
-        __Abstract__() property "ConnectTimeout"   { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ConnectTimeout = timeout end end }
+        __Abstract__() property "ConnectTimeout"    { type = Number, handler = function(self, timeout) if self.Socket then self.Socket.ConnectTimeout = timeout end end }
 
         --- Gets or sets a value that specifies the amount of time for the message published after which a synchronous Receive call will time out
         __Abstract__() property "MessageReceiveTimeout" { type = Number, handler = function(self, timeout) if self.MessagePublisher then self.MessagePublisher.Timeout = timeout end end }
 
         --- Whether auto send the ping to the server to keep connection, not works for the server side client
-        __Abstract__() property "KeepConnection"   { type = Boolean, default = true }
+        __Abstract__() property "KeepConnection"    { type = Boolean, default = true }
 
         --- The maximum qos level can be subscribed
-        __Abstract__() property "MaximumQosLevel"  { type = QosLevel, default = QosLevel.EXACTLY_ONCE }
+        __Abstract__() property "MaximumQosLevel"   { type = QosLevel, default = QosLevel.EXACTLY_ONCE }
 
         --- The client state
-        __Abstract__() property "State"            { type = ClientState, default = ClientState.DISCONNECTED }
+        __Abstract__() property "State"             { type = ClientState, default = ClientState.DISCONNECTED }
 
         --- The MQTT Protocol Level
-        __Abstract__() property "ProtocolLevel"    { type = ProtocolLevel, default = ProtocolLevel.V3_1_1 }
+        __Abstract__() property "ProtocolLevel"     { type = ProtocolLevel, default = ProtocolLevel.V3_1_1 }
 
         --- The keep alive time(in sec), default 1 min
-        __Abstract__() property "KeepAlive"        { type = Number, default = 60 }
+        __Abstract__() property "KeepAlive"         { type = Number,  default = 60 }
 
         --- The clean session flag
-        __Abstract__() property "CleanSession"     { type = Boolean, default = false }
+        __Abstract__() property "CleanSession"      { type = Boolean, default = false }
 
         --- The client ID
-        __Abstract__() property "ClientID"         { type = String, default = Guid.New():gsub("-", ""):sub(23) }
+        __Abstract__() property "ClientID"          { type = String,  default = function() return Guid.New():gsub("-", ""):sub(23) end }
 
         --- The user name
-        __Abstract__() property "UserName"         { type = String }
+        __Abstract__() property "UserName"          { type = String }
 
         --- The password
-        __Abstract__() property "Password"         { type = String }
+        __Abstract__() property "Password"          { type = String }
 
         --- The publiced packet, keep until the ack is received
-        __Abstract__() property "PublishPackets"   { set = false, default = Toolset.newtable }
+        __Abstract__() property "PublishPackets"    { set = false, default = Toolset.newtable }
 
         --- The last used packet ID
-        __Abstract__() property "LastPacketID"     { type = Number, default = 0 }
+        __Abstract__() property "LastPacketID"      { type = Number, default = 0 }
 
         --- The will message
-        __Abstract__() property "WillMessage"      { type = ConnectWill }
+        __Abstract__() property "WillMessage"       { type = ConnectWill }
 
         --- The last active time that received the packet
         property "LastActiveTime"                   { type = Date }

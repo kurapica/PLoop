@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2020/09/09                                               --
--- Update Date  :   2020/09/09                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2020/12/03                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -185,7 +185,28 @@ PLoop(function(_ENV)
         end
     end)
 
-    -- The simple MQTT Message publisher could be used in single os thread platform
+    --- A dummy MQTT Message publisher with no operations, so the client
+    -- should handle the topic subscribe by itself
+    __Sealed__() class "DummyMQTTPublisher" (function(_ENV)
+       extend "IMQTTPublisher"
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        --- Subscribe a message filter, topic-based, return true if successful, otherwise false and error code is needed
+        function SubscribeTopic(self, filter) return true end
+
+        --- Unsubscribe a message filter, topic-based, return true if successful, otherwise false and error code is needed
+        function UnsubscribeTopic(self, filter) return true end
+
+        --- Publish the msssage, it'd give a topic if it's topic-based message
+        function PublishMessage(self, topic, message) return true end
+
+        --- Receive and return the published message
+        function ReceiveMessage(self) end
+    end)
+
+    --- The simple MQTT Message publisher could be used in single os thread platform
     __Sealed__() class "MQTTPublisher" (function(_ENV)
         inherit "System.Message.MessagePublisher"
         extend "IMQTTPublisher"

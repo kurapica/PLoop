@@ -46,11 +46,11 @@ PLoop(function(_ENV)
 
     --- The MQTT Exception
     __Sealed__()
-    class "MQTTException" { Exception }
+    class "MQTTException"       { Exception }
 
     --- The MQTT Protocol Level
     __Sealed__()
-    enum "ProtocolLevel" {
+    enum "ProtocolLevel"        {
         V3_1                    = 3,
         V3_1_1                  = 4,
         V5_0                    = 5,
@@ -58,7 +58,7 @@ PLoop(function(_ENV)
 
     --- The MQTT Packet Control Type
     __Sealed__()
-    enum "PacketType" {
+    enum "PacketType"           {
         FORBIDDEN               = 0,   -- UNEXPECTED
         CONNECT                 = 1,   -- CLIENT ->Server
         CONNACK                 = 2,   -- CLIENT<- Server
@@ -79,7 +79,7 @@ PLoop(function(_ENV)
 
     --- The Connection Return Code
     __Sealed__()
-    enum "ConnectReturnCode" {
+    enum "ConnectReturnCode"    {
         ACCEPTED                = 0, -- Connection accepted
 
         -- For MQTT v3.1.1
@@ -115,7 +115,7 @@ PLoop(function(_ENV)
 
     --- The QoS level
     __Sealed__()
-    enum "QosLevel" {
+    enum "QosLevel"             {
         AT_MOST_ONCE            = 0,
         AT_LEAST_ONCE           = 1,
         EXACTLY_ONCE            = 2,
@@ -123,7 +123,7 @@ PLoop(function(_ENV)
 
     --- The SubAck Return Code
     __Sealed__()
-    enum "SubAckReturnCode" {
+    enum "SubAckReturnCode"     {
         MAX_QOS_0               = 0,                    -- The subscription is accepted and the maximum QoS sent will be QoS 0. This might be a lower QoS than was requested
         MAX_QOS_1               = 1,                    -- The subscription is accepted and the maximum QoS sent will be QoS 1. This might be a lower QoS than was requested.
         MAX_QOS_2               = 2,                    -- The subscription is accepted and any received QoS will be sent to this subscription.
@@ -140,7 +140,7 @@ PLoop(function(_ENV)
 
     --- The Property Identifier
     __Sealed__()
-    enum "PropertyIdentifier" {
+    enum "PropertyIdentifier"   {
         PAYLOAD_FORMAT_INDICATOR= 1,            -- Byte                 [PUBLISH, Will Properties]
         MESSAGE_EXPIRY_INTERVAL = 2,            -- Four Byte Integer    [PUBLISH, Will Properties]
         CONTENT_TYPE            = 3,            -- UTF-8 Encoded String [PUBLISH, Will Properties]
@@ -172,7 +172,7 @@ PLoop(function(_ENV)
 
     -- The Reason code
     __Sealed__() __Shareable__()
-    enum "ReasonCode" {
+    enum "ReasonCode"           {
         SUCCESS                 = 0,                    -- CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, UNSUBACK, AUTH
         NORMAL_DISCONNECTION    = 0,                    -- DISCONNECT
         GRANTED_QOS_0           = 0,                    -- SUBACK
@@ -221,7 +221,7 @@ PLoop(function(_ENV)
     }
 
     -- The PUBACK Reason Code
-    PubAckReasonCode = {
+    PubAckReasonCode            = {
         [ReasonCode.SUCCESS                 ] = true,
         [ReasonCode.NO_MATCHING_SUBSCRIBERS ] = true,
         [ReasonCode.UNSPECIFIED_ERROR       ] = true,
@@ -234,13 +234,13 @@ PLoop(function(_ENV)
     }
 
     -- The PUBREL Reason Code
-    PubRelReasonCode = {
+    PubRelReasonCode            = {
         [ReasonCode.SUCCESS                 ] = true,
         [ReasonCode.PACKET_IDENTIFIER_NOT_FOUND] = true,
     }
 
     -- The UNSUBACK Reason Code
-    UnsubAckReasonCode = {
+    UnsubAckReasonCode          = {
         [ReasonCode.SUCCESS ]               = true,
         [ReasonCode.NO_SUBSCRIPTION_EXISTED]= true,
         [ReasonCode.UNSPECIFIED_ERROR]      = true,
@@ -251,106 +251,106 @@ PLoop(function(_ENV)
     }
 
     -- The Authentication Reason Code
-    AuthReasonCode = {
-        [ReasonCode.SUCCESS] = true,
+    AuthReasonCode              = {
+        [ReasonCode.SUCCESS]    = true,
         [ReasonCode.CONTINUE_AUTHENTICATION] = true,
         [ReasonCode.RE_AUTHENTICATE] = true,
     }
 
     -- The property collection
     __Sealed__()
-    struct "PropertySet" {
-        [PropertyIdentifier] = String + Number + struct{ String + Number } + struct { [String] = String }
+    struct "PropertySet"        {
+        [PropertyIdentifier]    = String + Number + struct{ String + Number } + struct { [String] = String }
     }
 
     --- The Connect will packet
     __Sealed__()
-    struct "ConnectWill" {
-        { name = "qos",     type = Number },
-        { name = "retain",  type = Boolean },
-        { name = "topic",   type = String },
-        { name = "message", type = String },
-        { name = "payload", type = String },
+    struct "ConnectWill"        {
+        { name = "qos",         type = Number },
+        { name = "retain",      type = Boolean },
+        { name = "topic",       type = String },
+        { name = "message",     type = String },
+        { name = "payload",     type = String },
 
-        { name = "properties", type = PropertySet },
+        { name = "properties",  type = PropertySet },
     }
 
     --- The MQTT CONNECT Packet
     __Sealed__()
-    struct "ConnectPacket" {
-        { name = "level",        type = Number },
-        { name = "cleanSession", type = Boolean },      -- MQTT v3.1.1
-        { name = "cleanStart",   type = Boolean },      -- MQTT v5.0
-        { name = "keepAlive",    type = Number },
-        { name = "will",         type = ConnectWill },
-        { name = "properties",   type = PropertySet },
+    struct "ConnectPacket"      {
+        { name = "level",       type = Number },
+        { name = "cleanSession",type = Boolean },      -- MQTT v3.1.1
+        { name = "cleanStart",  type = Boolean },      -- MQTT v5.0
+        { name = "keepAlive",   type = Number },
+        { name = "will",        type = ConnectWill },
+        { name = "properties",  type = PropertySet },
 
         -- Payload
-        { name = "clientID",     type = String },
-        { name = "userName",     type = String },
-        { name = "password",     type = String },
+        { name = "clientID",    type = String },
+        { name = "userName",    type = String },
+        { name = "password",    type = String },
     }
 
     --- The MQTT CONNACK Packet
     __Sealed__()
-    struct "ConnackPacket" {
+    struct "ConnackPacket"      {
         { name = "sessionPresent", type = Boolean },
-        { name = "returnCode",   type = ConnectReturnCode },
-        { name = "properties",   type = PropertySet },
+        { name = "returnCode",  type = ConnectReturnCode },
+        { name = "properties",  type = PropertySet },
     }
 
     --- The MQTT PUBLISH Packet
     __Sealed__()
-    struct "PublishPacket" {
-        { name = "dupFlag",      type = Boolean },
-        { name = "qos",          type = QosLevel },
-        { name = "retainFlag",   type = Boolean },
-        { name = "topicName",    type = String },
-        { name = "packetID",     type = Number },
-        { name = "payload",      type = String },
-        { name = "properties",   type = PropertySet },
+    struct "PublishPacket"      {
+        { name = "dupFlag",     type = Boolean },
+        { name = "qos",         type = QosLevel },
+        { name = "retainFlag",  type = Boolean },
+        { name = "topicName",   type = String },
+        { name = "packetID",    type = Number },
+        { name = "payload",     type = String },
+        { name = "properties",  type = PropertySet },
     }
 
     --- The MQTT ACK Packet
     __Sealed__()
-    struct "AckPacket" {
-        { name = "packetID",     type = Number },
-        { name = "reasonCode",   type = ReasonCode },
-        { name = "properties",   type = PropertySet },
+    struct "AckPacket"          {
+        { name = "packetID",    type = Number },
+        { name = "reasonCode",  type = ReasonCode },
+        { name = "properties",  type = PropertySet },
     }
 
     __Sealed__()
-    struct "TopicFilterOption" {
-        { name = "retain", type = Number },
-        { name = "rap",    type = Boolean }, -- Retain as Published
-        { name = "nolocal",type = Boolean },
-        { name = "qos",    type = Number },
+    struct "TopicFilterOption"  {
+        { name = "retain",      type = Number },
+        { name = "rap",         type = Boolean }, -- Retain as Published
+        { name = "nolocal",     type = Boolean },
+        { name = "qos",         type = Number },
     }
 
     __Sealed__()
-    struct "TopicFilter" {
-        { name = "topicFilter",  type = String, require = true },
-        { name = "requestedQoS", type = Number },
-        { name = "options", type = TopicFilterOption },
+    struct "TopicFilter"        {
+        { name = "topicFilter", type = String, require = true },
+        { name = "requestedQoS",type = Number },
+        { name = "options",     type = TopicFilterOption },
     }
 
     __Sealed__()
-    struct "TopicFilters" { TopicFilter }
+    struct "TopicFilters"       { TopicFilter }
 
     --- The SUBSCRIBE Packet
     __Sealed__()
-    struct "SubscribePacket" {
-        { name = "packetID",     type = Number },
-        { name = "properties",   type = PropertySet },
-        { name = "topicFilters", type = TopicFilters },
+    struct "SubscribePacket"    {
+        { name = "packetID",    type = Number },
+        { name = "properties",  type = PropertySet },
+        { name = "topicFilters",type = TopicFilters },
     }
 
     --- The SUBACK Packet
     __Sealed__()
-    struct "SubAckPacket" {
-        { name = "packetID",     type = Number },
-        { name = "properties",   type = PropertySet },
-        { name = "returnCodes",  type = struct { SubAckReturnCode } },
+    struct "SubAckPacket"       {
+        { name = "packetID",    type = Number },
+        { name = "properties",  type = PropertySet },
+        { name = "returnCodes", type = struct { SubAckReturnCode } },
     }
 
     ---------------------------------------------------
@@ -1611,7 +1611,7 @@ PLoop(function(_ENV)
     ---------------------------------------------------
     --        The MQTT Protocol v3.1.1 & v5.0        --
     ---------------------------------------------------
-    System.Net.Protocol "MQTT" {
+    System.Net.Protocol "MQTT"  {
         make                    = function(ptype, packet, level)
             local map           = PACKET_MAKE_MAP[ptype]
             if not map then return nil end
