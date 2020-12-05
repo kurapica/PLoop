@@ -13990,7 +13990,17 @@ do
         -- @param   value
         -- @param   deep:boolean
         -- @param   safe:boolean    only need if there'd be recursive reference in the table
+        -- @return  the clone
         clone                   = clone,
+
+        --- Copy the values in the source to the target table
+        -- @param   src: the source table
+        -- @param   tar: the target table
+        -- @param   deep: whether check the deep level tables
+        -- @param   override: whether override the values in the target table
+        -- @param   safe: whether there could be the same table in teh source
+        -- @return  tar
+        copy                    = tblclone,
 
         --- load the snippets
         -- @param   chunk           the code
