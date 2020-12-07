@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/11/27                                               --
+-- Update Date  :   2020/12/07                                               --
 -- Version      :   1.6.26                                                   --
 --===========================================================================--
 
@@ -45,6 +45,7 @@ do
     --                      environment preparation                      --
     -----------------------------------------------------------------------
     local cerror, cformat       = error, string.format
+    local cdebug                = type(debug) == "table" and debug or nil -- Check the debug lib
     local _PLoopEnv             = setmetatable(
         {
             _G                  = _G,
@@ -101,13 +102,13 @@ do
             loadfile            = loadfile,
 
             -- Debug lib
-            debug               = debug or false,
-            debuginfo           = debug and debug.getinfo    or false,
-            getupvalue          = debug and debug.getupvalue or false,
-            getlocal            = debug and debug.getlocal   or false,
-            traceback           = debug and debug.traceback  or false,
-            setfenv             = setfenv or debug and debug.setfenv or false,
-            getfenv             = getfenv or debug and debug.getfenv or false,
+            debug               = cdebug or false,
+            debuginfo           = cdebug and cdebug.getinfo    or false,
+            getupvalue          = cdebug and cdebug.getupvalue or false,
+            getlocal            = cdebug and cdebug.getlocal   or false,
+            traceback           = cdebug and cdebug.traceback  or false,
+            setfenv             = setfenv or cdebug and cdebug.setfenv or false,
+            getfenv             = getfenv or cdebug and cdebug.getfenv or false,
             collectgarbage      = collectgarbage,
 
             -- Share API
