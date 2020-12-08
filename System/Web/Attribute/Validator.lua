@@ -243,6 +243,7 @@ PLoop(function(_ENV)
             ValidateEnumValue   = Enum.ValidateValue,
 
             strmatch            = string.match,
+            select              = select,
             tonumber            = tonumber,
             pairs               = pairs,
             type                = type,
@@ -329,7 +330,15 @@ PLoop(function(_ENV)
 
                 return value, errs
             elseif value[1] == nil then
-                return nil, config.require and __Form__.RequireMessage or nil
+                local errs
+                local val, err  = config.elementconfig:validate(value)
+                value           = { val }
+                if err then
+                    errs        = {}
+                    errs[1]     = err
+                end
+
+                return value, errs
             else
                 local errs
                 local avalid    = config.elementconfig
