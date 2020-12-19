@@ -273,30 +273,4 @@ PLoop(function(_ENV)
             self.SubscribeCore  = subscribe
         end
     end)
-
-    --- The attribute used to wrap a function that return operator to be an Observable, so could be re-used
-    __Sealed__() class "__Observable__" (function(_ENV)
-        extend "IInitAttribute"
-
-        local Defer             = Observable.Defer
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            return function(...)
-                return Defer(target, ...)
-            end
-        end
-
-        -----------------------------------------------------------
-        --                       property                        --
-        -----------------------------------------------------------
-        --- the attribute target
-        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
-
-        property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
-
-        property "SubLevel"         { type = Number, default = -9999 }
-    end)
 end)

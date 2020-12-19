@@ -142,6 +142,46 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- The attribute used to wrap a function that return operator to be an Observable, so could be re-used
+    __Sealed__() class "__Observable__" (function(_ENV)
+        extend "IInitAttribute"
+
+        local Defer             = Observable.Defer
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            local subjectType   = self.SubjectType
+
+            if subjectType then
+                return function(...) return subjectType(Defer(target, ...)) end
+            else
+                return function(...) return Defer(target, ...) end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
+
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
+
+        property "SubLevel"         { type = Number, default = -9999 }
+
+        property "SubjectType"      { type = -Subject }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ -Subject/nil }
+        function __ctor(self, type)
+            self.SubjectType    = type
+        end
+    end)
+
     --- Only emits the last value (and only the last value) emitted by the source Observable,
     -- and only after that source Observable completes
     __Sealed__() class "AsyncSubject" (function(_ENV)
@@ -309,6 +349,36 @@ PLoop(function(_ENV)
         function __ctor(self, max)
             self.QueueSize      = max
             super(self)
+        end
+    end)
+
+    --- A subject used to generate single literal value and provide the `__concat` meta-method
+    -- so it can be used like `"ID: " .. subject`
+    __Sealed__() class "LiteralSubject" (function(_ENV)
+        inherit "Subject"
+
+        export{ strformat = string.format, tostring = tostring, type = type, isObjectType = Class.IsObjectType, IObservable, Observable, LiteralSubject }
+
+        local function concat(a, b)
+            return tostring(a) .. tostring(b)
+        end
+
+        __Arguments__{ NEString }
+        function Format(self, fmt)
+            return LiteralSubject(self:Map(function(val) return val and strformat(fmt, tostring(val)) or "" end))
+        end
+
+        -----------------------------------------------------------------------
+        --                            meta-method                            --
+        -----------------------------------------------------------------------
+        function __concat(prev, tail)
+            if not isObjectType(prev, IObservable) then
+                prev            = Observable.Just(tostring(prev))
+            elseif not isObjectType(tail, IObservable) then
+                tail            = Observable.Just(tostring(tail))
+            end
+
+            return LiteralSubject(prev:CombineLatest(tail, concat))
         end
     end)
 end)
