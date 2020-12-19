@@ -30,6 +30,23 @@ PLoop(function(_ENV)
             AttributeTargets, __Login__, Application
         }
 
+        local function redirect(context, path, settings)
+            local request       = context.Request
+            if request:IsHtmlAccepted() then
+                if not path then
+                    if request.HttpMethod == HttpMethod_GET then
+                        path    = (settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(request.RawUrl)
+                    else
+                        path    = settings and settings.LoginPage or __Login__.DefaultLoginPage
+                    end
+                end
+
+                return context.Response:Redirect(path)
+            else
+                context.Response.StatusCode = HTTP_STATUS.DENIED
+            end
+        end
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -39,21 +56,15 @@ PLoop(function(_ENV)
             if targettype == AttributeTargets.Function then
                 if authority then
                     return function(context, ...)
-                        local settings  = context.Application[__Login__]
+                        local settings      = context.Application[__Login__]
+                        local result, path
                         if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
-                            local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
-                            if result then
-                                return definition(context, ...)
-                            elseif path then
-                                return context.Response:Redirect(path)
-                            end
+                            result, path    = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
+
+                            if result then return definition(context, ...) end
                         end
 
-                        if context.Request.HttpMethod == HttpMethod_GET then
-                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                        else
-                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                        end
+                        return redirect(context, path, settings)
                     end
                 else
                     return function(context, ...)
@@ -62,31 +73,21 @@ PLoop(function(_ENV)
                             return definition(context, ...)
                         end
 
-                        if context.Request.HttpMethod == HttpMethod_GET then
-                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                        else
-                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                        end
+                        return redirect(context, nil, settings)
                     end
                 end
             else
                 if authority then
                     return function(self, context, ...)
-                        local settings  = context.Application[__Login__]
+                        local settings      = context.Application[__Login__]
+                        local result, path
                         if (settings and settings.LoginChecker or __Login__.DefaultLoginChecker)(context) then
-                            local result, path = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
-                            if result then
-                                return definition(self, context, ...)
-                            elseif path then
-                                return context.Response:Redirect(path)
-                            end
+                            result, path    = (settings and settings.AuthorityChecker or __Login__.DefaultAuthorityChecker)(context, unpack(authority))
+
+                            if result then return definition(self, context, ...) end
                         end
 
-                        if context.Request.HttpMethod == HttpMethod_GET then
-                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                        else
-                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                        end
+                        return redirect(context, path, settings)
                     end
                 else
                     return function(self, context, ...)
@@ -95,11 +96,7 @@ PLoop(function(_ENV)
                             return definition(self, context, ...)
                         end
 
-                        if context.Request.HttpMethod == HttpMethod_GET then
-                            context.Response:Redirect((settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(context.Request.RawUrl))
-                        else
-                            context.Response:Redirect(settings and settings.LoginPage or __Login__.DefaultLoginPage)
-                        end
+                        return redirect(context, nil, settings)
                     end
                 end
             end

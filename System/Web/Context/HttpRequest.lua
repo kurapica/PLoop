@@ -66,25 +66,25 @@ PLoop(function(_ENV)
         --- Whether the request accept html as result
         function IsHtmlAccepted(self)
             local accept        = self.Accept
-            return accept and accept:match("text/html") and true or false
+            return accept and (accept:match("text/html") or accept:match("%*/%*")) and true or false
         end
 
         --- Whether the request accept text as result
         function IsTextAccepted(self)
             local accept        = self.Accept
-            return accept and accept:match("text/plain") and true or false
+            return accept and (accept:match("text/plain") or accept:match("%*/%*")) and true or false
         end
 
         --- Whether the request accept json as result
         function IsJsonAccepted(self)
             local accept        = self.Accept
-            return accept and accept:match("application/json") and true or false
+            return accept and (accept:match("application/json") or accept:match("%*/%*")) and true or false
         end
 
         --- Whether the request accept javascript as result
         function IsScriptAccepted(self)
             local accept        = self.Accept
-            return accept and (accept:match("text/[%w-]+script") or accept:match("application/[%w%-]+script")) and true or false
+            return accept and ((accept:match("text/[%w-]+script") or accept:match("%*/%*")) or accept:match("application/[%w%-]+script")) and true or false
         end
 
         -----------------------------------------------------------
