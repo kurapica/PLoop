@@ -142,46 +142,6 @@ PLoop(function(_ENV)
         end
     end)
 
-    --- The attribute used to wrap a function that return operator to be an Observable, so could be re-used
-    __Sealed__() class "__Observable__" (function(_ENV)
-        extend "IInitAttribute"
-
-        local Defer             = Observable.Defer
-
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        function InitDefinition(self, target, targettype, definition, owner, name, stack)
-            local subjectType   = self.SubjectType
-
-            if subjectType then
-                return function(...) return subjectType(Defer(target, ...)) end
-            else
-                return function(...) return Defer(target, ...) end
-            end
-        end
-
-        -----------------------------------------------------------
-        --                       property                        --
-        -----------------------------------------------------------
-        --- the attribute target
-        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function }
-
-        property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
-
-        property "SubLevel"         { type = Number, default = -9999 }
-
-        property "SubjectType"      { type = -Subject }
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        __Arguments__{ -Subject/nil }
-        function __ctor(self, type)
-            self.SubjectType    = type
-        end
-    end)
-
     --- Only emits the last value (and only the last value) emitted by the source Observable,
     -- and only after that source Observable completes
     __Sealed__() class "AsyncSubject" (function(_ENV)
