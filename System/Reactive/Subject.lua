@@ -15,6 +15,133 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
+    --- A bridge or proxy that acts both as an observer and as an Observable
+    __Sealed__() class "Subject" (function(_ENV)
+        extend "System.IObservable" "System.IObserver"
+
+        export { Observer, Dictionary, next = next, type = type, pairs = pairs }
+
+        FIELD_NEW_SUBSCRIBE     = "__Subject_New"
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- The obervable that provides the items
+        property "Observable"   { type = IObservable }
+
+        --- The observer that will consume the items
+        property "Observers"    { set = false, default = function() return Dictionary() end }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        local function subscribe(self, observer)
+            local obs           = self.Observers
+            if obs[observer] then return observer end
+            local hasobs        = next(obs)
+
+            -- Bind the Unsubscribe event
+            local onUnsubscribe
+            onUnsubscribe       = function()
+                observer.OnUnsubscribe = observer.OnUnsubscribe - onUnsubscribe
+
+                obs[observer]   = nil
+                if self.Observable and not next(obs) then self:Unsubscribe() end
+            end
+            observer.OnUnsubscribe = observer.OnUnsubscribe + onUnsubscribe
+
+            -- Subscribe the subject
+            self:Resubscribe()
+            if self[FIELD_NEW_SUBSCRIBE] then
+                if self[FIELD_NEW_SUBSCRIBE] == true then
+                    self[FIELD_NEW_SUBSCRIBE] = {}
+                end
+
+                self[FIELD_NEW_SUBSCRIBE][observer] = true
+            else
+                obs[observer]   = true
+            end
+            if self.Observable and not hasobs then self.Observable:Subscribe(self) end
+
+            return observer
+        end
+
+        --- Notifies the provider that an observer is to receive notifications.
+        __Arguments__{ IObserver }
+        Subscribe               = subscribe
+
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
+        function Subscribe(self, onNext, onError, onCompleted)
+            return subscribe(self, Observer(onNext, onError, onCompleted))
+        end
+
+        function OnNextCore(self, ...) return self:OnNext(...) end
+        function OnErrorCore(self, e)  return self:OnError(e) end
+        function OnCompletedCore(self) return self:OnCompleted() end
+
+        --- Provides the observer with new data
+        function OnNext(self, ...)
+            if not self.IsUnsubscribed then
+                self[FIELD_NEW_SUBSCRIBE] = self[FIELD_NEW_SUBSCRIBE] or true
+
+                local onNext    = self.OnNextCore
+                for k in self.Observers:GetIterator() do
+                    onNext(k, ...)
+                end
+
+                local newSubs   = self[FIELD_NEW_SUBSCRIBE]
+                if newSubs and type(newSubs) == "table" then
+                    for observer in pairs(newSubs) do
+                        self.Observers[observer] = true
+                    end
+                end
+                self[FIELD_NEW_SUBSCRIBE] = false
+            end
+        end
+
+        --- Notifies the observer that the provider has experienced an error condition
+        function OnError(self, exception)
+            if self.IsUnsubscribed then return end
+
+            local onError       = self.OnErrorCore
+            for k in self.Observers:GetIterator() do
+                onError(k, exception)
+            end
+        end
+
+        --- Notifies the observer that the provider has finished sending push-based notifications
+        function OnCompleted(self)
+            if self.IsUnsubscribed then return end
+
+            local onComp        = self.OnCompletedCore
+            for k in self.Observers:GetIterator() do
+                onComp(k)
+            end
+        end
+
+        -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
+        function __ctor(self, observable, onNext, onError, onCompleted)
+            self[FIELD_NEW_SUBSCRIBE] = false
+
+            self.Observable     = observable
+            self.OnNextCore     = onNext
+            self.OnErrorCore    = onError
+            self.OnCompletedCore= onCompleted
+        end
+
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
+        function __ctor(self, onNext, onError, onCompleted)
+            self[FIELD_NEW_SUBSCRIBE] = false
+
+            self.OnNextCore     = onNext
+            self.OnErrorCore    = onError
+            self.OnCompletedCore= onCompleted
+        end
+    end)
+
     --- Only emits the last value (and only the last value) emitted by the source Observable,
     -- and only after that source Observable completes
     __Sealed__() class "AsyncSubject" (function(_ENV)

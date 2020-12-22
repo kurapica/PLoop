@@ -63,4 +63,40 @@ PLoop(function(_ENV)
             self.OnCompletedCore= onCompleted
         end
     end)
+
+    -- Declare first
+    class "Observable" (function(_ENV)
+        extend "System.IObservable"
+
+        export { Observer }
+
+        -----------------------------------------------------------------------
+        --                          abstract method                          --
+        -----------------------------------------------------------------------
+        __Abstract__() function SubscribeCore(observer) end
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        local function subscribe(self, observer)
+            self.SubscribeCore(observer)
+            return observer
+        end
+
+        __Arguments__{ IObserver }
+        Subscribe               = subscribe
+
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
+        function Subscribe(self, onNext, onError, onCompleted)
+            return subscribe(self, Observer(onNext, onError, onCompleted))
+        end
+
+        -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        __Arguments__{ Callable }
+        function __ctor(self, subscribe)
+            self.SubscribeCore  = subscribe
+        end
+    end)
 end)

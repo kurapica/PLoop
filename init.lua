@@ -37,8 +37,8 @@ require "PLoop.System.Text.TemplateString"
 -- System.Reactive
 require "PLoop.System.Observer"
 require "PLoop.System.Reactive.Observer"
-require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Subject"
+require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Operator"
 
 -- System.Message

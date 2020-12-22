@@ -10403,6 +10403,28 @@ do
     event                       = prototype {
         __tostring              = "event",
         __index                 = {
+            --- Gets the event's owner
+            -- @static
+            -- @method  GetOwner
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  owner
+            ["GetOwner"]        = function(self)
+                local info      = _EventInfo[self]
+                return info and info[FLD_EVENT_OWNER]
+            end;
+
+            --- Gets the event's name
+            -- @static
+            -- @method  GetName
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  name
+            ["GetName"]         = function(self)
+                local info      = _EventInfo[self]
+                return info and info[FLD_EVENT_NAME]
+            end;
+
             --- Get the event delegate
             -- @static
             -- @method  Get
@@ -10634,6 +10656,8 @@ do
             return "[event]" .. namespace.GetNamespaceName(info[FLD_EVENT_OWNER]) .. "." .. info[FLD_EVENT_NAME]
         end;
         __index                 = {
+            ["GetOwner"]        = event.GetOwner;
+            ["GetName"]         = event.GetName;
             ["Get"]             = event.Get;
             ["GetFeature"]      = event.GetFeature;
             ["GetEventChangeHandler"] = event.GetEventChangeHandler;
@@ -11653,6 +11677,28 @@ do
     -----------------------------------------------------------------------
     property                    = prototype {
         __index                 = {
+            --- Gets the property's owner
+            -- @static
+            -- @method  GetOwner
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  owner
+            ["GetOwner"]        = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_OWNER]
+            end;
+
+            --- Gets the property's name
+            -- @static
+            -- @method  GetName
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  name
+            ["GetName"]         = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_NAME]
+            end;
+
             --- Get the property accessor, the accessor will be used by object to get/set value instead of the property itself
             -- @static
             -- @method  GetAccessor
@@ -12182,6 +12228,8 @@ do
             return "[property]" .. namespace.GetNamespaceName(info[FLD_PROP_OWNER]) .. "." .. info[FLD_PROP_NAME]
         end;
         __index                 = {
+            ["GetOwner"]        = property.GetOwner;
+            ["GetName"]         = property.GetName;
             ["GetAccessor"]     = property.GetAccessor;
             ["GetFeature"]      = property.GetFeature;
             ["GetField"]        = property.GetField;
