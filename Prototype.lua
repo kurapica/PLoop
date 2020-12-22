@@ -14060,8 +14060,8 @@ do
         --- A fake function that do nothing
         fakefunc                = fakefunc,
 
-        --- A function used to return an empty table
-        newtable                = function() return {} end,
+        --- A function used to return an empty table with weak settings
+        newtable                = function(weakKey, weakVal) return weakKey and setmetatable({}, weakVal and WEAK_ALL or WEAK_KEY) or weakVal and setmetatable({}, WEAK_VALUE) or {} end,
     }
 
     -----------------------------------------------------------------------
