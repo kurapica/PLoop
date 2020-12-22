@@ -341,4 +341,161 @@ PLoop(function(_ENV)
             return LiteralSubject(prev:CombineLatest(tail, concat))
         end
     end)
+
+    --- The attribute used to wrap a function or property that return operator to be an Observable, so could be re-used
+    __Sealed__() class "__Observable__" (function(_ENV)
+        extend "IInitAttribute"
+
+        export {
+            _PropertyMap        = Toolset.newtable(true),
+
+            Defer               = Observable.Defer,
+            pairs               = pairs,
+            error               = error,
+            type                = type,
+            rawget              = rawget,
+            rawset              = rawset,
+            strlower            = string.lower,
+            safeset             = Toolset.safeset,
+
+            AttributeTargets, Class, Property, Event, __Observable__
+        }
+
+        local _StaticSubjects   = Toolset.newtable(true)
+
+        local function processPropertySet(prop, obj, ...)
+            if prop:IsStatic() then
+                subject         = _StaticSubjects[prop]
+            else
+                subject         = rawget(obj, __Observable__)
+                subject         = subject and subject[prop]
+            end
+
+            if subject then subject:OnNext(...) end
+        end
+
+        -----------------------------------------------------------
+        --                     extend method                     --
+        -----------------------------------------------------------
+        __Static__()
+        function Observable.FromProperty(self, prop)
+            if type(prop) == "string" then
+                if Class.Validate(self) then
+                    prop        = Class.GetFeature(self, prop)
+                    if not Property.IsStatic(prop) then return end
+                else
+                    local cls   = Class.GetObjectClass(self)
+                    prop        = cls and Class.GetFeature(cls, prop, true)
+                end
+            elseif prop == nil then
+                prop            = self
+                if not (Property.Validate(prop) and Property.IsStatic(prop)) then return end
+            end
+
+            if prop and _PropertyMap[prop] then
+                if Property.IsStatic(prop) then
+                    local subject   = _StaticSubjects[prop]
+                    if not subject then
+                        subject     = Subject()
+                        _StaticSubjects = safeset(_StaticSubjects, prop, subject)
+                    end
+                    return subject
+                else
+                    local obs       = rawget(self, __Observable__)
+                    if not obs then
+                        obs         = {}
+                        rawset(self, __Observable__, obs)
+                    end
+
+                    local subject   = obs[prop]
+                    if not subject then
+                        subject     = Subject()
+                        obs[prop]   = subject
+                    end
+
+                    return subject
+                end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function InitDefinition(self, target, targettype, definition, owner, name, stack)
+            if targettype == AttributeTargets.Property then
+                local set, handler
+
+                for k, v in pairs(definition) do
+                    if type(k) == "string" then
+                        local lk    = strlower(k)
+
+                        if lk == "auto" then
+                            error("The property " .. name .. " can't be used as observable", stack + 1)
+                        elseif lk  == "set" then
+                            if v  == false then error("The property " .. name .. " can't be used as observable", stack + 1) end
+                            set     = k
+                        elseif lk  == "setmethod" then
+                            set     = set or k
+                        elseif lk  == "handler" then
+                            handler = k
+                        end
+                    end
+                end
+
+                if set then
+                    -- Replace the set
+                    local oset      = definition[set]
+                    if type(oset) == "function" then
+                        definition[set] = function(obj, ...)
+                            oset(obj, ...)
+
+                            return processPropertySet(target, obj, ...)
+                        end
+                    elseif type(oset) == "string" then
+                        definition[set] = function(obj, ...)
+                            local func  = obj[oset]
+                            if type(func) == "function" then func(obj, ...) end
+
+                            return processPropertySet(target, obj, ...)
+                        end
+                    end
+                end
+
+                -- Replace the handler
+                local ohandler      = definition[handler]
+                if type(ohandler) == "function" then
+                    definition[handler] = function(obj, new, old, prop)
+                        ohandler(obj, new, old, prop)
+
+                        return processPropertySet(target, obj, new)
+                    end
+                elseif type(ohandler) == "string" then
+                    definition[handler] = function(obj, new, old, prop)
+                        local func      = obj[ohandler]
+                        if type(func) == "function" then func(obj, new, old, prop) end
+
+                        return processPropertySet(target, obj, new)
+                    end
+                else
+                    definition.handler  = function(obj, new, old, prop)
+                        return processPropertySet(target, obj, new)
+                    end
+                end
+
+                _PropertyMap[target]    = true
+            else
+                return function(...) return Defer(target, ...) end
+            end
+        end
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the attribute target
+        property "AttributeTarget"  { type = AttributeTargets,  default = AttributeTargets.Method + AttributeTargets.Function + AttributeTargets.Property }
+
+        property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
+
+        property "SubLevel"         { type = Number, default = -9999 }
+    end)
 end)

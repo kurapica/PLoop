@@ -8100,7 +8100,8 @@ do
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info and type(name) == "string" then
                     info        = info[fromobj and FLD_IC_OBJFTR or FLD_IC_TYPFTR]
-                    return info and info[name]
+                    info        = info and info[name]
+                    return info and info:GetFeature()
                 end
             end;
 
@@ -8117,7 +8118,12 @@ do
                 local info      = fromobj and _ICInfo[target] or getICTargetInfo(target)
                 if info then
                     local typftr= info[fromobj and FLD_IC_OBJFTR or FLD_IC_TYPFTR]
-                    if typftr then return function(self, n) return next(typftr, n) end, target end
+                    if typftr then
+                        return function(self, n)
+                            local name, ftr = next(typftr, n)
+                            if name then return name, ftr:GetFeature() end
+                        end, target
+                    end
                 end
                 return fakefunc, target
             end;
@@ -10449,6 +10455,14 @@ do
                 end
             end;
 
+            --- Get the feature itself
+            -- @static
+            -- @method  GetFeature()
+            -- @owner   event
+            -- @param   target                      the target event
+            -- @return  event
+            ["GetFeature"]      = function(self) return self end;
+
             --- Get the event change handler
             -- @static
             -- @method  GetEventChangeHandler
@@ -10621,6 +10635,7 @@ do
         end;
         __index                 = {
             ["Get"]             = event.Get;
+            ["GetFeature"]      = event.GetFeature;
             ["GetEventChangeHandler"] = event.GetEventChangeHandler;
             ["Invoke"]          = invokeEvent;
             ["IsShareable"]     = event.IsShareable;
@@ -11781,8 +11796,16 @@ do
                     genPropertyGet(info)
                 end
 
-                return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET] }
+                return { Get = info[FLD_PROP_RAWGET], Set = info[FLD_PROP_RAWSET], GetFeature = function() return self end }
             end;
+
+            --- Get the feature itself
+            -- @static
+            -- @method  GetFeature()
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  property
+            ["GetFeature"]      = function(self) return self end;
 
             --- Get the property field if existed
             -- @static
@@ -12160,6 +12183,7 @@ do
         end;
         __index                 = {
             ["GetAccessor"]     = property.GetAccessor;
+            ["GetFeature"]      = property.GetFeature;
             ["GetField"]        = property.GetField;
             ["IsGetClone"]      = property.IsGetClone;
             ["IsGetDeepClone"]  = property.IsGetDeepClone;
