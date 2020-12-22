@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2020/12/07                                               --
--- Version      :   1.6.26                                                   --
+-- Update Date  :   2020/12/22                                               --
+-- Version      :   1.6.27                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -13615,6 +13615,12 @@ do
 
     --- Represents class type
     __Sealed__() struct "System.ClassType"          { genTypeValidator(class)       }
+
+    --- Represent a property
+    __Sealed__() struct "System.PropertyType"       { genTypeValidator(property)    }
+
+    --- Represents an event
+    __Sealed__() struct "System.EventType"          { genTypeValidator(event)       }
 
     --- Represents any validation type
     __Sealed__() AnyType = struct "System.AnyType"  { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}

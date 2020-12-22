@@ -1,6 +1,16 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [1.6.27] - 2020-12-22 WangXH <kurapica125@outlook.com>
+### Added
+- System.PropertyType, System.EventType is added to validate the property and event objects.
+- LiteralSubject is added to support concat operatiosn like `"hi" .. LiteralSubject()` to generate another LiteralSubject.
+
+### Changed
+- Observable.From now support the property marked with `__Observable__` attribute.
+
+
 ## [1.6.26] - 2020-11-26 WangXH <kurapica125@outlook.com>
 ### Changes
 - The Context System is re-designed, can use custom APIs to save and get the current context object, so no need use debug to fetch it from the stack.
