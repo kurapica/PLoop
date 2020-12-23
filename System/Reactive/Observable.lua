@@ -43,7 +43,7 @@ PLoop(function(_ENV)
 
                 if not subject and withCreation then
                     subject     = BehaviorSubject()
-                    if prop:IsReadable() then
+                    if prop:IsReadable() and not prop:IsIndexer() then
                         local val   = prop:GetOwner()[prop:GetName()]
                         if val ~= nil then subject:OnNext(val) end
                     end
@@ -63,7 +63,7 @@ PLoop(function(_ENV)
 
                     container[prop] = subject
 
-                    if prop:IsReadable() then
+                    if prop:IsReadable() and not prop:IsIndexer() then
                         local val   = obj[prop:GetName()]
                         if val ~= nil then subject:OnNext(val) end
                     end
