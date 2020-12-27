@@ -320,7 +320,7 @@ PLoop(function(_ENV)
         export{ strformat = string.format, tostring = tostring, type = type, isObjectType = Class.IsObjectType, IObservable, Observable, LiteralSubject }
 
         local function concat(a, b)
-            return tostring(a) .. tostring(b)
+            return tostring(a ~= nil and a or "") .. tostring(b ~= nil and b or "")
         end
 
         __Arguments__{ NEString }
@@ -333,12 +333,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function __concat(prev, tail)
             if not isObjectType(prev, IObservable) then
-                prev            = Observable.Just(tostring(prev))
+                prev            = tostring(prev)
+                return LiteralSubject(tail:Map(function(val) return prev .. (val ~= nil and tostring(val) or "") end))
             elseif not isObjectType(tail, IObservable) then
-                tail            = Observable.Just(tostring(tail))
+                tail            = tostring(tail)
+                return LiteralSubject(prev:Map(function(val) return (val ~= nil and tostring(val) or "") .. tail end))
+            else
+                return LiteralSubject(prev:CombineLatest(tail, concat))
             end
-
-            return LiteralSubject(prev:CombineLatest(tail, concat))
         end
     end)
 end)
