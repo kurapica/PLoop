@@ -29,6 +29,7 @@ PLoop(function(_ENV)
             rawset              = rawset,
             strlower            = string.lower,
             safeset             = Toolset.safeset,
+            isSubType           = Class.IsSubType,
 
             AttributeTargets, Class, Property, Event, __Observable__, Observable, BehaviorSubject
         }
@@ -42,11 +43,15 @@ PLoop(function(_ENV)
                 subject         = _StaticSubjects[prop]
 
                 if not subject and withCreation then
-                    subject     = BehaviorSubject()
-                    if prop:IsReadable() and not prop:IsIndexer() then
-                        local val   = prop:GetOwner()[prop:GetName()]
-                        if val ~= nil then subject:OnNext(val) end
+                    local stype = _PropertyMap[prop] or BehaviorSubject
+                    subject     = stype()
+
+                    -- Special settings for the Behavior Subjects
+                    if isSubType(stype, BehaviorSubject) and prop:IsReadable() and not prop:IsIndexer() then
+                        local v = prop:GetOwner()[prop:GetName()]
+                        if v ~= nil then subject:OnNext(v) end
                     end
+
                     _StaticSubjects = safeset(_StaticSubjects, prop, subject)
                 end
             else
@@ -54,7 +59,8 @@ PLoop(function(_ENV)
                 subject         = container and container[prop]
 
                 if not subject and obj and withCreation then
-                    subject     = BehaviorSubject()
+                    local stype = _PropertyMap[prop] or BehaviorSubject
+                    subject     = stype()
 
                     if not container then
                         container = {}
@@ -63,7 +69,8 @@ PLoop(function(_ENV)
 
                     container[prop] = subject
 
-                    if prop:IsReadable() and not prop:IsIndexer() then
+                    -- Special settings for the Behavior Subjects
+                    if isSubType(stype, BehaviorSubject) and prop:IsReadable() and not prop:IsIndexer() then
                         local val   = obj[prop:GetName()]
                         if val ~= nil then subject:OnNext(val) end
                     end
@@ -77,12 +84,12 @@ PLoop(function(_ENV)
         --                    static  method                     --
         -----------------------------------------------------------
         __Static__() function IsObservableProperty(prop)
-            return _PropertyMap[prop] or false
+            return _PropertyMap[prop] ~= nil
         end
 
         __Static__()
         function GetPropertyObservable(prop, obj)
-            return _PropertyMap[prop] and getSubject(prop, obj, true) or nil
+            return _PropertyMap[prop] ~= nil and getSubject(prop, obj, true) or nil
         end
 
         -----------------------------------------------------------
@@ -154,7 +161,10 @@ PLoop(function(_ENV)
                     end
                 end
 
-                _PropertyMap[target]    = true
+                _PropertyMap[target]    = self.SubjectType or false
+            elseif self.SubjectType then
+                local stype             = self.SubjectType
+                return function(...) return Observable.Defer(stype, target, ...) end
             else
                 return function(...) return Observable.Defer(target, ...) end
             end
@@ -169,6 +179,16 @@ PLoop(function(_ENV)
         property "Priority"         { type = AttributePriority, default = AttributePriority.Lower }
 
         property "SubLevel"         { type = Number, default = -9999 }
+
+        property "SubjectType"      { type = -Subject }
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ -Subject/nil }
+        function __ctor(self, type)
+            self.SubjectType    = type
+        end
     end)
 
     __Sealed__() class "Observable" (function(_ENV)
@@ -269,11 +289,13 @@ PLoop(function(_ENV)
             __index             = function(self, count)
                 local args      = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func      = loadsnippet([[
-                    return function(ctor, ]] .. args .. [[)
+                    return function(stype, ctor, ]] .. args .. [[)
                         return Observable(function(observer)
                             local obs   = ctor(]] .. args .. [[)
                             if not IsObjectType(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
+                            elseif stype then
+                                return obs:ToSubject(stype):Subscribe(observer)
                             else
                                 return obs:Subscribe(observer)
                             end
@@ -287,7 +309,12 @@ PLoop(function(_ENV)
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
         function Defer(ctor, ...)
-            return _DeferAutoGen[select("#", ...)](ctor, ...)
+            return _DeferAutoGen[select("#", ...)](nil, ctor, ...)
+        end
+
+        __Static__() __Arguments__{ -Subject, Callable, Any * 0 }
+        function Defer(subjectType, ctor, ...)
+            return _DeferAutoGen[select("#", ...)](subjectType, ctor, ...)
         end
 
         --- Converts collection objects into Observables
