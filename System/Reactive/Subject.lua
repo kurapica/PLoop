@@ -174,7 +174,7 @@ PLoop(function(_ENV)
     __Sealed__() class "BehaviorSubject" (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = unpack or table.unpack }
+        export { select = select, unpack = unpack or table.unpack, onNext = Subject.OnNext }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -190,7 +190,8 @@ PLoop(function(_ENV)
             for i = 1, self[0] do
                 self[i]         = select(i, ...)
             end
-            super.OnNext(self, ...)
+
+            onNext(self, ...)
         end
 
         -----------------------------------------------------------------------
@@ -315,17 +316,53 @@ PLoop(function(_ENV)
     --- A subject used to generate single literal value and provide the `__concat` meta-method
     -- so it can be used like `"ID: " .. subject`
     __Sealed__() class "LiteralSubject" (function(_ENV)
-        inherit "Subject"
+        inherit "BehaviorSubject"
 
-        export{ strformat = string.format, tostring = tostring, type = type, isObjectType = Class.IsObjectType, IObservable, Observable, LiteralSubject }
+        export{ select = select, unpack = unpack or table.unpack, onNext = Subject.OnNext, strformat = string.format, tostring = tostring, type = type, isObjectType = Class.IsObjectType, IObservable, Observable, LiteralSubject }
 
         local function concat(a, b)
             return tostring(a ~= nil and a or "") .. tostring(b ~= nil and b or "")
         end
 
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+
         __Arguments__{ NEString }
         function Format(self, fmt)
-            return LiteralSubject(self:Map(function(val) return val and strformat(fmt, tostring(val)) or "" end))
+            return LiteralSubject(self:Map(function(val) return val and strformat(fmt, val) or "" end))
+        end
+
+        --- Provides the observer with new data
+        function OnNext(self, val)
+            if val ~= nil then
+                val             = tostring(val)
+                self[0]         = 1
+                self[1]         = val
+
+                onNext(self, val)
+            end
+        end
+
+        -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        __Arguments__{ IObservable, System.Any/nil }
+        function __ctor(self, observable, init)
+            if init == nil then
+                super(self, observable)
+            else
+                super(self, observable, tostring(init))
+            end
+        end
+
+        __Arguments__{ System.Any/nil }
+        function __ctor(self, ...)
+            if init == nil then
+                super(self)
+            else
+                super(self, tostring(init))
+            end
         end
 
         -----------------------------------------------------------------------
@@ -334,10 +371,10 @@ PLoop(function(_ENV)
         function __concat(prev, tail)
             if not isObjectType(prev, IObservable) then
                 prev            = tostring(prev)
-                return LiteralSubject(tail:Map(function(val) return prev .. (val ~= nil and tostring(val) or "") end))
+                return LiteralSubject(tail:Map(function(val) return prev .. (val or "") end))
             elseif not isObjectType(tail, IObservable) then
                 tail            = tostring(tail)
-                return LiteralSubject(prev:Map(function(val) return (val ~= nil and tostring(val) or "") .. tail end))
+                return LiteralSubject(prev:Map(function(val) return (val or "") .. tail end))
             else
                 return LiteralSubject(prev:CombineLatest(tail, concat))
             end

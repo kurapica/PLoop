@@ -1845,9 +1845,9 @@ PLoop(function(_ENV)
             return ReplaySubject(self, size)
         end
 
-        __Arguments__{ -Subject/Subject }
-        function ToSubject(self, subject)
-            return subject(self)
+        __Arguments__{ -Subject/Subject, System.Any * 0 }
+        function ToSubject(self, subject, ...)
+            return subject(self, ...)
         end
     end)
 end)
