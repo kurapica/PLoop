@@ -285,7 +285,20 @@ PLoop(function(_ENV)
         end
 
         --- Creates the Observable only when the observer subscribes
-        local _DeferAutoGen     = setmetatable({}, {
+        local _DeferAutoGen     = setmetatable({
+            [0]                 = function(stype, ctor)
+                return Observable(function(observer)
+                    local obs   = ctor()
+                    if not IsObjectType(obs, IObservable) then
+                        observer:OnError(Exception("The defer function doesn't provide valid observable"))
+                    elseif stype then
+                        return obs:ToSubject(stype):Subscribe(observer)
+                    else
+                        return obs:Subscribe(observer)
+                    end
+                end)
+            end,
+        }, {
             __index             = function(self, count)
                 local args      = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func      = loadsnippet([[
