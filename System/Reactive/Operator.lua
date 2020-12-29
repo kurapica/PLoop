@@ -105,6 +105,7 @@ PLoop(function(_ENV)
             next                = next,
             select              = select,
             pairs               = pairs,
+            strformat           = string.format,
             loadsnippet         = Toolset.loadsnippet,
             tostringall         = Toolset.tostringall,
             otime               = os and (os.clock or os.time),
@@ -1033,6 +1034,17 @@ PLoop(function(_ENV)
             )
         end
         FlatMap                 = SelectMany
+
+        __Observable__()
+        __Arguments__{ NEString, Boolean/nil }
+        function Format(self, fmt, safe)
+            return Operator(self, safe and function(observer, ...)
+                return safeNext(observer, pcall(strformat, fmt, ...))
+            end or function(observer, ...)
+                local ok, res   = pcall(strformat, fmt, ...)
+                return ok and observer:OnNext(res)
+            end)
+        end
 
         -----------------------------------------------------------------------
         --                             Combining                             --

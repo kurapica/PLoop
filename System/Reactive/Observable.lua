@@ -162,9 +162,6 @@ PLoop(function(_ENV)
                 end
 
                 _PropertyMap[target]    = self.SubjectType or false
-            elseif self.SubjectType then
-                local stype             = self.SubjectType
-                return function(...) return Observable.Defer(stype, target, ...) end
             else
                 return function(...) return Observable.Defer(target, ...) end
             end
@@ -286,13 +283,11 @@ PLoop(function(_ENV)
 
         --- Creates the Observable only when the observer subscribes
         local _DeferAutoGen     = setmetatable({
-            [0]                 = function(stype, ctor)
+            [0]                 = function(ctor)
                 return Observable(function(observer)
                     local obs   = ctor()
                     if not IsObjectType(obs, IObservable) then
                         observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                    elseif stype then
-                        return obs:ToSubject(stype):Subscribe(observer)
                     else
                         return obs:Subscribe(observer)
                     end
@@ -302,13 +297,11 @@ PLoop(function(_ENV)
             __index             = function(self, count)
                 local args      = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func      = loadsnippet([[
-                    return function(stype, ctor, ]] .. args .. [[)
+                    return function(ctor, ]] .. args .. [[)
                         return Observable(function(observer)
                             local obs   = ctor(]] .. args .. [[)
                             if not IsObjectType(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                            elseif stype then
-                                return obs:ToSubject(stype):Subscribe(observer)
                             else
                                 return obs:Subscribe(observer)
                             end
@@ -322,12 +315,7 @@ PLoop(function(_ENV)
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
         function Defer(ctor, ...)
-            return _DeferAutoGen[select("#", ...)](nil, ctor, ...)
-        end
-
-        __Static__() __Arguments__{ -Subject, Callable, Any * 0 }
-        function Defer(subjectType, ctor, ...)
-            return _DeferAutoGen[select("#", ...)](subjectType, ctor, ...)
+            return _DeferAutoGen[select("#", ...)](ctor, ...)
         end
 
         --- Converts collection objects into Observables
