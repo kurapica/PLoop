@@ -867,6 +867,11 @@ PLoop(function(_ENV)
             if Class.IsSubType(owner, IDataEntity) then
                 set.fieldindex  = getDataTableFieldCount(owner)
 
+                -- Check the converter
+                if not set.foreign then
+                    set.converter       = set.converter or TYPE_CONVERTER[ptype]
+                end
+
                 saveDataFieldSchema(owner, name, set)
 
                 if set.foreign then
@@ -1104,7 +1109,7 @@ PLoop(function(_ENV)
                 else
                     local fld           = set.name
                     local schema        = getDataTableSchema(owner)
-                    local converter     = set.converter or TYPE_CONVERTER[ptype]
+                    local converter     = set.converter
                     local isprimary = schema.primary == fld
 
                     if type(schema.primary) == "table" then
@@ -1112,7 +1117,6 @@ PLoop(function(_ENV)
                     end
 
                     if converter then
-                        set.converter   = converter
                         local fromvalue = converter.fromvalue
                         local tovalue   = converter.tovalue
                         local format    = set.format or converter.format
@@ -1298,14 +1302,14 @@ PLoop(function(_ENV)
         --- the default type converter
         __Static__() __Indexer__(AnyType)
         property "Converter" {
-            get     = function(self, datatype)
+            get                 = function(self, datatype)
                 return TYPE_CONVERTER[datatype]
             end,
-            set     = function(self, datatype, converter)
-                TYPE_CONVERTER = safeset(TYPE_CONVERTER, datatype, converter)
+            set                 = function(self, datatype, converter)
+                TYPE_CONVERTER  = safeset(TYPE_CONVERTER, datatype, converter)
             end,
-            type    = TypeConverter,
-            require = true,
+            type                = TypeConverter,
+            require             = true,
         }
 
         -----------------------------------------------------------
@@ -1590,7 +1594,7 @@ PLoop(function(_ENV)
 
                 if fld then
                     if converter[fld] then
-                        val     = converter[1].tovalue(val, converter[2])
+                        val     = converter[fld][1].tovalue(val, converter[fld][2])
                         if val == nil then
                             error(strformat("The %q isn't valid", name), 3)
                         end
