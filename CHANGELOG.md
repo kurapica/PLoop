@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.28] - 2021-01-04 WangXH <kurapica125@outlook.com>
+### Changed
+- Fix the data base convertor not working.
+
 
 ## [1.6.27] - 2020-12-22 WangXH <kurapica125@outlook.com>
 ### Added
