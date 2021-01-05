@@ -190,7 +190,7 @@ PLoop(function(_ENV)
 
     __Sealed__() class "Observable" (function(_ENV)
         export {
-            Observer, Observable, IObservable, List, __Observable__,
+            Observer, Observable, IObservable, Subject, List, __Observable__,
 
             tostring            = tostring,
             select              = select,
@@ -334,13 +334,13 @@ PLoop(function(_ENV)
         --- Converts event delegate objects into Observables
         __Static__() __Arguments__{ Delegate }
         function From(delegate)
-            return Observable(function(observer)
-                local handler   = function(...) observer:OnNext(...) end
-                delegate        = delegate + handler
-                observer.OnUnsubscribe = observer.OnUnsubscribe + function()
-                    delegate    = delegate - handler
-                end
-            end)
+            local subject       = delegate[Observable]
+            if not subject then
+                subject         = Subject()
+                delegate        = delegate + function(...) return subject:OnNext(...) end
+                delegate[Observable] = subject
+            end
+            return subject
         end
 
         --- Converts tables into Observables
