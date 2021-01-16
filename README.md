@@ -2,7 +2,7 @@
 
 中文版请点击[README-zh.md](https://github.com/kurapica/PLoop/blob/master/README-zh.md)
 
-**PLoop** is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also include the luajit. It's also designed to be used on multi-os thread platforms like the **OpenResty**.
+**PLoop** is a C# like style object-oriented program system for lua. It support Lua 5.1 and above versions, also include the luajit. It's also designed to be used on multi-os thread platforms.
 
 It provide the usage of enum, struct, interface and class. Also provide common useful features like thread, collection, serialization , data entity framework, web framework and etc.
 
