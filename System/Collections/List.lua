@@ -576,10 +576,24 @@ PLoop(function(_ENV)
             return self
         end
 
+        __Arguments__{ Table }
+        function Map(self, map)
+            if self[FLD_MAPACTITON] then return ListStreamWorker(self):Map(feature) end
+            self[FLD_MAPACTITON] = function(item) return map[item] end
+            return self
+        end
+
         __Arguments__{ Callable }
         function Filter(self, func)
             if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(func) end
             self[FLD_FILTERACTN] = func
+            return self
+        end
+
+        __Arguments__{ Table }
+        function Filter(self, filter)
+            if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(func) end
+            self[FLD_FILTERACTN] = function(item) return filter[item] end
             return self
         end
 
@@ -669,12 +683,18 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Map(self, func) return ListStreamWorker(self):Map(func) end
 
+        __Arguments__{ Table }
+        function Map(self, map) return ListStreamWorker(self):Map(map) end
+
         __Arguments__{ String }
         function Map(self, feature) return ListStreamWorker(self):Map(feature) end
 
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
         function Filter(self, func) return ListStreamWorker(self):Filter(func) end
+
+        __Arguments__{ Table }
+        function Filter(self, filter) return ListStreamWorker(self):Filter(filter) end
 
         __Arguments__{ String, System.Any/nil }
         function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
