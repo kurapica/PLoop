@@ -579,7 +579,7 @@ PLoop(function(_ENV)
         __Arguments__{ Table }
         function Map(self, map)
             if self[FLD_MAPACTITON] then return ListStreamWorker(self):Map(feature) end
-            self[FLD_MAPACTITON] = function(item) return map[item] end
+            self[FLD_MAPACTITON] = function(item) if map[item] ~= nil then return map[item] else return item end end
             return self
         end
 
