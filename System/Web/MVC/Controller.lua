@@ -355,6 +355,13 @@ PLoop(function(_ENV)
             self.Context.Response.StatusCode = HTTP_STATUS.FORBIDDEN
         end
 
+        --- DENIED
+        function Denied(self)
+            if self.IsFinished then return end
+            self.IsFinished     = true
+            self.Context.Response.StatusCode = HTTP_STATUS.DENIED
+        end
+
         --- Server Error
         function ServerError(self)
             if self.IsFinished then return end
