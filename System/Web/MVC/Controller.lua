@@ -181,8 +181,10 @@ PLoop(function(_ENV)
             if self.IsFinished or res.RequestRedirected or res.StatusCode ~= HTTP_STATUS.OK then return end
             self.IsFinished     = true
 
+            local dtype         = type(object)
+
             -- Fix the data not existed
-            object              = type(object) == "table" and object or { object }
+            object              = (dtype == "table" or dtype == "string") and object or {}
 
             local context       = self.Context
             if context.IsInnerRequest then --and context.RawContext.ProcessPhase == HEAD_PHASE then
@@ -192,10 +194,14 @@ PLoop(function(_ENV)
 
                 yield()
 
-                if oType then
-                    serialize(JsonFormatProvider(), object, oType, res.Write)
+                if dtype == "string" then
+                    res.Write(object)
                 else
-                    serialize(JsonFormatProvider(), object, res.Write)
+                    if oType then
+                        serialize(JsonFormatProvider(), object, oType, res.Write)
+                    else
+                        serialize(JsonFormatProvider(), object, res.Write)
+                    end
                 end
 
                 yield()

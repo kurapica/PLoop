@@ -117,6 +117,7 @@ PLoop(function(_ENV)
             serialize           = Serialization.Serialize,
             HEAD_PHASE          = IHttpContextHandler.ProcessPhase.Head,
             issubtype           = Class.IsSubType,
+            type                = type,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
             IHttpContextHandler, JsonFormatProvider, Controller, AttributeTargets, __Json__, HTTP_STATUS,
@@ -127,15 +128,15 @@ PLoop(function(_ENV)
             if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
             if phase == HEAD_PHASE then
-                local data, type= self[2](context)
+                local data,dtype= self[2](context)
                 if response.RequestRedirected or response.StatusCode ~= HTTP_STATUS.OK then return end
 
                 if data then
                     response.ContentType    = "application/json"
                     if context.IsInnerRequest then -- and context.RawContext.ProcessPhase == HEAD_PHASE then
-                        context:SaveJsonData(data, type)
+                        context:SaveJsonData(data, dtype)
                     else
-                        context[__Json__]   = { data, type }
+                        context[__Json__]   = { data, dtype }
                     end
                 else
                     Error("The function %q failed to return a json data", self[1])
@@ -144,10 +145,14 @@ PLoop(function(_ENV)
             else
                 local content   = context[__Json__]
                 if content then
-                    if content[2] then
-                        serialize(JsonFormatProvider(), content[1], content[2], response.Write)
-                    else
-                        serialize(JsonFormatProvider(), content[1], response.Write)
+                    if type(content[1]) == "table" then
+                        if content[2] then
+                            serialize(JsonFormatProvider(), content[1], content[2], response.Write)
+                        else
+                            serialize(JsonFormatProvider(), content[1], response.Write)
+                        end
+                    elseif type(content[1]) == "string" then
+                        response.Write(content[1])
                     end
                 end
             end
