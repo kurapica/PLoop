@@ -123,7 +123,7 @@ PLoop(function(_ENV)
             ['"']               = false,
             ["+"]               = false,
             ["-"]               = false,
-            ["\\"]              = System.Text.XmlEncode,
+            ["\\"]              = System.Text.XmlEntity.Encode,
         }
 
         -------------------------------

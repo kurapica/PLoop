@@ -13,26 +13,102 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    export { "type", "error", "ipairs", tconcat = table.concat, istype = Class.IsObjectType, Prototype, Namespace, Toolset, Iterable }
+    export {
+        type                    = type,
+        error                   = error,
+        ipairs                  = ipairs,
+        max                     = math.max,
+        yield                   = coroutine.yield,
+        tconcat                 = table.concat,
+        istype                  = Class.IsObjectType,
+        validateValue           = Struct.ValidateValue,
+        RunIterator             = Threading.RunIterator,
+
+        Prototype, Namespace, Toolset, Iterable
+    }
 
     __Sealed__() __Final__() interface "System.Text" {}
 
     namespace "System.Text"
 
+    __Sealed__() __AutoIndex__()
+    enum "TextReaderStrategy" { "CHAR", "LINE", "ALL" }
+
+    __Sealed__()
+    struct "EncodingDefinition" {
+        { name = "encode",  type = Function, require = true },
+        { name = "decode",  type = Function, require = true },
+        { name = "strategy",type = TextReaderStrategy, default = TextReaderStrategy.LINE },
+    }
+
+    __Iterator__()
+    function iterReader(reader, strategy)
+        if strategy == TextReaderStrategy.CHAR then
+            local index         = reader.Position + 1
+            local chr           = reader:Read(1)
+            while chr do
+                yield(index, chr)
+
+                chr             = reader:Read(1)
+                index           = index + 1
+            end
+        elseif strategy == TextReaderStrategy.ALL then
+            yield(reader.Position + 1, reader:ReadToEnd())
+        else
+            -- Read Line, As Default
+            local base          = reader.Position + 1
+            local line          = reader:ReadLine()
+            if not line then return end
+
+            yield(base, line)
+
+            while true do
+                base            = reader.Position
+                line            = reader:ReadLine()
+                if not line then return end
+
+                yield(base, "\n")
+                yield(base + 1, line)
+            end
+        end
+    end
+
     -----------------------------------------------------------------------
     --                             Encoding                              --
     -----------------------------------------------------------------------
-    local encoder
-    local newEncoder            = function (name, settings)
-        if type(settings) ~= "table" or type(settings.decode) ~= "function" or type(settings.encode) ~= "function" then
-            error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function }", 3)
-        end
+    __Iterator__()
+    function IterReaderDecoding(decode, reader, strategy)
+        for i, str in iterReader(reader, strategy) do
+            local base          = i - 1
+            local idx           = 1
+            local lcnt          = #str
 
+            while idx <= lcnt do
+                local code, len = decode(str, idx)
+                if not code then return end
+
+                yield(base + idx, code)
+                idx             = idx + (len or 1)
+            end
+        end
+    end
+
+    __Iterator__()
+    function IterEncoding(encode, iter, arg1, arg2)
+        local i                 = 1
+        for idx, code in iter, arg1, arg2 do
+            yield(i, encode(code or idx))
+            i                   = i + 1
+        end
+    end
+
+    local encoding
+    local newEncoding           = function (name, settings)
         local encode            = settings.encode
         local decode            = settings.decode
+        local strategy          = settings.strategy
 
         if not name:find(".", 1, true) then name = "System.Text." .. name end
-
         if Namespace.GetNamespace(name) then error("The " .. name .. " is already existed", 3) end
 
         local decodes           = function(str, startp)
@@ -49,10 +125,18 @@ PLoop(function(_ENV)
                 -- Decode a char based on  the index, default 1
                 Decode          = decode,
 
-                -- Decode a text
-                Decodes         = function (str, startp) return decodes, str, startp end,
+                -- Return an iterator to decode the target string or text reader
+                Decodes         = function (str, startp)
+                    if type(str) == "string" then
+                        return decodes, str, startp
+                    elseif istype(str, TextReader) then
+                        return IterReaderDecoding(decode, str, strategy)
+                    else
+                        error("Usage: " .. name .. ".Decodes(string|System.Text.TextReader[, start])", 2)
+                    end
+                end,
 
-                -- Encode unicode code points
+                -- Return an iterator to encode unicode code points from another iterator or list
                 Encodes         = function (codes, arg1, arg2)
                     local ty    = type(codes)
                     if ty      == "function" then
@@ -64,20 +148,149 @@ PLoop(function(_ENV)
                             codes, arg1, arg2 = ipairs(codes)
                         end
                     else
-                        return
+                        error("Usage: " .. name .. ".Encodes(table|iterator, ...)", 2)
                     end
 
-                    local cache = {}
-                    local i     = 1
-                    local ec    = encode
-
-                    for _, code in codes, arg1, arg2 do
-                        cache[i]= ec(code)
-                        i       = i + 1
-                    end
-
-                    return tconcat(cache)
+                    return IterEncoding(encode, codes, arg1, arg2)
                 end
+            },
+            __newindex          = Toolset.readonly,
+            __tostring          = Namespace.GetNamespaceName,
+            __metatable         = encoding,
+        })
+    end
+
+    encoding                    = Prototype (ValidateType, {
+        __index                 = {
+            ["IsImmutable"]     = function() return true, true end;
+            ["ValidateValue"]   = function(_, value) return getmetatable(value) == encoding and value ~= encoding and value end;
+            ["Validate"]        = function(value)    return getmetatable(value) == encoding and value ~= encoding and value end;
+        },
+        __newindex              = Toolset.readonly,
+        __call                  = function(self, name)
+            if type(name) ~= "string" then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
+            return function(settings)
+                local ret, err  = validateValue(EncodingDefinition, settings, true)
+                if not ret or err then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
+
+                local coder     = newEncoding(name, ret)
+                return coder
+            end
+        end,
+        __tostring              = Namespace.GetNamespaceName,
+    })
+
+    --- Represents a character encoding
+    Namespace.SaveNamespace("System.Text.Encoding", encoding)
+
+    --- Represents the ASCII encoding
+    System.Text.Encoding "ASCIIEncoding" {
+        encode                  = string.char,
+        decode                  = string.byte,
+        strategy                = TextReaderStrategy.CHAR,
+    }
+
+    -----------------------------------------------------------------------
+    --                         Encoder & Decoder                         --
+    -----------------------------------------------------------------------
+    __Iterator__()
+    function IterReader(encode, reader, strategy, ...)
+        for i, str in iterReader(reader, strategy) do
+            for res in RunIterator(encode, str, ...) do
+                yield(res)
+            end
+        end
+    end
+
+    local encoder
+    local newEncoder            = function (name, settings)
+        local encode            = settings.encode
+        local decode            = settings.decode
+        local strategy          = settings.strategy
+
+        if not name:find(".", 1, true) then name = "System.Text." .. name end
+        if Namespace.GetNamespace(name) then error("The " .. name .. " is already existed", 3) end
+
+        local usageDecode       = "Usage: " .. name .. ".Decode([TextWriter,] String + TextReader, ...)"
+        local usageEncode       = "Usage: " .. name .. ".Encode([TextWriter,] String + TextReader, ...)"
+
+        return Namespace.SaveNamespace(name, Prototype {
+            __index             = {
+                -- Decode string or string from a reader to an iterator
+                Decodes         = function(str, ...)
+                    if type(str) == "string" then
+                        return RunIterator(decode, str, ...)
+                    elseif istype(str, TextReader) then
+                        return IterReader(decode, str, strategy, ...)
+                    else
+                        error("Usage: " .. name .. ".Decodes(string|System.Text.TextReader)", 2)
+                    end
+                end,
+
+                -- Encode string or string from a reader to an iterator
+                Encodes         = function(str, ...)
+                    if type(str) == "string" then
+                        return RunIterator(encode, str, ...)
+                    elseif istype(str, TextReader) then
+                        return IterReader(encode, str, strategy, ...)
+                    else
+                        error("Usage: " .. name .. ".Decodes(string|System.Text.TextReader)", 2)
+                    end
+                end,
+
+                -- Decode string or string from a reader
+                Decode          = function (str, ...)
+                    if type(str) == "string" then
+                        local w = StringWriter()
+                        w:Open()
+
+                        for res in RunIterator(decode, str, ...) do
+                            w:Write(res)
+                        end
+
+                        w:Close()
+                        return w:ToString()
+                    elseif istype(str, TextReader) then
+                        local w = StringWriter()
+                        w:Open()
+
+                        for res in IterReader(decode, str, strategy, ...) do
+                            w:Write(res)
+                        end
+
+                        w:Close()
+                        return w:ToString()
+                    else
+                        error("Usage: " .. name .. ".Decode(string|System.Text.TextReader)", 2)
+                    end
+                end,
+
+                -- Encode string or string from a reader
+                Encode          = function (str, ...)
+                    if type(str) == "string" then
+                        local w = StringWriter()
+                        w:Open()
+
+                        for res in RunIterator(encode, str, ...) do
+                            w:Write(res)
+                        end
+
+                        w:Close()
+                        return w:ToString()
+                    elseif istype(str, TextReader) then
+                        local w = StringWriter()
+                        w:Open()
+
+                        for res in IterReader(encode, str, strategy, ...) do
+                            w:Write(res)
+                        end
+
+                        w:Close()
+                        return w:ToString()
+                    else
+                        error("Usage: " .. name .. ".Encode(string|System.Text.TextReader)", 2)
+                    end
+                end,
             },
             __newindex          = Toolset.readonly,
             __tostring          = Namespace.GetNamespaceName,
@@ -93,23 +306,20 @@ PLoop(function(_ENV)
         },
         __newindex              = Toolset.readonly,
         __call                  = function(self, name)
-            if type(name) ~= "string" then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function }", 2) end
+            if type(name) ~= "string" then error("Usage: System.Text.Encoder \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
             return function(settings)
-                local coder     = newEncoder(name, settings)
+                local ret, err  = validateValue(EncodingDefinition, settings, true)
+                if not ret or err then error("Usage: System.Text.Encoder \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
+
+                local coder     = newEncoder(name, ret)
                 return coder
             end
         end,
         __tostring              = Namespace.GetNamespaceName,
     })
 
-    --- Represents a character encoding
-    Namespace.SaveNamespace("System.Text.Encoding", encoder)
-
-    --- Represents the ASCII encoding
-    System.Text.Encoding "ASCIIEncoding" {
-        encode                  = string.char,
-        decode                  = string.byte,
-    }
+    --- Represents a character encoder
+    Namespace.SaveNamespace("System.Text.Encoder", encoder)
 
     -----------------------------------------------------------------------
     --                          Reader & Writer                          --
@@ -160,5 +370,163 @@ PLoop(function(_ENV)
 
         --- Reads all characters from the current position to the end of the text reader and returns them as one string.
         __Abstract__() function ReadToEnd(self) end
+    end)
+
+    -----------------------------------------------------------------------
+    --                      String Reader & Writer                       --
+    -----------------------------------------------------------------------
+    --- Represents a writer that can write a sequential series of characters to files
+    __Sealed__()
+    class "StringWriter" (function(_ENV)
+        inherit "TextWriter"
+
+        export {
+            tconcat             = table.concat,
+            wipe                = Toolset.wipe,
+        }
+
+        field {
+            temp                = false,
+            count               = 0,
+        }
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- the final result
+        property "Result"       { set = false, field = 0 }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        __Arguments__{ String }
+        function Write(self, text)
+            local cnt       = self.count + 1
+            self.count      = cnt
+            self.temp[cnt]  = text
+        end
+
+        function Open(self)
+            self.temp           = {}
+            self.count          = 0
+        end
+
+        function Close(self)
+            self[0]             = tconcat(self.temp)
+            self.temp           = false
+            self.count          = 0
+        end
+
+        function ToString(self)
+            return self.Result
+        end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        function __tostring(self)
+            return self.Result
+        end
+    end)
+
+    --- Represents a writer that can write a sequential series of characters to files
+    __Sealed__()
+    class "StringReader" (function(_ENV)
+        inherit "TextReader"
+
+        export {
+            strsub                  = string.sub,
+            strfind                 = string.find,
+            strmatch                = string.match,
+            floor                   = math.floor,
+            max                     = math.max,
+        }
+
+        --- Gets or sets the position. negative number means start from the end of the file.
+        property "Position" {
+            type = Number,
+            field                   = "__seekpos",
+            set                     = function(self, pos)
+                pos                 = floor(pos)
+                if pos < 0 then
+                    self.__seekpos  = max(0, self.__length + pos)
+                else
+                    self.__seekpos  = max(0, pos)
+                end
+            end,
+        }
+
+        --- Whether discard the indent at the head of the each line
+        property "DiscardIndents" { type = Boolean, default = false }
+
+        -- Method
+        function Read(self)
+            self.__skipindent       = false -- only skip indent when keeping read line
+
+            local pos               = self.__seekpos + 1
+            if pos <= self.__length then
+                self.__seekpos      = pos
+                return strsub(self.__content, pos, pos)
+            end
+        end
+
+        function ReadLine(self)
+            local pos               = self.__seekpos + 1
+            if pos <= self.__length then
+                local nxtl, endl    = strfind(self.__content, "\n", pos)
+                local line
+                if nxtl then
+                    self.__seekpos  = endl
+                    line            = strsub(self.__content, pos, nxtl - 1)
+                else
+                    self.__seekpos  = self.__length
+                    line            = strsub(self.__content, pos)
+                end
+                if self.__skipindent == -1 then
+                    self.__skipindent = self.DiscardIndents and strmatch(line, "^%s+") or false
+                end
+
+                if self.__skipindent then
+                    if line:find(self.__skipindent, 1, true) then
+                        line        = line:sub(#self.__skipindent + 1)
+                    end
+                end
+
+                return line
+            end
+        end
+
+        function ReadToEnd(self)
+            self.__skipindent       = false -- only skip indent when keeping read line
+
+            local pos               = self.__seekpos + 1
+            if pos <= self.__length then
+                self.__seekpos      = self.__length
+                return strsub(self.__content, pos)
+            end
+        end
+
+        function ReadBlock(self, count, index)
+            self.__skipindent       = false -- only skip indent when keeping read line
+
+            if index then self.Position = index end
+
+            local pos               = self.__seekpos + 1
+            if pos <= self.__length then
+                self.__seekpos      = pos + count - 1
+                return strsub(self.__content, pos, pos + count - 1)
+            end
+        end
+
+        -- Constructor
+        __Arguments__{ String }
+        function __new(_, str)
+            return {
+                __content           = str,
+                __length            = #str,
+                __seekpos           = 0,
+                __skipindent        = -1,
+            }, true
+        end
     end)
 end)

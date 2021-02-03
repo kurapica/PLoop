@@ -3,8 +3,8 @@ local root = require "PLoop.Prototype"
 
 -- System
 require "PLoop.System.Collections"
-require "PLoop.System.Text"
 require "PLoop.System.Threading"
+require "PLoop.System.Text"
 require "PLoop.System.Serialization"
 require "PLoop.System.Date"
 require "PLoop.System.Context"
@@ -26,14 +26,16 @@ require "PLoop.System.Configuration"
 require "PLoop.System.Serialization.LuaFormatProvider"
 require "PLoop.System.Serialization.StringFormatProvider"
 
--- System.Text
-require "PLoop.System.Text.StringReader"
-require "PLoop.System.Text.StringWriter"
+-- System.Text.Encoding
 require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
-require "PLoop.System.Text.Encoder"
-require "PLoop.System.Text.TemplateString"
+
+-- System.Text.Encoder
+require "PLoop.System.Text.XmlEntity"
 require "PLoop.System.Text.Base64"
+
+-- Syste.Text
+require "PLoop.System.Text.TemplateString"
 
 -- System.Reactive
 require "PLoop.System.Observer"

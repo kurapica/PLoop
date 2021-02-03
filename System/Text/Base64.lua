@@ -22,6 +22,7 @@ PLoop(function(_ENV)
         band                    = Toolset.band,
         bor                     = Toolset.bor,
         rshift                  = Toolset.rshift,
+        yield                   = coroutine.yield,
         encodeMap               = List(("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"):gmatch(".")),
 
         List, System.Text.UTF8Encoding
@@ -37,70 +38,60 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                              Base64                               --
     -----------------------------------------------------------------------
-    __Static__() __Arguments__{ String }
-    function System.Text.Base64Encode(text)
-        local total             = 0
-        local length            = #text
-        local lst               = List()
-        local i                 = 1
+    System.Text.Encoder "Base64" {
+        encode                  = function (text)
+            local total         = 0
+            local length        = #text
+            local i             = 1
 
-        while i <= length do
-            local f, s, t       = strbyte(text, i, i + 2)
-            local cache         = f * 0x10000 + (s or 0) * 0x100 + (t or 0)
+            while i <= length do
+                if total > 0 and total % 76 == 0 then yield("\n") end
 
-            lst:Insert(encodeMap[rshift(cache, 18)])
-            lst:Insert(encodeMap[rshift(band(cache, 0x3FFFF), 12)])
+                local f, s, t   = strbyte(text, i, i + 2)
+                local cache     = f * 0x10000 + (s or 0) * 0x100 + (t or 0)
 
-            if s then
-                lst:Insert(encodeMap[rshift(band(cache, 0xFFF), 6)])
+                yield(encodeMap[rshift(cache, 18)])
+                yield(encodeMap[rshift(band(cache, 0x3FFFF), 12)])
 
-                if t then
-                    lst:Insert(encodeMap[band(cache, 0x3F)])
-                    total       = total + 4
-                    if total % 76 == 0 then lst:Insert("\n") end
+                if s then
+                    yield(encodeMap[rshift(band(cache, 0xFFF), 6)])
+
+                    if t then
+                        yield(encodeMap[band(cache, 0x3F)])
+                        total   = total + 4
+                    else
+                        yield("=")
+                    end
                 else
-                    lst:Insert("=")
+                    yield("==")
                 end
-            else
-                lst:Insert("=")
-                lst:Insert("=")
+
+                i               = i + 3
             end
+        end,
+        decode                  = function (text, encode)
+            local cache         = 0
+            local clen          = 0
 
-            i                   = i + 3
-        end
+            for _, byte in (encode or UTF8Encoding).Decodes(text) do
+                local code      = decodeMap[byte]
+                if code then
+                    if clen == 0 then
+                        clen    = 6
+                        cache   = code
+                    else
+                        clen    = clen + 6
+                        cache   = cache * 0x40 + code
 
-        if lst:Last() == "\n" then last:RemoveByIndex() end
+                        if clen >= 8 then
+                            clen= clen - 8
 
-        return lst:Join()
-    end
-
-    --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-    __Static__() __Arguments__{ String, System.Text.Encoding/nil }
-    function System.Text.Base64Decode(text, encode)
-        local lst               = List()
-        local cache             = 0
-        local clen              = 0
-
-        for _, byte in (encode or UTF8Encoding).Decodes(text) do
-            local code          = decodeMap[byte]
-            if code then
-                if clen == 0 then
-                    clen        = 6
-                    cache       = code
-                else
-                    clen        = clen + 6
-                    cache       = cache * 0x40 + code
-
-                    if clen >= 8 then
-                        clen    = clen - 8
-
-                        lst:Insert(strchar(rshift(cache, clen)))
-                        cache   = band(cache, 2^clen - 1)
+                            yield(strchar(rshift(cache, clen)))
+                            cache = band(cache, 2^clen - 1)
+                        end
                     end
                 end
             end
-        end
-
-        return lst:Join()
-    end
+        end,
+    }
 end)

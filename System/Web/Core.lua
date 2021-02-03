@@ -256,10 +256,10 @@ PLoop(function(_ENV)
         end
 
         --- Encodes a string to be displayed in a browser
-        __Static__() HtmlEncode = System.Text.XmlEncode
+        __Static__() HtmlEncode = System.Text.XmlEntity.Encode
 
         --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-        __Static__() HtmlDecode = System.Text.XmlDecode
+        __Static__() HtmlDecode = System.Text.XmlEntity.Decode
 
         --- Get the physical path
         __Arguments__{ String, Context/nil }

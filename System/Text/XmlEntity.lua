@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                            System.Text.Encoder                            --
+--                           System.Text.XmlEntity                           --
 --                                                                           --
 --===========================================================================--
 
@@ -13,7 +13,17 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    export { strchar = string.char, strbyte = string.byte, strsub = string.sub, strgsub = string.gsub, tblconcat = table.concat, tonumber = tonumber, System.Text.UTF8Encoding }
+    export {
+        strchar                 = string.char,
+        strbyte                 = string.byte,
+        strsub                  = string.sub,
+        strgsub                 = string.gsub,
+        tblconcat               = table.concat,
+        tonumber                = tonumber,
+        yield                   = coroutine.yield,
+
+        System.Text.UTF8Encoding
+    }
 
     local _EncodeMap            = {
         [strbyte('<')]          = "&lt;",
@@ -279,95 +289,88 @@ PLoop(function(_ENV)
         ["diams"]               = strchar(0x26, 0x66),
     }
 
-    --- Encodes a string to be displayed in a browser
-    __Static__() __Arguments__{ String, System.Text.Encoding/nil }
-    function System.Text.XmlEncode(text, encode)
-        local iter, tar, idx    = (encode or UTF8Encoding).Decodes(text)
-        local byte
-        local prev              = idx or 1
+    -----------------------------------------------------------------------
+    --                             XmlEntity                             --
+    -----------------------------------------------------------------------
+    System.Text.Encoder "XmlEntity" {
+        encode                  = function(text, encode)
+            local iter, tar, idx    = (encode or UTF8Encoding).Decodes(text)
+            local byte
+            local prev              = idx or 1
 
-        idx, byte               = iter(tar, idx)
+            idx, byte               = iter(tar, idx)
 
-        -- Check whether need encode
-        while idx do
-            if _EncodeMap[byte] then break end
-            if byte >= 160 and byte < 256 then break end
-            if byte >= 0x10000 then break end
-            prev                = idx
-            idx, byte           = iter(tar, idx)
-        end
-
-        -- There is no need to convert
-        if not idx then return text end
-
-        local cache             = {}
-        local cnt               = 0
-        local start             = 1
-
-        while idx do
-            if _EncodeMap[byte] or (byte >= 160 and byte < 256) or byte >= 0x10000 then
-                if prev > start then
-                    cnt         = cnt + 1
-                    cache[cnt]  = strsub(text, start, prev - 1)
-                    start       = prev
-                end
-                cnt             = cnt + 1
-                cache[cnt]      = _EncodeMap[byte] or "&#" .. byte .. ";"
-                start           = idx
+            -- Check whether need encode
+            while idx do
+                if _EncodeMap[byte] then break end
+                if byte >= 160 and byte < 256 then break end
+                if byte >= 0x10000 then break end
+                prev                = idx
+                idx, byte           = iter(tar, idx)
             end
 
-            prev                = idx
-            idx, byte           = iter(tar, idx)
-        end
+            -- There is no need to convert
+            if not idx then return text end
 
-        if prev > start then
-            cnt                 = cnt + 1
-            cache[cnt]          = strsub(text, start, prev - 1)
-            start               = prev
-        end
+            local start             = 1
 
-        return tblconcat(cache, "", 1, cnt)
-    end
-
-    --- Decodes a string that has been encoded to eliminate invalid HTML characters.
-    __Static__() __Arguments__{ String, System.Text.Encoding/nil, Boolean/nil }
-    function System.Text.XmlDecode(text, encode, discard)
-        encode                  = (encode or UTF8Encoding).Encode
-        return (strgsub(text, "&(#?)([xX]?)([^&]+);", function(isNumber, isHex, entity)
-            isNumber            = isNumber and #isNumber > 0
-            if not isNumber then
-                if isHex then
-                    entity      = isHex .. entity
-                end
-            else
-                isHex           = isHex and #isHex > 0
-            end
-
-            -- entity
-            if not isNumber then
-                local rs        = _EntityMap[entity]
-
-                if discard then
-                    local b     = strbyte(rs)
-                    if #rs > 1 or b >= 0x80 then
-                        return b == 0xa0 and " " or ""
+            while idx do
+                if _EncodeMap[byte] or (byte >= 160 and byte < 256) or byte >= 0x10000 then
+                    if prev > start then
+                        yield(strsub(text, start, prev - 1))
+                        start       = prev
                     end
+                    yield(_EncodeMap[byte] or "&#" .. byte .. ";")
+                    start           = idx
                 end
 
-                return rs
-            else
-                -- code
-                if isHex then
-                    entity      = tonumber(entity, 16)
-                else
-                    entity      = tonumber(entity)
-                end
-
-                if discard and entity >= 0x80 then return "" end
-
-                return entity and encode(entity)
+                prev                = idx
+                idx, byte           = iter(tar, idx)
             end
-        end))
-    end
 
+            if prev > start then
+                yield(strsub(text, start, prev - 1))
+                start               = prev
+            end
+        end,
+
+        decode                      = function (text, encode, discard)
+            encode                  = (encode or UTF8Encoding).Encode
+            return (strgsub(text, "&(#?)([xX]?)([^&]+);", function(isNumber, isHex, entity)
+                isNumber            = isNumber and #isNumber > 0
+                if not isNumber then
+                    if isHex then
+                        entity      = isHex .. entity
+                    end
+                else
+                    isHex           = isHex and #isHex > 0
+                end
+
+                -- entity
+                if not isNumber then
+                    local rs        = _EntityMap[entity]
+
+                    if discard then
+                        local b     = strbyte(rs)
+                        if #rs > 1 or b >= 0x80 then
+                            return b == 0xa0 and " " or ""
+                        end
+                    end
+
+                    return rs
+                else
+                    -- code
+                    if isHex then
+                        entity      = tonumber(entity, 16)
+                    else
+                        entity      = tonumber(entity)
+                    end
+
+                    if discard and entity >= 0x80 then return "" end
+
+                    return entity and encode(entity)
+                end
+            end))
+        end,
+    }
 end)
