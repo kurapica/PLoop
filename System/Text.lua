@@ -506,6 +506,7 @@ PLoop(function(_ENV)
             strfind                 = string.find,
             strmatch                = string.match,
             floor                   = math.floor,
+            min                     = math.min,
             max                     = math.max,
         }
 
@@ -516,9 +517,9 @@ PLoop(function(_ENV)
             set                     = function(self, pos)
                 pos                 = floor(pos)
                 if pos < 0 then
-                    self.__seekpos  = max(0, self.__length + pos)
+                    self.__seekpos  = min(max(0, self.__length + pos), self.__length)
                 else
-                    self.__seekpos  = max(0, pos)
+                    self.__seekpos  = min(pos, self.__length)
                 end
             end,
         }
@@ -580,8 +581,8 @@ PLoop(function(_ENV)
 
             local pos               = self.__seekpos + 1
             if pos <= self.__length then
-                self.__seekpos      = pos + count - 1
-                return strsub(self.__content, pos, pos + count - 1)
+                self.__seekpos      = min(self.__length, pos + count - 1)
+                return strsub(self.__content, pos, self.__seekpos)
             end
         end
 

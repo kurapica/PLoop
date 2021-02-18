@@ -33,8 +33,10 @@ require "PLoop.System.Text.UTF16Encoding"
 -- System.Text.Encoder
 require "PLoop.System.Text.XmlEntity"
 require "PLoop.System.Text.Base64"
+require "PLoop.System.Text.Deflate"
 
 -- Syste.Text
+require "PLoop.System.Text.Crc"
 require "PLoop.System.Text.TemplateString"
 
 -- System.Reactive
