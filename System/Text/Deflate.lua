@@ -560,7 +560,7 @@ PLoop(function(_ENV)
                 local litHtree, distHtree
                 local sendPair, sendRaw, sendBlock
 
-                if mode == DeflateMode.FixedHuffmanCodes then
+                if mode == DeflateMode.FixedHuffmanCodes or mode == true then
                     initFixedHuffmanCodes()
 
                     litHtree    = FIXED_LIT_HTREE
