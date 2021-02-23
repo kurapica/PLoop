@@ -76,6 +76,21 @@ PLoop(function(_ENV)
         if isarray then
             local count         = #data
 
+            local v             = data[0]
+            if v ~= nil then
+                if type(v) == "table" then
+                    write("[0]=")
+                    SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
+                    if count > 0 then write(",") end
+                else
+                    if count > 0 then
+                        write(strformat("[0]=%s,", SerializeSimpleData(v)))
+                    else
+                        write(strformat("[0]=%s", SerializeSimpleData(v)))
+                    end
+                end
+            end
+
             for i = 1, count do
                 local v         = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
@@ -138,6 +153,25 @@ PLoop(function(_ENV)
         if isarray then
             local subIndentChar = preIndentChar .. indentChar
             local count         = #data
+
+            local v             = data[0]
+            if v ~= nil then
+                if type(v) == "table" then
+                    write(strformat("%s[0] = ", subIndentChar))
+                    SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if count > 0 then
+                        write("," .. lineBreak)
+                    else
+                        write(lineBreak)
+                    end
+                else
+                    if count > 0 then
+                        write(strformat("%s[0] = %s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(strformat("%s[0] = %s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    end
+                end
+            end
 
             for i = 1, count do
                 local v     = data[i]
@@ -208,6 +242,21 @@ PLoop(function(_ENV)
         if isarray then
             local count         = #data
 
+            local v             = data[0]
+            if v ~= nil then
+                if type(v) == "table" then
+                    write(object, "[0]=")
+                    SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
+                    if count > 0 then write(object, ",") end
+                else
+                    if count > 0 then
+                        write(object, strformat("[0]=%s,", SerializeSimpleData(v)))
+                    else
+                        write(object, strformat("[0]=%s", SerializeSimpleData(v)))
+                    end
+                end
+            end
+
             for i = 1, count do
                 local v         = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
@@ -270,6 +319,25 @@ PLoop(function(_ENV)
         if isarray then
             local subIndentChar = preIndentChar .. indentChar
             local count         = #data
+
+            local v             = data[0]
+            if v ~= nil then
+                if type(v) == "table" then
+                    write(object, strformat("%s[0] = ", subIndentChar))
+                    SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
+                    if count > 0 then
+                        write(object, "," .. lineBreak)
+                    else
+                        write(object, lineBreak)
+                    end
+                else
+                    if count > 0 then
+                        write(object, strformat("%s[0] = %s,%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    else
+                        write(object, strformat("%s[0] = %s%s", subIndentChar, SerializeSimpleData(v), lineBreak))
+                    end
+                end
+            end
 
             for i = 1, count do
                 local v         = data[i]
