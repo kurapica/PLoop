@@ -186,7 +186,7 @@ PLoop(function(_ENV)
 
         --- Write the byte
         Write                   = function(self, byte)
-            if self.size >= 1024 then self:Flush() end
+            if self.size >= 32768 then self:Flush() end
 
             self.size           = self.size + 1
             self.main[self.size]= byte
@@ -428,6 +428,8 @@ PLoop(function(_ENV)
             count               = count + 1
         end
 
+        if count == 0 then return depths end
+
         -- Build the huffman tree
         for i = 1, max(1, count - 1) do
             local a             = root
@@ -506,8 +508,8 @@ PLoop(function(_ENV)
 
                     if offset <= 0 then
                         return prev and prev:byte(16384 + offset) or nil
-                    elseif offset > length then
-                        nxt     = nxt or length == 16384 and reader:ReadBlock(16384)
+                    elseif offset > length and length == 16384 then
+                        nxt     = nxt or reader:ReadBlock(16384) or false
                         offset  = offset - length
 
                         if move then
@@ -533,11 +535,11 @@ PLoop(function(_ENV)
                                             v[i]        = nil
                                         end
                                     elseif b > 1 then
-                                        for j = i, l do
-                                            v[j - i + 1]= v[j]
+                                        for j = b, l do
+                                            v[j - b + 1]= v[j]
                                         end
 
-                                        for j = l - i + 2, l do
+                                        for j = l - b + 2, l do
                                             v[j]        = nil
                                         end
                                     end
@@ -551,7 +553,7 @@ PLoop(function(_ENV)
                             return nxt and nxt:byte(offset) or nil
                         end
                     else
-                        return buff:byte(offset)
+                        return buff and buff:byte(offset) or nil
                     end
                 end
 
@@ -614,7 +616,7 @@ PLoop(function(_ENV)
                 else
                     local bidx  = 0
                     local block = {}
-                    local litefr= {}
+                    local litefr= { [256] = 1 }
                     local distfr= {}
 
                     sendPair    = function(length, distance)
@@ -704,8 +706,6 @@ PLoop(function(_ENV)
                         -- Calc the depths
                         local liteDepths= calcHuffmanDepths(litefr, 285)
                         local distDepths= calcHuffmanDepths(distfr, 29)
-
-                        liteDepths[256] = 1
 
                         local depths    = {}
 
@@ -883,41 +883,46 @@ PLoop(function(_ENV)
 
                     if match then
                         local maxcur, maxlen = 0, 0
+                        local midx  = #match
 
-                        for i = 1, #match do
+                        for i = midx, 1, -1 do
                             local c = match[i] + 2
-                            local l = 0
-                            local a, b
+                            if c < cursor then
+                                local l = 0
+                                local a, b
 
-                            repeat
-                                l   = l + 1
-                                b   = readByte(cursor + l)
+                                repeat
+                                    l   = l + 1
+                                    b   = readByte(cursor + l)
 
-                                if c + l > base then
-                                    a   = strbyte(buff, c + l - base)
-                                else
-                                    a   = strbyte(prev, c + l - (base - 16384))
+                                    if c + l > base then
+                                        a   = strbyte(buff, c + l - base)
+                                    else
+                                        a   = strbyte(prev, c + l - (base - 16384))
+                                    end
+                                until a ~= b or l == 256
+
+                                l       = l + 2 -- (3 - 1)
+
+                                if l > maxlen then
+                                    maxcur  = match[i]
+                                    maxlen  = l
                                 end
-                            until a ~= b or l == 256
-
-                            l       = l + 2 -- (3 - 1)
-
-                            if l > maxlen then
-                                maxcur  = match[i]
-                                maxlen  = l
                             end
                         end
 
-                        tinsert(match, cursor - 2)
+                        if midx == 0 or match[midx] < cursor - 2 then
+                            match[midx + 1] = cursor - 2
+                        end
 
                         if maxlen >= LAZY_MATCH_LIMIT then
                             -- No lazy match
                             sendRaw(cursor - 3)
                             sendPair(maxlen, cursor - 2 - maxcur)
-                            widx        = cursor - 3 + maxlen
+                            widx            = cursor - 3 + maxlen
 
-                            b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
-                            cpcursor    = nil
+                            b1, b2, b3      = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
+                            cpcursor        = nil
                         elseif cpcursor then
                             -- Check lazy match
                             if maxlen > cplen then
@@ -935,42 +940,43 @@ PLoop(function(_ENV)
                                 b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
                                 cpcursor    = nil
                             end
-                        else
+                        elseif maxlen > 0 then
                             -- Wait for lazy match
-                            cpcursor    = cursor - 2
-                            cplen       = maxlen
-                            cpdist      = cpcursor - maxcur
-                            b1, b2, b3  = b2, b3, readByte()
+                            cpcursor        = cursor - 2
+                            cplen           = maxlen
+                            cpdist          = cpcursor - maxcur
+                            b1, b2, b3      = b2, b3, readByte()
+                        else
+                            b1, b2, b3      = b2, b3, readByte()
                         end
                     else
-                        match           = {}
-                        matchlst[bytes] = match
-
-                        tinsert(match, cursor - 2)
+                        match               = { cursor - 2 }
+                        matchlst[bytes]     = match
 
                         if cpcursor then
                             -- No lazy match
                             sendRaw(cpcursor - 1)
                             sendPair(cplen, cpdist)
-                            widx        = cpcursor + cplen - 1
+                            widx            = cpcursor + cplen - 1
 
-                            b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
-                            cpcursor    = nil
+                            b1, b2, b3      = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
+                            cpcursor        = nil
                         else
                             sendRaw(cursor - 2)
-                            b1, b2, b3  = b2, b3, readByte()
+                            b1, b2, b3      = b2, b3, readByte()
                         end
                     end
                 end
 
+                -- Finish the rest
                 if cpcursor then
                     sendRaw(cpcursor - 1)
                     sendPair(cplen, cpdist)
                     widx        = cpcursor + cplen - 1
                 end
-
                 sendRaw(true)
 
+                -- Send the block
                 if mode == DeflateMode.FixedHuffmanCodes then
                     writer:Write(litHtree:ToByte(256)) -- End of Block
                 else

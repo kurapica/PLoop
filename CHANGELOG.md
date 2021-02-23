@@ -1,6 +1,18 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.29] - 2021-02-23 WangXH  <kurapica125@outlook.com>
+### Changed
+- The System.Text.Encoder & System.Text.Encoding System is re-designed.
+- The System.Serialization.StringFomartProvider now support zero-base array.
+
+### Added
+- System.Text.Base64 Encoder added.
+- System.Text.Deflate Encoder added.
+- System.Text.Base64 Encoder added.
+- System.Text.CRC32 API added.
+
+
 ## [1.6.28] - 2021-01-04 WangXH <kurapica125@outlook.com>
 ### Changed
 - Fix the data base convertor not working.
