@@ -977,7 +977,7 @@ PLoop(function(_ENV)
                 sendRaw(true)
 
                 -- Send the block
-                if mode == DeflateMode.FixedHuffmanCodes then
+                if mode == DeflateMode.FixedHuffmanCodes or mode == true then
                     writer:Write(litHtree:ToByte(256)) -- End of Block
                 else
                     sendBlock(true)
