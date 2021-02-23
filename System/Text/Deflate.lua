@@ -18,10 +18,13 @@ PLoop(function(_ENV)
         yield                   = coroutine.yield,
         strbyte                 = string.byte,
         strchar                 = string.char,
+        pairs                   = pairs,
+        ipairs                  = ipairs,
         min                     = math.min,
         max                     = math.max,
         floor                   = math.floor,
         ceil                    = math.ceil,
+        log                     = math.log,
         unpack                  = unpack or table.unpack,
         band                    = Toolset.band,
         bor                     = Toolset.bor,
@@ -29,6 +32,10 @@ PLoop(function(_ENV)
         bxor                    = Toolset.bxor,
         lshift                  = Toolset.lshift,
         rshift                  = Toolset.rshift,
+        tinsert                 = table.insert,
+        tremove                 = table.remove,
+
+        LAZY_MATCH_LIMIT        = 8,
 
         BAND_LENGTH             = List(19, 'i=>2^i - 1'),
         MAGIC_HUFFMAN_ORDER     = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 },
@@ -62,7 +69,7 @@ PLoop(function(_ENV)
             length              = length or 1
 
             while self.remain < length do
-                if self.cursor > self.length then
+                if self.cursor >= self.length then
                     self.buff   = self.reader:ReadBlock(4096) or false
                     self.length = self.buff and #self.buff or 0
                     self.cursor = 0
@@ -120,7 +127,7 @@ PLoop(function(_ENV)
 
         --- Write the byte
         Write                   = function(self, byte, len)
-            if self.size >= 32768 then self:Flush() end
+            if self.size >= 1024 then self:Flush() end
 
             self.byte           = self.byte + lshift(byte, self.bytelen)
             self.bytelen        = self.bytelen + len
@@ -179,7 +186,7 @@ PLoop(function(_ENV)
 
         --- Write the byte
         Write                   = function(self, byte)
-            if self.size >= 32768 then self:Flush() end
+            if self.size >= 1024 then self:Flush() end
 
             self.size           = self.size + 1
             self.main[self.size]= byte
@@ -273,13 +280,12 @@ PLoop(function(_ENV)
                     code        = next_code[d]
                     next_code[d]= next_code[d] + 1
 
-                    codes[i]    = code
-
                     -- Map code -> byte
                     local mcode = 0
                     for j = 1, d do
                         mcode   = mcode + lshift(band(1, rshift(code, j - 1)), d - j)
                     end
+                    codes[i]    = mcode
 
                     for j = mcode, max_code, 2^d do
                         map[j]  = i
@@ -302,6 +308,9 @@ PLoop(function(_ENV)
                 reader:Skip(self.depths[byte])
                 return byte
             end
+        end,
+        ToByte                  = function(self, byte)
+            return self.codes[byte], self.depths[byte]
         end,
     }
 
@@ -375,11 +384,74 @@ PLoop(function(_ENV)
         end
     end
 
+    calcHuffmanDepths            = function(freqitems, mbyte)
+        -- Init the fixed huffman code tree
+        local root
+        local count             = 0
+        local depths            = {}
+
+        for i = 0, mbyte do depths[i] = 0 end
+
+        local insertLink        = function(node)
+            local parent        = root
+            local upper
+            local freq          = node.freq
+
+            while parent and parent.freq < freq do
+                upper           = parent
+                parent          = parent.next
+            end
+
+            node.next           = parent
+
+            if upper then
+                upper.next      = node
+            else
+                root            = node
+            end
+        end
+
+        local convertToLevel
+        convertToLevel          = function(node, level)
+            if node.left then
+                convertToLevel(node.left,  level + 1)
+                if node.right then convertToLevel(node.right, level + 1) end
+            else
+                -- Leaf node
+                depths[node.byte] = level
+            end
+        end
+
+        -- build a link list based on the freq
+        for k, v in pairs(freqitems) do
+            insertLink{ byte = k, freq = v }
+            count               = count + 1
+        end
+
+        -- Build the huffman tree
+        for i = 1, max(1, count - 1) do
+            local a             = root
+            local b             = root.next
+
+            a.next              = nil
+            if b then
+                root            = b and b.next
+                b.next          = nil
+            end
+
+            insertLink{ freq = a.freq + (b and b.freq or 0), left = a, right = b }
+        end
+
+        -- Calc the depths of the byte
+        convertToLevel(root, 0)
+
+        return depths
+    end
+
     __Sealed__() enum "System.Text.DeflateMode" {
         "NoCompression",
         "FixedHuffmanCodes",
         "DynamicHuffmanCodes",
-        "Reserved",
     }
 
     --- System.Text.Encoder.Deflate
@@ -403,12 +475,509 @@ PLoop(function(_ENV)
 
                     text        = nxt
                 end
-            elseif mode == DeflateMode.FixedHuffmanCodes then
-                initFixedHuffmanCodes()
-
-
             else
-                -- DeflateMode.DynamicHuffmanCodes
+                local buff      = reader:ReadBlock(16384)
+                local length    = #buff
+                local writer    = bitStreamWriter()
+                local prev      = false
+                local nxt       = false
+                local matchlst  = {}
+                local base      = 0
+                local cpcursor  = nil
+                local cplen     = 0
+                local cpdist    = 0
+                local widx      = 0
+
+                if not buff then return end
+
+                local b1, b2, b3= buff:byte(1, 3)
+                local cursor    = 3
+
+                local readByte  = function(index, move)
+                    if not index then
+                        cursor  = cursor + 1
+                        index   = cursor
+                        move    = true
+                    elseif move then
+                        cursor  = index
+                    end
+
+                    local offset= index - base
+
+                    if offset <= 0 then
+                        return prev and prev:byte(16384 + offset) or nil
+                    elseif offset > length then
+                        nxt     = nxt or length == 16384 and reader:ReadBlock(16384)
+                        offset  = offset - length
+
+                        if move then
+                            prev            = buff
+                            buff            = nxt
+                            nxt             = false
+                            length          = buff and #buff or 0
+
+                            if buff then
+                                -- Clear matchlst that out of the window
+                                for k, v in pairs(matchlst) do
+                                    local l = #v
+                                    local b = 0
+                                    for i = 1, l do
+                                        if v[i] > base then
+                                            b = i
+                                            break
+                                        end
+                                    end
+
+                                    if b == 0 then
+                                        for i = l, 1, -1 do
+                                            v[i]        = nil
+                                        end
+                                    elseif b > 1 then
+                                        for j = i, l do
+                                            v[j - i + 1]= v[j]
+                                        end
+
+                                        for j = l - i + 2, l do
+                                            v[j]        = nil
+                                        end
+                                    end
+                                end
+
+                                base        = base + 16384
+
+                                return buff:byte(offset)
+                            end
+                        else
+                            return nxt and nxt:byte(offset) or nil
+                        end
+                    else
+                        return buff:byte(offset)
+                    end
+                end
+
+                local litHtree, distHtree
+                local sendPair, sendRaw, sendBlock
+
+                if mode == DeflateMode.FixedHuffmanCodes then
+                    initFixedHuffmanCodes()
+
+                    litHtree    = FIXED_LIT_HTREE
+                    distHtree   = FIXED_DIST_HTREE
+
+                    sendPair    = function(length, distance)
+                        -- <Length, Distance>
+                        if length < 11 then
+                            writer:Write(litHtree:ToByte(254 + length))
+                        elseif length < 258 then
+                            local e = ceil(log(2 + rshift(length - 11, 3)) / log(2))
+                            local b = 261 + lshift(e, 2) + rshift(length - 3, e) - 4
+                            local d = length - 3 - lshift(band(b - 261, 3) + 4, e)
+
+                            writer:Write(litHtree:ToByte(b))
+                            writer:Write(d, e)
+                        else
+                            writer:Write(litHtree:ToByte(285))
+                        end
+
+                        if distance < 5 then
+                            writer:Write(distHtree:ToByte(distance - 1))
+                        else
+                            local e = ceil(log(2 + rshift(distance - 5, 2)) / log(2))
+                            local b = rshift(distance - 1, e) + lshift(e, 1)
+                            local d = distance - 1 - lshift(band(b, 1) + 2, e)
+
+                            writer:Write(distHtree:ToByte(b))
+                            writer:Write(d, e)
+                        end
+                    end
+
+                    sendRaw     = function(index)
+                        if index == true then
+                            -- End
+                            widx    = widx + 1
+                            local b = readByte(widx)
+                            while b do
+                                writer:Write(litHtree:ToByte(b))
+                                widx= widx + 1
+                                b   = readByte(widx)
+                            end
+                        else
+                            for i = widx + 1, index do
+                                writer:Write(litHtree:ToByte(readByte(i)))
+                            end
+                            widx    = index
+                        end
+                    end
+
+                    writer:Write(1, 1)
+                    writer:Write(1, 2)
+                else
+                    local bidx  = 0
+                    local block = {}
+                    local litefr= {}
+                    local distfr= {}
+
+                    sendPair    = function(length, distance)
+                        -- <Length, Distance>
+                        if length < 11 then
+                            local b     = 254 + length
+                            litefr[b]   = (litefr[b] or 0) + 1
+
+                            bidx        = bidx + 1
+                            block[bidx] = b
+                        elseif length < 258 then
+                            local e     = ceil(log(2 + rshift(length - 11, 3)) / log(2))
+                            local b     = 261 + lshift(e, 2) + rshift(length - 3, e) - 4
+                            local d     = length - 3 - lshift(band(b - 261, 3) + 4, e)
+
+                            litefr[b]   = (litefr[b] or 0) + 1
+                            bidx        = bidx + 1
+                            block[bidx] = b
+
+                            bidx        = bidx + 1
+                            block[bidx] = d
+                            bidx        = bidx + 1
+                            block[bidx] = e
+                        else
+                            local b     = 285
+                            litefr[b]   = (litefr[b] or 0) + 1
+
+                            bidx        = bidx + 1
+                            block[bidx] = b
+                        end
+
+                        if distance < 5 then
+                            local b     = distance - 1
+                            distfr[b]   = (distfr[b] or 0) + 1
+
+                            bidx        = bidx + 1
+                            block[bidx] = b
+                        else
+                            local e     = ceil(log(2 + rshift(distance - 5, 2)) / log(2))
+                            local b     = rshift(distance - 1, e) + lshift(e, 1)
+                            local d     = distance - 1 - lshift(band(b, 1) + 2, e)
+
+                            distfr[b]   = (distfr[b] or 0) + 1
+                            bidx        = bidx + 1
+                            block[bidx] = b
+
+                            bidx        = bidx + 1
+                            block[bidx] = d
+                            bidx        = bidx + 1
+                            block[bidx] = e
+                        end
+                    end
+
+                    sendRaw     = function(index)
+                        if index == true then
+                            -- End
+                            widx            = widx + 1
+                            local b         = readByte(widx)
+                            while b do
+                                litefr[b]   = (litefr[b] or 0) + 1
+
+                                bidx        = bidx + 1
+                                block[bidx] = b
+
+                                widx        = widx + 1
+                                b           = readByte(widx)
+                            end
+                        else
+                            for i = widx + 1, index do
+                                local b     = readByte(i)
+                                litefr[b]   = (litefr[b] or 0) + 1
+
+                                bidx        = bidx + 1
+                                block[bidx] = b
+                            end
+                            widx            = index
+                        end
+                    end
+
+                    sendBlock   = function(final)
+                        writer:Write(final and 1 or 0, 1)
+                        writer:Write(2, 2)
+                        writer:Write(286 - 257, 5) -- HLIT
+                        writer:Write(30 - 1,    5) -- HDIST
+                        writer:Write(19 - 4,    4) -- HCLEN
+
+                        -- Calc the depths
+                        local liteDepths= calcHuffmanDepths(litefr, 285)
+                        local distDepths= calcHuffmanDepths(distfr, 29)
+
+                        liteDepths[256] = 1
+
+                        local depths    = {}
+
+                        local prev      = liteDepths[0]
+                        local same      = 1
+                        local lenbuff   = {}
+                        local lenidx    = 0
+
+                        local sendLength= function()
+                            if prev then
+                                if prev > 0 then
+                                    while same >= 4 do
+                                        same        = same - 1
+                                        local len   = min(same, 6)
+
+                                        lenidx      = lenidx + 1
+                                        lenbuff[lenidx] = prev
+                                        depths[prev]= (depths[prev] or 0) + 1
+
+                                        lenidx      = lenidx + 1
+                                        lenbuff[lenidx] = 16
+                                        depths[16]  = (depths[16] or 0) + 1
+
+                                        lenidx      = lenidx + 1
+                                        lenbuff[lenidx] = len - 3
+
+                                        same        = same - len
+                                    end
+
+                                    for i = 1, same do
+                                        lenidx      = lenidx + 1
+                                        lenbuff[lenidx] = prev
+                                        depths[prev]= (depths[prev] or 0) + 1
+                                    end
+                                else
+                                    while same >= 3 do
+                                        local len   = min(same, 138)
+                                        if len >= 11 then
+                                            lenidx  = lenidx + 1
+                                            lenbuff[lenidx] = 18
+                                            depths[18] = (depths[18] or 0) + 1
+
+                                            lenidx  = lenidx + 1
+                                            lenbuff[lenidx] = len - 11
+                                        else
+                                            lenidx  = lenidx + 1
+                                            lenbuff[lenidx] = 17
+                                            depths[17] = (depths[17] or 0) + 1
+
+                                            lenidx  = lenidx + 1
+                                            lenbuff[lenidx] = len - 3
+                                        end
+
+                                        same        = same - len
+                                    end
+
+                                    for i = 1, same do
+                                        lenidx      = lenidx + 1
+                                        lenbuff[lenidx] = 0
+                                        depths[0]   = (depths[0] or 0) + 1
+                                    end
+                                end
+
+                                prev    = nil
+                                same    = 0
+                            end
+                        end
+
+                        for i = 1, 285 do
+                            local v     = liteDepths[i]
+                            if v == prev then
+                                same    = same + 1
+                            else
+                                sendLength()
+
+                                prev    = v
+                                same    = 1
+                            end
+                        end
+                        sendLength()
+
+                        prev            = distDepths[0]
+                        same            = 1
+                        for i = 1, 29 do
+                            local v     = distDepths[i]
+                            if v == prev then
+                                same    = same + 1
+                            else
+                                sendLength()
+
+                                prev    = v
+                                same    = 1
+                            end
+                        end
+                        sendLength()
+
+                        -- The Huffman tree for Length
+                        local depDepths = calcHuffmanDepths(depths, 18)
+                        local lHTree    = huffTableTree(depDepths)
+
+                        for i = 1, 19 do
+                            writer:Write(depDepths[MAGIC_HUFFMAN_ORDER[i]], 3)
+                        end
+
+                        local i = 1
+                        while i <= lenidx do
+                            local v     = lenbuff[i]
+                            writer:Write(lHTree:ToByte(v))
+
+                            if v == 16 then
+                                writer:Write(lenbuff[i + 1], 2)
+                                i       = i + 2
+                            elseif v == 17 then
+                                writer:Write(lenbuff[i + 1], 3)
+                                i       = i + 2
+                            elseif v == 18 then
+                                writer:Write(lenbuff[i + 1], 7)
+                                i       = i + 2
+                            else
+                                i       = i + 1
+                            end
+                        end
+
+                        -- Compress the block data
+                        i               = 1
+                        litHtree        = huffTableTree(liteDepths)
+                        distHtree       = huffTableTree(distDepths)
+
+                        while i <= bidx do
+                            local v     = block[i]
+
+                            if v < 256 then
+                                -- Literal
+                                writer:Write(litHtree:ToByte(v))
+                                i       = i + 1
+                            elseif v > 256 then
+                                -- <Length, Distance>
+                                writer:Write(litHtree:ToByte(v))
+
+                                -- Length Extra
+                                if v >= 265 and v < 285 then
+                                    writer:Write(block[i+1], block[i+2])
+                                    i   = i + 3
+                                else
+                                    i   = i + 1
+                                end
+
+                                -- Distance
+                                v       = block[i]
+                                writer:Write(distHtree:ToByte(v))
+
+                                if v >= 4 then
+                                    writer:Write(block[i+1], block[i+2])
+                                    i   = i + 3
+                                else
+                                    i   = i + 1
+                                end
+                            end
+                        end
+
+                        -- End of Block
+                        writer:Write(litHtree:ToByte(256))
+
+                        bidx    = 0
+                        block   = {}
+                        litefr  = {}
+                        distfr  = {}
+                    end
+                end
+
+                while b3 do
+                    -- Check th matchlist
+                    local bytes     = b1 + 256 * (b2 + 256 * b3)
+                    local match     = matchlst[bytes]
+
+                    if match then
+                        local maxcur, maxlen = 0, 0
+
+                        for i = 1, #match do
+                            local c = match[i] + 2
+                            local l = 0
+                            local a, b
+
+                            repeat
+                                l   = l + 1
+                                b   = readByte(cursor + l)
+
+                                if c + l > base then
+                                    a   = strbyte(buff, c + l - base)
+                                else
+                                    a   = strbyte(prev, c + l - (base - 16384))
+                                end
+                            until a ~= b or l == 256
+
+                            l       = l + 2 -- (3 - 1)
+
+                            if l > maxlen then
+                                maxcur  = match[i]
+                                maxlen  = l
+                            end
+                        end
+
+                        tinsert(match, cursor - 2)
+
+                        if maxlen >= LAZY_MATCH_LIMIT then
+                            -- No lazy match
+                            sendRaw(cursor - 3)
+                            sendPair(maxlen, cursor - 2 - maxcur)
+                            widx        = cursor - 3 + maxlen
+
+                            b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
+                            cpcursor    = nil
+                        elseif cpcursor then
+                            -- Check lazy match
+                            if maxlen > cplen then
+                                sendRaw(cursor - 3)
+
+                                cpcursor    = cursor - 2
+                                cplen       = maxlen
+                                cpdist      = cpcursor - maxcur
+                                b1, b2, b3  = b2, b3, readByte()
+                            else
+                                sendRaw(cpcursor - 1)
+                                sendPair(cplen, cpdist)
+                                widx        = cpcursor + cplen - 1
+
+                                b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
+                                cpcursor    = nil
+                            end
+                        else
+                            -- Wait for lazy match
+                            cpcursor    = cursor - 2
+                            cplen       = maxlen
+                            cpdist      = cpcursor - maxcur
+                            b1, b2, b3  = b2, b3, readByte()
+                        end
+                    else
+                        match           = {}
+                        matchlst[bytes] = match
+
+                        tinsert(match, cursor - 2)
+
+                        if cpcursor then
+                            -- No lazy match
+                            sendRaw(cpcursor - 1)
+                            sendPair(cplen, cpdist)
+                            widx        = cpcursor + cplen - 1
+
+                            b1, b2, b3  = readByte(widx + 1, true), readByte(widx + 2, true), readByte(widx + 3, true)
+                            cpcursor    = nil
+                        else
+                            sendRaw(cursor - 2)
+                            b1, b2, b3  = b2, b3, readByte()
+                        end
+                    end
+                end
+
+                if cpcursor then
+                    sendRaw(cpcursor - 1)
+                    sendPair(cplen, cpdist)
+                    widx        = cpcursor + cplen - 1
+                end
+
+                sendRaw(true)
+
+                if mode == DeflateMode.FixedHuffmanCodes then
+                    writer:Write(litHtree:ToByte(256)) -- End of Block
+                else
+                    sendBlock(true)
+                end
+
+                writer:Close()
             end
         end,
         decode                  = function(reader)
@@ -462,12 +1031,12 @@ PLoop(function(_ENV)
                     local hlit  = streamReader:Get(5) -- # of Literal/Length codes - 257
                     local hdist = streamReader:Get(5) -- # of Distance codes - 1
                     local hclen = streamReader:Get(4) -- # of Code Length codes - 4
-                    if not (hlit and hdist and hclen) then return "", "The input data can't be decompressed" end
+                    if not (hlit and hdist and hclen) then return "", "The input data can't be decompressed 1" end
 
                     local depths= { [0] = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
                     for i = 1, hclen + 4 do
                         local c = streamReader:Get(3)
-                        if not c then return "", "The input data can't be decompressed" end
+                        if not c then return "", "The input data can't be decompressed 2" end
                         depths[MAGIC_HUFFMAN_ORDER[i]] = c
                     end
 
@@ -483,7 +1052,7 @@ PLoop(function(_ENV)
                     local ext
                     while idx <= hlit + hdist do
                         local c = lHTree:ParseByte(streamReader)
-                        if not c then return "", "The input data can't be decompressed" end
+                        if not c then return "", "The input data can't be decompressed 3" end
 
                         if c < 16 then
                             -- Represent code lengths of 0 - 15
@@ -492,10 +1061,10 @@ PLoop(function(_ENV)
                         elseif c == 16 then
                             -- Copy the previous code length 3 - 6 times. (2 bits of length)
                             ext = streamReader:Get(2)
-                            if not ext then return "", "The input data can't be decompressed" end
+                            if not ext then return "", "The input data can't be decompressed 4" end
 
                             c   = depths[idx - 1]
-                            if not c then return "", "The input data can't be decompressed" end
+                            if not c then return "", "The input data can't be decompressed 5" end
 
                             for i = 1, 3 + ext do
                                 depths[idx] = c
@@ -504,7 +1073,7 @@ PLoop(function(_ENV)
                         elseif c == 17 then
                             -- Repeat a code length of 0 for 3 - 10 times. (3 bits of length)
                             ext = streamReader:Get(3)
-                            if not ext then return "", "The input data can't be decompressed" end
+                            if not ext then return "", "The input data can't be decompressed 6" end
 
                             c   = 0
 
@@ -515,7 +1084,7 @@ PLoop(function(_ENV)
                         elseif c == 18 then
                             -- Repeat a code length of 0 for 11 - 138 times. (7 bits of length)
                             ext = streamReader:Get(7)
-                            if not ext then return "", "The input data can't be decompressed" end
+                            if not ext then return "", "The input data can't be decompressed 7" end
 
                             c   = 0
 
@@ -524,7 +1093,7 @@ PLoop(function(_ENV)
                                 idx         = idx + 1
                             end
                         else
-                            return "", "The input data can't be decompressed"
+                            return "", "The input data can't be decompressed 8"
                         end
                     end
 
@@ -540,7 +1109,7 @@ PLoop(function(_ENV)
                     end
 
                     if not uncompression(streamWriter, streamReader, huffTableTree(ldep), huffTableTree(ddep)) then
-                        return "", "The input data can't be decompressed"
+                        return "", "The input data can't be decompressed 9"
                     end
                 else
                     -- Reserved
