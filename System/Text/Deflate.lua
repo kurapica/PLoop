@@ -48,7 +48,7 @@ PLoop(function(_ENV)
     local FIXED_DIST_HTREE
 
     __AutoCache__()
-    bitStreamReader             = class {
+    BitStreamReader             = class {
         __new                   = function(_, reader)
             local buff          = reader:ReadBlock(4096)
 
@@ -115,7 +115,7 @@ PLoop(function(_ENV)
     }
 
     __AutoCache__()
-    bitStreamWriter             = class {
+    BitStreamWriter             = class {
         __new                   = function()
             return {
                 main            = {},
@@ -174,7 +174,7 @@ PLoop(function(_ENV)
     }
 
     __AutoCache__()
-    byteStreamWriter            = class {
+    ByteStreamWriter            = class {
         __new                   = function()
             return {
                 main            = {},
@@ -246,7 +246,7 @@ PLoop(function(_ENV)
     }
 
     __AutoCache__()
-    huffTableTree               = class {
+    HuffTableTree               = class {
         __new                   = function(_, depths)
             -- From 0 ~ xx
             local mbyte         = #depths
@@ -372,7 +372,7 @@ PLoop(function(_ENV)
             for i = 256, 279    do depths[i] = 7 end
             for i = 280, 287    do depths[i] = 8 end
 
-            FIXED_LIT_HTREE     = huffTableTree(depths)
+            FIXED_LIT_HTREE     = HuffTableTree(depths)
         end
 
         if not FIXED_DIST_HTREE then
@@ -380,7 +380,7 @@ PLoop(function(_ENV)
 
             for i = 0, 31       do depths[i] = 5 end
 
-            FIXED_DIST_HTREE    = huffTableTree(depths)
+            FIXED_DIST_HTREE    = HuffTableTree(depths)
         end
     end
 
@@ -464,7 +464,7 @@ PLoop(function(_ENV)
                 while text do
                     local len   = #text
                     local nxt   = len == 32768 and reader:ReadBlock(32768)
-                    local writer= bitStreamWriter()
+                    local writer= BitStreamWriter()
 
                     writer:Write(nxt and 0 or 1, 1) -- BFINAL
                     writer:Write(0, 2)              -- BTYPE
@@ -480,7 +480,7 @@ PLoop(function(_ENV)
             else
                 local buff      = reader:ReadBlock(16384)
                 local length    = #buff
-                local writer    = bitStreamWriter()
+                local writer    = BitStreamWriter()
                 local prev      = false
                 local nxt       = false
                 local matchlst  = {}
@@ -804,7 +804,7 @@ PLoop(function(_ENV)
 
                         -- The Huffman tree for Length
                         local depDepths = calcHuffmanDepths(depths, 18)
-                        local lHTree    = huffTableTree(depDepths)
+                        local lHTree    = HuffTableTree(depDepths)
 
                         for i = 1, 19 do
                             writer:Write(depDepths[MAGIC_HUFFMAN_ORDER[i]], 3)
@@ -831,8 +831,8 @@ PLoop(function(_ENV)
 
                         -- Compress the block data
                         i               = 1
-                        litHtree        = huffTableTree(liteDepths)
-                        distHtree       = huffTableTree(distDepths)
+                        litHtree        = HuffTableTree(liteDepths)
+                        distHtree       = HuffTableTree(distDepths)
 
                         while i <= bidx do
                             local v     = block[i]
@@ -988,8 +988,8 @@ PLoop(function(_ENV)
         end,
         decode                  = function(reader)
             local moreBlocks    = true
-            local streamReader  = bitStreamReader(reader)
-            local streamWriter  = byteStreamWriter()
+            local streamReader  = BitStreamReader(reader)
+            local streamWriter  = ByteStreamWriter()
 
             while moreBlocks do
                 local bfinal    = streamReader:Get(1)
@@ -1047,7 +1047,7 @@ PLoop(function(_ENV)
                     end
 
                     -- The Huffman tree for Length
-                    local lHTree= huffTableTree(depths)
+                    local lHTree= HuffTableTree(depths)
 
                     depths      = {}
 
@@ -1114,7 +1114,7 @@ PLoop(function(_ENV)
                         ddep[i - base] = depths[i]
                     end
 
-                    if not uncompression(streamWriter, streamReader, huffTableTree(ldep), huffTableTree(ddep)) then
+                    if not uncompression(streamWriter, streamReader, HuffTableTree(ldep), HuffTableTree(ddep)) then
                         return "", "The input data can't be decompressed 9"
                     end
                 else
