@@ -36,7 +36,7 @@ PLoop(function(_ENV)
             MQTT.SubAckPacket, MQTT.MQTTException, MQTT.ConnectWill,
 
             System.Context.Session, Net.TimeoutException, ClientState,
-            Protocol.MQTT, Guid, Date,
+            Protocol.MQTT, Guid, Date, Queue,
 
             isObjectType        = Class.IsObjectType,
             valEnumValue        = Enum.ValidateValue,
@@ -44,6 +44,7 @@ PLoop(function(_ENV)
             error               = error,
             ipairs              = ipairs,
             type                = type,
+            unpack              = unpack or table.unpack,
             min                 = math.min,
             floor               = math.floor,
             yield               = coroutine.yield,
@@ -287,6 +288,7 @@ PLoop(function(_ENV)
                 -- Subscribe the topic filter
                 local returnCodes   = {}
                 local publisher     = self.MessagePublisher
+                local subscribed    = Queue()
 
                 for i, filter in ipairs(packet.topicFilters) do
                     local qos       = min(self.MaximumQosLevel, filter.requestedQoS or QosLevel.AT_MOST_ONCE)
@@ -294,11 +296,15 @@ PLoop(function(_ENV)
                     self.TopicFilters[filter.topicFilter] = returnCodes[i]
 
                     if returnCodes[i] <= SubAckReturnCode.MAX_QOS_2 then
-                        OnTopicSubscribed(self, filter.topicFilter, qos)
+                        subscribed:Enqueue(filter.topicFilter, qos)
                     end
                 end
 
                 self:SubAck(packet.packetID, returnCodes)
+
+                while subscribed.Count > 0 do
+                    OnTopicSubscribed(self, subscribed:Dequeue(2))
+                end
 
             elseif ptype == PacketType.SUBACK then
                 -- Check the subscription result
