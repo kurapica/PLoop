@@ -250,9 +250,9 @@ PLoop(function(_ENV)
         end
 
         __Arguments__{ IDictionary }
-        function __new(_, org)
+        function __new(_, obj)
             local dict  = {}
-            for key, value in org:GetIterator() do
+            for key, value in obj:GetIterator() do
                 dict[key] = value
             end
             return dict, true
@@ -412,7 +412,12 @@ PLoop(function(_ENV)
                 -- Check Function
                 if map then
                     for key, value in targetDict:GetIterator() do
-                        if filter(key, value) then yield(key, map(key, value)) end
+                        if filter(key, value) then
+                            value = map(key, value)
+                            if value ~= nil then
+                                yield(key, value)
+                            end
+                        end
                     end
                 else
                     for key, value in targetDict:GetIterator() do
@@ -423,7 +428,10 @@ PLoop(function(_ENV)
                 -- No filter
                 if map then
                     for key, value in targetDict:GetIterator() do
-                        yield(key, map(key, value))
+                        value   = map(key, value)
+                        if value ~= nil then
+                            yield(key, value)
+                        end
                     end
                 else
                     for key, value in targetDict:GetIterator() do

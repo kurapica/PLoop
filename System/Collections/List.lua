@@ -431,16 +431,22 @@ PLoop(function(_ENV)
                                 local item = targetList[i]
                                 if item == nil then return end
                                 if filter(item) then
-                                    _, _, stop = yield(i, map(item), item)
-                                    if stop then return end
+                                    local mitem = map(item)
+                                    if mitem ~= nil then
+                                        _, _, stop = yield(i, mitem, item)
+                                        if stop then return end
+                                    end
                                 end
                             end
                         else
                             for i = rangeStart, rangeStop, rangeStep do
                                 local item = targetList[i]
                                 if item == nil then return end
-                                _, _, stop = yield(i, map(item), item)
-                                if stop then return end
+                                local mitem = map(item)
+                                if mitem ~= nil then
+                                    _, _, stop = yield(i, mitem, item)
+                                    if stop then return end
+                                end
                             end
                         end
                     else
@@ -496,8 +502,11 @@ PLoop(function(_ENV)
                         if stepCnt == rangeStep then
                             stepCnt = 0
                             if item ~= nil and filter(item) then
-                                _, _, stop = yield(targetIdx, map(item), item)
-                                if stop then return end
+                                local mitem = map(item)
+                                if mitem ~= nil then
+                                    _, _, stop = yield(targetIdx, mitem, item)
+                                    if stop then return end
+                                end
                             end
                         end
 
@@ -512,8 +521,11 @@ PLoop(function(_ENV)
                         if stepCnt == rangeStep then
                             stepCnt = 0
                             if item ~= nil then
-                                _, _, stop = yield(targetIdx, map(item), item)
-                                if stop then return end
+                                local mitem = map(item)
+                                if mitem ~= nil then
+                                    _, _, stop = yield(targetIdx, mitem, item)
+                                    if stop then return end
+                                end
                             end
                         end
 
