@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.30] - 2021-05-10 WangXH <kurapica125@outlook.com>
+- The System.Collections.List's Filter & Map is improved, nil value will be discard
+- The System.Collections.Dictonary's Filter & Map is improved, nil value will be discard.
+
+
 ## [1.6.29] - 2021-02-23 WangXH  <kurapica125@outlook.com>
 ### Changed
 - The System.Text.Encoder & System.Text.Encoding System is re-designed.
