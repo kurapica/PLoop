@@ -483,7 +483,7 @@ PLoop(function(_ENV)
 
             while idx < rangeStart do
                 targetIdx, item = targetIter(targetObj, targetIdx)
-                if item == nil then return end
+                if targetIdx == nil then return end
                 idx = idx + 1
             end
 
@@ -491,11 +491,11 @@ PLoop(function(_ENV)
                 if filter then
                     while idx <= rangeStop do
                         targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
+                        if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
                             stepCnt = 0
-                            if filter(item) then
+                            if item ~= nil and filter(item) then
                                 _, _, stop = yield(targetIdx, map(item), item)
                                 if stop then return end
                             end
@@ -507,12 +507,14 @@ PLoop(function(_ENV)
                 else
                     while idx <= rangeStop do
                         targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
+                        if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
                             stepCnt = 0
-                            _, _, stop = yield(targetIdx, map(item), item)
-                            if stop then return end
+                            if item ~= nil then
+                                _, _, stop = yield(targetIdx, map(item), item)
+                                if stop then return end
+                            end
                         end
 
                         stepCnt = stepCnt + 1
@@ -523,11 +525,11 @@ PLoop(function(_ENV)
                 if filter then
                     while idx <= rangeStop do
                         targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
+                        if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
                             stepCnt = 0
-                            if filter(item) then
+                            if item ~= nil and filter(item) then
                                 _, _, stop = yield(targetIdx, item)
                                 if stop then return end
                             end
@@ -539,12 +541,14 @@ PLoop(function(_ENV)
                 else
                     while idx <= rangeStop do
                         targetIdx, item = targetIter(targetObj, targetIdx)
-                        if item == nil then return end
+                        if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
                             stepCnt = 0
-                            _, _, stop = yield(targetIdx, item)
-                            if stop then return end
+                            if item ~= nil then
+                                _, _, stop = yield(targetIdx, item)
+                                if stop then return end
+                            end
                         end
 
                         stepCnt = stepCnt + 1
