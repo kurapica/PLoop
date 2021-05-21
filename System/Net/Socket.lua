@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2020/08/09                                               --
--- Update Date  :   2020/08/09                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2021/05/21                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -192,16 +192,13 @@ PLoop(function(_ENV)
                 local ret, err  = self[0]:setpeername("*")
                 if not ret      then throw(SocketException(err)) end
                 self.Connected  = false
-            elseif self.ProtocolType == ProtocolType.TCP then
-                self[0]:close()
-                self.Connected  = false
+            else
+                throw(ProtocolException())
             end
         end
 
         --- Closes the Socket connection and releases all associated resources
         function Close(self)
-            if not self.Connected then return end
-
             self[0]:close()
             self.Connected      = false
         end
