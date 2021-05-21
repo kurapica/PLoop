@@ -24,7 +24,7 @@ PLoop(function(_ENV)
 
         import "System.Net"
 
-        export { "throw", "type", "error", Socket, SocketShutdown, TimeoutException, SocketException, ProtocolType, LingerOption, fakefunc = Toolset.fakefunc }
+        export { "throw", "type", Socket, SocketShutdown, TimeoutException, SocketException, ProtocolException, ProtocolType, LingerOption, fakefunc = Toolset.fakefunc }
 
         ---------------------------------------------------
         --                   property                    --
