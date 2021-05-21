@@ -50,6 +50,12 @@ PLoop(function(_ENV)
     --- The socket interface
     __Sealed__()
     interface "ISocket" (function(_ENV)
+        export { "throw", ProtocolException }
+
+        local function throwProtocolException()
+            throw(ProtocolException())
+        end
+
         ---------------------------------------------------
         --                   property                    --
         ---------------------------------------------------
@@ -66,16 +72,16 @@ PLoop(function(_ENV)
         __Abstract__() property "ConnectTimeout"    { type = Number }
 
         --- Gets or sets a Boolean value that specifies whether the Socket can send or receive broadcast packets
-        __Abstract__() property "EnableBroadcast"   { type = Boolean }
+        __Abstract__() property "EnableBroadcast"   { type = Boolean, set = throwProtocolException }
 
         --- Gets a value that indicates whether a Socket is connected to a remote host as of the last Send or Receive operation.
         __Abstract__() property "Connected"         { type = Boolean }
 
         --- Gets or sets a value that specifies whether the Socket will delay closing a socket in an attempt to send all pending data.
-        __Abstract__() property "LingerState"       { type = LingerOption }
+        __Abstract__() property "LingerState"       { type = LingerOption, set = throwProtocolException  }
 
         --- Gets or sets a Boolean value that specifies whether the stream Socket is using the Nagle algorithm.
-        __Abstract__() property "NoDelay"           { type = Boolean }
+        __Abstract__() property "NoDelay"           { type = Boolean, set = throwProtocolException  }
 
         --- Gets the protocol type of the Socket.
         __Abstract__() property "ProtocolType"      { type = ProtocolType }
@@ -84,37 +90,37 @@ PLoop(function(_ENV)
         --                    method                     --
         ---------------------------------------------------
         --- Creates a new Socket for a newly created connection
-        __Abstract__() function Accept(self) end
+        __Abstract__() Accept           = throwProtocolException
 
         --- Associates a Socket with a local endpoint
-        __Abstract__() function Bind(self, address, port) end
+        __Abstract__() Bind             = throwProtocolException
 
         --- Places a Socket in a listening state
-        __Abstract__() function Listen(self, backlog) end
+        __Abstract__() Listen           = throwProtocolException
 
         --- Establishes a connection to a remote host
-        __Abstract__() function Connect(self, address, port) end
+        __Abstract__() Connect          = throwProtocolException
 
         --- Receives data from a bound Socket
-        __Abstract__() function Receive(self) end
+        __Abstract__() Receive          = throwProtocolException
 
         --- Receives data from an endpoint
-        __Abstract__() function ReceiveFrom(self, address, port) end
+        __Abstract__() ReceiveFrom      = throwProtocolException
 
         --- Sends data to a connected Socket
-        __Abstract__() function Send(self, data) end
+        __Abstract__() Send             = throwProtocolException
 
         --- Sends data to the specified endpoint.
-        __Abstract__() function SendTo(self, address, port) end
+        __Abstract__() SendTo           = throwProtocolException
 
         --- Disables sends and receives on a Socket
-        __Abstract__() function Shutdown(self, socketShutdown) end
+        __Abstract__() Shutdown         = throwProtocolException
 
         --- Closes the socket connection and allows reuse of the socket.
-        __Abstract__() function Disconnect(self) end
+        __Abstract__() Disconnect       = throwProtocolException
 
         --- Closes the Socket connection and releases all associated resources
-        __Abstract__() function Close(self) end
+        __Abstract__() Close            = throwProtocolException
     end)
 
     -----------------------------------------------------------------------------------
