@@ -15,6 +15,13 @@
 PLoop(function(_ENV)
     namespace "System.Net"
 
+    --- Specifies the protocols that the Socket class supports, for simple only two protocol type now.
+    __Sealed__()
+    enum "ProtocolType" {
+        TCP                     = 6,    -- Transmission Control Protocol
+        UDP                     = 17,   -- User Datagram Protocol
+    }
+
     --- Defines constants that are used by the Shutdown method
     __Sealed__()
     enum "SocketShutdown" {
@@ -23,12 +30,22 @@ PLoop(function(_ENV)
         BOTH                    = 2,    -- Disables a Socket for both sending and receiving
     }
 
+
     --- Define the common Exception types
     __Sealed__()
-    class "TimeoutException"    { Exception, Message = { type = String, default = "The operation has timed-out" } }
+    class "TimeoutException"    { Exception, Message = { type = String, default = "The operation has timed out" } }
 
     __Sealed__()
     class "SocketException"     { Exception }
+
+    __Sealed__()
+    class "ProtocolException"   { SocketException, Message = { type = String, default = "The protocol is unsupported" } }
+
+    __Sealed__()
+    struct "LingerOption"       {
+        { name = "Enabled",    type = Boolean, require = true }, -- whether to linger after the Socket is closed
+        { name = "LingerTime", type = Number,  require = true }, -- the amount of time to remain connected after calling the Close() method if data remains to be sent.
+    }
 
     --- The socket interface
     __Sealed__()
@@ -48,6 +65,21 @@ PLoop(function(_ENV)
         --- Gets or sets a value that specifies the amount of time after which a synchronous Connect call will time out(in seconds)
         __Abstract__() property "ConnectTimeout"    { type = Number }
 
+        --- Gets or sets a Boolean value that specifies whether the Socket can send or receive broadcast packets
+        __Abstract__() property "EnableBroadcast"   { type = Boolean }
+
+        --- Gets a value that indicates whether a Socket is connected to a remote host as of the last Send or Receive operation.
+        __Abstract__() property "Connected"         { type = Boolean }
+
+        --- Gets or sets a value that specifies whether the Socket will delay closing a socket in an attempt to send all pending data.
+        __Abstract__() property "LingerState"       { type = LingerOption }
+
+        --- Gets or sets a Boolean value that specifies whether the stream Socket is using the Nagle algorithm.
+        __Abstract__() property "NoDelay"           { type = Boolean }
+
+        --- Gets the protocol type of the Socket.
+        __Abstract__() property "ProtocolType"      { type = ProtocolType }
+
         ---------------------------------------------------
         --                    method                     --
         ---------------------------------------------------
@@ -63,21 +95,30 @@ PLoop(function(_ENV)
         --- Establishes a connection to a remote host
         __Abstract__() function Connect(self, address, port) end
 
-        --- Closes the Socket connection and releases all associated resources
-        __Abstract__() function Close(self) end
-
         --- Receives data from a bound Socket
         __Abstract__() function Receive(self) end
+
+        --- Receives data from an endpoint
+        __Abstract__() function ReceiveFrom(self, address, port) end
 
         --- Sends data to a connected Socket
         __Abstract__() function Send(self, data) end
 
+        --- Sends data to the specified endpoint.
+        __Abstract__() function SendTo(self, address, port) end
+
         --- Disables sends and receives on a Socket
         __Abstract__() function Shutdown(self, socketShutdown) end
+
+        --- Closes the socket connection and allows reuse of the socket.
+        __Abstract__() function Disconnect(self) end
+
+        --- Closes the Socket connection and releases all associated resources
+        __Abstract__() function Close(self) end
     end)
 
     -----------------------------------------------------------------------------------
-    --- The protocol to be used by the Socket object
+    --- The protocol based on the Scoket
     -- The protocols are special prototypes, to be created like
     --
     -- System.Net.Protocol "MQTT" { make = function() end, parse = function() end }
@@ -123,8 +164,8 @@ PLoop(function(_ENV)
         __call          = function(self, name)
             if type(name) ~= "string" then error("Usage: System.Net.Protocol \"name\" { parse = Function, make = Function }", 2) end
             return function(settings)
-                local coder     = newProtocol(name, settings)
-                return coder
+                local protl     = newProtocol(name, settings)
+                return protl
             end
         end,
         __tostring              = Namespace.GetNamespaceName,

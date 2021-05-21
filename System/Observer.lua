@@ -23,7 +23,7 @@ PLoop(function(_ENV)
 
         local function safeCall(func)
             return function(...)
-                local ok, ret = pcall(func, ...)
+                local ok, ret   = pcall(func, ...)
                 if not ok then Error(tostring(ret)) end
             end
         end
