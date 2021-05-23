@@ -37,7 +37,6 @@ PLoop(function(_ENV)
         type                    = type,
         ipairs                  = ipairs,
         pairs                   = pairs,
-        tblconcat               = table.concat,
 
         throw                   = throw,
 
