@@ -38,6 +38,8 @@ PLoop(function(_ENV)
             System.Context.Session, Net.TimeoutException, ClientState,
             Protocol.MQTT, Guid, Date, Queue,
 
+            MAX_PACKET_ID       = 2^15 - 1,
+
             isObjectType        = Class.IsObjectType,
             valEnumValue        = Enum.ValidateValue,
             pcall               = pcall,
@@ -363,7 +365,7 @@ PLoop(function(_ENV)
         --- Gets a new packet id
         function GetNewPacketId(self)
             local packetid      = self.LastPacketID + 1
-            if packetid >= 2^15 - 1 then packetid = 1 end
+            if packetid >= MAX_PACKET_ID then packetid = 1 end
 
             self.LastPacketID   = packetid
             return packetid
