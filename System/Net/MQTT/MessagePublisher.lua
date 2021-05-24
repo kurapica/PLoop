@@ -36,7 +36,8 @@ PLoop(function(_ENV)
     end
 
     --- The message publisher for MQTT protocol
-    __Sealed__() interface "IMQTTPublisher" (function(_ENV)
+    __Sealed__() __AnonymousClass__()
+    interface "IMQTTPublisher" (function(_ENV)
         extend "System.Message.IPublisher"
 
         export {
@@ -51,6 +52,8 @@ PLoop(function(_ENV)
             wipe                = Toolset.wipe,
             yield               = coroutine.yield,
             rawset              = rawset,
+            fakefunc            = Toolset.fakefunc,
+            noOperFunc          = function() return true end,
 
             GetNormalMethod     = Class.GetNormalMethod,
         }
@@ -241,45 +244,21 @@ PLoop(function(_ENV)
             rawset(self, "__RetainMsgQueue",   Queue())
 
             -- The normal method defined by the object's class
-            rawset(self, "__SubscribeTopic",   GetNormalMethod(cls, "SubscribeTopic"))
-            rawset(self, "__UnsubscribeTopic", GetNormalMethod(cls, "UnsubscribeTopic"))
-            rawset(self, "__PublishMessage",   GetNormalMethod(cls, "PublishMessage"))
-            rawset(self, "__ReceiveMessage",   GetNormalMethod(cls, "ReceiveMessage"))
+            rawset(self, "__SubscribeTopic",   GetNormalMethod(cls, "SubscribeTopic")   or noOperFunc)
+            rawset(self, "__UnsubscribeTopic", GetNormalMethod(cls, "UnsubscribeTopic") or noOperFunc)
+            rawset(self, "__PublishMessage",   GetNormalMethod(cls, "PublishMessage")   or noOperFunc)
+            rawset(self, "__ReceiveMessage",   GetNormalMethod(cls, "ReceiveMessage")   or fakefunc)
         end
     end)
 
-    --- A dummy MQTT Message publisher with no operations, so the client
-    -- should handle the topic subscribe by itself
-    __Sealed__() class "DummyMQTTPublisher" (function(_ENV)
-       extend "IMQTTPublisher"
 
-        -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- Subscribe a message filter, topic-based, return true if successful, otherwise false and error code is needed
-        function SubscribeTopic(self, filter) return true end
-
-        --- Unsubscribe a message filter, topic-based, return true if successful, otherwise false and error code is needed
-        function UnsubscribeTopic(self, filter) return true end
-
-        --- Publish the msssage, it'd give a topic if it's topic-based message
-        function PublishMessage(self, topic, message) return true end
-
-        --- Receive and return the published message
-        function ReceiveMessage(self) end
-    end)
-
-    --- The simple MQTT Message publisher could be used in single os thread platform
+    --- The simple MQTT Message publisher could be used in single os thread platform for test
     __Sealed__() class "MQTTPublisher" (function(_ENV)
         inherit "System.Message.MessagePublisher"
         extend "IMQTTPublisher"
 
         export {
-            QosLevel, Queue,
-
             pairs               = pairs,
-            next                = next,
-            tonumber            = tonumber,
             yield               = coroutine.yield,
         }
 
