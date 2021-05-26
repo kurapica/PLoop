@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2021/02/04                                               --
--- Update Date  :   2021/02/04                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2021/05/25                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -47,7 +47,7 @@ PLoop(function(_ENV)
     local FIXED_LIT_HTREE
     local FIXED_DIST_HTREE
 
-    __AutoCache__()
+    __Sealed__() __AutoCache__()
     BitStreamReader             = class {
         __new                   = function(_, reader)
             local buff          = reader:ReadBlock(4096)
@@ -114,7 +114,7 @@ PLoop(function(_ENV)
         end,
     }
 
-    __AutoCache__()
+    __Sealed__() __AutoCache__()
     BitStreamWriter             = class {
         __new                   = function()
             return {
@@ -173,7 +173,7 @@ PLoop(function(_ENV)
         end,
     }
 
-    __AutoCache__()
+    __Sealed__() __AutoCache__()
     ByteStreamWriter            = class {
         __new                   = function()
             return {
@@ -245,7 +245,7 @@ PLoop(function(_ENV)
         end,
     }
 
-    __AutoCache__()
+    __Sealed__() __AutoCache__()
     HuffTableTree               = class {
         __new                   = function(_, depths)
             -- From 0 ~ xx
@@ -1037,12 +1037,12 @@ PLoop(function(_ENV)
                     local hlit  = streamReader:Get(5) -- # of Literal/Length codes - 257
                     local hdist = streamReader:Get(5) -- # of Distance codes - 1
                     local hclen = streamReader:Get(4) -- # of Code Length codes - 4
-                    if not (hlit and hdist and hclen) then return "", "The input data can't be decompressed 1" end
+                    if not (hlit and hdist and hclen) then return "", "The input data can't be decompressed" end
 
                     local depths= { [0] = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
                     for i = 1, hclen + 4 do
                         local c = streamReader:Get(3)
-                        if not c then return "", "The input data can't be decompressed 2" end
+                        if not c then return "", "The input data can't be decompressed" end
                         depths[MAGIC_HUFFMAN_ORDER[i]] = c
                     end
 
@@ -1058,7 +1058,7 @@ PLoop(function(_ENV)
                     local ext
                     while idx <= hlit + hdist do
                         local c = lHTree:ParseByte(streamReader)
-                        if not c then return "", "The input data can't be decompressed 3" end
+                        if not c then return "", "The input data can't be decompressed" end
 
                         if c < 16 then
                             -- Represent code lengths of 0 - 15
@@ -1067,10 +1067,10 @@ PLoop(function(_ENV)
                         elseif c == 16 then
                             -- Copy the previous code length 3 - 6 times. (2 bits of length)
                             ext = streamReader:Get(2)
-                            if not ext then return "", "The input data can't be decompressed 4" end
+                            if not ext then return "", "The input data can't be decompressed" end
 
                             c   = depths[idx - 1]
-                            if not c then return "", "The input data can't be decompressed 5" end
+                            if not c then return "", "The input data can't be decompressed" end
 
                             for i = 1, 3 + ext do
                                 depths[idx] = c
@@ -1079,7 +1079,7 @@ PLoop(function(_ENV)
                         elseif c == 17 then
                             -- Repeat a code length of 0 for 3 - 10 times. (3 bits of length)
                             ext = streamReader:Get(3)
-                            if not ext then return "", "The input data can't be decompressed 6" end
+                            if not ext then return "", "The input data can't be decompressed" end
 
                             c   = 0
 
@@ -1090,7 +1090,7 @@ PLoop(function(_ENV)
                         elseif c == 18 then
                             -- Repeat a code length of 0 for 11 - 138 times. (7 bits of length)
                             ext = streamReader:Get(7)
-                            if not ext then return "", "The input data can't be decompressed 7" end
+                            if not ext then return "", "The input data can't be decompressed" end
 
                             c   = 0
 
@@ -1099,7 +1099,7 @@ PLoop(function(_ENV)
                                 idx         = idx + 1
                             end
                         else
-                            return "", "The input data can't be decompressed 8"
+                            return "", "The input data can't be decompressed"
                         end
                     end
 
@@ -1115,7 +1115,7 @@ PLoop(function(_ENV)
                     end
 
                     if not uncompression(streamWriter, streamReader, HuffTableTree(ldep), HuffTableTree(ddep)) then
-                        return "", "The input data can't be decompressed 9"
+                        return "", "The input data can't be decompressed"
                     end
                 else
                     -- Reserved

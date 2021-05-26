@@ -25,7 +25,7 @@ PLoop(function(_ENV)
         __Abstract__() property "KeepAlive"     { type = Boolean }
 
         --- The minute count before session time out, this will be used if the session's timeout is not set
-        __Abstract__() property "TimeoutMinutes"{ type = NaturalNumber, default = 30 }
+        __Abstract__() property "TimeoutMinutes"{ type = Number, default = 30 }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -60,20 +60,21 @@ PLoop(function(_ENV)
         --- Save the session items
         function SaveSessionItems(self)
             local provider      = self.SessionStorageProvider
-            if not provider then return end
+            local sessionID     = self.SessionID
+            if not (provider and sessionID) then return end
 
             if self.Canceled then
                 -- Clear the session items
-                return provider:RemoveItems(self.SessionID)
+                return provider:RemoveItems(sessionID)
             elseif self.IsNewSession or self.ItemsChanged then
                 -- Set teh session items
-                return provider:SetItems(self.SessionID, self.RawItems, self.Timeout or Date.Now:AddMinutes(provider.TimeoutMinutes))
+                return provider:SetItems(sessionID, self.RawItems, self.Timeout or Date.Now:AddMinutes(provider.TimeoutMinutes))
             elseif self.TimeoutChanged then
                 -- Reset the timeout with the settings
-                return provider:ResetItems(self.SessionID, self.Timeout)
+                return provider:ResetItems(sessionID, self.Timeout)
             elseif provider.KeepAlive then
                 -- Keep the session alive
-                return provider:ResetItems(self.SessionID, Date.Now:AddMinutes(provider.TimeoutMinutes))
+                return provider:ResetItems(sessionID, Date.Now:AddMinutes(provider.TimeoutMinutes))
             end
         end
 
@@ -107,22 +108,20 @@ PLoop(function(_ENV)
         --- Gets or sets the session items
         __Indexer__()
         __Abstract__() property "Items"         {
-            set = function(self, key, value)
+            set                         = function(self, key, value)
                 if self.RawItems[key]  ~= value then
                     self.ItemsChanged   = true
                     self.RawItems[key]  = value
                 end
             end,
-            get = function(self, key)
-                return self.RawItems[key]
-            end,
+            get                         = function(self, key) return self.RawItems[key] end,
         }
 
         --- The raw item table to be used for serialization
         __Abstract__() property "RawItems"      { default = LoadSessionItems }
 
         --- Gets or sets the date time, allowed the next request access the session
-        __Set__ (PropertySet.Clone)
+        __Set__(PropertySet.Clone)
         __Abstract__() property "Timeout"       { type = Date, handler = function(self) self.TimeoutChanged = true end }
 
         --- Whether the time out is changed

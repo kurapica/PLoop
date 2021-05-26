@@ -15,26 +15,6 @@
 PLoop(function(_ENV)
     namespace "System.Net.MQTT"
 
-    local strtrim               = Toolset.trim
-
-    local function parseToLuaPattern(pattern)
-        pattern                 = strtrim(pattern)
-        -- The pattern can't be empty and not started with $
-        if pattern == "" or pattern:match("^%$") then return end
-
-        return "^" .. pattern:gsub("(.?)%+(.?)", function(a, b)
-            if a and a ~= "/" or b and b ~= "/" then
-                return a .. "%+" .. b
-            else
-                return a .. "[^/]*" .. b
-            end
-        end):gsub("(.?)#$", function(a)
-            if not a or a == "/" then
-                return a .. ".*"
-            end
-        end) .. "$"
-    end
-
     --- The message publisher for MQTT protocol
     __Sealed__() __AnonymousClass__()
     interface "IMQTTPublisher" (function(_ENV)
@@ -57,6 +37,24 @@ PLoop(function(_ENV)
 
             GetNormalMethod     = Class.GetNormalMethod,
         }
+
+        local function parseToLuaPattern(pattern)
+            pattern             = strtrim(pattern)
+            -- The pattern can't be empty and not started with $
+            if pattern == "" or pattern:match("^%$") then return end
+
+            return "^" .. pattern:gsub("(.?)%+(.?)", function(a, b)
+                if a and a ~= "/" or b and b ~= "/" then
+                    return a .. "%+" .. b
+                else
+                    return a .. "[^/]*" .. b
+                end
+            end):gsub("(.?)#$", function(a)
+                if not a or a == "/" then
+                    return a .. ".*"
+                end
+            end) .. "$"
+        end
 
         -----------------------------------------------------------
         --                         event                         --

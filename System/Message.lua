@@ -42,7 +42,7 @@ PLoop(function(_ENV)
 
         export { "next", "pairs", Queue }
 
-        local _Publisher        = setmetatable({}, { __mode = "k" })
+        local _Publisher        = Toolset.newtable(true)
 
         -----------------------------------------------------------------------
         --                             property                              --

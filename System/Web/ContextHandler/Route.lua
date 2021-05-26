@@ -234,11 +234,11 @@ PLoop(function(_ENV)
 
         --- Process the http request
         function Process(self, context)
-            local request = context.Request
-            local handler = self:GetContextHandlerFromUrl(context, request.Url, request.HttpMethod)
+            local request       = context.Request
+            local handler       = self:GetContextHandlerFromUrl(context, request.Url, request.HttpMethod)
 
             if handler then
-                request.Handled         = true
+                request.Handled = true
                 handler.AsGlobalHandler = false
                 handler:RegisterToContext(context)
             end

@@ -62,7 +62,7 @@ PLoop(function(_ENV)
         local _FinlGlobalHandlers   = {}
 
         local function addHandler(lst, handler)
-            local priority = handler.Priority
+            local priority          = handler.Priority
 
             for i, v in ipairs, lst, 0 do
                 if v == handler then return end
@@ -84,9 +84,9 @@ PLoop(function(_ENV)
         end
 
         local function registerGlobalHandler(handler)
-            local phase = handler.ProcessPhase
+            local phase             = handler.ProcessPhase
             if handler.Application then
-                local ghandlers = handler.Application[IHttpContextHandler] or {}
+                local ghandlers     = handler.Application[IHttpContextHandler] or {}
 
                 if validateflags(InitPhase, phase) then ghandlers[InitPhase] = addHandler(ghandlers[InitPhase] or {}, handler) end
                 if validateflags(HeadPhase, phase) then ghandlers[HeadPhase] = addHandler(ghandlers[HeadPhase] or {}, handler) end
@@ -104,7 +104,7 @@ PLoop(function(_ENV)
 
         local function unregisterGlobalHandler(handler)
             if handler.Application then
-                local ghandlers = handler.Application[IHttpContextHandler]
+                local ghandlers     = handler.Application[IHttpContextHandler]
                 if ghandlers then
                     if ghandlers[InitPhase] then removeHandler(ghandlers[InitPhase], handler) end
                     if ghandlers[HeadPhase] then removeHandler(ghandlers[HeadPhase], handler) end
@@ -120,28 +120,28 @@ PLoop(function(_ENV)
         end
 
         local function processHttpRequest(context)
-            local request       = context.Request
-            local response      = context.Response
-            local apphandler    = context.Application[IHttpContextHandler]
+            local request           = context.Request
+            local response          = context.Response
+            local apphandler        = context.Application[IHttpContextHandler]
 
             -- Prepare the temp context handler container
-            local handlers      = {}
+            local handlers          = {}
             context[IHttpContextHandler] = handlers
 
-            response.StatusCode = HTTP_STATUS.OK
+            response.StatusCode     = HTTP_STATUS.OK
 
-            context.ProcessPhase= InitPhase
+            context.ProcessPhase    = InitPhase
 
             -- Init - Global
             for i = 1, #_InitGlobalHandlers do
-                local handler   = _InitGlobalHandlers[i]
+                local handler       = _InitGlobalHandlers[i]
                 if not request.Handled or not handler.IsRequestHandler then
                     handler:Process(context, InitPhase)
                 end
             end
 
             -- Init - Application(router register path handler)
-            local initapp       = apphandler and apphandler[InitPhase]
+            local initapp           = apphandler and apphandler[InitPhase]
             if initapp then
                 for i = 1, #initapp do
                     local handler   = initapp[i]
@@ -151,11 +151,11 @@ PLoop(function(_ENV)
                 end
             end
 
-            context.ProcessPhase= HeadPhase
+            context.ProcessPhase    = HeadPhase
 
             -- Head - Temp
             for i = 1, #handlers do
-                local handler   = handlers[i]
+                local handler       = handlers[i]
                 if validateflags(HeadPhase, handler.ProcessPhase) then
                     handler:Process(context, HeadPhase)
                 end
@@ -167,7 +167,7 @@ PLoop(function(_ENV)
             end
 
             -- Head - Application
-            local headapp       = apphandler and apphandler[HeadPhase]
+            local headapp           = apphandler and apphandler[HeadPhase]
             if headapp then
                 for i = 1, #headapp do
                     headapp[i]:Process(context, HeadPhase)
@@ -179,7 +179,7 @@ PLoop(function(_ENV)
                 _HeadGlobalHandlers[i]:Process(context, HeadPhase)
             end
 
-            context.ProcessPhase= BodyPhase
+            context.ProcessPhase    = BodyPhase
 
             -- Call server's redirect method
             if response.RequestRedirected then
@@ -191,7 +191,7 @@ PLoop(function(_ENV)
                 -- Body - Temp
                 if response.StatusCode == HTTP_STATUS.OK then
                     for i = 1, #handlers do
-                        local handler   = handlers[i]
+                        local handler = handlers[i]
                         if validateflags(BodyPhase, handler.ProcessPhase) then
                             handler:Process(context, BodyPhase)
                         end
@@ -215,18 +215,18 @@ PLoop(function(_ENV)
                 response:Close()
             end
 
-            context.ProcessPhase= FinlPhase
+            context.ProcessPhase    = FinlPhase
 
             -- Final - Temp
             for i = 1, #handlers do
-                local handler   = handlers[i]
+                local handler       = handlers[i]
                 if validateflags(FinlPhase, handler.ProcessPhase) then
                     handler:Process(context, FinlPhase)
                 end
             end
 
             -- Final - Application
-            local finlapp       = apphandler and apphandler[FinlPhase]
+            local finlapp           = apphandler and apphandler[FinlPhase]
             if finlapp then
                 for i = 1, #finlapp do
                     finlapp[i]:Process(context, FinlPhase)
@@ -244,11 +244,11 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Process the http request for a http context
         __Static__() function ProcessHttpRequest(context)
-            local ok, err = pcall(processHttpRequest, context)
+            local ok, err           = pcall(processHttpRequest, context)
             if not ok then
                 if context.IsInnerRequest then error(err, 0) end
 
-                local handler = context.Application._ErrorHandler or Web.ErrorHandler
+                local handler       = context.Application._ErrorHandler or Web.ErrorHandler
                 handler(err, 0, context)
             end
         end
@@ -260,7 +260,7 @@ PLoop(function(_ENV)
         function RegisterToContext(self, context)
             if self.AsGlobalHandler then return end
 
-            context = context or getContext()
+            context                 = context or getContext()
             if context and context[IHttpContextHandler] then
                 addHandler(context[IHttpContextHandler], self)
             end

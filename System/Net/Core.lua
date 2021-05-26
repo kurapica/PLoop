@@ -120,7 +120,7 @@ PLoop(function(_ENV)
         __Abstract__() Disconnect       = throwProtocolException
 
         --- Closes the Socket connection and releases all associated resources
-        __Abstract__() Close            = throwProtocolException
+        __Abstract__() Close            = Toolset.fakefunc
     end)
 
     -----------------------------------------------------------------------------------
