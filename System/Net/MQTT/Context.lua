@@ -60,8 +60,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                               event                               --
         -----------------------------------------------------------------------
-        --- Fired when a topic filter is subscribed
+        --- Fired when the client has topic subscribed
+        -- @param topic         the subscribed topic
+        -- @param qos           the QoS of the topic
         event "OnTopicSubscribed"
+
+        --- Fired when the client has topic unsubscribed
+        -- @param topic         the unsubscribed topic
+        event "OnTopicUnsubscribed"
 
         --- Fired when a message is received
         event "OnMessageReceived"
@@ -126,9 +132,6 @@ PLoop(function(_ENV)
         --- The password
         __Abstract__() property "Password"          { type = String }
 
-        --- The publiced packet, keep until the ack is received
-        __Abstract__() property "PublishPackets"    { set = false, default = Toolset.newtable }
-
         --- The last used packet ID
         __Abstract__() property "LastPacketID"      { type = Number, default = 0 }
 
@@ -137,6 +140,9 @@ PLoop(function(_ENV)
 
         --- The last active time that received the packet
         property "LastActiveTime"                   { type = Date }
+
+        --- The publiced packet, keep until the ack is received
+        property "PublishPackets"                   { set = false, default = Toolset.newtable }
 
         --- The subscribed topics and requested qos levels, used both for server side and client side
         property "TopicFilters"                     { set = false, default = Toolset.newtable }
@@ -323,13 +329,24 @@ PLoop(function(_ENV)
                 -- Subscribe the topic filter
                 local returnCodes   = {}
                 local publisher     = self.MessagePublisher
+                local unsubscribed  = Queue()
 
                 for i, filter in ipairs(packet.topicFilters) do
                     self.TopicFilters[filter.topicFilter] = nil
                     returnCodes[i]  = publish and publisher:UnsubscribeTopic(filter.topicFilter) or ReasonCode.UNSPECIFIED_ERROR
+
+                    if returnCodes[i] == ReasonCode.SUCCESS then
+                        unsubscribed:Enqueue(filter.topicFilter)
+                    end
                 end
 
                 self:UnsubAck(packet.packetID, returnCodes)
+
+                local filter        = unsubscribed:Dequeue()
+                while filter do
+                    OnTopicUnsubscribed(self, filter)
+                    filter          = unsubscribed:Dequeue()
+                end
 
             elseif ptype == PacketType.UNSUBACK then
                 -- Check the unsubscribe request
@@ -653,7 +670,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                    Server & Client Side Method                    --
         -----------------------------------------------------------------------
-        --- Publish the message to the server or client
+        --- Publish the message to the server or client, and return the packet id
         __Arguments__{ NEString, NEString, QosLevel/nil, Boolean/nil, PropertySet/nil }
         function Publish(self, topic, payload, qos, retain, properties)
             if self.State ~= ClientState.CONNECTED then return end
@@ -675,6 +692,13 @@ PLoop(function(_ENV)
             end
 
             self:SendPacket(PacketType.PUBLISH, packet)
+
+            return packet.packetID
+        end
+
+        --- Check if the packet haven't receive the ACK
+        function IsPacketAcked(self, packetid)
+            return packetid and self.PublishPackets[packetid] == nil
         end
 
         --- Re-publish the message to the server or client
@@ -812,7 +836,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                         abstract method                           --
         -----------------------------------------------------------------------
-        --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result or true/false  and with a return code if failed
+        --- Valiate the connection or auth packet for authentication, should return the ConnectReturnCode as result or true/false and with a return code if failed
         __Abstract__() function Authenticate(self, packet) end
 
         -----------------------------------------------------------------------
