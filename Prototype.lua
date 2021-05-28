@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2021/05/10                                               --
--- Version      :   1.6.30                                                   --
+-- Update Date  :   2021/05/27                                               --
+-- Version      :   1.6.31                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -442,18 +442,7 @@ do
     -----------------------------------------------------------------------
     --                         flags management                          --
     -----------------------------------------------------------------------
-    if LUA_VERSION >= 5.3 then
-        lshift                  = loadstring [[ return function(x, n) return x << n end ]] ()
-        rshift                  = loadstring [[ return function(x, n) return x >> n end ]] ()
-        band                    = loadstring [[ return function(x, n) return x & n  end ]] ()
-        bnot                    = loadstring [[ return function(x)    return ~x     end ]] ()
-        bor                     = loadstring [[ return function(x, n) return x | n  end ]] ()
-        bxor                    = loadstring [[ return function(x, n) return x ~ n  end ]] ()
-
-        validateflags           = loadstring [[ return function(x, n) return (x & (n or 0)) > 0 end ]] ()
-        turnonflags             = loadstring [[ return function(x, n) return x | (n or 0) end ]] ()
-        turnoffflags            = loadstring [[ return function(x, n) return (~x) & (n or 0) end ]] ()
-    elseif ((LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table")) then
+    if ((LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table")) then
         lshift                  = _G.bit32 and _G.bit32.lshift  or _G.bit.lshift
         rshift                  = _G.bit32 and _G.bit32.rshift  or _G.bit.rshift
         band                    = _G.bit32 and _G.bit32.band    or _G.bit.band
@@ -466,6 +455,7 @@ do
         turnoffflags            = function (x, n) return band(bnot(x), n or 0) end
     else
         -- Create the custom bit lib, for simple, don't check whether the number is integer
+        -- Although the Lua5.3 provide the bitwise, but 64 bit could cause some bugs
         local MOD               = 2^32
         local MODMAX            = MOD - 1
         local xorcache          = { [0]={[0]=0,[1]=1}, [1]={[0]=1,[1]=0} }

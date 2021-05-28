@@ -1,7 +1,16 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [1.6.31] - 2021-05-27 WangXH <kurapica125@outlook.com>
+### Changed
+- Use custom bit func instead of the bitwise in Lua5.3, since 64bit bitwise will cause bugs in features like CRC32.
+- Improve the System.Net.Socket and System.Net.MQTT libs.
+
+
+
 ## [1.6.30] - 2021-05-10 WangXH <kurapica125@outlook.com>
+### Changed
 - The System.Collections.List's Filter & Map is improved, nil value will be discard
 - The System.Collections.Dictonary's Filter & Map is improved, nil value will be discard.
 
