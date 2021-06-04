@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 
+## [1.6.32] - 2021-06-01 WangXH <kurapica125@outlook.com>
+### Added
+- System.Date now support `date + sec` operation, a new date will be returned, negative number can be used.
+- System.Collections.IDictionary has a new `ToTable` method, it will return a raw hash table for the selected items.
+- System.Serialization.TargetFormat & System.Serialization.__SerializeFormat__ is added, the attribute can be used on class, property, member to specific the target format to string or number, normally only used on the Date class, default is number, so a date object will be serialize/deserialze to a number format.
+
+
 ## [1.6.31] - 2021-05-27 WangXH <kurapica125@outlook.com>
 ### Changed
 - Use custom bit func instead of the bitwise in Lua5.3, since 64bit bitwise will cause bugs in features like CRC32.

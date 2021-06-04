@@ -282,6 +282,10 @@ do
         -- thread pool, should be actived for http servers.
         ENABLE_CONTEXT_FEATURES             = false,
 
+        --- Whether enable thread lock features like __Lock__
+        -- Default false
+        ENABLE_THREAD_LOCK                  = false,
+
         --- Whehther active safe thread iterator so it will stop for dead coroutine
         -- On some platforms like Openresty call a dead wrap won't raise error but
         -- return the error message 'cannot resume dead coroutine'
@@ -16269,7 +16273,7 @@ do
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
-        __Final__() property "Context" { type = Context }
+        property "Context"      { type = Context }
 
         -----------------------------------------------------------
         --                      initializer                      --

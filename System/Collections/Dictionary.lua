@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/02/28                                               --
 -- Update Date  :   2020/07/06                                               --
--- Version      :   1.1.5                                                    --
+-- Version      :   1.1.6                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -345,7 +345,7 @@ PLoop(function(_ENV)
         function __new(_, dict) return { XDICT_TYPE_DICT, dict }, true end
 
         __Arguments__{ Callable, Any/nil, Any/nil }
-        function __new(_, iter, obj, idx) return { XDICT_TYPE_ITER, iter, obj, idx }, true  end
+        function __new(_, iter, obj, idx) return { XDICT_TYPE_ITER, iter, obj, idx }, true end
     end)
 
     --- the dictionary stream worker, used to provide stream filter, map and
@@ -501,6 +501,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                     Final method                      --
         -----------------------------------------------------------
+        --- Convert the selected items to a raw hash table
+        function ToTable(self)
+            local result        = {}
+            for key, value in self:GetIterator() do result[key] = value end
+            return result
+        end
+
         --- Convert the selected items to a dictionary
         __Arguments__{ -IDictionary/Dictionary }
         function ToDict(self, cls) return cls(self) end

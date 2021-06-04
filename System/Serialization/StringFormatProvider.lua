@@ -502,7 +502,7 @@ PLoop(function(_ENV)
         end
 
         if dtype then
-            if isValidValue(SerializableType, type) then
+            if isValidValue(SerializableType, dtype) then
                 return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data, dtype)
             end
         elseif isValidValue(Serializable, data) then

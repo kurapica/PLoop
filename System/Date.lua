@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2016/03/08                                               --
--- Update Date  :   2019/04/21                                               --
--- Version      :   1.0.2                                                    --
+-- Update Date  :   2021/06/01                                               --
+-- Version      :   1.0.3                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -66,7 +66,7 @@ PLoop(function(_ENV)
     }
 
     --- Represents the date object
-    __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false)
+    __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
     class "Date" (function (_ENV)
         extend "ICloneable" "ISerializable"
 
@@ -74,18 +74,52 @@ PLoop(function(_ENV)
             date                = _G.os and os.date or _G.date,
             time                = _G.os and os.time or _G.time,
             diff                = _G.os and os.difftime or _G.difftime,
+            floor               = math.floor,
             pairs               = pairs,
             type                = type,
             getmetatable        = getmetatable,
             strfind             = strfind,
             rawset              = rawset,
             tonumber            = tonumber,
+
+            Serialization.TargetFormat
         }
 
         local offset            = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
         local r2Time            = function (self) self.time = time(self) end
         local r4Time            = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
         local getnow            = time
+
+        local parseString       = function(s)
+            local year, month, day, hour, min, sec
+            local index         = 0
+
+            for n in s:gmatch("%d+") do
+                index           = index + 1
+                if index == 1 then
+                    year        = tonumber(n)
+                elseif index == 2 then
+                    month       = tonumber(n)
+                elseif index == 3 then
+                    day         = tonumber(n)
+                elseif index == 4 then
+                    hour        = tonumber(n)
+                elseif index == 5 then
+                    min         = tonumber(n)
+                elseif index == 6 then
+                    sec         = tonumber(n)
+                    break
+                end
+            end
+
+            if (year and month and day and year >= 1970 and month >= 1 and month <= 12 and day >= 1 and day <= 31)
+                and (not hour or (hour >= 0 and hour < 24))
+                and (not min  or (min  >= 0 and min < 60))
+                and (not sec  or (sec  >= 0 and sec < 60)) then
+
+                return year, month, day, hour, min, sec
+            end
+        end
 
         -----------------------------------------------------------
         --                    static property                    --
@@ -215,31 +249,8 @@ PLoop(function(_ENV)
 
         __Static__() __Arguments__{ NEString, Boolean/false, Boolean/false }
         function Parse(s, isEndOfDay, isutc)
-            local year, month, day, hour, min, sec
-            local index         = 0
-
-            for n in s:gmatch("%d+") do
-                index           = index + 1
-                if index == 1 then
-                    year        = tonumber(n)
-                elseif index == 2 then
-                    month       = tonumber(n)
-                elseif index == 3 then
-                    day         = tonumber(n)
-                elseif index == 4 then
-                    hour        = tonumber(n)
-                elseif index == 5 then
-                    min         = tonumber(n)
-                elseif index == 6 then
-                    sec         = tonumber(n)
-                    break
-                end
-            end
-
-            if (year and month and day and year >= 1970 and month >= 1 and month <= 12 and day >= 1 and day <= 31)
-                and (not hour or (hour >= 0 and hour < 24))
-                and (not min  or (min  >= 0 and min < 60))
-                and (not sec  or (sec  >= 0 and sec < 60)) then
+            local year, month, day, hour, min, sec = parseString(s)
+            if year then
                 return Date(year, month, day, hour or isEndOfDay and 23 or 0, min or isEndOfDay and 59 or 0, sec or isEndOfDay and 59 or 0, isutc)
             end
         end
@@ -249,7 +260,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Serialize the date
         function Serialize(self, info)
-            info:SetValue("time", self.Time)
+            if info == TargetFormat.STRING then
+                return self:ToString()
+            elseif info == TargetFormat.NUMBER then
+                return self.Time
+            else
+                info:SetValue("time", self.Time)
+            end
         end
 
         --- Return the diff second for the two Date object
@@ -313,6 +330,34 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
+        __Arguments__{ TargetFormat, Any }
+        function __new(_, fmt, value)
+            local vtype         = type(value)
+            if vtype == "number" then
+                local self      = { time = floor(value) }
+                r4Time(self)
+                return self, true
+            elseif vtype == "string" then
+                local year, month, day, hour, min, sec = parseString(value)
+                if year then
+                    local self          = {
+                        year            = year,
+                        month           = month,
+                        day             = day,
+                        hour            = hour,
+                        min             = min,
+                        sec             = sec,
+                    }
+
+                    r2Time(self)
+                    r4Time(self)
+
+                    return self, true
+                end
+            end
+            throw("The value can't be deserialized to Date object")
+        end
+
         __Arguments__{ SerializationInfo }
         function __new(_, info)
             local self          = { time = info:GetValue("time") or 0 }
@@ -370,6 +415,7 @@ PLoop(function(_ENV)
         __Arguments__{ Date }
         function __le(self, obj) return self.time <= obj.time end
 
+        __add                   = AddSeconds
         __sub                   = Diff
         __tostring              = ToString
 

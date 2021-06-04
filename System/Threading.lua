@@ -20,7 +20,7 @@ PLoop(function(_ENV)
         __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
         class "ThreadPool" (function(_ENV)
             if Platform.ENABLE_CONTEXT_FEATURES then
-                extend "System.IContext"   -- Only enable the context support when using in multi os thread
+                extend "System.IContext"
             end
 
             export {
@@ -224,7 +224,7 @@ PLoop(function(_ENV)
             --- the default thread pool, can't be used in multi os thread mode
             __Static__() property "Default" { set = false, default = function() return ThreadPool{ PoolSize = DEFAULT_POOL_SIZE } end }
 
-            --- the current thread pool, should only be used when MULTI_OS_THREAD and ENABLE_CONTEXT_FEATURES all turn on
+            --- the current thread pool if not use default
             __Static__() property "Current" {
                 get                 = function()
                     local ok, ret   = pcall(getCurrentPool)
@@ -479,7 +479,7 @@ PLoop(function(_ENV)
 
             export { RunWithLock = ILockManager.RunWithLock }
 
-            local wraptarget        = Platform.MULTI_OS_THREAD and function(target, key)
+            local wraptarget        = Platform.ENABLE_THREAD_LOCK and function(target, key)
                 return function(...) return RunWithLock(key, target, ...) end
             end or Toolset.fakefunc
 
@@ -523,7 +523,7 @@ PLoop(function(_ENV)
 
             export { TryRunWithLock = ILockManager.TryRunWithLock }
 
-            local wraptarget        = Platform.MULTI_OS_THREAD and function(target, key)
+            local wraptarget        = Platform.ENABLE_THREAD_LOCK and function(target, key)
                 return function(...) return TryRunWithLock(key, target, ...) end
             end or Toolset.fakefunc
 
