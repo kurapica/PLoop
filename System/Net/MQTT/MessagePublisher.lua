@@ -16,7 +16,7 @@ PLoop(function(_ENV)
     namespace "System.Net.MQTT"
 
     --- The message publisher for MQTT protocol
-    __Sealed__() __AnonymousClass__()
+    __Sealed__()
     interface "IMQTTPublisher" (function(_ENV)
         extend "System.Message.IPublisher"
 
@@ -247,6 +247,14 @@ PLoop(function(_ENV)
             rawset(self, "__PublishMessage",   GetNormalMethod(cls, "PublishMessage")   or noOperFunc)
             rawset(self, "__ReceiveMessage",   GetNormalMethod(cls, "ReceiveMessage")   or fakefunc)
         end
+    end)
+
+    --- An fake message publisher
+    __Sealed__()
+    class "FakeMQTTPublisher" (function(_ENV)
+        extend "IMQTTPublisher"
+
+        property "TopicSubscribed" { set = Toolset.fakefunc, get = function() return false end }
     end)
 
 
