@@ -153,6 +153,9 @@ PLoop(function(_ENV)
         --- The Second of the minute, 0-61
         property "Second"       { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
+        --- The week number, with the sunday is the first day
+        property "Week"         { get = function(self) return tonumber(date("%U", self.time)) end}
+
         --- The weekday, Sunday is 1
         property "DayOfWeek"    { get = function(self) return date("*t", self.time).wday end }
 
