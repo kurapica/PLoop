@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.33] - 2021-06-09 WangXH <kurapica125@outlook.com>
+### Added
+- System.Date now has a property "Week" to get the week number, which the monday is the first day of the week, [0, 53].
+
+### Changed
+- The "DayOfWeek" property of System.Date will return 0 - sunday, 1 - monday and etc
+
 
 ## [1.6.32] - 2021-06-01 WangXH <kurapica125@outlook.com>
 ### Added

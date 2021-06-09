@@ -157,7 +157,7 @@ PLoop(function(_ENV)
         property "Week"         { get = function(self) return tonumber(date("%W", self.time)) end}
 
         --- The weekday 1 (for Monday) to 7 (for Sunday)
-        property "DayOfWeek"    { get = function(self) local wday = date("*t", self.time).wday wday = wday - 1 return wday > 0 and wday or 7 end }
+        property "DayOfWeek"    { get = function(self) return date("*t", self.time).wday -1 end }
 
         --- The day of the year
         property "DayOfYear"    { get = function(self) return date("*t", self.time).yday end }
