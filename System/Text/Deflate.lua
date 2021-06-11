@@ -433,7 +433,12 @@ PLoop(function(_ENV)
             end
         end
 
-        if count == 0 then return depths end
+        if count == 0 then
+            return depths
+        elseif count == 1 then
+            depths[root.byte]   = 1
+            return depths
+        end
 
         -- Build the huffman tree
         for i = 1, max(1, count - 1) do

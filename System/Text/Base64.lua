@@ -39,13 +39,13 @@ PLoop(function(_ENV)
     --                              Base64                               --
     -----------------------------------------------------------------------
     System.Text.Encoder "Base64" {
-        encode                  = function (text)
+        encode                  = function (text, noret)
             local total         = 0
             local length        = #text
             local i             = 1
 
             while i <= length do
-                if total > 0 and total % 76 == 0 then yield("\n") end
+                if not noret and total > 0 and total % 76 == 0 then yield("\n") end
 
                 local f, s, t   = strbyte(text, i, i + 2)
                 local cache     = f * 0x10000 + (s or 0) * 0x100 + (t or 0)
