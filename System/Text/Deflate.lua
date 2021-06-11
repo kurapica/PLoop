@@ -25,7 +25,7 @@ PLoop(function(_ENV)
         floor                   = math.floor,
         ceil                    = math.ceil,
         log                     = math.log,
-        unpack                  = unpack or table.unpack,
+        unpack                  = _G.unpack or table.unpack,
         band                    = Toolset.band,
         bor                     = Toolset.bor,
         bnot                    = Toolset.bnot,
@@ -384,20 +384,17 @@ PLoop(function(_ENV)
         end
     end
 
-    calcHuffmanDepths            = function(freqitems, mbyte)
-        -- Init the fixed huffman code tree
+    calcHuffmanDepths           = function(freqitems, mbyte, maxLevel)
         local root
         local count             = 0
         local depths            = {}
-
-        for i = 0, mbyte do depths[i] = 0 end
 
         local insertLink        = function(node)
             local parent        = root
             local upper
             local freq          = node.freq
 
-            while parent and parent.freq < freq do
+            while parent and parent.freq <= freq do
                 upper           = parent
                 parent          = parent.next
             end
@@ -413,6 +410,9 @@ PLoop(function(_ENV)
 
         local convertToLevel
         convertToLevel          = function(node, level)
+            -- Normally enough
+            if maxLevel and maxLevel < level then level = maxLevel end
+
             if node.left then
                 convertToLevel(node.left,  level + 1)
                 if node.right then convertToLevel(node.right, level + 1) end
@@ -423,9 +423,14 @@ PLoop(function(_ENV)
         end
 
         -- build a link list based on the freq
-        for k, v in pairs(freqitems) do
-            insertLink{ byte = k, freq = v }
-            count               = count + 1
+        for i = 0, mbyte do
+            depths[i]           = 0
+
+            local freq          = freqitems[i]
+            if freq and freq > 0 then
+                insertLink{ byte = i, freq = freq }
+                count               = count + 1
+            end
         end
 
         if count == 0 then return depths end
@@ -701,7 +706,6 @@ PLoop(function(_ENV)
                         writer:Write(2, 2)
                         writer:Write(286 - 257, 5) -- HLIT
                         writer:Write(30 - 1,    5) -- HDIST
-                        writer:Write(19 - 4,    4) -- HCLEN
 
                         -- Calc the depths
                         local liteDepths= calcHuffmanDepths(litefr, 285)
@@ -802,11 +806,17 @@ PLoop(function(_ENV)
                         end
                         sendLength()
 
-                        -- The Huffman tree for Length
-                        local depDepths = calcHuffmanDepths(depths, 18)
+                        -- The Huffman tree for Length - max level no more than 3 byte
+                        local depDepths = calcHuffmanDepths(depths, 18, 7)
                         local lHTree    = HuffTableTree(depDepths)
 
-                        for i = 1, 19 do
+                        local hclen     = 19
+                        while depDepths[MAGIC_HUFFMAN_ORDER[hclen]] == 0 do
+                            hclen       = hclen - 1
+                        end
+                        writer:Write(hclen - 4, 4) -- HCLEN
+
+                        for i = 1, hclen do
                             writer:Write(depDepths[MAGIC_HUFFMAN_ORDER[i]], 3)
                         end
 
