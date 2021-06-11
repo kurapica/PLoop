@@ -347,6 +347,11 @@ PLoop(function(_ENV)
             end
         end
 
+        --- Sends all currently buffered output to the client.
+        function Flush(self)
+            return self.Context.Response:Flush()
+        end
+
         --- Missing
         function NotFound(self)
             if self.IsFinished then return end

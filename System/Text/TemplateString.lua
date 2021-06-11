@@ -378,7 +378,7 @@ PLoop(function(_ENV)
             setmetatable        = setmetatable,
             safeset             = Toolset.safeset,
             _PL_tostring        = Toolset.tostring or tostring,
-            setfenv             = setfenv or _G.debug and debug.setfenv or Toolset.fakefunc,
+            setfenv             = _G.setfenv or _G.debug and debug.setfenv or Toolset.fakefunc,
 
             META_ITEMS          = { __index = _G },
 

@@ -194,7 +194,7 @@ PLoop(function(_ENV)
 
             tostring            = tostring,
             select              = select,
-            unpack              = unpack,
+            unpack              = _G.unpack or table.unpack,
             pcall               = pcall,
             rawset              = rawset,
             loadsnippet         = Toolset.loadsnippet,

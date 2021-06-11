@@ -23,7 +23,7 @@ PLoop(function(_ENV)
     class "Queue" (function(_ENV, lsttype)
        extend "ICountable" "ISerializable"
 
-        export { type = type, ipairs = ipairs, yield = coroutine.yield, select = select, unpack = unpack or table.unpack, min = math.min }
+        export { type = type, ipairs = ipairs, yield = coroutine.yield, select = select, unpack = _G.unpack or table.unpack, min = math.min }
 
         lsttype = lsttype ~= Any and lsttype or nil
 

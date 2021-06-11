@@ -49,6 +49,9 @@ PLoop(function(_ENV)
         --- Gets a collection of cookies sent to the client.
         __Abstract__() property "Cookies"           { set = false, default = function(self) return HttpCookies() end }
 
+        --- Sends all currently buffered output to the client.
+        __Abstract__() function Flush(self) end
+
         --- Send the response headers
         __Abstract__() function SendHeaders(self) end
 

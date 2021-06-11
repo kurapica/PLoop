@@ -396,6 +396,8 @@ PLoop(function(_ENV)
             tinsert                         = tinsert,
             tblconcat                       = tblconcat,
             loadsnippet                     = Toolset.loadsnippet,
+            strbyte                         = string.byte,
+            strsub                          = string.sub,
             type                            = type,
             SerializeDataWithWriter         = SerializeDataWithWriter,
             SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
@@ -405,6 +407,14 @@ PLoop(function(_ENV)
 
             List,
         }
+
+        local function checkBOM(str)
+            if strbyte(str, 1) == 0xEF and strbyte(str, 2) == 0xBB and strbyte(str, 3) == 0xBF then
+                return strsub(str, 4, -1)
+            else
+                return str
+            end
+        end
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -474,18 +484,18 @@ PLoop(function(_ENV)
         __Arguments__{ System.Text.TextReader }
         function Deserialize(self, reader)
             local data = reader:ReadToEnd()
-            if data then return loadsnippet("return " .. data)() end
+            if data then return loadsnippet("return " .. checkBOM(data))() end
         end
 
         __Arguments__{ Function }
         function Deserialize(self, read)
             local data = List(read):Join()
-            if data then return loadsnippet("return " .. data)() end
+            if data then return loadsnippet("return " .. checkBOM(data))() end
         end
 
         __Arguments__{ String }
         function Deserialize(self, data)
-            return loadsnippet("return " .. data)()
+            return loadsnippet("return " .. checkBOM(data))()
         end
     end)
 

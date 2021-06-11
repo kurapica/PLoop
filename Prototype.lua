@@ -304,6 +304,9 @@ do
 
         --- The time out of the fake entities(second)
         DATA_CACHE_FAKE_ENTITY_TIMEOUT      = 3600,
+
+        --- Whether only use the custom bit operation by PLoop
+        USE_CUSTOM_BIT_IMPLEMENTATION       = false,
     }
 
     -- Special constraint
@@ -446,7 +449,7 @@ do
     -----------------------------------------------------------------------
     --                         flags management                          --
     -----------------------------------------------------------------------
-    if ((LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table")) then
+    if not PLOOP_PLATFORM_SETTINGS.USE_CUSTOM_BIT_IMPLEMENTATION and ((LUA_VERSION == 5.2 and type(_G.bit32) == "table") or (LUA_VERSION == 5.1 and type(_G.bit) == "table")) then
         lshift                  = _G.bit32 and _G.bit32.lshift  or _G.bit.lshift
         rshift                  = _G.bit32 and _G.bit32.rshift  or _G.bit.rshift
         band                    = _G.bit32 and _G.bit32.band    or _G.bit.band
@@ -15099,7 +15102,7 @@ do
         --                      meta-method                      --
         -----------------------------------------------------------
         function __call(self, first, ...)
-            if select("#", ...) == 0 and type(first) == "table" and getmetatable(tabel) == nil then
+            if select("#", ...) == 0 and type(first) == "table" and getmetatable(first) == nil then
                 self.Template   = first
             else
                 self.Template   = { first, ... }

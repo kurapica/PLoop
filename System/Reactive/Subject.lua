@@ -147,7 +147,7 @@ PLoop(function(_ENV)
     __Sealed__() class "AsyncSubject" (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = unpack or table.unpack }
+        export { select = select, unpack = _G.unpack or table.unpack }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -174,7 +174,7 @@ PLoop(function(_ENV)
     __Sealed__() class "BehaviorSubject" (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = unpack or table.unpack, onNext = Subject.OnNext }
+        export { select = select, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext }
 
         -----------------------------------------------------------------------
         --                              method                               --
