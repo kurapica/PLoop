@@ -408,12 +408,13 @@ PLoop(function(_ENV)
             List,
         }
 
-        local function checkBOM(str)
+        local function loadData(str)
             if strbyte(str, 1) == 0xEF and strbyte(str, 2) == 0xBB and strbyte(str, 3) == 0xBF then
-                return strsub(str, 4, -1)
-            else
-                return str
+                str             = strsub(str, 4, -1)
             end
+
+            local func          = loadsnippet("return " .. str)
+            return func and func()
         end
 
         -----------------------------------------------------------------------
@@ -484,18 +485,18 @@ PLoop(function(_ENV)
         __Arguments__{ System.Text.TextReader }
         function Deserialize(self, reader)
             local data = reader:ReadToEnd()
-            if data then return loadsnippet("return " .. checkBOM(data))() end
+            return data and loadData(data)
         end
 
         __Arguments__{ Function }
         function Deserialize(self, read)
             local data = List(read):Join()
-            if data then return loadsnippet("return " .. checkBOM(data))() end
+            return data and loadData(data)
         end
 
         __Arguments__{ String }
         function Deserialize(self, data)
-            return loadsnippet("return " .. checkBOM(data))()
+            return loadData(data)
         end
     end)
 
