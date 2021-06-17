@@ -722,6 +722,17 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                     Final method                      --
         -----------------------------------------------------------
+        --- Convert the selected items to a raw hash table
+        function ToTable(self)
+            local result        = {}
+            local index         = 1
+            for _, value in self:GetIterator() do
+                result[index]   = value
+                index           = index + 1
+            end
+            return result
+        end
+
         --- Convert the selected items to a list
         __Arguments__{ -IList/List }
         function ToList(self, cls) return cls(self) end
