@@ -48,8 +48,7 @@ PLoop(function(_ENV)
 
                     -- Special settings for the Behavior Subjects
                     if isSubType(stype, BehaviorSubject) and prop:IsReadable() and not prop:IsIndexer() then
-                        local v = prop:GetOwner()[prop:GetName()]
-                        if v ~= nil then subject:OnNext(v) end
+                        subject:OnNext(prop:GetOwner()[prop:GetName()])
                     end
 
                     _StaticSubjects = safeset(_StaticSubjects, prop, subject)
@@ -71,8 +70,7 @@ PLoop(function(_ENV)
 
                     -- Special settings for the Behavior Subjects
                     if isSubType(stype, BehaviorSubject) and prop:IsReadable() and not prop:IsIndexer() then
-                        local val   = obj[prop:GetName()]
-                        if val ~= nil then subject:OnNext(val) end
+                        subject:OnNext(obj[prop:GetName()])
                     end
                 end
             end

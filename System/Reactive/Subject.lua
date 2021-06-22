@@ -174,7 +174,7 @@ PLoop(function(_ENV)
     __Sealed__() class "BehaviorSubject" (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext }
+        export { select = select, max = math.max, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -186,7 +186,7 @@ PLoop(function(_ENV)
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self[0]             = select("#", ...)
+            self[0]             = max(1, select("#", ...))
             for i = 1, self[0] do
                 self[i]         = select(i, ...)
             end
