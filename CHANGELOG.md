@@ -7,12 +7,14 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - The "DayOfWeek" property of System.Date will return 0 - sunday, 1 - monday and etc
+- The Behavior Subject can hold nil value now.
 
 
 ## [1.6.32] - 2021-06-01 WangXH <kurapica125@outlook.com>
 ### Added
 - System.Date now support `date + sec` operation, a new date will be returned, negative number can be used.
 - System.Collections.IDictionary has a new `ToTable` method, it will return a raw hash table for the selected items.
+- System.Collections.IList has a new `ToTable` method, it will return a raw hash table for the selected items.
 - System.Serialization.TargetFormat & System.Serialization.__SerializeFormat__ is added, the attribute can be used on class, property, member to specific the target format to string or number, normally only used on the Date class, default is number, so a date object will be serialize/deserialze to a number format.
 
 
