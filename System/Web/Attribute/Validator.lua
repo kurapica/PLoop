@@ -33,15 +33,19 @@ PLoop(function(_ENV)
         local function redirect(context, path, settings)
             local request       = context.Request
             if request:IsHtmlAccepted() then
-                if not path then
-                    if request.HttpMethod == HttpMethod_GET then
-                        path    = (settings and settings.LoginPage or __Login__.DefaultLoginPage) .. "?" .. (settings and settings.PathKey or __Login__.DefaultPathKey) .. "=" .. UrlEncode(request.RawUrl)
-                    else
-                        path    = settings and settings.LoginPage or __Login__.DefaultLoginPage
-                    end
-                end
+                path            = path or settings and settings.LoginPage or __Login__.DefaultLoginPage
 
-                return context.Response:Redirect(path)
+                if path then
+                    if request.HttpMethod == HttpMethod_GET then
+                        local k = settings and settings.PathKey or __Login__.DefaultPathKey
+                        if k and k ~= "" then
+                            path= path .. "?" .. k .. "=" .. UrlEncode(request.RawUrl)
+                        end
+                    end
+                    return context.Response:Redirect(path)
+                else
+                    context.Response.StatusCode = HTTP_STATUS.DENIED
+                end
             else
                 context.Response.StatusCode = HTTP_STATUS.DENIED
             end
