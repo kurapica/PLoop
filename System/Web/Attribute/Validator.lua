@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/06/13                                               --
--- Version      :   1.3.4                                                    --
+-- Update Date  :   2020/07/04                                               --
+-- Version      :   1.3.5                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -248,6 +248,7 @@ PLoop(function(_ENV)
             tonumber            = tonumber,
             pairs               = pairs,
             type                = type,
+            next                = next,
             pcall               = pcall,
             strgsub             = string.gsub,
             strtrim             = function (s) return s and strgsub(s, "^%s*(.-)%s*$", "%1") or "" end,
@@ -330,7 +331,7 @@ PLoop(function(_ENV)
                 end
 
                 return value, errs
-            elseif value[1] == nil then
+            elseif value[1] == nil and next(value) ~= nil then
                 local errs
                 local val, err  = config.elementconfig:validate(value)
                 value           = { val }
