@@ -373,22 +373,6 @@ PLoop(function(_ENV)
             ERR_MSG_ESCAPE_CHAR = "Unexpected escape char at %d of the json.",
 
             ERR_MSG_CLOSE_STR   = "'\"' is expected to close the string started at %d of the json.",
-
-            -- Declare global variables
-            LoadJsonObject      = false,
-            LoadJsonArray       = false,
-            LoadJsonString      = false,
-            LoadJsonNumber      = false,
-            LoadJsonBoolean     = false,
-            LoadJsonData        = false,
-            DecodeUTF8          = false,
-            LoadJsonObjectUTF8  = false,
-            LoadJsonArrayUTF8   = false,
-            LoadJsonStringUTF8  = false,
-            LoadJsonNumberUTF8  = false,
-            LoadJsonBooleanUTF8 = false,
-            LoadJsonDataUTF8    = false,
-            LoadJson            = false,
         }
 
         ------------------------------

@@ -414,7 +414,7 @@ PLoop(function(_ENV)
             end
 
             local func          = loadsnippet("return " .. str)
-            return func and func()
+            return func and func() or str
         end
 
         -----------------------------------------------------------------------
@@ -494,7 +494,7 @@ PLoop(function(_ENV)
             return data and loadData(data)
         end
 
-        __Arguments__{ String }
+        __Arguments__{ String + Number }
         function Deserialize(self, data)
             return loadData(data)
         end
@@ -526,11 +526,7 @@ PLoop(function(_ENV)
     --- Convert the string to data
     __Static__()
     function Toolset.parsestring(string, type)
-        if type then
-            return Deserialize(StringFormatProvider(), string, type)
-        else
-            return Deserialize(StringFormatProvider(), string)
-        end
+        return Deserialize(StringFormatProvider(), string, type)
     end
 
     local _ToStringAllHandler   = {}

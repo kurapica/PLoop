@@ -711,9 +711,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                           static method                           --
         -----------------------------------------------------------------------
-        __Arguments__{ FormatProvider, Any + Function + System.Text.TextReader, SerializableType/nil }
-        __Static__() function Deserialize(provider, reader, otype)
-            return deserialize(provider:Deserialize(reader), otype)
+        __Arguments__{ FormatProvider, Any + Function + System.Text.TextReader, SerializableType/nil, TargetFormat/nil }
+        __Static__() function Deserialize(provider, reader, otype, fmt)
+            return deserialize(provider:Deserialize(reader), otype, fmt)
         end
 
         __Arguments__{ FormatProvider, Serializable, (Function + System.Text.TextWriter)/nil }
@@ -727,6 +727,24 @@ PLoop(function(_ENV)
             if type(object) ~= "table" then return provider:Serialize(object, writer) end
             return provider:Serialize(serialize(object, otype, {}), writer)
         end
+
+        __Arguments__{ FormatProvider, Serializable, TargetFormat, (Function + System.Text.TextWriter)/nil }
+        __Static__() function Serialize(provider, object, fmt, writer)
+            if type(object) ~= "table" then return provider:Serialize(object, writer) end
+            return provider:Serialize(serialize(object, nil, {}, fmt), writer)
+        end
+
+        __Arguments__{ FormatProvider, Serializable, SerializableType, TargetFormat, (Function + System.Text.TextWriter)/nil }
+        __Static__() function Serialize(provider, object, otype, fmt, writer)
+            if type(object) ~= "table" then return provider:Serialize(object, writer) end
+            return provider:Serialize(serialize(object, otype, {}, fmt), writer)
+        end
+
+        --- whether  the type is serializable
+        __Static__() IsSerializableType     = isSerializableType
+
+        --- whether the value is serializable
+        __Static__() IsSerializable         = isSerializable
     end)
 
     -----------------------------------------------------------------------

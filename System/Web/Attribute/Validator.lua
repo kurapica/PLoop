@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/04/04                                               --
--- Update Date  :   2020/07/04                                               --
--- Version      :   1.3.5                                                    --
+-- Update Date  :   2021/07/13                                               --
+-- Version      :   1.4.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -259,9 +259,11 @@ PLoop(function(_ENV)
             DICTIONARY          = StructCategory.DICTIONARY,
             Debug               = Logger.Default[Logger.LogLevel.Debug],
 
+            stringProvider      = Serialization.StringFormatProvider(),
+
             HttpMethod_GET      = HttpMethod.GET,
 
-            __Form__, Attribute, AttributeTargets, JsonFormatProvider, Serialization.StringFormatProvider, Number
+            __Form__, Attribute, AttributeTargets, JsonFormatProvider, Number, Date,
         }
 
         local function validateNotypeValue(config, value)
@@ -288,6 +290,20 @@ PLoop(function(_ENV)
                 local ret, err  = ValidateEnumValue(config.type, value)
                 if err then return value, true end
                 return ret
+            end
+        end
+
+        local function validateDateValue(config, value)
+            if type(value) == "string" then value = strtrim(value) end
+            if value == "" then value = nil end
+
+            if value == nil then
+                return nil, config.require and __Form__.RequireMessage or nil
+            else
+                local number    = tonumber(value)
+                local ok, val   = pcall(Deserialize, stringProvider, number or value, Date, number and "NUMBER" or "STRING")
+                if not ok then return value, __Form__.DateMessage end
+                return val
             end
         end
 
@@ -445,6 +461,10 @@ PLoop(function(_ENV)
                     elseif category == DICTIONARY then
                         return { keyconfig = parseType(GetDictionaryKey(vtype), nil, stack + 1), valconfig = parseType(GetDictionaryValue(vtype), nil, stack + 1), validate = validateDictValue, require = require  }
                     end
+                elseif vtype == Date then
+                    return { type = Date, validate = validateDateValue, require = require }
+                else
+                    error("The " .. vtype .. " is not supported for form validation")
                 end
             end
             return { validate = validateNotypeValue, require = require }
@@ -519,6 +539,9 @@ PLoop(function(_ENV)
 
         --- The message for table errors
         __Static__() property "TableMessage"    { type = String, default = "the %s must be a table" }
+
+        --- The message for Date errors
+        __Static__() property "DateMessage"     { type = String, default = "the %s must be a valid date value"}
 
         -----------------------------------------------------------
         --                       property                        --
