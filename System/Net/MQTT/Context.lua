@@ -828,7 +828,7 @@ PLoop(function(_ENV)
         property "SendTimeout"              { type = NaturalNumber }
 
         --- The Session Storage Provider for the server side client, with a default session provider only for testing purposes
-        property "SessionStorageProvider"   { type = System.Context.ISessionStorageProvider, default = function(self) return TableSessionStorageProvider() end }
+        property "SessionStorageProvider"   { type = System.Context.ISessionStorageProvider, default = function(self) return System.Context.TableSessionStorageProvider() end }
 
         --- The MQTT Message Publisher type to be used for the server side client
         property "MessagePublisherType"     { type = - System.Net.MQTT.IMQTTPublisher, default = System.Net.MQTT.MQTTPublisher }
