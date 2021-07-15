@@ -265,7 +265,7 @@ PLoop(function(_ENV)
     --- The Connect will packet
     __Sealed__()
     struct "ConnectWill"        {
-        { name = "qos",         type = Number },
+        { name = "qos",         type = QosLevel },
         { name = "retain",      type = Boolean },
         { name = "topic",       type = String },
         { name = "message",     type = String },
@@ -277,7 +277,7 @@ PLoop(function(_ENV)
     --- The MQTT CONNECT Packet
     __Sealed__()
     struct "ConnectPacket"      {
-        { name = "level",       type = Number },
+        { name = "level",       type = ProtocolLevel },
         { name = "cleanSession",type = Boolean },      -- MQTT v3.1.1
         { name = "cleanStart",  type = Boolean },      -- MQTT v5.0
         { name = "keepAlive",   type = Number },
