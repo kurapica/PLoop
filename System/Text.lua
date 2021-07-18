@@ -304,7 +304,7 @@ PLoop(function(_ENV)
                         local w = StringWriter()
                         w:Open()
 
-                        for res in IterReader(decode, str, strategy, block, ...) do
+                        for res in IterReaderEncoder(decode, str, strategy, block, ...) do
                             w:Write(res)
                         end
 
@@ -348,7 +348,7 @@ PLoop(function(_ENV)
                         local w = StringWriter()
                         w:Open()
 
-                        for res in IterReader(encode, str, strategy, block, ...) do
+                        for res in IterReaderEncoder(encode, str, strategy, block, ...) do
                             w:Write(res)
                         end
 
