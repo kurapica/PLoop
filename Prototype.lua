@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2020 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2021 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --
@@ -667,8 +667,8 @@ do
         end
 
         -- Default
-        stack = stack or 1
-        env = env or visitor or getfenv(stack + 3) or _G
+        stack                   = stack or 1
+        env                     = env or visitor or getfenv(stack + 3) or _G
 
         return visitor, env, target, definition, flag, stack
     end
@@ -12019,6 +12019,28 @@ do
                 end
             end;
 
+            --- Has Default Value
+            -- @static
+            -- @method  HasDefault
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  bool                        whether the property has default value
+            ["HasDefault"]      = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_DEFAULT] ~= nil or false
+            end;
+
+            --- Has Default Value Factory
+            -- @static
+            -- @method  HasDefaultFactory
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  bool                        whether the property has default value factory
+            ["HasDefaultFactory"] = function(self)
+                local info      = _PropertyInfo[self]
+                return info and info[FLD_PROP_DEFAULTFUNC] ~= nil or false
+            end;
+
             --- Get the property default value
             -- @static
             -- @method  GetType
@@ -12027,7 +12049,7 @@ do
             -- @return  default                     the default value
             ["GetDefault"]      = function(self)
                 local info      = _PropertyInfo[self]
-                return info and clone(info[FLD_PROP_DEFAULT]) or nil
+                if info then return clone(info[FLD_PROP_DEFAULT]) end
             end;
 
             --- Get the property type
@@ -12243,6 +12265,8 @@ do
             ["IsWeak"]          = property.IsWeak;
             ["IsWritable"]      = property.IsWritable;
             ["GetClone"]        = property.GetClone;
+            ["HasDefault"]      = property.HasDefault;
+            ["HasDefaultFactory"]=property.HasDefaultFactory;
             ["GetDefault"]      = property.GetDefault;
             ["GetType"]         = property.GetType;
             ["SetClone"]        = property.SetClone;

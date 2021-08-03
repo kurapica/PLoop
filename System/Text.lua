@@ -33,6 +33,9 @@ PLoop(function(_ENV)
 
     namespace "System.Text"
 
+    __Sealed__()
+    class "EncodingException"   { Exception, Message = { type = String, default = "The encoding isn't supported" } }
+
     __Sealed__() __AutoIndex__()
     enum "TextReaderStrategy" { "CHAR", "LINE", "ALL", "BLOCK", "READER" }
 

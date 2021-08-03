@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file.
 
 
+## [1.6.36] - 2021-07-04 WangXH <kurapica125@outlook.com>
+### Added
+- `System.Reactive` is global namespace now.
+
+
+## [1.6.35] - 2021-06-13 WangXH <kurapica125@outlook.com>
+### Added
+- `System.Date` can be validate by `__Form__`.
+
+
 ## [1.6.34] - 2021-07-04 WangXH <kurapica125@outlook.com>
 ### Changed
 - `__Form__`'s validation logic for array struct fixed for empty array.

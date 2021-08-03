@@ -8,12 +8,14 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2021/08/04                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     namespace "System.Reactive"
+
+    Environment.RegisterGlobalNamespace("System.Reactive")
 
     __Sealed__() class "Observer" (function(_ENV)
         extend "System.IObserver"

@@ -156,7 +156,7 @@ PLoop(function(_ENV)
         --- The week number, with the mondy is the first day
         property "Week"         { get = function(self) return tonumber(date("%W", self.time)) end}
 
-        --- The weekday 1 (for Monday) to 7 (for Sunday)
+        --- The weekday 0 (for Sunday) to 6 (for Saturday)
         property "DayOfWeek"    { get = function(self) return date("*t", self.time).wday -1 end }
 
         --- The day of the year
