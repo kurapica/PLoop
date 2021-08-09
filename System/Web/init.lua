@@ -7,9 +7,6 @@ require "PLoop.System.Data"
 -- Core
 require "PLoop.System.Web.Core"
 
--- FormatProvider
-require "PLoop.System.Web.FormatProvider.JsonFormatProvider"
-
 -- Context
 require "PLoop.System.Web.Context.HttpCookie"
 require "PLoop.System.Web.Context.HttpRequest"

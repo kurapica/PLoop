@@ -263,7 +263,7 @@ PLoop(function(_ENV)
 
             HttpMethod_GET      = HttpMethod.GET,
 
-            __Form__, Attribute, AttributeTargets, JsonFormatProvider, Number, Date,
+            __Form__, Attribute, AttributeTargets, Serialization.JsonFormatProvider, Number, Date,
         }
 
         local function validateNotypeValue(config, value)

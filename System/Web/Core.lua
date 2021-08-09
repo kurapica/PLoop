@@ -43,7 +43,7 @@ PLoop(function(_ENV)
             loadresource        = IO.Resource.IResourceManager.LoadResource,
             IsObjectType        = Class.IsObjectType,
 
-            System.Text.UTF8Encoding, IO.Resource.IResourceManager, Web
+            System.Text.UTF8Encoding, IO.Resource.IResourceManager, Web, Toolset,
         }
 
         local SPECIAL_MAP       = { [System.Data.DBNull] = "" }
@@ -252,7 +252,7 @@ PLoop(function(_ENV)
 
         --- Parse the value to string so special null value can be changed to empty string
         __Static__() function ParseString(val, otype)
-            return val == nil and "" or SPECIAL_MAP[val] or type(val) ~= "table" and tostring(val) or Web.Json(val, otype)
+            return val == nil and "" or SPECIAL_MAP[val] or type(val) ~= "table" and tostring(val) or Toolset.json(val, otype)
         end
 
         --- Encodes a string to be displayed in a browser

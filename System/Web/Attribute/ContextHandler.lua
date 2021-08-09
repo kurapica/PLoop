@@ -120,7 +120,7 @@ PLoop(function(_ENV)
             type                = type,
             Error               = Logger.Default[Logger.LogLevel.Error],
 
-            IHttpContextHandler, JsonFormatProvider, Controller, AttributeTargets, __Json__, HTTP_STATUS,
+            IHttpContextHandler, Serialization.JsonFormatProvider, Controller, AttributeTargets, __Json__, HTTP_STATUS,
         }
 
         local processHandler    = function(self, context, phase)
@@ -807,13 +807,13 @@ PLoop(function(_ENV)
             GetResource         = GetResource,
             loadresource        = IO.Resource.IResourceLoader.LoadResource,
             Error               = Logger.Default[Logger.LogLevel.Error],
-            Json                = Json,
+            Json                = Toolset.json,
 
             SWITCH_CASE_VIEW    = 1,
             SWITCH_CASE_JSON    = 2,
             SWITCH_CASE_TEXT    = 3,
 
-            JsonFormatProvider, IHttpContextHandler, Controller, IHttpOutput, Text.StringReader, AttributeTargets, __Switch__, HTTP_STATUS, Web
+            Serialization.JsonFormatProvider, IHttpContextHandler, Controller, IHttpOutput, Text.StringReader, AttributeTargets, __Switch__, HTTP_STATUS, Web
         }
 
         local processView       = function(self, default, path, data)

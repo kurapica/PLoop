@@ -494,7 +494,7 @@ PLoop(function(_ENV)
             return data and loadData(data)
         end
 
-        __Arguments__{ String + Number }
+        __Arguments__{ Number + String }
         function Deserialize(self, data)
             return loadData(data)
         end

@@ -4816,15 +4816,12 @@ end
 
 ### 从JSON开始
 
-使用取自System.Web的一个例子：
+这是一个完整的序列化和反序列化的例子：
 
 
 ```lua
-require "PLoop.System.Web"
-
-PLoop(function(_ENV)
+require "PLoop" (function(_ENV)
 	import "System.Serialization"
-	import "System.Web"
 
 	json = [==[
 	{
@@ -4860,7 +4857,7 @@ PLoop(function(_ENV)
 end)
 ```
 
-这个例子使用**System.Serialization**通过**System.Web.JsonFormatProvider**来反序列化json字符串为lua的普通table，然后使用**System.Serialization.StringFormatProvider**将这个普通table转换成lua的字符串。
+这个例子使用**System.Serialization**通过**System.Serialization.JsonFormatProvider**来反序列化json字符串为lua的普通table，然后使用**System.Serialization.StringFormatProvider**将这个普通table转换成lua的字符串。
 
 **System.Serialization.Serialize**和 **System.Serialization.Deserialize**是两个静态方法。
 
@@ -4871,7 +4868,13 @@ end)
 * Serialize : PLoop object -> lua table -> target format( string, json, xml )
 * Deserialize : target format -> lua table -> PLoop object
 
-**JsonFormatProvider**定义在**System.Web**，而**StringFormatProvider**定义在**System.Serialization**。
+
+Json是常见的序列化处理，每次使用JsonFormatProvider也比较麻烦，实际可以直接用`Toolset.json(data[,type])`将对象或者数据转换为Json数据包，或者用
+`Toolset.parsejson(json[, type])`将Json数据转换为Lua的数据或者PLoop的对象。
+
+同样，针对**StringFormatProvider**可以使用`Toolset.tostring(data[, type[, pretty]])`将对象或者数据序列化为字符串，或者用
+`Toolset.parsestring(str[, type])`将字符串转换为Lua的数据或者PLoop的对象。
+
 
 ### 可序列化类型
 

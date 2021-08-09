@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
+### Changed
+- `System.Web.JsonFormatProvider` is moved to `System.Serialization.JsonFormatProvider`
+- `Web.Json` and `Web.ParseJson` is moved to `Toolset.json` and `Toolsest.parsejson`
+
 
 ## [1.6.36] - 2021-07-04 WangXH <kurapica125@outlook.com>
 ### Added

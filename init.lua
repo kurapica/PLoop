@@ -22,13 +22,14 @@ require "PLoop.System.Collections.Queue"
 -- System Configuration
 require "PLoop.System.Configuration"
 
--- System.Serialization
-require "PLoop.System.Serialization.LuaFormatProvider"
-require "PLoop.System.Serialization.StringFormatProvider"
-
 -- System.Text.Encoding
 require "PLoop.System.Text.UTF8Encoding"
 require "PLoop.System.Text.UTF16Encoding"
+
+-- System.Serialization
+require "PLoop.System.Serialization.LuaFormatProvider"
+require "PLoop.System.Serialization.StringFormatProvider"
+require "PLoop.System.Serialization.JsonFormatProvider"
 
 -- System.Text.Encoder
 require "PLoop.System.Text.XmlEntity"

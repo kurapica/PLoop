@@ -86,7 +86,7 @@ PLoop(function(_ENV)
             resume              = coroutine.resume,
             error               = error,
 
-            JsonFormatProvider, IHttpOutput, HTTP_STATUS, IHttpContextHandler.ProcessPhase,
+            Serialization.JsonFormatProvider, IHttpOutput, HTTP_STATUS, IHttpContextHandler.ProcessPhase,
             Controller, ThreadPool, Guid
         }
 

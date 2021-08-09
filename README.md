@@ -589,15 +589,11 @@ With the **System.Serialization**, we can serialize objects to data of target fo
 
 ### JSON Format
 
-To use the JSON format, we need load **PLoop.System.Web** besides the **PLoop**.
+Here is a full example to use the Serialization:
 
 ```lua
-require "PLoop"
-require "PLoop.System.Web"
-
-PLoop(function(_ENV)
+require "PLoop" (function(_ENV)
 	import "System.Serialization"
-	import "System.Web"
 
 	json = [==[
 	{
@@ -633,9 +629,15 @@ PLoop(function(_ENV)
 end)
 ```
 
-The example is using **System.Serialization** deserialize a json string to lua data by using **System.Web.JsonFormatProvider**, then use **System.Serialization.StringFormatProvider** to serialize the data to a string.
+The example is using **System.Serialization** deserialize a json string to lua data by using **System.Serialization.JsonFormatProvider**, then use **System.Serialization.StringFormatProvider** to serialize the data to a string.
 
 You can find more in [009.serialization.md](https://github.com/kurapica/PLoop/blob/master/Docs/009.serialization.md)
+
+To simply use the **JsonFormatProvider**, you can use `Toolset.json(data[, type])` to serialize the data or object into json,
+or use `Toolset.parsejson(json[, type])` to deserialize the json to the data or object.
+
+For the **StringFormatProvider**, also we can use `Toolset.tostring(data[, type[, pretty]])` to serialize the data or object into
+string, or use `Toolset.parsestring(str[, type])` deserialize the string to the data or object.
 
 
 ## Data Entity

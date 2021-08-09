@@ -259,7 +259,7 @@ PLoop(function(_ENV)
     -- The property collection
     __Sealed__()
     struct "PropertySet"        {
-        [PropertyIdentifier]    = String + Number + struct{ String + Number } + struct { [String] = String }
+        [PropertyIdentifier]    = Number + String + struct{ Number + String } + struct { [String] = String }
     }
 
     --- The Connect will packet

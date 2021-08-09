@@ -71,7 +71,7 @@ PLoop(function(_ENV)
                 ProcessHttpRequest = IHttpContextHandler.ProcessHttpRequest,
                 serialize          = Serialization.Serialize,
 
-                InnerContext, JsonFormatProvider
+                InnerContext, Serialization.JsonFormatProvider
             }
 
             -----------------------------------------------------------

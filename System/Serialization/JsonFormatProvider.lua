@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                       System.Web.JsonFormatProvider                       --
+--                  System.Serialization.JsonFormatProvider                  --
 --                                                                           --
 --===========================================================================--
 
@@ -8,14 +8,13 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2015/05/26                                               --
--- Update Date  :   2019/04/01                                               --
--- Version      :   1.0.3                                                    --
+-- Update Date  :   2021/08/09                                               --
+-- Version      :   1.0.4                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
-    namespace "System.Web"
+    namespace "System.Serialization"
 
-    import "System.Serialization"
     import "System.Text"
 
     export {
@@ -1277,7 +1276,7 @@ PLoop(function(_ENV)
     end)
 
     __Static__()
-    function Web.Json(data, type)
+    function Toolset.json(data, type)
         if type then
             return Serialize(JsonFormatProvider(), data, type)
         else
@@ -1286,7 +1285,7 @@ PLoop(function(_ENV)
     end
 
     __Static__()
-    function Web.ParseJson(string, type)
+    function Toolset.parsejson(string, type)
         if type then
             return Deserialize(JsonFormatProvider(), string, type)
         else
