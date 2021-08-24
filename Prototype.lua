@@ -88,8 +88,10 @@ do
             tostring            = tostring,
 
             -- Math
+            abs                 = math.abs,
             floor               = math.floor,
             mlog                = math.log,
+            mpow                = math.pow,
 
             -- Safe
             pcall               = pcall,
@@ -517,6 +519,50 @@ do
         validateflags           = function (x, n) if not n or x > n then return false end n = n % (2 * x) return (n - n % x) == x end
         turnonflags             = function (x, n) return validateflags(x, n) and n or (x + (n or 0)) end
         turnoffflags            = function (x, n) return validateflags(x, n) and (n - x) or n end
+    end
+
+    function inttoreal(int)
+        if int == 0 then return 0 end
+
+        local b1, b2            = rshift(int, 16), band(int, 2^16-1)
+        local intSign, intSignRest, intExponent, intExponentRest
+        local faDigit
+
+        intSign                 = rshift(b1, 15)
+        intSignRest             = band(b1, 32767)
+
+        intExponent             = rshift(intSignRest, 7)
+        intExponentRest         = band(intSignRest, 127)
+
+        faDigit                 = floor((intExponentRest * 65536 + b2) / 8388608 * 10^8 + 0.5) / 10^8
+
+        return mpow(-1, intSign) * mpow(2, intExponent - 127) * (faDigit + 1)
+    end
+
+    function realtoint(real)
+        if real == 0 then return 0 end
+
+        local intSign, intSignRest, intExponent, intExponentRest
+        local faDigit
+
+        intSign                 = real < 0 and 1 or 0
+        real                    = abs(real)
+
+        intExponent             = floor(mlog(real) / mlog(2))
+
+        faDigit                 = real / mpow(2, intExponent) - 1
+        intExponent             = intExponent + 127
+
+        faDigit                 = floor( faDigit * 8388608 + 0.5 )
+        intExponentRest         = rshift(faDigit, 16)
+
+        intSignRest             = lshift(intExponent, 7) + intExponentRest
+
+        local b1                = lshift(intSign, 15) + intSignRest
+        local b2                = band(faDigit, 65535)
+        local int               = lshift(b1, 16) + b2
+
+        return int < 0 and (2^32 + int) or int
     end
 
     -----------------------------------------------------------------------
@@ -12069,7 +12115,7 @@ do
             -- @owner   property
             -- @param   target                      the target property
             -- @return  type                        the index key type
-            ["GetIndexType"]         = function(self)
+            ["GetIndexType"]    = function(self)
                 local info      = _PropertyInfo[self]
                 return info and info[FLD_PROP_INDEXERTYP] or nil
             end;
@@ -13631,6 +13677,9 @@ do
     --- Represents string value
     __Sealed__() String = struct "System.String"    { genBasicValidator("string")   }
 
+    --- Represents array of string
+    __Sealed__() struct "System.Strings"            { String }
+
     --- Represents number value
     __Sealed__() Number = struct "System.Number"    { genBasicValidator("number")   }
 
@@ -13665,7 +13714,7 @@ do
     __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
 
     --- Represents natural number value
-    __Sealed__() struct "System.NaturalNumber"      { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
+    __Sealed__() NaturalNumber = struct "System.NaturalNumber" { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
 
     --- Represents negative integer value
     __Sealed__() struct "System.NegativeInteger"     { __base = Integer, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative integer") or nil end }
@@ -13856,6 +13905,40 @@ do
             end
         end
     end)
+
+    --- SByte
+    __Sealed__() struct "System.SByte"              { __base = Integer, function(val, onlyvalid) return (val > 127 or val < -128) and (onlyvalid or "the %s must be an 8 bytes integer") or nil end }
+
+    --- Byte
+    __Sealed__() struct "System.Byte"               { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^8 and (onlyvalid or "the %s must be an 8 bytes unsigned integer") or nil end }
+
+    --- Int16
+    __Sealed__() struct "System.Int16"              { __base = Integer, function(val, onlyvalid) return (val > 32767 or val < -32768) and (onlyvalid or "the %s must be an 16 bytes integer") or nil end }
+
+    --- UInt16
+    __Sealed__() struct "System.UInt16"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^16 and (onlyvalid or "the %s must be an 16 bytes unsigned integer") or nil end }
+
+    --- Int32
+    __Sealed__() struct "System.Int32"              { __base = Integer, function(val, onlyvalid) return (val > 2147483647 or val < -2147483648) and (onlyvalid or "the %s must be an 32 bytes integer") or nil end }
+
+    --- UInt32
+    __Sealed__() struct "System.UInt32"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^32 and (onlyvalid or "the %s must be an 32 bytes unsigned integer") or nil end }
+
+    --- Int64, no limit check
+    __Sealed__() struct "System.Int64"              { __base = Integer }
+
+    --- UInt64, no limit check
+    __Sealed__() struct "System.UInt64"             { __base = NaturalNumber }
+
+    --- Float, no check
+    __Sealed__() struct "System.Float"              { __base = Number }
+
+    --- Double, no check
+    __Sealed__() struct "System.Double"             { __base = Number }
+
+    --- Decimal, no check
+    __Sealed__() struct "System.Decimal"            { __base = Number }
+
 
     -----------------------------------------------------------------------
     --                             interface                             --
@@ -14128,6 +14211,10 @@ do
         bor                     = bor,
         bnot                    = bnot,
         bxor                    = bxor,
+
+        --- Number conversion
+        inttoreal               = inttoreal,
+        realtoint               = realtoint,
 
         --- validate flags values
         -- @param   chkvalue        the check value, must be 2^n
