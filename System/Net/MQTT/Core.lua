@@ -1634,22 +1634,22 @@ PLoop(function(_ENV)
 
                 local vlength, offset = parseVarLength(socket, 2)
                 if not vlength then
-                    throw(MQTTException("The variable length field data is malformed"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The variable length field data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
                 if #socket < offset + vlength - 1 then
-                    throw(MQTTException("The packet data is malformed"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The packet data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
                 local map           = PACKET_PARSE_MAP[ptype]
                 if not map then
-                    throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The packet control type is not malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
                 return ptype, map(vlength == 0 and "" or socket:sub(offset, offset + vlength -1), flags, level)
             else
                 if not isObjectType(socket, ISocket) then
-                    throw(MQTTException("The protocol can't read data from the given object"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The protocol can't read data from the given object", ReasonCode.MALFORMED_PACKET))
                 end
 
                 -- Parse the Fixed Header
@@ -1664,12 +1664,12 @@ PLoop(function(_ENV)
 
                 local vlength       = parseSocketVarLength(socket)
                 if not vlength then
-                    throw(MQTTException("The variable length field data is malformed"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The variable length field data is malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
                 local map           = PACKET_PARSE_MAP[ptype]
                 if not map then
-                    throw(MQTTException("The packet control type is not malformed"), ReasonCode.MALFORMED_PACKET)
+                    throw(MQTTException("The packet control type is not malformed", ReasonCode.MALFORMED_PACKET))
                 end
 
                 return ptype, map(vlength == 0 and "" or socket:Receive(vlength), flags, level)
