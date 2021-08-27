@@ -509,12 +509,12 @@ do
         bit_rshift              = function(a, d) return d < 0 and bit_lshift(a, -d) or floor(a % MOD / 2^d) end
         bit_lshift              = function(a, d) return d < 0 and bit_rshift(a, -d) or (a * 2^d) % MOD end
 
-        lshift                  = function(a, d) return tobit(bit_lshift(a % MOD, d % 32)) end
-        rshift                  = function(a, d) return tobit(bit_rshift(a % MOD, d % 32)) end
-        band                    = function(a, b) return tobit(bit_band(a % MOD, b % MOD)) end
-        bnot                    = function(a)    return tobit(bit_bnot(a % MOD)) end
-        bor                     = function(a, b) return tobit(bit_bor(a % MOD, b % MOD)) end
-        bxor                    = function(a, b) return tobit(bit_bxor(a % MOD, b % MOD)) end
+        lshift                  = function(a, d) if not(a and d) then error("Usage: lshift(a, b) - the a and b be provided", 2) end return tobit(bit_lshift(a % MOD, d % 32)) end
+        rshift                  = function(a, d) if not(a and d) then error("Usage: rshift(a, b) - the a and b be provided", 2) end return tobit(bit_rshift(a % MOD, d % 32)) end
+        band                    = function(a, b) if not(a and b) then error("Usage: band(a, b) - the a and b be provided", 2)   end return tobit(bit_band(a % MOD, b % MOD)) end
+        bnot                    = function(a)    if not a        then error("Usage: bnot(a) - the a provided", 2)               end return tobit(bit_bnot(a % MOD)) end
+        bor                     = function(a, b) if not(a and b) then error("Usage: bor(a, b) - the a and b be provided", 2)    end return tobit(bit_bor(a % MOD, b % MOD)) end
+        bxor                    = function(a, b) if not(a and b) then error("Usage: bxor(a, b) - the a and b be provided", 2)   end return tobit(bit_bxor(a % MOD, b % MOD)) end
 
         validateflags           = function (x, n) if not n or x > n then return false end n = n % (2 * x) return (n - n % x) == x end
         turnonflags             = function (x, n) return validateflags(x, n) and n or (x + (n or 0)) end
