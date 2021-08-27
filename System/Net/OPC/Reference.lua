@@ -15,331 +15,304 @@
 PLoop(function(_ENV)
     namespace "System.Net.OPC"
 
-    __Sealed__() __Abstract__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 31), NodeClass = NodeClass.ReferenceType, Symmetric = true }
+    __Sealed__() __Abstract__() __Node__{ NodeId = 31, Symmetric = true }
     class "References" (function(_ENV)
-        extend "IIndexedList"
-
         export {
-            Node, NodeId, __Node__, AddressSpace,
+            __Node__, Class, Node, NodeId,
 
-            isObjectType        = Class.IsObjectType,
-            getmetatable        = getmetatable,
-            type                = type,
-            validateValue       = Struct.ValidateValue,
-            error               = error,
-            tremove             = table.remove,
+            getNodeInfo     = __Node__.GetNodeInfo,
+            isObjectType    = Class.IsObjectType,
+            getNamespaceName= Namespace.GetNamespaceName,
+            getmetatable    = getmetatable,
+            pairs,
+            type            = type,
+            validateValue   = Struct.ValidateValue,
+            error           = error,
+            safeset         = Toolset.safeset,
+            yield           = coroutine.yield,
         }
 
         local function getTargetNode(self, target)
-            if getmetatable(target) == nil and validateValue(NodeId, target) then
-                local node      = self.Source.AddressSpace:GetNode(target)
-                if node then
-                    return node
-                else
-                    return target, true
-                end
-            elseif isObjectType(target, Node) then
+            if validateValue(NodeId, target) then
                 return target
+            elseif isObjectType(target, Node) then
+                return target.NodeId
             else
-                local node      = self.Source.AddressSpace:GetNode(target)
-                if node then
-                    return node
-                else
-                    return __Node__.GetNodeInfo(target, "NodeId"), true
-                end
+                local node  = self.AddressSpace:GetNode(target)
+                return node and node.NodeId or getNodeInfo(target, "NodeId")
             end
         end
-
-        -----------------------------------------------------------
-        --                        method                         --4
-        -----------------------------------------------------------
-        --- Whether the node can be used as the source
-        __Abstract__()
-        function IsSourceNodeAllowed(self, node)
-            return true
-        end
-
-        --- Whether the node can be used as the target
-        __Abstract__()
-        function IsTargetNodeAllowed(self, node)
-            return true
-        end
-
-        --- Binding the Source, return false if can't use the target as the source
-        __Arguments__{ Node }
-        function SetSource(self, source)
-            if self.IsInverse and not self:IsTargetNodeAllowed(source.Target) then
-                return false
-            elseif not self.IsInverse and not self:IsSourceNodeAllowed(source.Target) then
-                return false
-            end
-
-            self.Source         = source
-            return true
-        end
-
-        --- Add target, the target can be real target, NodeId or Node
-        -- the target will be converted to the NodeId or Node,  the Reference
-        -- only keep the NodeId for the target
-        function AddTarget(self, target, noBid)
-            local tNode, isId   = getTargetNode(self, target)
-
-            if tNode then
-                if self.IsInverse and not self:IsSourceNodeAllowed(tNode.Target) then
-                    return false
-                elseif not self.IsInverse and not self:IsTargetNodeAllowed(tNode.Target) then
-                    return false
-                end
-
-                local nodeId    = tNode.NodeId
-                if isId then
-                    for i, node in self:GetIterator() do
-                        if isObjectType(node, Node) then
-                            node=  node.NodeId
-                        end
-
-                        if tNode.namespaceIndex == node.namespaceIndex and tNode.identifier == node.identifier then
-                            return true
-                        end
-                    end
-                else
-                    for i, node in self:GetIterator() do
-                        if tNode == node then return true end
-                    end
-                end
-
-                self[#self + 1] = tNode
-                self.Source:UpdateNodeVersion()
-
-                if noBid or isId or (not self.IsInverse and not (self.Symmetric or self.InverseName)) then return true end
-
-                -- Create the bidirectional references
-                local refType   = getmetatable(self)
-                local isInverse = not self.IsInverse
-
-                local tref
-                for _, ref in tNode.References:GetIterator() do
-                    if getmetatable(ref) == refType and (not isInverse == not ref.IsInverse) then
-                        tref    = ref
-                        break
-                    end
-                end
-
-                if not tref then
-                    tref        = refType(isInverse)
-                    if tref:SetSource(tNode) then
-                        tNode.References:Insert(tref)
-                    else
-                        tref    = nil
-                    end
-                end
-
-                if tref then
-                    return tref:AddTarget(self.Source, true)
-                end
-            else
-                return false
-            end
-        end
-
-        --- Remove target node
-        function RemoveTarget(self, target, noBid)
-            local tNode, isId   = getTargetNode(self, target)
-
-            if tNode then
-                if isId then
-                    for i, node in self:GetIterator() do
-                        if isObjectType(node, Node) then
-                            node=  node.NodeId
-                        end
-
-                        if tNode.namespaceIndex == node.namespaceIndex and tNode.identifier == node.identifier then
-                            tremove(self, i)
-                            self.Source:UpdateNodeVersion()
-                            break
-                        end
-                    end
-                else
-                    for i, node in self:GetIterator() do
-                        if tNode == node then
-                            tremove(self, i)
-                            self.Source:UpdateNodeVersion()
-                            break
-                        end
-                    end
-                end
-
-                if noBid or isId then return end
-
-                -- Create the bidirectional references
-                local refType   = getmetatable(self)
-                local isInverse = not self.IsInverse
-
-                local tref
-                for _, ref in tNode.References:GetIterator() do
-                    if getmetatable(ref) == refType and (not isInverse == not ref.IsInverse) then
-                        tref    = ref
-                        break
-                    end
-                end
-
-                if tref then return tref:RemoveTarget(self.Source, true) end
-
-            end
-        end
-
-        GetIterator             = ipairs
 
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
-        --- The source node
-        property "Source"       { type = Node, field = 0 }
+        --- The AddressSpace
+        property "AddressSpace"     { type = AddressSpace }
 
-        --- Whether the reference is inverse
-        property "IsInverse"    { type = Boolean, field = -1, default = false }
+        --- Whether this is inverse
+        property "IsInverse"        { type = Boolean }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Check if the source and target can be referenced
+        __Abstract__()
+        function IsReferenceable(self, source, target)
+            return true
+        end
+
+        --- Add a reference between source node or target node
+        function AddReference(self, source, target, nobid)
+            print("AddReference", getmetatable(self), source, target)
+
+            source              = getTargetNode(self, source)
+            target              = getTargetNode(self, target)
+
+            if not (source and target) then error("Usage: References:AddReference(target, source) - the target and source must be Node, NodeId or which has Node Infomations", 2) end
+            if not self:IsReferenceable(source, target) then error("Usage: References:AddReference(target, source) - the source and target can't be referenced by the reference type", 2) end
+
+            local sourceid      = source.namespaceIndex .. "_" .. source.identifier
+            local targetid      = target.namespaceIndex .. "_" .. target.identifier
+
+            self.References     = safeset(self.References, sourceid, safeset(self.References[sourceid] or {}, targetid, true))
+
+            if nobid then return end
+
+            local cls           = getmetatable(self)
+
+            if self.IsInverse then
+                return self.AddressSpace.References[getNamespaceName(cls, true)]:AddReference(target, source, true)
+            elseif getNodeInfo(cls, "Symmetric") then
+                return self:AddReference(target, source, true)
+            else
+                local inverse   = getNodeInfo(cls, "InverseName")
+                return inverse and self.AddressSpace.References[inverse.text]:AddReference(target, source, true)
+            end
+        end
+
+        --- Remove a reference between source node or target node
+        function RemoveReference(self, source, target, nobid)
+            source              = getTargetNode(self, source)
+            target              = getTargetNode(self, target)
+
+            if not (source and target) then error("Usage: References:RemoveReference(target, source) - the target and source must be Node, NodeId or which has Node Infomations", 2) end
+
+            local sourceid      = source.namespaceIndex .. "_" .. source.identifier
+            local targetid      = target.namespaceIndex .. "_" .. target.identifier
+
+            if not (self.References[sourceid] and self.References[sourceid][targetid]) then return end
+
+            self.References     = safeset(self.References, sourceid, safeset(self.References[sourceid] or {}, targetid, nil))
+
+            if nobid then return end
+
+            local cls           = getmetatable(self)
+
+            if self.IsInverse then
+                return self.AddressSpace.References[getNamespaceName(cls, true)]:RemoveReference(target, source, true)
+            elseif getNodeInfo(cls, "Symmetric") then
+                return self:RemoveReference(target, source, true)
+            else
+                local inverse   = getNodeInfo(cls, "InverseName")
+                return inverse and self.AddressSpace.References[inverse.text]:RemoveReference(target, source, true)
+            end
+        end
+
+        --- Remove all references from the source
+        function RemoveReferences(self, source)
+            source              = getTargetNode(self, source)
+            if not source then error("Usage: References:GetTargets(source) - the source must be Node, NodeId or which has Node Infomations", 2) end
+
+            source              = source.namespaceIndex .. "_" .. source.identifier
+
+            local targets       = self.References[source]
+            if targets then
+                self.References = safeset(self.References, source, nil)
+
+                local cls       = getmetatable(self)
+
+                if self.IsInverse then
+                    self        = self.AddressSpace.References[getNamespaceName(cls, true)]
+                elseif getNodeInfo(cls, "Symmetric") then
+                    self        = self
+                else
+                    local inverse = getNodeInfo(cls, "InverseName")
+                    if not inverse then return end
+                    self        = self.AddressSpace.References[inverse.text]
+                end
+
+                for target in pairs(targets) do
+                    if self.References[target] and self.References[target][source] then
+                        self.References[target] = safeset(self.References[target], source, nil)
+                    end
+                end
+            end
+        end
+
+        --- Get target nodes from source node
+        __Iterator__()
+        function GetTargets(self, source)
+            source          = getTargetNode(self, source)
+            if not source then error("Usage: References:GetTargets(source) - the source must be Node, NodeId or which has Node Infomations", 2) end
+
+            source          = source.namespaceIndex .. "_" .. source.identifier
+
+            local targets   = self.References[source]
+            if targets then
+                local i     = 0
+                for node in pairs(targets) do
+                    i       = i + 1
+
+                    local index, id = node:match("^(%d+)_(.*)$")
+                    yield(i, NodeId(tonumber(index), tonumber(id) or id))
+                end
+            end
+        end
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ Boolean/nil }
-        function __new(_, isInverse)
-            return { [-1] = isInverse or nil }, true
+        __Arguments__{ AddressSpace, Boolean/nil }
+        function __ctor(self, addressSpace, isInverse)
+            self.AddressSpace   = addressSpace
+            self.IsInverse      = isInverse
+
+            self.References     = {}
         end
     end)
 
-    __Sealed__() __Abstract__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 32), NodeClass = NodeClass.ReferenceType, Symmetric = true }
+    __Sealed__() __Abstract__() __Node__{ NodeId = 32, Symmetric = true }
     class "NonHierarchicalReferences" { References }
 
-    __Sealed__() __Abstract__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 33), NodeClass = NodeClass.ReferenceType, Symmetric = false }
+    __Sealed__() __Abstract__() __Node__{ NodeId = 33, Symmetric = false }
     class "HierarchicalReferences"  { References }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 23469), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "HasAlias") }
+    __Sealed__() __Node__{ NodeId = 23469, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "HasAlias") }
     class "AliasFor"                { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 51), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "ToTransition") }
+    __Sealed__() __Node__{ NodeId = 51, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "ToTransition") }
     class "FromState"               { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 41), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "GeneratedBy") }
+    __Sealed__() __Node__{ NodeId = 41, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "GeneratedBy") }
     class "GeneratesEvent"          { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 53), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeCausedBy") }
+    __Sealed__() __Node__{ NodeId = 53, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeCausedBy") }
     class "HasCause"                { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 9006), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsConditionOf") }
+    __Sealed__() __Node__{ NodeId = 9006, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsConditionOf") }
     class "HasCondition"            { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 39), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "DescriptionOf") }
+    __Sealed__() __Node__{ NodeId = 39, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "DescriptionOf") }
     class "HasDescription"          { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17597), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "DictionaryEntryOf") }
+    __Sealed__() __Node__{ NodeId = 17597, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "DictionaryEntryOf") }
     class "HasDictionaryEntry"      { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 54), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeEffectedBy") }
+    __Sealed__() __Node__{ NodeId = 54, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeEffectedBy") }
     class "HasEffect"               { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 38), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "EncodingOf") }
+    __Sealed__() __Node__{ NodeId = 38, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "EncodingOf") }
     class "HasEncoding"             { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 9005), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsFalseSubStateOf") }
+    __Sealed__() __Node__{ NodeId = 9005, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsFalseSubStateOf") }
     class "HasFalseSubState"        { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17603), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "InterfaceOf") }
+    __Sealed__() __Node__{ NodeId = 17603, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "InterfaceOf") }
     class "HasInterface"            { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 37), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "ModellingRuleOf") }
+    __Sealed__() __Node__{ NodeId = 37, Symmetric = false } --, InverseName = LocalizedText(LocaleIdEnum.en, "ModellingRuleOf") }
     class "HasModellingRule"        { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 117), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "SubStateMachineOf") }
+    __Sealed__() __Node__{ NodeId = 117, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "SubStateMachineOf") }
     class "HasSubStateMachine"      { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 9004), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsTrueSubStateOf") }
+    __Sealed__() __Node__{ NodeId = 9004, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsTrueSubStateOf") }
     class "HasTrueSubState"         { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 40), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "TypeDefinitionOf") }
+    __Sealed__() __Node__{ NodeId = 40, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "TypeDefinitionOf") }
     class "HasTypeDefinition"       { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 52), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "FromTransition") }
+    __Sealed__() __Node__{ NodeId = 52, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "FromTransition") }
     class "ToState"                 { NonHierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 14936), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "WriterToDataSet") }
+    __Sealed__() __Node__{ NodeId = 14936, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "WriterToDataSet") }
     class "DataSetToWriter"         { HierarchicalReferences }
 
-    __Sealed__() __Abstract__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 34), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "ChildOf") }
+    __Sealed__() __Abstract__() __Node__{ NodeId = 34, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "ChildOf") }
     class "HasChild"                { HierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 36), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "EventSourceOf") }
+    __Sealed__() __Node__{ NodeId = 36, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "EventSourceOf") }
     class "HasEventSource"          { HierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 35), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "OrganizedBy") }
+    __Sealed__() __Node__{ NodeId = 35, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "OrganizedBy") }
     class "Organizes"               { HierarchicalReferences }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 45), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "SubtypeOf") }
+    __Sealed__() __Node__{ NodeId = 45, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "SubtypeOf") }
     class "HasSubtype"              { HasChild }
 
-    __Sealed__() __Abstract__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 44), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "AggregatedBy") }
+    __Sealed__() __Abstract__() __Node__{ NodeId = 44, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "AggregatedBy") }
     class "Aggregates"              { HasChild }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 47), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "ComponentOf") }
+    __Sealed__() __Node__{ NodeId = 47, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "ComponentOf") }
     class "HasComponent"            { Aggregates }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 56), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "HistoricalConfigurationOf") }
+    __Sealed__() __Node__{ NodeId = 56, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "HistoricalConfigurationOf") }
     class "HasHistoricalConfiguration" { Aggregates }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 46), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "PropertyOf") }
+    __Sealed__() __Node__{ NodeId = 46, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "PropertyOf") }
     class "HasProperty"             { Aggregates }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 16362), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MemberOfAlarmGroup") }
+    __Sealed__() __Node__{ NodeId = 16362, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MemberOfAlarmGroup") }
     class "AlarmGroupMember"        { Organizes }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 3065), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "AlwaysGeneratedBy") }
+    __Sealed__() __Node__{ NodeId = 3065, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "AlwaysGeneratedBy") }
     class "AlwaysGeneratesEvent"    { GeneratesEvent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17604), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "AddInOf") }
+    __Sealed__() __Node__{ NodeId = 17604, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "AddInOf") }
     class "HasAddIn"                { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 16361), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsAlarmSuppressionGroupOf") }
+    __Sealed__() __Node__{ NodeId = 16361, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsAlarmSuppressionGroupOf") }
     class "HasAlarmSuppressionGroup"{ HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 129), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "ArgumentDescriptionOf") }
+    __Sealed__() __Node__{ NodeId = 129, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "ArgumentDescriptionOf") }
     class "HasArgumentDescription"  { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 15297), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsReaderInGroup") }
+    __Sealed__() __Node__{ NodeId = 15297, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsReaderInGroup") }
     class "HasDataSetReader"        { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 15296), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsWriterInGroup") }
+    __Sealed__() __Node__{ NodeId = 15296, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsWriterInGroup") }
     class "HasDataSetWriter"        { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 15112), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "GuardOf") }
+    __Sealed__() __Node__{ NodeId = 15112, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "GuardOf") }
     class "HasGuard"                { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 49), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "OrderedComponentOf") }
+    __Sealed__() __Node__{ NodeId = 49, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "OrderedComponentOf") }
     class "HasOrderedComponent"     { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 14476), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "PubSubConnectionOf") }
+    __Sealed__() __Node__{ NodeId = 14476, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "PubSubConnectionOf") }
     class "HasPubSubConnection"     { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 18805), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsReaderGroupOf") }
+    __Sealed__() __Node__{ NodeId = 18805, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsReaderGroupOf") }
     class "HasReaderGroup"          { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 18804), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "IsWriterGroupOf") }
+    __Sealed__() __Node__{ NodeId = 18804, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "IsWriterGroupOf") }
     class "HasWriterGroup"          { HasComponent }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17276), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeDisabledBy") }
+    __Sealed__() __Node__{ NodeId = 17276, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeDisabledBy") }
     class "HasEffectDisable"        { HasEffect }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17983), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeEnabledBy") }
+    __Sealed__() __Node__{ NodeId = 17983, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeEnabledBy") }
     class "HasEffectEnable"         { HasEffect }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17984), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeSuppressedBy") }
+    __Sealed__() __Node__{ NodeId = 17984, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeSuppressedBy") }
     class "HasEffectSuppressed"     { HasEffect }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17985), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "MayBeUnsuppressedBy") }
+    __Sealed__() __Node__{ NodeId = 17985, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "MayBeUnsuppressedBy") }
     class "HasEffectUnsuppressed"   { HasEffect }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 48), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "NotifierOf") }
+    __Sealed__() __Node__{ NodeId = 48, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "NotifierOf") }
     class "HasNotifier"             { HasEventSource }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 131), NodeClass = NodeClass.ReferenceType, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.enUS, "OptionalInputArgumentDescriptionOf") }
+    __Sealed__() __Node__{ NodeId = 131, Symmetric = false, InverseName = LocalizedText(LocaleIdEnum.en, "OptionalInputArgumentDescriptionOf") }
     class "HasOptionalInputArgumentDescription" { HasArgumentDescription }
 end)

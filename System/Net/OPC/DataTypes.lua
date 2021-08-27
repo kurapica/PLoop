@@ -15,79 +15,126 @@
 PLoop(function(_ENV)
     namespace "System.Net.OPC"
 
-    export { validateValue = Struct.ValidateValue, Guid }
+    export { type = type, validateValue = Struct.ValidateValue, isObjectType = Class.IsObjectType, hasNodeInfo = __Node__.HasNodeInfo, getNodeInfo = __Node__.GetNodeInfo, Guid, Node }
 
     ---------------------------------------------------
     --                 BaseDataType                  --
     ---------------------------------------------------
-    --- BaseDataType <-> Any
-    __Node__.RegisterNode(Any, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 24), BrowseName = QualifiedName(NamespaceIndex.OPC_UA_URI, "BaseDataType"), IsAbstract = true })
-
     --- Boolean
-    __Node__.RegisterNode(Boolean, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 1), SubtypeOf = Any })
+    __Node__.RegisterNode(Boolean,      { NodeId = 1, SubtypeOf = Any })
 
-    --- Number
-    __Node__.RegisterNode(Number, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 26), IsAbstract = true, SubtypeOf = Any })
+    --- SByte
+    __Node__.RegisterNode(SByte,        { NodeId = 2 })
 
-    --- Enumeration
-    __Node__.RegisterNode(Enum, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 29), BrowseName = QualifiedName(NamespaceIndex.OPC_UA_URI, "Enumeration"), IsAbstract = true, SubtypeOf = Any })
+    --- Byte
+    __Node__.RegisterNode(Byte,         { NodeId = 3} )
 
-    --- Structure
-    __Node__.RegisterNode(Struct, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 22), BrowseName = QualifiedName(NamespaceIndex.OPC_UA_URI, "Structure"), IsAbstract = true, SubtypeOf = Any })
+    --- Int16
+    __Node__.RegisterNode(Int16,        { NodeId = 4 })
+
+    -- UInt16
+    __Node__.RegisterNode(UInt16,       { NodeId = 5 })
+
+    --- Int32
+    __Node__.RegisterNode(Int32,        { NodeId = 6 })
+
+    --- UInt32
+    __Node__.RegisterNode(UInt32,       { NodeId = 7 })
+
+    --- Int64
+    __Node__.RegisterNode(Int64,        { NodeId = 8 })
+
+    --- UInt64
+    __Node__.RegisterNode(UInt64,       { NodeId = 9 })
+
+    --- Float
+    __Node__.RegisterNode(Float,        { NodeId = 10 })
+
+    --- Double
+    __Node__.RegisterNode(Double,       { NodeId = 11 })
+
+    --- Decimal
+    __Node__.RegisterNode(Decimal,      { NodeId = 50 })
 
     --- String
-    __Node__.RegisterNode(String, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12), SubtypeOf = Any })
+    __Node__.RegisterNode(String,       { NodeId = 12, SubtypeOf = Any })
+
+    --- BaseDataType <-> Any
+    __Node__.RegisterNode(Any,          { NodeId = 24, BrowseName = "basedataType", IsAbstract = true })
+
+    --- Number
+    __Node__.RegisterNode(Number,       { NodeId = 26, IsAbstract = true, SubtypeOf = Any })
+
+    --- Enumeration
+    __Node__.RegisterNode(Enum,         { NodeId = 29, BrowseName = "enumeratIon", IsAbstract = true, SubtypeOf = Any })
+
+    --- Structure
+    __Node__.RegisterNode(Struct,       { NodeId = 22, BrowseName = "structurE", IsAbstract = true, SubtypeOf = Any })
+
+    -- Integer
+    __Node__.RegisterNode(Integer,      { NodeId = 27, IsAbstract = true })
+
+    --- UInteger
+    __Node__.RegisterNode(NaturalNumber,{ NodeId = 28, BrowseName = "uinteger", IsAbstract = true, SubtypeOf = Number })
 
     --- DateTime
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 13), SubTypeOf = Any }
-    struct "DateTime" { __base = NaturalNumber }
+    __Sealed__() __Node__{ NodeId = 13, SubTypeOf = Any }
+    struct "DateTime"           { __base = NaturalNumber }
 
     --- UtcTime
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 294) }
-    struct "UtcTime" { __base = DateTime }
+    __Sealed__() __Node__{ NodeId = 294 }
+    struct "UtcTime"            { __base = DateTime }
 
     --- Guid
-    __Node__.RegisterNode(Guid, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 14), SubtypeOf = Any })
+    __Node__.RegisterNode(Guid, { NodeId = 14, SubtypeOf = Any })
 
     --- ByteString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 15), SubTypeOf = Any }
-    struct "ByteString" { __base = String }
+    __Sealed__() __Node__{ NodeId = 15, SubTypeOf = Any }
+    struct "ByteString"         { __base = String }
 
     --- XmlElement @todo: be replaced by real xml element
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 16), SubTypeOf = Any }
-    struct "XmlElement" {}
+    __Sealed__() __Node__{ NodeId = 16, SubTypeOf = Any }
+    struct "XmlElement"         {}
+
+    --- Duration - an interval of time in milliseconds (fractions can be used to define sub-millisecond values)
+    __Sealed__() __Node__{ NodeId = 290 }
+    struct "Duration"           { __base = Double }
+
+    --- IntegerId
+    __Sealed__() __Node__{ NodeId = 288 }
+    struct "IntegerId"          { __base = UInt32 }
+
+    --- VersionTime
+    __Sealed__() __Node__{ NodeId = 20998 }
+    struct "VersionTime"        { __base = UInt32 }
 
     ---------------------------------------------------
     --                  Enumeration                  --
     ---------------------------------------------------
-    ---- the type of the NodeId
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 256) }
+    ---- the type of the NodeId, already defined in the Core
+    __Sealed__() __Node__{ NodeId = 256 }
     enum "IdType"               {}
 
     --- the naming rule type
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 120) }
-    enum "NamingRuleType"   {
-        Mandatory               = 1, -- The BrowseName must appear in all instances of the type.
-        Optional                = 2, -- The BrowseName may appear in an instance of the type.
-        Constraint              = 3, -- The modelling rule defines a constraint and the BrowseName is not used in an instance of the type.
-    }
+    __Sealed__() __Node__{ NodeId = 120 }
+    enum "NamingRuleType"       {}
 
     --- The node classes
-    __Sealed__() __Flags__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 257) }
+    __Sealed__() __Node__{ NodeId = 257, SubtypeOf = Enum }
     enum "NodeClass"            {
         Unspecified             = 0,
-        "Object",
-        "Variable",
-        "Method",
-        "ObjectType",
-        "VariableType",
-        "ReferenceType",
-        "DataType",
-        "View",
+        Object                  = 1,
+        Variable                = 2,
+        Method                  = 4,
+        ObjectType              = 8,
+        VariableType            = 16,
+        ReferenceType           = 32,
+        DataType                = 64,
+        View                    = 128,
     }
 
     --- The attribute write flags
-    __Sealed__() __Flags__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 347) }
+    __Sealed__() __Flags__() __Node__{ NodeId = 347 }
     enum "AttributeWriteMask"   {
         "AccessLevel",
         "ArrayDimensions",
@@ -118,7 +165,7 @@ PLoop(function(_ENV)
     }
 
     --- The Permission type
-    __Sealed__() __Flags__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 94) }
+    __Sealed__() __Flags__() __Node__{ NodeId = 94 }
     enum "PermissionType"       {
         "Browse",
         "ReadRolePermissions",
@@ -140,14 +187,14 @@ PLoop(function(_ENV)
     }
 
     --- The Security Token Request Type
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 315) }
+    __Sealed__() __Node__{ NodeId = 315 }
     enum "SecurityTokenRequestType" {
         Issue                   = 0,
         Renew                   = 1,
     }
 
     --- The Message Security Mode
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 302) }
+    __Sealed__() __Node__{ NodeId = 302 }
     enum "MessageSecurityMode"  {
         Invalid                 = 0,
         None                    = 1,
@@ -156,7 +203,7 @@ PLoop(function(_ENV)
     }
 
     --- The Redundancy Support
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 851) }
+    __Sealed__() __Node__{ NodeId = 851 }
     enum "RedundancySupport"    {
         None                    = 0,
         Cold                    = 1,
@@ -167,7 +214,7 @@ PLoop(function(_ENV)
     }
 
     --- The Server State
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 852) }
+    __Sealed__() __Node__{ NodeId = 852 }
     enum "ServerState"          {
         Running                 = 0,
         Failed                  = 1,
@@ -180,7 +227,7 @@ PLoop(function(_ENV)
     }
 
     --- The Application Type
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 307) }
+    __Sealed__() __Node__{ NodeId = 307 }
     enum "ApplicationType"      {
         Server                  = 0,
         Client                  = 1,
@@ -189,7 +236,7 @@ PLoop(function(_ENV)
     }
 
     --- The Structure Type
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 98) }
+    __Sealed__() __Node__{ NodeId = 98 }
     enum "StructureType"        {
         Structure                   = 0,
         StructureWithOptionalFields = 1,
@@ -204,132 +251,152 @@ PLoop(function(_ENV)
         "SessionRequired",      -- The Client cannot access the Node when using SessionlessInvoke Service invocation.
     }
 
+    --- The EventNotifier Type
+    __Sealed__() __Flags__() __Node__{ NodeId = 15033, SubtypeOf = Byte }
+    enum "EventNotifierType"    {
+        None                    = 0,
+        "SubscribeToEvents",
+        "Reserved",
+        "HistoryRead",
+        "HistoryWrite",
+    }
+
+    --- The Access Level Type
+    __Sealed__() __Flags__() __Node__{ NodeId = 15031, SubtypeOf = Byte }
+    enum "AccessLevelType"      {
+        "CurrentRead",
+        "CurrentWrite",
+        "HistoryRead",
+        "HistoryWrite",
+        "SemanticChange",
+        "StatusWrite",
+        "TimestampWrite",
+    }
+
+    --- The Access Level ExType
+    __Sealed__() __Flags__() __Node__{ NodeId = 15406, SubtypeOf = UInt32 }
+    enum "AccessLevelExType"    {
+        "CurrentRead",
+        "CurrentWrite",
+        "HistoryRead",
+        "HistoryWrite",
+        "SemanticChange",
+        "StatusWrite",
+        "TimestampWrite",
+        "NonatomicRead",
+        "NonatomicWrite",
+        "WriteFullArrayOnly",
+        "NoSubDataTypes",
+    }
+
+    --- The Diagnostics Level
+    __Sealed__() __Node__{ NodeId = 19723 }
+    enum "DiagnosticsLevel"     {
+        Basic                   = 0,
+        Advanced                = 1,
+        Info                    = 2,
+        Log                     = 3,
+        Debug                   = 4,
+    }
+
+    --- The User Token Type
+    __Sealed__() __Node__{ NodeId = 303 }
+    enum "UserTokenType"        {
+        Anonymous               = 0,
+        UserName                = 1,
+        Certificate             = 2,
+        IssuedToken             = 3,
+    }
+
+    --- The Identity Criteria Type
+    __Sealed__() __Node__{ NodeId = 15632 }
+    enum "IdentityCriteriaType" {
+        UserName                = 1,
+        Thumbprint              = 2,
+        Role                    = 3,
+        GroupId                 = 4,
+        Anonymous               = 5,
+        AuthenticatedUser       = 6,
+    }
+
     ---------------------------------------------------
     --               Custom Structure                --
     ---------------------------------------------------
-    -- Integer
-    __Node__.RegisterNode(Integer, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 27), IsAbstract = true })
-
-    --- UInteger
-    __Node__.RegisterNode(NaturalNumber, { NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 28), BrowseName = QualifiedName(NamespaceIndex.OPC_UA_URI, "UInteger"), IsAbstract = true, SubtypeOf = Number })
-
-    --- Float
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 10) }
-    struct "Float"              { __base = Number }
-
-    --- Double
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 11) }
-    struct "Double"             { __base = Number }
-
-    --- Decimal
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 50) }
-    struct "Decimal"            { __base = Number }
-
-    --- Duration
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 290) }
-    struct "Duration"           { __base = Double }
-
-    --- SByte
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 2) }
-    struct "SByte"              { __base = Integer, function(val, onlyvalid) return (val > 127 or val < -128) and (onlyvalid or "the %s must be an 8 bytes integer") or nil end }
-
-    --- Int16
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 4) }
-    struct "Int16"              { __base = Integer, function(val, onlyvalid) return (val > 32767 or val < -32768) and (onlyvalid or "the %s must be an 16 bytes integer") or nil end }
-
-    --- Int32
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 6) }
-    struct "Int32"              { __base = Integer, function(val, onlyvalid) return (val > 2147483647 or val < -2147483648) and (onlyvalid or "the %s must be an 32 bytes integer") or nil end }
-
-    --- Int64
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 8) }
-    struct "Int64"              { __base = Integer }
-
-    --- Byte
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 3) }
-    struct "Byte"               { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^8 and (onlyvalid or "the %s must be an 8 bytes unsigned integer") or nil end }
-
-    --- UInt16
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 5) }
-    struct "UInt16"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^16 and (onlyvalid or "the %s must be an 16 bytes unsigned integer") or nil end }
-
-    --- UInt32
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 7) }
-    struct "UInt32"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^32 and (onlyvalid or "the %s must be an 32 bytes unsigned integer") or nil end }
-
-    --- UInt64
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 9) }
-    struct "UInt64"             { __base = NaturalNumber }
-
     --- BitFieldMaskDataType
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 11737) }
+    __Sealed__() __Node__{ NodeId = 11737 }
     struct "BitFieldMaskDataType" { __base = UInt64 }
 
     --- Index
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17588) }
+    __Sealed__() __Node__{ NodeId = 17588 }
     struct "Index"              { __base = UInt32 }
 
     --- StatusCode
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 19), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 19, SubTypeOf = Any }
     struct "StatusCode"         { __base = UInt32 }
 
+    __Sealed__()
+    struct "StatusCodes"        { StatusCode }
+
     --- Image
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 30), IsAbstract = true }
+    __Sealed__() __Node__{ NodeId = 30, IsAbstract = true }
     struct "Image"              { __base = ByteString }
 
     --- ImageBMP
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 2000) }
+    __Sealed__() __Node__{ NodeId = 2000 }
     struct "ImageBMP"           { __base = Image }
 
     --- ImageGIF
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 2001) }
+    __Sealed__() __Node__{ NodeId = 2001 }
     struct "ImageGIF"           { __base = Image }
 
     --- ImageJPG
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 2002) }
+    __Sealed__() __Node__{ NodeId = 2002 }
     struct "ImageJPG"           { __base = Image }
 
     --- ImagePNG
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 2003) }
+    __Sealed__() __Node__{ NodeId = 2003 }
     struct "ImagePNG"           { __base = Image }
 
     --- AudioDataType
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 16307) }
+    __Sealed__() __Node__{ NodeId = 16307 }
     struct "AudioDataType"      { __base = ByteString }
 
     --- LocaleId
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 295) }
+    __Sealed__() __Node__{ NodeId = 295 }
     struct "LocaleId"           { __base = String }
 
+    __Sealed__()
+    struct "LocaleIds"          { LocaleId }
+
     --- NumericRange
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 291) }
+    __Sealed__() __Node__{ NodeId = 291 }
     struct "NumericRange"       { __base = String }
 
     --- NormalizedString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12877) }
+    __Sealed__() __Node__{ NodeId = 12877 }
     struct "NormalizedString"   { __base = String }
 
     --- DecimalString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12878) }
+    __Sealed__() __Node__{ NodeId = 12878 }
     struct "DecimalString"      { __base = String }
 
-    --- DurationString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12879) }
+    --- DurationString - P[n]Y[n]M[n]DT[n]H[n]M[n]S or P[n]W
+    __Sealed__() __Node__{ NodeId = 12879 }
     struct "DurationString"     { __base = String }
 
     --- TimeString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12880) }
+    __Sealed__() __Node__{ NodeId = 12880 }
     struct "TimeString"         { __base = String }
 
     --- DateString
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12881) }
+    __Sealed__() __Node__{ NodeId = 12881 }
     struct "DateString"         { __base = String }
 
     ---------------------------------------------------
     --               Member Structure                --
     ---------------------------------------------------
     --- The node identifier structure
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 17), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 17, SubTypeOf = Any }
     struct "NodeId"             {
         { name = "namespaceIndex", type = UInt16, require = true },  -- The index for a namespace URI
         { name = "identifier",     type = Any,    require = true },  -- The identifier for a Node in the AddressSpace of an OPC UA Server
@@ -343,7 +410,7 @@ PLoop(function(_ENV)
     }
 
     --- The Expanded NodeId
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 18), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 18, SubTypeOf = Any }
     struct "ExpandedNodeId"     {
         { name = "serverIndex",    type = Index,    require = true },  -- The index that identifies the Server that contains the TargetNode, 0 means local server
         { name = "namespaceUri",   type = String },                    -- The URI of the namespace
@@ -353,21 +420,24 @@ PLoop(function(_ENV)
     }
 
     --- A qualified name
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 20), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 20, SubTypeOf = Any }
     struct "QualifiedName"      {
         { name = "namespaceIndex", type = UInt16, require = true },  -- Index that identifies the namespace that defines the name
         { name = "name",           type = String, require = true },  -- The text portion of the QualifiedName, 512 characters
     }
 
     --- The localizaed text
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 21), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 21, SubTypeOf = Any }
     struct "LocalizedText"      {
         { name = "locale", type = LocaleId, require = true },  -- The identifier for the locale (e.g. "en-US")
         { name = "text",   type = String,   require = true },
     }
 
+    __Sealed__()
+    struct "LocalizedTexts"     { LocalizedText }
+
     --- The Data Value
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 23), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 23, SubTypeOf = Any }
     struct "DataValue"          {
         { name = "value",             type = Any },                         -- The data value. If the StatusCode indicates an error then the value is to be ignored and the Server shall set it to null.
         { name = "statusCode",        type = StatusCode, require = true },  -- The StatusCode that defines with the Server’s ability to access/provide the value.
@@ -378,7 +448,7 @@ PLoop(function(_ENV)
     }
 
     --- The Diagnostic Info - Vendor-specific diagnostic information.
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 25), SubTypeOf = Any }
+    __Sealed__() __Node__{ NodeId = 25, SubTypeOf = Any }
     struct "DiagnosticInfo"     {
         { name = "namespaceUri",   type = Int32  },             -- The symbolicId is defined within the context of a namespace, -1 indicates that no string is specified
         { name = "symbolicId",     type = Int32  },             -- The symbolicId shall be used to identify a vendor-specific error or condition; typically the result of some Server internal operation
@@ -389,24 +459,75 @@ PLoop(function(_ENV)
         { name = "innerDiagnosticInfo", type = DiagnosticInfo },-- The diagnostic info associated with the inner StatusCode.
     }
 
+    __Sealed__()
+    struct "DiagnosticInfos"    { DiagnosticInfo }
+
+    --- The type used to convert target, node and nodeId to nodeId for data types
+    __Sealed__()
+    struct "NodeDataType"       {
+        __valid                 = function(self, onlyvalid)
+            if hasNodeInfo(self, "NodeId") or validateValue(NodeId, self) or isObjectType(self, Node) then return end
+            return onlyvalid or "%s must be OPC node or nodeId or target type with node configs"
+        end,
+        __init                  = function(self)
+            if hasNodeInfo(self) then
+                return getNodeInfo(self, "NodeId")
+            elseif validateValue(NodeId, self) then
+                return self
+            elseif isObjectType(self, Node) then
+                return self.NodeId
+            end
+        end
+    }
+
     ---------------------------------------------------
     --               OPC Structure                   --
     ---------------------------------------------------
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 296) }
+    __Sealed__() __Node__{ NodeId = 388, SubTypeOf = NodeId }
+    struct "SessionAuthenticationToken" { __base = NodeId }
+
+
+    __Sealed__() __Node__{ NodeId = 296 }
     struct "Argument"           {
-        { name = "name",            type = String },
-        { name = "dataType",        type = NodeId },
-        { name = "valueRank",       type = Int32 },
+        { name = "name",            type = String, require = true },
+        { name = "dataType",        type = NodeDataType, require = true },
+        { name = "valueRank",       type = Int32, default = -1 },
         { name = "arrayDimensions", type = struct { UInt32 } },
         { name = "description",     type = LocalizedText },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 316), IsAbstract = true }
+    __Sealed__()
+    struct "Arguments"          { Argument }
+
+    --- Common parameters for all requests submitted on a Session
+    __Sealed__() __Node__{ NodeId = 389 }
+    struct "RequestHeader"      {
+        { name = "authenticationToken", type = SessionAuthenticationToken },
+        { name = "timestamp",           type = UtcTime },
+        { name = "requestHandle",       type = IntegerId },
+        { name = "returnDiagnostics",   type = UInt32 },
+        { name = "auditEntryId",        type = String },
+        { name = "timeoutHint",         type = UInt32 },
+        { name = "additionalHeader",    type = Any },
+    }
+
+    --- Common parameters for all responses
+    __Sealed__() __Node__{ NodeId = 392}
+    struct "ResponseHeader"     {
+        { name = "timestamp",           type = UtcTime },
+        { name = "requestHandle",       type = IntegerId },
+        { name = "serviceResult",       type = StatusCode },
+        { name = "serviceDiagnostics",  type = DiagnosticInfo },
+        { name = "stringTable",         type = Strings },
+        { name = "additionalHeader",    type = Any }
+    }
+
+    __Sealed__() __Node__{ NodeId = 316, IsAbstract = true }
     struct "UserIdentityToken"  {
         { name = "policyId",        type = String },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 376) }
+    __Sealed__() __Node__{ NodeId = 376 }
     struct "AddNodesItem"       {
         { name = "parentNodeId",    type = ExpandedNodeId },
         { name = "referenceTypeId", type = NodeId },
@@ -417,7 +538,7 @@ PLoop(function(_ENV)
         { name = "typeDefinition",  type = ExpandedNodeId },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 379) }
+    __Sealed__() __Node__{ NodeId = 379 }
     struct "AddReferencesItem"  {
         { name = "sourceNodeId",    type = NodeId },
         { name = "referenceTypeId", type = NodeId },
@@ -427,13 +548,13 @@ PLoop(function(_ENV)
         { name = "targetNodeClass", type = NodeClass },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 382) }
+    __Sealed__() __Node__{ NodeId = 382 }
     struct "DeleteNodesItem"    {
         { name = "nodeId",          type = NodeId },
         { name = "deleteTargetReferences",  type = Boolean },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 385) }
+    __Sealed__() __Node__{ NodeId = 385 }
     struct "DeleteReferencesItem" {
         { name = "sourceNodeId",    type = NodeId },
         { name = "referenceTypeId", type = NodeId },
@@ -442,7 +563,7 @@ PLoop(function(_ENV)
         { name = "deleteBidirectional", type = Boolean },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 308) }
+    __Sealed__() __Node__{ NodeId = 308 }
     struct "ApplicationDescription" {
         { name = "applicationUri",  type = String },
         { name = "productUri",      type = String },
@@ -450,10 +571,13 @@ PLoop(function(_ENV)
         { name = "applicationType", type = ApplicationType },
         { name = "gatewayServerUri",type = String },
         { name = "discoveryProfileUri", type = String },
-        { name = "discoveryUrls",   type = struct { String } },
+        { name = "discoveryUrls",   type = Strings },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 338) }
+    __Sealed__()
+    struct "ApplicationDescriptions" { ApplicationDescription }
+
+    __Sealed__() __Node__{ NodeId = 338 }
     struct "BuildInfo"          {
         { name = "productUri",      type = String },
         { name = "manufacturerName",type = String },
@@ -463,14 +587,14 @@ PLoop(function(_ENV)
         { name = "buildDate",       type = UtcTime },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 853) }
+    __Sealed__() __Node__{ NodeId = 853 }
     struct "RedundantServerDataType" {
         { name = "serverId",        type = String },
         { name = "serviceLevel",    type = Byte },
         { name = "serverState",     type = ServerState },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 856) }
+    __Sealed__() __Node__{ NodeId = 856 }
     struct "SamplingIntervalDiagnosticsDataType" {
         { name = "samplingInterval",            type = Duration },
         { name = "monitoredItemCount",          type = UInt32 },
@@ -478,7 +602,7 @@ PLoop(function(_ENV)
         { name = "disabledMonitoredItemCount",  type = UInt32 },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 859) }
+    __Sealed__() __Node__{ NodeId = 859 }
     struct "ServerDiagnosticsSummaryDataType" {
         { name = "serverViewCount",             type = UInt32 },
         { name = "currentSessionCount",         type = UInt32 },
@@ -494,7 +618,7 @@ PLoop(function(_ENV)
         { name = "rejectedRequestsCount",       type = UInt32 },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 862) }
+    __Sealed__() __Node__{ NodeId = 862 }
     struct "ServerStatusDataType" {
         { name = "startTime",                   type = UtcTime },
         { name = "currentTime",                 type = UtcTime },
@@ -504,20 +628,20 @@ PLoop(function(_ENV)
         { name = "shutdownReason",              type = LocalizedText },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 871) }
+    __Sealed__() __Node__{ NodeId = 871 }
     struct "ServiceCounterDataType" {
         { name = "totalCount",                  type = UInt32 },
         { name = "errorCount",                  type = UInt32 },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 865) }
+    __Sealed__() __Node__{ NodeId = 865 }
     struct "SessionDiagnosticsDataType" {
         { name = "sessionId",                   type = NodeId },
         { name = "sessionName",                 type = String },
         { name = "clientDescription",           type = ApplicationDescription },
         { name = "serverUri",                   type = String },
         { name = "endpointUrl",                 type = String },
-        { name = "localeIds",                   type = struct { LocaleId } },
+        { name = "localeIds",                   type = LocaleIds },
         { name = "actualSessionTimeout",        type = Duration },
         { name = "maxResponseMessageSize",      type = UInt32 },
         { name = "clientConnectionTime",        type = UtcTime },
@@ -557,11 +681,11 @@ PLoop(function(_ENV)
         { name = "unregisterNodesCount",        type = ServiceCounterDataType },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 868) }
+    __Sealed__() __Node__{ NodeId = 868 }
     struct "SessionSecurityDiagnosticsDataType" {
         { name = "sessionId",                   type = NodeId },
         { name = "clientUserIdOfSession",       type = String },
-        { name = "clientUserIdHistory",         type = struct { String } },
+        { name = "clientUserIdHistory",         type = Strings },
         { name = "authenticationMechanism",     type = String },
         { name = "encoding",                    type = String },
         { name = "transportProtocol",           type = String },
@@ -570,13 +694,13 @@ PLoop(function(_ENV)
         { name = "clientCertificate",           type = ByteString },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 299) }
+    __Sealed__() __Node__{ NodeId = 299 }
     struct "StatusResult"       {
         { name = "statusCode",                  type = StatusCode },
         { name = "diagnosticInfo",              type = DiagnosticInfo },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 874) }
+    __Sealed__() __Node__{ NodeId = 874 }
     struct "SubscriptionDiagnosticsDataType" {
         { name = "sessionId",                   type = NodeId },
         { name = "subscriptionId",              type = UInt32 },
@@ -611,102 +735,201 @@ PLoop(function(_ENV)
         { name = "eventQueueOverFlowCount",     type = UInt32 },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 877) }
+    __Sealed__() __Node__{ NodeId = 877 }
     struct "ModelChangeStructureDataType" {
         { name = "affected",                    type = NodeId },
-        { name = "affectedType",                type = NodeId },
+        { name = "affectedType",                type = NodeDataType },
         { name = "verb",                        type = Byte },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 897) }
+    __Sealed__() __Node__{ NodeId = 897 }
     struct "SemanticChangeStructureDataType" {
         { name = "affected",                    type = NodeId },
-        { name = "affectedType",                type = NodeId },
+        { name = "affectedType",                type = NodeDataType },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 344) }
+    __Sealed__() __Node__{ NodeId = 344 }
     struct "SignedSoftwareCertificate" {
         { name = "certificateData",             type = ByteString },
         { name = "signature",                   type = ByteString },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 8912) }
+    __Sealed__()
+    struct "SignedSoftwareCertificates" { SignedSoftwareCertificate }
+
+    __Sealed__() __Node__{ NodeId = 8912 }
     struct "TimeZoneDataType"   {
-        { name = "offset",                      type = Int16 },
-        { name = "daylightSavingInOffset",      type = Boolean },
+        { name = "offset",                      type = Int16 },     -- The offset in minutes from UtcTime
+        { name = "daylightSavingInOffset",      type = Boolean },   -- daylight saving time (DST) is in effect and offset includes the DST correction if true
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 7594) }
+    __Sealed__() __Node__{ NodeId = 7594 }
     struct "EnumValueType"      {
-        { name = "value",                       type = Int64 },
-        { name = "displayName",                 type = LocalizedText },
-        { name = "description",                 type = LocalizedText },
+        { name = "value",                       type = Int64 },         -- The Integer representation of an Enumeration
+        { name = "displayName",                 type = LocalizedText }, -- A human-readable representation of the Value of the Enumeration
+        { name = "description",                 type = LocalizedText }, -- A localized description of the enumeration value
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12755), IsAbstract = true }
+    __Sealed__()
+    struct "EnumValueTypes"     { EnumValueType }
+
+    __Sealed__() __Node__{ NodeId = 12755, IsAbstract = true }
     struct "OptionSet"          {
         { name = "value",                       type = ByteString },
         { name = "validBits",                   type = ByteString },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 12756), IsAbstract = true, SubTypeOf = Struct }
+    __Sealed__() __Node__{ NodeId = 12756, IsAbstract = true, SubTypeOf = Struct }
     struct "Union"              {}
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 101) }
+    __Sealed__() __Node__{ NodeId = 101 }
     struct "StructureField"     {
-        { name = "name",                        type = String },
-        { name = "description",                 type = LocalizedText },
-        { name = "dataType",                    type = NodeId },
-        { name = "valueRank",                   type = Int32 },
-        { name = "arrayDimensions",             type = struct { UInt32 } },
-        { name = "maxStringLength",             type = UInt32 },
-        { name = "isOptional",                  type = Boolean },
+        { name = "name",                        type = String },            -- A name for the field that is unique within the StructureDefinition
+        { name = "description",                 type = LocalizedText },     -- A localized description of the field
+        { name = "dataType",                    type = NodeDataType },      -- The NodeId of the DataType for the field
+        { name = "valueRank",                   type = Int32 },             -- The value rank for the field
+        { name = "arrayDimensions",             type = struct { UInt32 } }, -- the maximum supported length of each dimension
+        { name = "maxStringLength",             type = UInt32 },            -- the maximum supported length
+        { name = "isOptional",                  type = Boolean },           -- if a data type field in a Structure is optional
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 97), IsAbstract = true, SubTypeOf = Struct }
     struct "DataTypeDefinition" {}
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 99), SubTypeOf = DataTypeDefinition }
+    __Sealed__() __Node__{ NodeId = 99, SubTypeOf = DataTypeDefinition }
     struct "StructureDefinition"{
         { name = "defaultEncodingId",           type = NodeId },
-        { name = "baseDataType",                type = NodeId },
+        { name = "baseDataType",                type = NodeDataType },
         { name = "structureType",               type = StructureType },
         { name = "fields",                      type = struct { StructureField } },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 102), SubTypeOf = EnumValueType }
+    __Sealed__() __Node__{ NodeId = 102, SubTypeOf = EnumValueType }
     struct "EnumField"          {
         { name = "name",                        type = String },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 100), SubTypeOf = DataTypeDefinition }
+    __Sealed__() __Node__{ NodeId = 100, SubTypeOf = DataTypeDefinition }
     struct "EnumDefinition"     {
-        { name = "fields",                      type = struct { EnumField } },
+        { name = "fields", type = struct { EnumField } },
     }
 
-    __Sealed__() __Node__{ NodeId = NodeId(NamespaceIndex.OPC_UA_URI, 96) }
+    __Sealed__() __Node__{ NodeId = 97, IsAbstract = true, SubTypeOf = Struct }
+    struct "DataTypeDefinition" { __base = StructureDefinition + EnumDefinition }
+
+    __Sealed__() __Node__{ NodeId = 96 }
     struct "RolePermissionType" {
         { name = "roleId",      type = NodeId,          require = true },
         { name = "permissions", type = PermissionType,  require = true },
     }
 
+    __Sealed__() __Node__{ NodeId = 887 }
+    struct "EUInformation"      {
+        { name = "namespaceUri",type = String,          require = true },
+        { name = "unitId",      type = Int32,           require = true },
+        { name = "displayName", type = LocalizedText,   require = true },
+        { name = "description", type = LocalizedText },
+    }
+
+    __Sealed__() __Node__{ NodeId = 311, SubtypeOf = ByteString }
+    struct "ApplicationInstanceCertificate" {
+        { name = "version",             type = String },            -- An identifier for the version of the Certificate encoding.
+        { name = "serialNumber",        type = ByteString },        -- A unique identifier for the Certificate assigned by the Issuer.
+        { name = "signatureAlgorithm",  type = String },            -- The algorithm used to sign the Certificate.The syntax of this field depends on the Certificate encoding.
+        { name = "signature",           type = ByteString },        -- The signature created by the Issuer.
+        { name = "issuer",              type = Any },               -- A name that identifies the Issuer Certificate used to create the signature.
+        { name = "validFrom",           type = UtcTime },           -- When the Certificate becomes valid.
+        { name = "validTo",             type = UtcTime },           -- When the Certificate expires.
+        { name = "subject",             type = Any },               -- A name that identifies the application instance that the Certificate describes. This field shall contain the productName and the name of the organization responsible for the application instance.
+        { name = "applicationUri",      type = String },            -- The applicationUri specified in the ApplicationDescription. The ApplicationDescription is described in 7.1.
+        { name = "hostnames",           type = Strings },           -- The name of the machine where the application instance runs. A machine may have multiple names if is accessible via multiple networks. The hostname may be a numeric network address or a descriptive name. Server   Certificates   shall have at least one hostname defined.
+        { name = "publicKey",           type = ByteString },        -- The public key associated with the Certificate.
+        { name = "keyUsage",            type = Strings },           -- Specifies how the Certificate key may be used.
+    }
+
+    __Sealed__() __Node__{ NodeId = 304 }
+    struct "UserTokenPolicy "   {
+        { name = "policyId",            type = String },
+        { name = "tokenType",           type = UserTokenType },
+        { name = "issuedTokenType",     type = String },
+        { name = "issuerEndpointUrl",   type = String },
+        { name = "securityPolicyUri",   type = String },
+    }
+
+    __Sealed__() __Node__{ NodeId = 12189 }
+    struct "ServerOnNetwork"    {
+        { name = "recordId",            type = UInt32 },
+        { name = "serverName",          type = String },
+        { name = "discoveryUrl",        type = String },
+        { name = "serverCapabilities",  type = Strings },
+    }
+
+    __Sealed__()
+    struct "ServerOnNetworks"   { ServerOnNetwork }
+
+    __Sealed__() __Node__{ NodeId = 312 }
+    struct "EndpointDescription"{
+        { name = "endpointUrl",         type = String },
+        { name = "server",              type = ApplicationDescription },
+        { name = "serverCertificate",   type = ApplicationInstanceCertificate },
+        { name = "securityMode",        type = MessageSecurityMode },
+        { name = "securityPolicyUri",   type = String },
+        { name = "userIdentityTokens",  type = struct { UserTokenPolicy } },
+        { name = "transportProfileUri", type = String },
+        { name = "securityLevel",       type = Byte },
+    }
+
+    __Sealed__()
+    struct "EndpointDescriptions"{ EndpointDescription }
+
+    __Sealed__() __Node__{ NodeId = 432 }
+    struct "RegisteredServer"   {
+        { name = "serverUri",           type = String },
+        { name = "productUri",          type = String },
+        { name = "serverNames",         type = struct{ LocalizedText } },
+        { name = "serverType",          type = ApplicationType },
+        { name = "gatewayServerUri",    type = String },
+        { name = "discoveryUrls",       type = Strings },
+        { name = "semaphoreFilePath",   type = String },
+        { name = "isOnline",            type = Boolean },
+    }
+
+    __Sealed__() __Node__{ NodeId = 15634 }
+    struct "IdentityMappingRuleType" {
+        { name = "criteriaType",    type = IdentityCriteriaType },
+        { name = "criteria",        type = String },
+    }
+
+    __Sealed__()
+    struct "IdentityMappingRuleTypes" { IdentityMappingRuleType }
+
+    __Sealed__() __Node__{ NodeId = 15528 }
+    struct "EndpointType"       {
+        { name = "endpointUrl",         type = String },
+        { name = "securityMode",        type = MessageSecurityMode },
+        { name = "securityPolicyUri",   type = String },
+        { name = "transportProfileUri", type = String },
+    }
+
+    __Sealed__()
+    struct "EndpointTypes"      { EndpointType }
+
     --- The Node Information Structure Re-definition
     __Sealed__()
-    struct "NodeInfo"             {
+    struct "NodeInfo"           {
         --- The persisted identifier
-        { name = "NodeId",              type = NodeId, require = true },
+        { name = "NodeId",              type = NodeId + NaturalNumber },
 
         --- The NodeClass of node
         { name = "NodeClass",           type = NodeClass },
 
         --- A non-localised readable name contains a namespace and a string
-        { name = "BrowseName",          type = QualifiedName },
+        { name = "BrowseName",          type = QualifiedName + String },
 
         --- The localised name of the node
-        { name = "DisplayName",         type = LocalizedText },
+        { name = "DisplayName",         type = LocalizedText + String },
 
         --- The localised description text
-        { name = "Description",         type = LocalizedText },
+        { name = "Description",         type = LocalizedText + String },
 
         --- The possibilities of a client to write the attributes of node
         { name = "WriteMask",           type = AttributeWriteMask },
@@ -732,22 +955,49 @@ PLoop(function(_ENV)
         --- The meaning of the ReferenceType as seen from the TargetNode
         { name = "InverseName",         type = LocalizedText },
 
-        { name = "ContainsNoLoops",     type = Any },
-        { name = "EventNotifier",       type = Any },
+        { name = "ContainsNoLoops",     type = Boolean },
+        { name = "EventNotifier",       type = NaturalNumber },
         { name = "Value",               type = Any },
-        { name = "DataType",            type = Any },
-        { name = "ValueRank",           type = Any },
-        { name = "ArrayDimensions",     type = Any },
-        { name = "AccessLevel",         type = Any },
-        { name = "UserAccessLevel",     type = Any },
-        { name = "MinimumSamplingInterval", type = Any },
-        { name = "Historizing",         type = Any },
-        { name = "Executable",          type = Any },
-        { name = "UserExecutable",      type = Any },
-        { name = "DataTypeDefinition",  type = Any },
-        { name = "AccessLevelEx",       type = Any },
+        { name = "DataType",            type = NodeDataType },
+        { name = "ValueRank",           type = Int32 },
+        { name = "ArrayDimensions",     type = struct { UInt32 } },
+        { name = "AccessLevel",         type = AccessLevelType },
+        { name = "UserAccessLevel",     type = AccessLevelType },
+        { name = "MinimumSamplingInterval", type = Duration },
+        { name = "Historizing",         type = Boolean },
+        { name = "Executable",          type = Boolean },
+        { name = "UserExecutable",      type = Boolean },
+        { name = "DataTypeDefinition",  type = DataTypeDefinition },
+        { name = "AccessLevelEx",       type = AccessLevelExType },
+
+        --- Use ModellingRule instead of the real node
+        { name = "HasModellingRule",    type = ModellingRule },
 
         --- The super type of the node, all reference inverse name can be used
         { name = "SubtypeOf",           type = Any },
+
+        --- The input arguments for the Method
+        { name = "InputArguments",      type = Arguments },
+
+        --- The output arguments for the Method
+        { name = "OutputArguments",     type = Arguments },
+
+        __init                  = function(self)
+            if type(self.NodeId) == "number" then
+                self.NodeId     = NodeId(NamespaceIndex.OPC_UA_URI, self.NodeId)
+            end
+
+            if type(self.BrowseName) == "string" then
+                self.BrowseName = QualifiedName(NamespaceIndex.OPC_UA_URI, self.BrowseName)
+            end
+
+            if type(self.DisplayName) == "string" then
+                self.DisplayName= LocalizedText(LocaleIdEnum.en, self.DisplayName)
+            end
+
+            if type(self.Description) == "string" then
+                self.Description= LocalizedText(LocaleIdEnum.en, self.Description)
+            end
+        end
     }
 end)
