@@ -22,6 +22,8 @@ PLoop(function(_ENV)
             strmatch            = string.match,
             strformat           = string.format,
             strgsub             = string.gsub,
+            type                = type,
+            error               = error,
             Error               = Logger.Default[Logger.LogLevel.Error],
         }
 
@@ -73,6 +75,42 @@ PLoop(function(_ENV)
         __PipeRead__ (function(path) return strformat("del /f \"%s\"", path) end, "", OperationSystemType.Windows)
         __Static__()
         function Delete(path)
+        end
+
+        __Static__()
+        function Copy(source, target, force)
+            if type(source) ~= "string" then error("Usage: Path.Copy(source, target) - the source must be a string", 2) end
+            if type(target) ~= "string" then error("Usage: Path.Copy(source, target) - the target must be a string", 2) end
+
+            if not force then
+                local f         = fopen(target, "r")
+                if f then f:close() error("Usage: Path.Copy(source, target) - the target already existed", 2) end
+            end
+
+            source              = fopen(source, "rb")
+            if not source then error("Usage: Path.Copy(source, target) - the source file can't be open", 2) end
+
+            target              = fopen(target, "wb")
+            if not target then error("Usage: Path.Copy(source, target) - the target file is not valid", 2) end
+
+            local line          = source:read(100)
+            while line do
+                target:write(line)
+                if #line == 100 then
+                    line        = source:read(100)
+                else
+                    break
+                end
+            end
+
+            source:close()
+            target:close()
+        end
+
+        __PipeRead__ (function(source, target) return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nmv \"%s\" \"%s\"", source, target) end, "", OperationSystemType.MacOS + OperationSystemType.Linux, 2)
+        __PipeRead__ (function(source, target) return strformat("move /Y \"%s\" \"%s\"", source, target) end, "", OperationSystemType.Windows, 2)
+        __Static__()
+        function Move(source, target)
         end
     end)
 end)
