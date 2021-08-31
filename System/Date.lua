@@ -491,7 +491,7 @@ PLoop(function(_ENV)
         --- Return the diff second for the two Date object
         __Arguments__{ Date }
         function Diff(self, obj)
-            return TimeSpan(self.time - obj.time)
+            return self.time - obj.time
         end
 
         --- Converts the value of the current DateTime object to its equivalent string representation using the specified format.
