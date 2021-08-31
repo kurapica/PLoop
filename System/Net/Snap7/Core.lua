@@ -64,8 +64,7 @@ PLoop(function(_ENV)
             end
 
             --- Set|Get the bit
-            __Static__()
-            function GetBitAt(buffer, pos, bit)
+            __Static__() function GetBitAt(buffer, pos, bit)
                 return band(rshift(buffer[pos], (not bit or bit < 0) and 0 or bit > 7 and 7 or bit), 1) == 1
             end
 
@@ -628,7 +627,7 @@ PLoop(function(_ENV)
                 MinPduSize                  = 16,
                 MinPduSizeToRequest         = 240,
                 MaxPduSizeToRequest         = 960,
-                DefaultTimeout              = 2000,
+                DefaultTimeout              = 2,
                 IsoHSize                    = 7, -- TPKT+COTP Header Size
             }
 
