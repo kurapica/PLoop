@@ -108,7 +108,7 @@ PLoop(function(_ENV)
         end
 
         __PipeRead__ (function(source, target) return strformat("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nmv \"%s\" \"%s\"", source, target) end, "", OperationSystemType.MacOS + OperationSystemType.Linux, 2)
-        __PipeRead__ (function(source, target) return strformat("move /Y \"%s\" \"%s\"", source, target) end, "", OperationSystemType.Windows, 2)
+        __PipeRead__ (function(source, target) return strformat("move /Y \"%s\" \"%s\"", source:gsub("/", "\\"), target:gsub("/", "\\")) end, "", OperationSystemType.Windows, 2)
         __Static__()
         function Move(source, target)
         end
