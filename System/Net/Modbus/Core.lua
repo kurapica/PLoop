@@ -387,7 +387,9 @@ PLoop(function(_ENV)
             identifier              = identifier > 0xFFF and 1 or identifier
             self.TransferIdentifier = identifier
 
-            Trace("[MODBUS][SEND][%s] %s - %s", identifier, PublicFunctionCode(dataUnit.funcCode), dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil")
+            -- Trace("[MODBUS][SEND][%s] %s - %s", identifier, PublicFunctionCode(dataUnit.funcCode), dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil")
+
+            local packet            = Modbus.MakePacket( identifier, self.UnitIdentifier, dataUnit )
 
             self.Socket:Send(Modbus.MakePacket( identifier, self.UnitIdentifier, dataUnit ))
 
@@ -404,7 +406,7 @@ PLoop(function(_ENV)
             end
 
             if ok then
-                if tid then Trace("[MODBUS][RECEIVE][%s] %s - %s", tid, dataUnit and PublicFunctionCode(dataUnit.funcCode) or "nil", dataUnit and dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil") end
+                -- if tid then Trace("[MODBUS][RECEIVE][%s] %s - %s", tid, dataUnit and PublicFunctionCode(dataUnit.funcCode) or "nil", dataUnit and dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil") end
                 return tid, unitId, dataUnit
             elseif not isObjectType(tid, TimeoutException) then
                 error(tid)
@@ -566,7 +568,7 @@ PLoop(function(_ENV)
 
         --- write a block of contiguous registers (1 to 123 registers) in a remote device
         __Arguments__{ UInt16, UInt16 * 1 }
-        function WriteMultipleregisters(self, startAddress, ...)
+        function WriteMultipleRegisters(self, startAddress, ...)
             local bytes             = {}
             local quantity          = select("#", ...)
             local count             = 0
@@ -574,7 +576,7 @@ PLoop(function(_ENV)
             if quantity > 0x007B then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
             local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.WRITE_MULTIPLE_COILS,
+                                        PublicFunctionCode.WRITE_MULTIPLE_REGISTERS,
                                         encodeByte(startAddress, 2) ..  -- Starting Address        2 Bytes 0x0000 to 0xFFFF
                                         encodeByte(quantity, 2) ..      -- Quantity of Registers   2 Bytes 0x0001 to 0x007B
                                         encodeByte(quantity * 2, 1) ..  -- Byte Count              1 Byte 2 x N*
