@@ -389,8 +389,6 @@ PLoop(function(_ENV)
 
             -- Trace("[MODBUS][SEND][%s] %s - %s", identifier, PublicFunctionCode(dataUnit.funcCode), dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil")
 
-            local packet            = Modbus.MakePacket( identifier, self.UnitIdentifier, dataUnit )
-
             self.Socket:Send(Modbus.MakePacket( identifier, self.UnitIdentifier, dataUnit ))
 
             return identifier
