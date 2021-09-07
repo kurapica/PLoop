@@ -106,8 +106,16 @@ PLoop(function(_ENV)
             local count         = select("#", ...)
             local start         = self[FIELD_REAR]
 
-            for i = 1, count do
-                self[start + i] = select(i, ...)
+            if count == 1 then
+                self[start + 1] = ...
+            elseif count == 2 then
+                self[start + 1], self[start + 2] = ...
+            elseif count == 3 then
+                self[start + 1], self[start + 2], self[start + 3] = ...
+            else
+                for i = 1, count do
+                    self[start + i] = select(i, ...)
+                end
             end
 
             self[FIELD_REAR]    = start + count
