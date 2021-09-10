@@ -108,7 +108,7 @@ PLoop(function(_ENV)
             strformat           = string.format,
             loadsnippet         = Toolset.loadsnippet,
             tostringall         = Toolset.tostringall,
-            otime               = _G.os and (os.clock or os.time),
+            otime               = _G.os and (os.clock or os.time) or false,
             unpack              = _G.unpack or table.unpack,
             isObjectType        = Class.IsObjectType,
             running             = coroutine.running,
