@@ -489,6 +489,8 @@ PLoop(function(_ENV)
                 end
             else
                 local buff      = reader:ReadBlock(16384)
+                if not buff then return end
+
                 local length    = #buff
                 local writer    = BitStreamWriter()
                 local prev      = false
@@ -499,8 +501,6 @@ PLoop(function(_ENV)
                 local cplen     = 0
                 local cpdist    = 0
                 local widx      = 0
-
-                if not buff then return end
 
                 local b1, b2, b3= buff:byte(1, 3)
                 local cursor    = 3
