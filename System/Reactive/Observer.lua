@@ -72,6 +72,8 @@ PLoop(function(_ENV)
 
         export { Observer }
 
+        local function isCancelled(self) return self.Cancelled or false end
+
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
@@ -81,7 +83,16 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
-            self.SubscribeCore(observer)
+            local onUnsubscribe
+            local token         = { IsCancelled = isCancelled }
+
+            onUnsubscribe       = function(observer)
+                observer.OnUnsubscribe = observer.OnUnsubscribe - onUnsubscribe
+                token.Cancelled = true
+            end
+            observer.OnUnsubscribe = observer.OnUnsubscribe + onUnsubscribe
+
+            self.SubscribeCore(observer, token)
             return observer
         end
 

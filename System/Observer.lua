@@ -57,7 +57,8 @@ PLoop(function(_ENV)
         --- Indicate that the subscriber is no longer interested in any of the Observables it is currently subscribed to
         function Unsubscribe(self) self.IsUnsubscribed = true end
 
-        --- Indicate the subscriber should restart the subscribe
+        --- Indicate the subscriber should restart the subscribe, this is a dangerous action since the previous observable
+        -- may haven't check the IsUnsubscribed flag to stop the subscription, the observable should check the OnUnsubscribe
         function Resubscribe(self) self.IsUnsubscribed = false end
 
         -----------------------------------------------------------------------
