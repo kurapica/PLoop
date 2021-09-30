@@ -294,14 +294,22 @@ PLoop(function(_ENV)
         end
 
         local function validateDateValue(config, value)
-            if type(value) == "string" then value = strtrim(value) end
+            local tvalue        = type(value)
+
+            if tvalue == "string" then
+                value           = strtrim(value)
+                local num       = tonumber(value)
+                if num and tostring(num) == value then
+                    value       = num
+                    tvalue      = "number"
+                end
+            end
             if value == "" then value = nil end
 
             if value == nil then
                 return nil, config.require and __Form__.RequireMessage or nil
             else
-                local number    = tonumber(value)
-                local ok, val   = pcall(Deserialize, stringProvider, number or value, Date, number and "NUMBER" or "STRING")
+                local ok, val   = pcall(Deserialize, stringProvider, value, Date, tvalue == "number" and "NUMBER" or "STRING")
                 if not ok then return value, __Form__.DateMessage end
                 return val
             end

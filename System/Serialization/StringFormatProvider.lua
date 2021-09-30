@@ -398,6 +398,7 @@ PLoop(function(_ENV)
             loadsnippet                     = Toolset.loadsnippet,
             strbyte                         = string.byte,
             strsub                          = string.sub,
+            strtrim                         = Toolset.trim,
             type                            = type,
             SerializeDataWithWriter         = SerializeDataWithWriter,
             SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
@@ -409,12 +410,22 @@ PLoop(function(_ENV)
         }
 
         local function loadData(str)
+            str                 = strtrim(str)
+
             if strbyte(str, 1) == 0xEF and strbyte(str, 2) == 0xBB and strbyte(str, 3) == 0xBF then
                 str             = strsub(str, 4, -1)
             end
 
-            local func          = loadsnippet("return " .. str)
-            return func and func() or str
+            -- { ... } | true | false | digists
+            if str:match("^{.*}$") or str:match("^[%w]+%.?%d*$") then
+                local func      = loadsnippet("return " .. str)
+                local val       = func and func()
+
+                if val ~=  nil then return val end
+                return str
+            else
+                return str
+            end
         end
 
         -----------------------------------------------------------------------
