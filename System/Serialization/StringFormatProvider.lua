@@ -416,7 +416,7 @@ PLoop(function(_ENV)
             end
 
             -- the date format 2021-12-12 can be load as expression, should be check standalone
-            if str:match("^%s*%d+%-%d+") then return str end
+            if str:match("^%s*%d+[%-/]%d+") then return str end
 
             local func          = loadsnippet("return " .. str)
             if func then
