@@ -400,6 +400,7 @@ PLoop(function(_ENV)
             strsub                          = string.sub,
             strtrim                         = Toolset.trim,
             type                            = type,
+            pcall                           = pcall,
             SerializeDataWithWriter         = SerializeDataWithWriter,
             SerializeDataWithWriterNoIndent = SerializeDataWithWriterNoIndent,
             SerializeDataWithWrite          = SerializeDataWithWrite,
@@ -410,22 +411,20 @@ PLoop(function(_ENV)
         }
 
         local function loadData(str)
-            str                 = strtrim(str)
-
             if strbyte(str, 1) == 0xEF and strbyte(str, 2) == 0xBB and strbyte(str, 3) == 0xBF then
                 str             = strsub(str, 4, -1)
             end
 
-            -- { ... } | true | false | digists
-            if str:match("^{.*}$") or str:match("^[%w]+%.?%d*$") then
-                local func      = loadsnippet("return " .. str)
-                local val       = func and func()
+            -- the date format 2021-12-12 can be load as expression, should be check standalone
+            if str:match("^%s*%d+%-%d+") then return str end
 
-                if val ~=  nil then return val end
-                return str
-            else
-                return str
+            local func          = loadsnippet("return " .. str)
+            if func then
+                local ok, val   = pcall(func)
+                if ok and val ~= nil then return val end
             end
+
+            return str
         end
 
         -----------------------------------------------------------------------
