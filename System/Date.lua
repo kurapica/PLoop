@@ -474,6 +474,11 @@ PLoop(function(_ENV)
             end
         end
 
+        __Static__() __Arguments__{ Number }
+        function Parse(time)
+            return Date(time)
+        end
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -566,7 +571,7 @@ PLoop(function(_ENV)
         function __new(_, fmt, value)
             local vtype         = type(value)
             if vtype == "number" then
-                local self      = { time = value }
+                local self      = { time = value, msec = floor(value * 1000) % 1000 / 1000 }
                 r4Time(self)
                 return self, true
             elseif vtype == "string" then
