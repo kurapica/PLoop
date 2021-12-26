@@ -2,6 +2,7 @@
 local root = require "PLoop.Prototype"
 
 -- System
+require "PLoop.System.Scalar"
 require "PLoop.System.Collections"
 require "PLoop.System.Threading"
 require "PLoop.System.Text"

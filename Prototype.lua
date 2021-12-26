@@ -13640,7 +13640,7 @@ do
 
     --- the property set settings
     __Sealed__() __Flags__() __Default__(0)
-    PropertySet = enum "System.PropertySet" {
+    PropertySet                 = enum "System.PropertySet" {
         Assign                  = 0,
         Clone                   = 1,
         DeepClone               = 2,
@@ -13650,7 +13650,7 @@ do
 
     --- the property get settings
     __Sealed__() __Flags__() __Default__(0)
-    PropertyGet = enum "System.PropertyGet" {
+    PropertyGet                 = enum "System.PropertyGet" {
         Origin                  = 0,
         Clone                   = 1,
         DeepClone               = 2,
@@ -13658,7 +13658,7 @@ do
 
     --- the struct category
     __Sealed__()
-    StructCategory = enum "System.StructCategory" {
+    StructCategory              = enum "System.StructCategory" {
         "MEMBER",
         "ARRAY",
         "CUSTOM",
@@ -13683,6 +13683,12 @@ do
     --- Represents number value
     __Sealed__() Number = struct "System.Number"    { genBasicValidator("number")   }
 
+    --- Represents integer value
+    __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
+
+    --- Represents natural number value
+    __Sealed__() NaturalNumber = struct "System.NaturalNumber" { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
+
     --- Represents function value
     __Sealed__() struct "System.Function"           { genBasicValidator("function") }
 
@@ -13703,21 +13709,6 @@ do
 
     --- Represents table value without meta-table
     __Sealed__() struct "System.RawTable"           { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
-
-    --- Represents the positive number
-    __Sealed__() struct "System.PositiveNumber"     { __base = Number, function(val, onlyvalid) return val <= 0 and (onlyvalid or "the %s must be a positive number") or nil end }
-
-    --- Represents the negative number
-    __Sealed__() struct "System.NegativeNumber"     { __base = Number, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative number") or nil end }
-
-    --- Represents integer value
-    __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
-
-    --- Represents natural number value
-    __Sealed__() NaturalNumber = struct "System.NaturalNumber" { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
-
-    --- Represents negative integer value
-    __Sealed__() struct "System.NegativeInteger"     { __base = Integer, function(val, onlyvalid) return val >= 0 and (onlyvalid or "the %s must be a negative integer") or nil end }
 
     --- Represents namespace type
     __Sealed__() struct "System.NamespaceType"      { genTypeValidator(namespace)   }
@@ -13905,39 +13896,6 @@ do
             end
         end
     end)
-
-    --- SByte
-    __Sealed__() struct "System.SByte"              { __base = Integer, function(val, onlyvalid) return (val > 127 or val < -128) and (onlyvalid or "the %s must be an 8 bytes integer") or nil end }
-
-    --- Byte
-    __Sealed__() struct "System.Byte"               { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^8 and (onlyvalid or "the %s must be an 8 bytes unsigned integer") or nil end }
-
-    --- Int16
-    __Sealed__() struct "System.Int16"              { __base = Integer, function(val, onlyvalid) return (val > 32767 or val < -32768) and (onlyvalid or "the %s must be an 16 bytes integer") or nil end }
-
-    --- UInt16
-    __Sealed__() struct "System.UInt16"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^16 and (onlyvalid or "the %s must be an 16 bytes unsigned integer") or nil end }
-
-    --- Int32
-    __Sealed__() struct "System.Int32"              { __base = Integer, function(val, onlyvalid) return (val > 2147483647 or val < -2147483648) and (onlyvalid or "the %s must be an 32 bytes integer") or nil end }
-
-    --- UInt32
-    __Sealed__() struct "System.UInt32"             { __base = NaturalNumber, function(val, onlyvalid) return val >= 2^32 and (onlyvalid or "the %s must be an 32 bytes unsigned integer") or nil end }
-
-    --- Int64, no limit check
-    __Sealed__() struct "System.Int64"              { __base = Integer }
-
-    --- UInt64, no limit check
-    __Sealed__() struct "System.UInt64"             { __base = NaturalNumber }
-
-    --- Float, no check
-    __Sealed__() struct "System.Float"              { __base = Number }
-
-    --- Double, no check
-    __Sealed__() struct "System.Double"             { __base = Number }
-
-    --- Decimal, no check
-    __Sealed__() struct "System.Decimal"            { __base = Number }
 
 
     -----------------------------------------------------------------------
