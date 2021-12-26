@@ -1757,6 +1757,10 @@ PLoop(function(_ENV)
             return self[FIELD_TBLNAME]
         end
 
+        function GetDataEntity(self)
+            return Entity
+        end
+
         --- Add a data entity to the collection
         __Arguments__{ QueryData }
         function Add(self, data)
