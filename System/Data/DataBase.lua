@@ -75,9 +75,9 @@ PLoop(function(_ENV)
         if schema.indexes then
             for _, index in ipairs(schema.indexes) do
                 if index.primary then
-                    schema.primary = index.fields
+                    schema.primary      = index.fields
                     if #schema.primary == 1 then
-                        schema.primary = schema.primary[1]
+                        schema.primary  = schema.primary[1]
                     end
                 end
             end
@@ -87,11 +87,12 @@ PLoop(function(_ENV)
     end
 
     function saveDataFieldSchema(entityCls, name, set)
-        local schema        = _DataTableSchema[entityCls]
+        local schema                = _DataTableSchema[entityCls]
 
         if set.foreign then
             schema.foreign[name]    = set.foreign.map
-            local keycount  = 0
+
+            local keycount          = 0
             local key
             for k, v in pairs(set.foreign.map) do
                 schema.map[k]       = schema.map[k] or name
@@ -587,7 +588,7 @@ PLoop(function(_ENV)
         FIELD_DATA              = 0 -- entity data
         FIELD_FORUPDATE         = 1 -- lock for update
         FIELD_STATUS            = 2 -- entity status
-        FIELD_CONTEXT           = 3 -- data context
+        FIELD_COLLECT           = 3 -- data collection
         FIELD_MODIFIED          = 4 -- modified field
         FIELD_REQUIRE           = 5 -- requirement field
 
@@ -595,7 +596,7 @@ PLoop(function(_ENV)
             [FIELD_DATA]        = false,
             [FIELD_FORUPDATE]   = false,
             [FIELD_STATUS]      = STATUS_UNMODIFIED,
-            [FIELD_CONTEXT]     = false,
+            [FIELD_COLLECT]     = false,
             [FIELD_MODIFIED]    = false,
             [FIELD_REQUIRE]     = false,
         }
@@ -606,17 +607,22 @@ PLoop(function(_ENV)
         --- Gets the entity's data context
         -- @return  context         the data context
         function GetDataContext(self)
-            return self[FIELD_CONTEXT] or nil
+            return self[FIELD_COLLECT] and self[FIELD_COLLECT]:GetDataContext()
         end
 
-        --- Sets the entity's data context
+        --- Gets the entity's data collection
+        function GetDataCollection(self)
+            return self[FIELD_COLLECT]
+        end
+
+        --- Sets the entity's data collection
         -- @param   context         the data context
-        __Arguments__{ IDataContext }
-        function SetDataContext(self, context)
-            if not self[FIELD_CONTEXT] then
-                self[FIELD_CONTEXT] = context
+        __Arguments__{ DataCollection }
+        function SetDataCollection(self, collection)
+            if not self[FIELD_COLLECT] then
+                self[FIELD_COLLECT] = collection
             else
-                error("Usage: IDataEntity:SetDataContext(context) - the data entity already has data context", 2)
+                error("Usage: IDataEntity:SetDataCollection(collection) - the data entity already belongs to a data collection", 2)
             end
         end
 
@@ -635,7 +641,7 @@ PLoop(function(_ENV)
                 if status == STATUS_UNMODIFIED then
                     self[FIELD_MODIFIED] = false
                 else
-                    local ctx   = self[FIELD_CONTEXT]
+                    local ctx   = self:GetDataContext()
                     if ctx then ctx:AddChangedEntity(self) end
                 end
             end
@@ -668,7 +674,7 @@ PLoop(function(_ENV)
 
         --- Gets the modified fields
         function SaveChange(self, stack)
-            local ctx           = self[FIELD_CONTEXT]
+            local ctx           = self:GetDataContext()
             local status        = self[FIELD_STATUS]
             if not ctx or status== STATUS_UNMODIFIED then return end
             stack               = (tonumber(stack) or 1) + 1
@@ -686,9 +692,10 @@ PLoop(function(_ENV)
             local entityCls         = getmetatable(self)
             local schema            = getDataTableSchema(entityCls)
             local flddata           = self[FIELD_DATA]
+            local tblname           = self[FIELD_COLLECT]:GetTableName()
 
             if status == STATUS_NEW then
-                local rs            = ctx.Connection:Insert(ctx.Connection:SqlBuilder():From(schema.name):Insert(flddata):ToSql())
+                local rs            = ctx.Connection:Insert(ctx.Connection:SqlBuilder():From(tblname):Insert(flddata):ToSql())
                 if schema.autokey and rs then
                     flddata[schema.autokey] = rs
                 end
@@ -713,8 +720,7 @@ PLoop(function(_ENV)
                 end
 
                 if status == STATUS_DELETED then
-                    ctx[getDataTableCol(entityCls)]:Delete(self)
-                    ctx:Execute(ctx.Connection:SqlBuilder():From(schema.name):Where(where):Delete():ToSql())
+                    ctx:Execute(ctx.Connection:SqlBuilder():From(tblname):Where(where):Delete():ToSql())
                 elseif status == STATUS_MODIFIED and self[FIELD_FORUPDATE] then
                     local update    = {}
 
@@ -728,7 +734,7 @@ PLoop(function(_ENV)
                         update[name]= val
                     end
 
-                    ctx:Execute(ctx.Connection:SqlBuilder():From(schema.name):Where(where):Update(update):ToSql())
+                    ctx:Execute(ctx.Connection:SqlBuilder():From(tblname):Where(where):Update(update):ToSql())
                 end
             end
 
@@ -748,7 +754,7 @@ PLoop(function(_ENV)
             if self[FIELD_STATUS] ~= STATUS_NEW then
                 self:SetEntityStatus(STATUS_DELETED)
             else
-                self[FIELD_CONTEXT] = nil
+                self[FIELD_COLLECT] = nil
             end
         end
     end)
@@ -780,12 +786,8 @@ PLoop(function(_ENV)
 
         local TYPE_CONVERTER    = {
             [Boolean]           = {
-                fromvalue       = function(value)
-                    return tonumber(value) == 1 or false
-                end,
-                tovalue         = function(object)
-                    return object and 1 or 0
-                end,
+                fromvalue       = function(value) return tonumber(value) == 1 or false end,
+                tovalue         = function(object)return object and 1 or 0 end,
             },
             [Date]              = {
                 fromvalue       = Date.Parse,
@@ -805,7 +807,7 @@ PLoop(function(_ENV)
 
             __init              = function(self)
                 if type(self.order) == "string" then
-                    self.order= { { name = self.order } }
+                    self.order  = { { name = self.order } }
                 end
             end,
         }
@@ -816,7 +818,7 @@ PLoop(function(_ENV)
 
             __init              = function(self)
                 if type(self.link) == "string" then
-                    self.link = { name = self.link }
+                    self.link   = { name = self.link }
                 end
             end,
         }
@@ -896,6 +898,8 @@ PLoop(function(_ENV)
                     end
 
                     local schema    = getDataTableSchema(ptype)
+                    if schema.name:find("%", 1, true) then error(("The %s has dynamic table name, can't be used as foreign"):format(tostring(ptype)), stack + 1) end
+
                     local isunique  = keycount == 1 and schema.unique[mkey] or isUniqueIndex(ptype, pmap)
                     local foreignfld= "_Foreign_" .. Namespace.GetNamespaceName(ptype, true) .. "_" .. name
                     local mainfld   = "_Main_" .. Namespace.GetNamespaceName(owner, true) .. "_" .. name
@@ -1110,7 +1114,7 @@ PLoop(function(_ENV)
                     local fld           = set.name
                     local schema        = getDataTableSchema(owner)
                     local converter     = set.converter
-                    local isprimary = schema.primary == fld
+                    local isprimary     = schema.primary == fld
 
                     if type(schema.primary) == "table" then
                         for i, v in ipairs(schema.primary) do if v == fld then isprimary = true break end end
@@ -1349,7 +1353,7 @@ PLoop(function(_ENV)
 
         export { Namespace, Class, Environment, IDataContext, IDataEntity, System.Serialization.__Serializable__, "saveDataTableSchema", "clearDataTableFieldCount" }
 
-        local setDataContext    = IDataEntity.SetDataContext
+        local setCollection     = IDataEntity.SetDataCollection
         local setEntityData     = IDataEntity.SetEntityData
 
         __Sealed__() struct "DataTableIndex" {
@@ -1398,11 +1402,11 @@ PLoop(function(_ENV)
                 -----------------------------------------------------------
                 --                      constructor                      --
                 -----------------------------------------------------------
-                __Arguments__{ IDataContext/nil, Table/nil }
-                function __new(_, ctx, tbl)
+                __Arguments__{ DataCollection/nil, Table/nil }
+                function __new(_, col, tbl)
                     local self  = {}
-                    if ctx then setDataContext(self, ctx) end
-                    if tbl then setEntityData (self, tbl) end
+                    if col then setCollection(self, col) end
+                    if tbl then setEntityData(self, tbl) end
                     return self, true
                 end
 
@@ -1560,6 +1564,9 @@ PLoop(function(_ENV)
         --                        helper                         --
         -----------------------------------------------------------
         local FIELD_DATA        = 0
+        local FIELD_CONTEXT     = 0
+        local FIELD_BUILDER     = 1
+        local FIELD_TBLNAME     = 2
 
         local clsname           = Namespace.GetNamespaceName(Entity, true)
         local schema            = getDataTableSchema(Entity)
@@ -1634,12 +1641,12 @@ PLoop(function(_ENV)
         end
 
         local function getEntityList(self, builder, lock)
-            local ctx           = self[0]
+            local ctx           = self[FIELD_CONTEXT]
 
             if builder then
-                if builder == self[1] then self[1] = nil end
+                if builder == self[FIELD_BUILDER] then self[FIELD_BUILDER] = false end
 
-                builder:From(tabelname):Select(fields)
+                builder:From(self[FIELD_TBLNAME]):Select(fields)
                 if lock then builder:Lock() end
 
                 local sql           = builder:ToSql()
@@ -1647,7 +1654,7 @@ PLoop(function(_ENV)
 
                 if rs then
                     for i, data in ipairs(rs) do
-                        rs[i]       = Entity(ctx, data)
+                        rs[i]       = Entity(self, data)
                         if lock then rs[i]:SetLockForUpdate() end
                     end
 
@@ -1663,92 +1670,97 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ QueryData, QueryOrders/nil }
         function Query(self, query, orders)
-            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder():Where(genQueryData(query)), orders))
+            return getEntityList(self, genOrder(self[FIELD_CONTEXT].Connection:SqlBuilder():Where(genQueryData(query)), orders))
         end
 
         __Arguments__{ QueryData/nil }
         function Count(self, query)
-            local builder       = self[1] or self[0].Connection:SqlBuilder()
-            if builder == self[1] then self[1] = nil end
+            local builder       = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            if builder == self[FIELD_BUILDER] then self[FIELD_BUILDER] = false end
             if query then builder:Where(genQueryData(query)) end
 
-            local ctx           = self[0]
-            local sql           = builder:From(tabelname):Count():ToSql()
+            local ctx           = self[FIELD_CONTEXT]
+            local sql           = builder:From(self[FIELD_TBLNAME]):Count():ToSql()
             return sql and ctx:Count(sql) or 0
         end
 
         __Arguments__{ QueryData, QueryOrders/nil }
         function Lock(self, query, orders)
-            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder():Where(genQueryData(query)), orders), true)
+            return getEntityList(self, genOrder(self[FIELD_CONTEXT].Connection:SqlBuilder():Where(genQueryData(query)), orders), true)
         end
 
         __Arguments__{ QueryOrders/nil }
         function QueryAll(self, orders)
-            return getEntityList(self, genOrder(self[0].Connection:SqlBuilder(), orders))
+            return getEntityList(self, genOrder(self[FIELD_CONTEXT].Connection:SqlBuilder(), orders))
         end
 
         __Arguments__{ QueryData }
         function Where(self, query)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
-            self[1]:Where(genQueryData(query))
+            self[FIELD_BUILDER] = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            self[FIELD_BUILDER]:Where(genQueryData(query))
             return self
         end
 
         __Arguments__{ NEString, Any * 0 }
         function Where(self, condition, ...)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
             condition           = condition:gsub("%%?[_%w]+", props)
-            self[1]:Where(condition, ...)
+            self[FIELD_BUILDER]:Where(condition, ...)
             return self
         end
 
         __Arguments__{ QueryOrders }
         function OrderBy(self, orders)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
-            genOrder(self[1], orders)
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            genOrder(self[FIELD_BUILDER], orders)
             return self
         end
 
         __Arguments__{ NEString, Boolean/nil }
         function OrderBy(self, name, desc)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
-            self[1]:OrderBy(props[name] or name, desc)
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            self[FIELD_BUILDER]:OrderBy(props[name] or name, desc)
             return self
         end
 
         __Arguments__{ NaturalNumber }
         function Limit(self, limit)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
-            self[1]:Limit(limit)
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            self[FIELD_BUILDER]:Limit(limit)
             return self
         end
 
         __Arguments__{ NaturalNumber }
         function Offset(self, offset)
-            self[1]             = self[1] or self[0].Connection:SqlBuilder()
-            self[1]:Offset(offset)
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
+            self[FIELD_BUILDER]:Offset(offset)
             return self
         end
 
         __Arguments__{}
         function Query(self)
-            return getEntityList(self, self[1])
+            return getEntityList(self, self[FIELD_BUILDER])
         end
 
         __Arguments__{}
         function Lock(self)
-            return getEntityList(self, self[1], true)
+            return getEntityList(self, self[FIELD_BUILDER], true)
         end
 
-        --- Get the data context of the data collection
+        --- Gets the data context of the data collection
         function GetDataContext(self)
-            return self[0]
+            return self[FIELD_CONTEXT]
+        end
+
+        --- Gets the table name of the data collection
+        function GetTableName(self)
+            return self[FIELD_TBLNAME]
         end
 
         --- Add a data entity to the collection
         __Arguments__{ QueryData }
         function Add(self, data)
-            local entity    = Entity(self[0])
+            local entity    = Entity(self)
             entity:SetEntityStatus(EntityStatus.NEW)
             for k, v in pairs(data) do
                 entity[k]   = v
@@ -1763,9 +1775,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ IDataContext }
-        function __new(cls, context)
-            return { [0] = context }, true
+        __Arguments__{ IDataContext, NEString/nil }
+        function __new(cls, context, name)
+            return { [FIELD_CONTEXT] = context, [FIELD_BUILDER] = false, [FIELD_TBLNAME] = name or tabelname }, true
         end
     end)
 
@@ -1845,7 +1857,25 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataContext__" (function(_ENV)
         extend "IApplyAttribute"
 
-        export { Namespace, Class, Attribute, Environment, IDataContext, IDataObject, IDataEntity, __DataTable__, __DataObject__, DataCollection, DataObjectCollection, "next" }
+        export {
+            Namespace, Class, Attribute, Environment, IDataContext, IDataObject, IDataEntity, __DataTable__, __DataObject__, DataCollection, DataObjectCollection,
+            "pcall", "next", "error", "type", strformat = string.format, unpack = _G.unpack or table.unpack
+        }
+
+        local function getDynamicTableName(name, keys)
+            if keys == nil then return end
+
+            local ok, ret
+
+            if type(keys) == "table" then
+                ok, ret         = pcall(strformat, name, unpack(keys))
+            else
+                ok, ret         = pcall(strformat, name, keys)
+            end
+
+            if not ok or ret:find("%", 1, true) then return end
+            return ret
+        end
 
         -----------------------------------------------------------
         --                        method                         --
@@ -1876,17 +1906,57 @@ PLoop(function(_ENV)
 
             for entityCls, isEntityCls in pairs(_Classes) do
                 if isEntityCls then
-                    local set       = Attribute.GetAttachedData(__DataTable__, entityCls)
+                    local set           = Attribute.GetAttachedData(__DataTable__, entityCls)
                     if set then
-                        local name  = set.collection
-                        local cls   = DataCollection[entityCls]
+                        local name      = set.collection
+                        local cls       = DataCollection[entityCls]
+                        local tname     = set.name
 
-                        Environment.Apply(manager, function(_ENV)
-                            property (name) {
-                                set     = false,
-                                default = function(self) return cls(self) end,
-                            }
-                        end)
+                        -- check if the entity class is dynamic
+                        if tname:find("%", 1, true) then
+                            local cnt   = 0
+                            local isnum = false
+                            local iserr = false
+
+                            for p in tname:gmatch("%%(.?)") do
+                                cnt     = cnt + 1
+                                if p == "d" then
+                                    isnum = true
+                                elseif p ~= "w" and p ~= "s" then
+                                    iserr = true
+                                end
+                            end
+                            if iserr or cnt == 0 then error(("The dynamic name %q is not valid"):format(tname), stack + 1) end
+
+                            Environment.Apply(manager, function(_ENV)
+                                export { throw = throw, type = type, unpack = unpack or table.unpack, rawget = rawget, rawset = rawset, tostring = Toolset.tostring }
+
+                                __Indexer__(cnt == 1 and (isnum and Integer or NEString) or nil)
+                                __Throwable__()
+                                property (name) {
+                                    set     = false,
+                                    get     = function(self, keys)
+                                        local key   = getDynamicTableName(tname, keys)
+                                        if not key then throw("The dynamic table name can't be generated with keys - " .. tostring(keys)) end
+
+                                        local holder= "__table_" .. key
+                                        local col   = rawget(self, holder)
+                                        if col then return col end
+
+                                        col         = cls(self, key)
+                                        rawset(self, holder, col)
+                                        return col
+                                    end,
+                                }
+                            end)
+                        else
+                            Environment.Apply(manager, function(_ENV)
+                                property (name) {
+                                    set     = false,
+                                    default = function(self) return cls(self) end,
+                                }
+                            end)
+                        end
                     end
                 else
                     local set       = Attribute.GetAttachedData(__DataObject__, entityCls)

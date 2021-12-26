@@ -54,7 +54,7 @@ PLoop(function(_ENV)
     __Sealed__() class "DataEntityCache" (function(_ENV, clsEntity, clsCache, defaultTimeout)
         extend "IDataCache"
 
-        export { "tostring", "ipairs", "pairs", "tonumber", "select", "error", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet, clone = Toolset.clone }
+        export { "tostring", "ipairs", "pairs", "tonumber", "select", "error", with = with, List, unpack = unpack or table.unpack, loadsnippet = Toolset.loadsnippet, clone = Toolset.clone, tostring = tostring, type = type }
 
         local clsContext        = Namespace.GetNamespace(Namespace.GetNamespaceName(clsEntity):match("^(.*)%.[%P_]+$"))
         local CACHE_KEY         = PLOOP_CACHE_KEY_PREFIX .. clsEntity .. ":"
@@ -62,6 +62,7 @@ PLoop(function(_ENV)
         local set               = Attribute.GetAttachedData(__DataTable__, clsEntity)
         if not set.indexes then error("The " .. clsEntity .. " has no data table index settings") end
 
+        -- Check if the data entity has dynamic table name
         local props             = {}
 
         for name, ftr in Class.GetFeatures(clsEntity) do
@@ -127,6 +128,25 @@ PLoop(function(_ENV)
         local KeyCollection     = set.collection
         props                   = nil
 
+        -- Check the dynamic table name
+        local dynamicKeys       = List()
+
+        for p in set.name:gmatch("%%(.?)") do
+            if p == "d" then
+                dynamicKeys:Insert(Number)
+            elseif p == "w" or p == "s" then
+                dynamicKeys:Insert(NEString)
+            else
+                error("The " .. clsEntity .. " has invalid dynamic table name")
+            end
+        end
+
+        if #dynamicKeys == 1 then
+            KeyCollection       = KeyCollection .. "[self[1]]"
+        elseif #dynamicKeys > 1 then
+            KeyCollection       = KeyCollection .. "[{" .. List(#dynamicKeys, "i=>'self[' .. i .. ']'"):Join(", ") .."}]"
+        end
+
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -159,21 +179,22 @@ PLoop(function(_ENV)
         --                    auto gen method                    --
         -----------------------------------------------------------
         local args              = List(#primaryflds, "i=>'arg' .. i"):Join(", ")
-        local entityKey         = '"' .. CACHE_KEY .. '" .. ' .. List(#primaryflds, "i=>'tostring(arg' .. i .. ')'"):Join(" .. '^' .. ")
+        local dynamickey        = #dynamicKeys > 0 and (List(#dynamicKeys, "i=>'self[' .. i .. ']'"):Join(" .. '^' .. ") .. " .. ':' .. ") or ""
+        local entityKey         = '"' .. CACHE_KEY .. '" .. ' .. dynamickey .. List(#primaryflds, "i=>'tostring(arg' .. i .. ')'"):Join(" .. '^' .. ")
         local queryMap          = List(#primaryflds, function(i) return primaryflds[i].name .. " = " .. "arg" .. i end):Join(", ")
         local argMap            = List(#primaryflds, function(i) return "arg" .. i end):Join(", ") .. " = " .. List(#primaryflds, function(i) return "query." .. primaryflds[i].name end):Join(", ")
-        local indexKeys         = List{ '"' .. CACHE_KEY .. '" .. ' .. List(#primaryflds, function(i) return "tostring(entity." .. primaryflds[i].name .. ")" end):Join(" .. '^' .. ") }
+        local indexKeys         = List{ '"' .. CACHE_KEY .. '" .. ' .. dynamickey .. List(#primaryflds, function(i) return "tostring(entity." .. primaryflds[i].name .. ")" end):Join(" .. '^' .. ") }
         local indexCond         = List{ "if " .. List(#primaryflds, function(i) return "entity." .. primaryflds[i].name .. " ~= nil" end):Join(" and ") .. " then " }
 
         if uniques then
             for idx, unique in pairs(uniques) do
-                indexKeys:Insert( '"' .. CACHE_KEY .. idx  .. ':" .. ' .. List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") )
+                indexKeys:Insert( '"' .. CACHE_KEY .. idx  .. ':" .. ' .. dynamickey .. List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") )
                 indexCond:Insert("if " .. List(#unique, function(i) return "entity." .. unique[i] .. " ~= nil" end):Join(" and ") .. " then ")
             end
         end
 
         local autoGenCode       = [[
-            local primaryflds, clsEntity, clsContext, clsCache, QueryData  = ...
+            local primaryflds, clsEntity, clsContext, clsCache, QueryData, tostring  = ...
 
             local function saveEntity(self, cache, entity)
                 cache:Set(]] .. indexKeys[1] .. [[, entity, self.Timeout)
@@ -199,7 +220,9 @@ PLoop(function(_ENV)
                     uniques and (
                         XDictionary(uniques).Keys:Map(function(idx)
                             local unique = uniques[idx]
-                            return "if " .. List(#unique, function(i) return "entity." .. unique[i] .. " ~= nil" end):Join(" and ") .. " then return " .. '"' .. CACHE_KEY .. idx  .. ':" .. ' .. List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") .. ", false end" end)
+                            return "if " .. List(#unique, function(i) return "entity." .. unique[i] .. " ~= nil" end):Join(" and ") ..
+                                " then return " .. '"' .. CACHE_KEY .. idx  .. ':" .. ' .. dynamickey ..
+                                List(#unique, function(i) return "tostring(entity." .. unique[i] .. ")" end):Join(" .. '^' .. ") .. ", false end" end)
                         :Join("\n")
                     ) or ""
                 ) .. [[
@@ -269,7 +292,7 @@ PLoop(function(_ENV)
                     if not main then
                         local v = self.Cache:Get(key)
                         if v == false then return end -- fake entity
-                        key     = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
+                        key     = v and ("]] .. CACHE_KEY .. [[" .. ]] .. dynamickey .. [[ v) or nil
                     end
 
                     entity      = key and self.Cache:Get(key, clsEntity)
@@ -295,7 +318,7 @@ PLoop(function(_ENV)
                         if not main then
                             local v = cache:Get(key)
                             if v == false then return end -- fake entity
-                            key = v and ("]] .. CACHE_KEY .. [[" .. v) or nil
+                            key = v and ("]] .. CACHE_KEY .. [[" .. ]] .. dynamickey .. [[ v) or nil
                         end
 
                         entity  = key and cache:Get(key, clsEntity)
@@ -360,9 +383,12 @@ PLoop(function(_ENV)
                     end)
                 end
             end
-        ]]
+        ]] .. (#dynamicKeys > 0 and [[
+            __Arguments__{]] .. dynamicKeys:Map(tostring):Join(",") .. [[}
+            function __new(_, ...) return { ... }, true end
+        ]] or "")
 
-        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack((uniqueflds or primaryflds):Map(Toolset.clone):ToList()) })
+        loadsnippet(autoGenCode, "DataEntityCache-" .. clsEntity, _ENV)(primaryflds, clsEntity, clsContext, clsCache, struct { unpack((uniqueflds or primaryflds):Map(Toolset.clone):ToList()) }, function (data) return tostring(data):gsub("%s+", "") end)
     end)
 
     --- The bindings between the data object and the data cache
@@ -425,7 +451,7 @@ PLoop(function(_ENV)
         local argMap            = List(#primaryflds, function(i) return "arg" .. i end):Join(", ") .. " = " .. List(#primaryflds, function(i) return "query." .. primaryflds[i].name end):Join(", ")
 
         local autoGenCode       = [[
-            local primaryflds, clsDataObject, clsContext, clsCache, QueryData  = ...
+            local primaryflds, clsDataObject, clsContext, clsCache, QueryData, tostring  = ...
 
             --- Get the entity object with the index key
             __Arguments__{ unpack( primaryflds:Map("v=>{ name = v.name, type = v.type }"):ToList() ) }
@@ -591,7 +617,7 @@ PLoop(function(_ENV)
             end
         ]]
 
-        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) })
+        loadsnippet(autoGenCode, "DataObjectCache-" .. clsDataObject, _ENV)(primaryflds, clsDataObject, clsContext, clsCache, struct { unpack(primaryflds:Map(Toolset.clone):ToList()) }, function (data) return tostring(data):gsub("%s+", "") end)
     end)
 
     --- The attribute used to bind the cache settings to the data entity or data object class
@@ -780,7 +806,7 @@ PLoop(function(_ENV)
     __Sealed__() class "__DataContextCache__" (function(_ENV)
         extend "IAttachAttribute" "IApplyAttribute"
 
-        export { Namespace, Environment, Class, List, DataEntityCache, DataObjectCache, EntityStatus, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = unpack or table.unpack, safeset = Toolset.safeset, loadsnippet = Toolset.loadsnippet, getAttachedData = Attribute.GetAttachedData }
+        export { Namespace, Environment, Class, List, DataEntityCache, DataObjectCache, EntityStatus, IDataEntity, IDataObject, __DataCacheEnable__, rawset = rawset, GetObjectClass = getmetatable, pairs = pairs, ipairs = ipairs, unpack = _G.unpack or table.unpack, safeset = Toolset.safeset, loadsnippet = Toolset.loadsnippet, getAttachedData = Attribute.GetAttachedData, error = error, tostring = tostring, tonumber = tonumber }
 
         local _EntityDepends    = {}
 
@@ -815,12 +841,29 @@ PLoop(function(_ENV)
             end
         })
 
+        local _TableNamePass    = setmetatable({}, {
+            __index             = function(self, count)
+                local func, msg = loadsnippet([[
+                    local pattern, ]] .. List(count, "i=>'p' .. i"):Join(", ") .. [[ = ...
+                    return function(name)
+                        local ]] .. List(count, "i=>'a' .. i"):Join(", ") .. [[ = name:match(pattern)
+                        return ]].. List(count, "i=>'p' .. i .. '(a' .. i .. ')'"):Join(", ") .. [[
+                    end
+                ]], "DataContextCache_NamePass_" .. count, _ENV)
+
+                rawset(self, count, func)
+                return func
+            end,
+        })
+
+        -- Auto remove data entity from cache when modified or deleted
         local function onEntitySaved(self, entities)
             local map           = {}
-
             local objCache      = {}
 
             for entity, status in pairs(entities) do
+                -- Check the dynamic table name
+                local tablename             = entity:GetDataCollection():GetTableName()
                 local cls                   = GetObjectClass(entity)
                 local depends               = _EntityDepends[cls]
 
@@ -828,8 +871,8 @@ PLoop(function(_ENV)
                     for target, convertor in pairs(depends) do
                         if target == cls then
                             local cachecls  = convertor[0]
-                            local object    = objCache[cachecls] or cachecls()
-                            objCache[cachecls] = object
+                            local object    = objCache[tablename] or convertor[1] and cachecls(convertor[1](tablename)) or cachecls()
+                            objCache[tablename] = object
 
                             -- Clear self with primary and unique index, so we must pass the entity
                             object:Delete(entity)
@@ -883,19 +926,40 @@ PLoop(function(_ENV)
                 local isEntityCls   = Class.IsSubType(entityCls, IDataEntity)
 
                 if Class.Validate(entityCls) and (isEntityCls or Class.IsSubType(entityCls, IDataObject)) then
-                    _Classes[entityCls]     = isEntityCls
+                    _Classes[entityCls] = isEntityCls
                 end
             end
 
             for entityCls, isEntityCls in pairs(_Classes) do
-                local settings  = getAttachedData(__DataCacheEnable__, entityCls)
+                local settings      = getAttachedData(__DataCacheEnable__, entityCls)
 
                 if settings then
+                    -- get parameters if the entity class use dynamic table name
+                    local set       = getAttachedData(__DataTable__, entityCls)
+                    local count     = 0
+                    local pass      = {}
+                    local tablepat  = set.name:gsub("%%(.)", function(p)
+                        if p == "d" then
+                            count   = count + 1
+                            pass[count] = tonumber
+                            return "(%d+)"
+                        elseif p == "w" or p == "s" then
+                            count   = count + 1
+                            pass[count] = tostring
+                            return "(%w+)"
+                        end
+                    end)
+                    if count == 0 then tablepat = nil end
+
                     --- Define the cache class
-                    local Cache = class (context .. "." .. settings.name) { (isEntityCls and DataEntityCache or DataObjectCache)[{ entityCls, self.CacheClass, settings.timeout or self.CacheTimeout }] }
+                    local Cache     = class (context .. "." .. settings.name) { (isEntityCls and DataEntityCache or DataObjectCache)[{ entityCls, self.CacheClass, settings.timeout or self.CacheTimeout }] }
 
                     -- Build the depend map
                     if settings.depends then
+                        if count > 0 then
+                            error(("The %s entity class use dynamic table name, can't use depends in the __DataCacheEnable__"):format(tostring(entityCls)), stack + 1)
+                        end
+
                         for depcls, convertor in pairs(settings.depends) do
                             convertor[0]    = Cache
                             _EntityDepends  = safeset(_EntityDepends, depcls, safeset(_EntityDepends[depcls] or {}, entityCls, convertor))
@@ -905,6 +969,7 @@ PLoop(function(_ENV)
                     if isEntityCls then
                         local primary       = settings.primary
                         primary[0]          = Cache
+                        primary[1]          = count > 0 and _TableNamePass[count](tablepat, unpack(pass)) or nil
                         _EntityDepends      = safeset(_EntityDepends, entityCls, safeset(_EntityDepends[entityCls] or {}, entityCls, primary))
                     end
                 end
