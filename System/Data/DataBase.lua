@@ -1739,6 +1739,7 @@ PLoop(function(_ENV)
 
         __Arguments__{}
         function Query(self)
+            self[FIELD_BUILDER]             = self[FIELD_BUILDER] or self[FIELD_CONTEXT].Connection:SqlBuilder()
             return getEntityList(self, self[FIELD_BUILDER])
         end
 
