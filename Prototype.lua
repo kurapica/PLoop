@@ -2684,6 +2684,8 @@ do
         __metatable             = namespace,
         __concat                = function (a, b) return tostring(a) .. tostring(b) end,
         __call                  = function(self, definition)
+            if(definition and type(definition) ~= "function") then error(strformat("Usage: namespace %q (function(_ENV) end)", tostring(self)), 2) end
+
             local env           = prototype.NewObject(tenvironment)
             environment.Initialize(env)
             environment.SetNamespace(env, self)
