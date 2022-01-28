@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2021/07/13                                               --
--- Version      :   1.6.35                                                   --
+-- Update Date  :   2022/01/28                                               --
+-- Version      :   1.6.36                                                   --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -10604,10 +10604,16 @@ do
                 if not info then error("Usage: event:Set(obj, delegate[, stack]) - the event is not valid", stack) end
                 if type(obj) ~= "table" and type(obj) ~= "userdata" then error("Usage: event:Set(obj, delegate[, stack]) - the object is not valid", stack) end
 
-                local odel      = self:Get(obj)
+                local odel      = self:Get(obj, true)
+
                 if delegate == nil then
-                    odel:SetFinalFunction(nil)
-                elseif type(delegate) == "function" then
+                    if odel then odel:SetFinalFunction(nil) end
+                    return
+                end
+
+                if type(delegate) == "function" then
+                    odel        = odel or self:Get(obj)
+
                     if attribute.HaveRegisteredAttributes() then
                         local name  = info[FLD_EVENT_NAME]
                         attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
@@ -10621,6 +10627,8 @@ do
                     end
                     odel:SetFinalFunction(delegate)
                 elseif getmetatable(delegate) == Delegate then
+                    odel        = odel or self:Get(obj)
+
                     if delegate ~= odel then
                         delegate:CopyTo(odel)
                     end
