@@ -116,7 +116,12 @@ do
             -- Share API
             fakefunc            = function() end,
         }, {
-            __index             = function(self, k) cerror(cformat("Global variable %q can't be found", k), 2) end,
+            __index             = function(self, k)
+                -- For System namespaces access only, the keyword are already saved
+                local value     = environment.GetValue(self, k, 2)
+                if value then return value end
+                cerror(cformat("Global variable %q can't be found", k), 2)
+            end,
             __metatable         = true,
         }
     )
@@ -1760,10 +1765,9 @@ do
             -- @static
             -- @method  GetValue
             -- @owner   environment
-            -- @format  (env, name[, noautocache][, stack])
+            -- @format  (env, name[, stack])
             -- @param   env:table                   the environment
             -- @param   name                        the key of the value
-            -- @param   noautocache                 true if don't save the value to the environment, the keyword won't be saved
             -- @param   stack                       the stack level
             -- @return  value                       the value of the name in the environment
             ["GetValue"]        = (function()
@@ -10894,7 +10898,7 @@ end
 -- You also can build indexer properties like :
 --
 --                  class "A" (function( _ENV )
---                      __Indexer__()
+--                      __Indexer__(Integer)  -- The index tyep
 --                      property "Items" {
 --                          set = function(self, idx, value)
 --                              self[idx] = value
@@ -10902,7 +10906,7 @@ end
 --                          get = function(self, idx)
 --                              return self[idx]
 --                          end,
---                          type = String,
+--                          type = String,    -- The value type
 --                      }
 --                  end)
 --
@@ -12935,7 +12939,7 @@ do
     --
     -- @attribute   System.__Abstract__
     -----------------------------------------------------------------------
-    __Abstract__ = namespace.SaveNamespace("System.__Abstract__", prototype {
+    namespace.SaveNamespace("System.__Abstract__",          prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype  == ATTRTAR_CLASS then
@@ -12979,7 +12983,7 @@ do
     --
     -- @attribute   System.__AnonymousClass__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AnonymousClass__",        prototype {
+    namespace.SaveNamespace("System.__AnonymousClass__",    prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 interface.SetAnonymousClass(target, parsestack(stack) + 1)
@@ -12997,7 +13001,7 @@ do
     --
     -- @attribute   System.__AutoCache__
     -----------------------------------------------------------------------
-    __AutoCache__ = namespace.SaveNamespace("System.__AutoCache__",         prototype {
+    namespace.SaveNamespace("System.__AutoCache__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
@@ -13086,7 +13090,7 @@ do
     --              enum "Test" { "A", "B", "C", "D" }
     --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoIndex__",             prototype {
+    namespace.SaveNamespace("System.__AutoIndex__",         prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local value     = self[1]
@@ -13118,7 +13122,7 @@ do
     --              enum "Test" { A = 1, C = 2 } -- The value must in (0, 100)
     --              print(Test.A, Test.C) -- 1101, 1102
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__BaseIndex__",             prototype {
+    namespace.SaveNamespace("System.__BaseIndex__",         prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local base      = self[1]
@@ -13157,7 +13161,7 @@ do
     --
     -- @attribute   System.__Base__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Base__",                  prototype {
+    namespace.SaveNamespace("System.__Base__",              prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 struct.SetBaseStruct(target, self[1], parsestack(stack) + 1)
@@ -13172,7 +13176,7 @@ do
     --
     -- @attribute   System.__Default__
     -----------------------------------------------------------------------
-    __Default__ = namespace.SaveNamespace("System.__Default__", prototype {
+    namespace.SaveNamespace("System.__Default__",           prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local value     = self[1]
@@ -13202,7 +13206,7 @@ do
     --
     -- @attribute   System.__EventChangeHandler__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__EventChangeHandler__",    prototype {
+    namespace.SaveNamespace("System.__EventChangeHandler__",prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
@@ -13222,7 +13226,7 @@ do
     --
     -- @attribute   System.__Final__
     -----------------------------------------------------------------------
-    __Final__ = namespace.SaveNamespace("System.__Final__",     prototype {
+    namespace.SaveNamespace("System.__Final__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype  == ATTRTAR_INTERFACE or targettype == ATTRTAR_CLASS then
@@ -13241,7 +13245,7 @@ do
     --
     -- @attribute   System.__Flags__
     -----------------------------------------------------------------------
-    __Flags__ = namespace.SaveNamespace("System.__Flags__",     prototype {
+    namespace.SaveNamespace("System.__Flags__",             prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 local cache     = _Cache()
@@ -13352,7 +13356,7 @@ do
     --
     -- @attribute   System.__Shareable__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Shareable__",             prototype {
+    namespace.SaveNamespace("System.__Shareable__",         prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 enum.SetValueShareable(target, parsestack(stack) + 1)
@@ -13367,7 +13371,7 @@ do
     --
     -- @attribute   System.__Get__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Get__",                   prototype {
+    namespace.SaveNamespace("System.__Get__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
@@ -13389,7 +13393,7 @@ do
     --
     -- @attribute   System.__Indexer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Indexer__",               prototype {
+    namespace.SaveNamespace("System.__Indexer__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 property.SetIndexer(target, self[1], parsestack(stack) + 1)
@@ -13404,7 +13408,7 @@ do
     --
     -- @attribute   System.__Namespace__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Namespace__",             prototype {
+    namespace.SaveNamespace("System.__Namespace__",         prototype {
         __call                  = function(self, value) namespace.SetNamespaceForNext(value) end,
         __index = writeonly, __newindex = readonly, __tostring = namespace.GetNamespaceName
     })
@@ -13427,7 +13431,7 @@ do
     --
     -- @attribute   System.__ObjectAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectAttr__",           prototype {
+    namespace.SaveNamespace("System.__ObjectAttr__",        prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
@@ -13445,7 +13449,7 @@ do
     --
     -- @attribute   System.__ObjFuncAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjFuncAttr__",           prototype {
+    namespace.SaveNamespace("System.__ObjFuncAttr__",       prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
@@ -13462,7 +13466,7 @@ do
     --
     -- @attribute   System.__ObjectSource__
     -----------------------------------------------------------------------
-    __ObjectSource__ = namespace.SaveNamespace("System.__ObjectSource__", prototype {
+    namespace.SaveNamespace("System.__ObjectSource__",      prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype  == ATTRTAR_CLASS then
@@ -13480,7 +13484,7 @@ do
     --
     -- @attribute   System.__Require__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Require__",               prototype {
+    namespace.SaveNamespace("System.__Require__",           prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 interface.SetRequireClass(target, self[1], parsestack(stack) + 1)
@@ -13495,7 +13499,7 @@ do
     --
     -- @attribute   System.__Sealed__
     -----------------------------------------------------------------------
-    __Sealed__ = namespace.SaveNamespace("System.__Sealed__",   prototype {
+    namespace.SaveNamespace("System.__Sealed__",            prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 getmetatable(target).SetSealed(target, parsestack(stack) + 1)
@@ -13510,7 +13514,7 @@ do
     --
     -- @attribute   System.__Set__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Set__",                   prototype {
+    namespace.SaveNamespace("System.__Set__",               prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 local value     = self[1]
@@ -13541,7 +13545,7 @@ do
     --
     -- @attribute   System.__SingleVer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__SingleVer__",             prototype {
+    namespace.SaveNamespace("System.__SingleVer__",         prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 if targettype == ATTRTAR_CLASS then
@@ -13559,7 +13563,7 @@ do
     --
     -- @attribute   System.__Static__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Static__",                prototype {
+    namespace.SaveNamespace("System.__Static__",            prototype {
         __index                 = {
             ["InitDefinition"]  = function(self, target, targettype, definition, owner, name, stack)
                 if targettype  == ATTRTAR_METHOD then
@@ -13585,7 +13589,7 @@ do
     --
     -- @attribute   System.__Super__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Super__",                 prototype {
+    namespace.SaveNamespace("System.__Super__",             prototype {
         __index                 = {
             ["ApplyAttribute"]  = function(self, target, targettype, manager, owner, name, stack)
                 class.SetSuperClass(target, self[1], parsestack(stack) + 1)
@@ -13650,7 +13654,7 @@ do
 
     --- the property set settings
     __Sealed__() __Flags__() __Default__(0)
-    PropertySet                 = enum "System.PropertySet" {
+    enum "System.PropertySet"   {
         Assign                  = 0,
         Clone                   = 1,
         DeepClone               = 2,
@@ -13660,7 +13664,7 @@ do
 
     --- the property get settings
     __Sealed__() __Flags__() __Default__(0)
-    PropertyGet                 = enum "System.PropertyGet" {
+    enum "System.PropertyGet"   {
         Origin                  = 0,
         Clone                   = 1,
         DeepClone               = 2,
@@ -13668,7 +13672,7 @@ do
 
     --- the struct category
     __Sealed__()
-    StructCategory              = enum "System.StructCategory" {
+    enum "System.StructCategory" {
         "MEMBER",
         "ARRAY",
         "CUSTOM",
@@ -13679,79 +13683,79 @@ do
     --                              structs                              --
     -----------------------------------------------------------------------
     --- Represents any value
-    __Sealed__() Any    = struct "System.Any"       { }
+    __Sealed__() struct "System.Any"            { }
 
     --- Represents boolean value
-    __Sealed__() Boolean= struct "System.Boolean"   { genBasicValidator("boolean")  }
+    __Sealed__() struct "System.Boolean"        { genBasicValidator("boolean")  }
 
     --- Represents string value
-    __Sealed__() String = struct "System.String"    { genBasicValidator("string")   }
+    __Sealed__() struct "System.String"         { genBasicValidator("string")   }
 
     --- Represents array of string
-    __Sealed__() struct "System.Strings"            { String }
+    __Sealed__() struct "System.Strings"        { String }
 
     --- Represents number value
-    __Sealed__() Number = struct "System.Number"    { genBasicValidator("number")   }
+    __Sealed__() struct "System.Number"         { genBasicValidator("number")   }
 
     --- Represents integer value
-    __Sealed__() Integer = struct "System.Integer"  { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
+    __Sealed__() struct "System.Integer"        { __base = Number, function(val, onlyvalid) return floor(val) ~= val and (onlyvalid or "the %s must be an integer") or nil end }
 
     --- Represents natural number value
-    __Sealed__() NaturalNumber = struct "System.NaturalNumber" { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
+    __Sealed__() struct "System.NaturalNumber"  { __base = Integer, function(val, onlyvalid) return val < 0 and (onlyvalid or "the %s must be a natural number") or nil end }
 
     --- Represents function value
-    __Sealed__() struct "System.Function"           { genBasicValidator("function") }
+    __Sealed__() struct "System.Function"       { genBasicValidator("function") }
 
     --- Represents table value
-    __Sealed__() Table = struct "System.Table"      { genBasicValidator("table")    }
+    __Sealed__() struct "System.Table"          { genBasicValidator("table")    }
 
     --- Represents userdata value
-    __Sealed__() struct "System.Userdata"           { genBasicValidator("userdata") }
+    __Sealed__() struct "System.Userdata"       { genBasicValidator("userdata") }
 
     --- Represents thread value
-    __Sealed__() struct "System.Thread"             { genBasicValidator("thread")   }
+    __Sealed__() struct "System.Thread"         { genBasicValidator("thread")   }
 
     --- Converts any value to boolean
-    __Sealed__() struct "System.AnyBool"            { false, __init = function(val) return val and true or false end }
+    __Sealed__() struct "System.AnyBool"        { false, __init = function(val) return val and true or false end }
 
     --- Represents non-empty string
-    __Sealed__() struct "System.NEString"           { __base = String, function(val, onlyvalid) return strtrim(val) == "" and (onlyvalid or "the %s can't be an empty string") or nil end }
+    __Sealed__() struct "System.NEString"       { __base = String, function(val, onlyvalid) return strtrim(val) == "" and (onlyvalid or "the %s can't be an empty string") or nil end }
 
     --- Represents table value without meta-table
-    __Sealed__() struct "System.RawTable"           { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
+    __Sealed__() struct "System.RawTable"       { __base = Table, function(val, onlyvalid) return getmetatable(val) ~= nil and (onlyvalid or "the %s must have no meta-table") or nil end  }
 
     --- Represents namespace type
-    __Sealed__() struct "System.NamespaceType"      { genTypeValidator(namespace)   }
+    __Sealed__() struct "System.NamespaceType"  { genTypeValidator(namespace)   }
 
     --- Represents enum type
-    __Sealed__() struct "System.EnumType"           { genTypeValidator(enum)        }
+    __Sealed__() struct "System.EnumType"       { genTypeValidator(enum)        }
 
     --- Represents struct type
-    __Sealed__() struct "System.StructType"         { genTypeValidator(struct)      }
+    __Sealed__() struct "System.StructType"     { genTypeValidator(struct)      }
 
     --- Represents interface type
-    __Sealed__() struct "System.InterfaceType"      { genTypeValidator(interface)   }
+    __Sealed__() struct "System.InterfaceType"  { genTypeValidator(interface)   }
 
     --- Represents class type
-    __Sealed__() struct "System.ClassType"          { genTypeValidator(class)       }
+    __Sealed__() struct "System.ClassType"      { genTypeValidator(class)       }
 
     --- Represent a property
-    __Sealed__() struct "System.PropertyType"       { genTypeValidator(property)    }
+    __Sealed__() struct "System.PropertyType"   { genTypeValidator(property)    }
 
     --- Represents an event
-    __Sealed__() struct "System.EventType"          { genTypeValidator(event)       }
+    __Sealed__() struct "System.EventType"      { genTypeValidator(event)       }
 
     --- Represents any validation type
-    __Sealed__() AnyType = struct "System.AnyType"  { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+    __Sealed__() struct "System.AnyType"        { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
 
     --- Represents lambda value, used to string like 'x, y => x + y' to function
-    __Sealed__() struct "System.Lambda"             { __init = function(value) return _LambdaCache[value] end, parseLambda }
+    __Sealed__() struct "System.Lambda"         { __init = function(value) return _LambdaCache[value] end, parseLambda }
 
     --- Represents callable value, like function, lambda, callable object generate by class
-    __Sealed__() struct "System.Callable"           { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
+    __Sealed__() struct "System.Callable"       { __init = function(value) if type(value) == "string" then return _LambdaCache[value] end end, parseCallable }
 
     --- Represents the variable types for arguments or return values
-    __Sealed__() Variable = struct (_PLoopEnv, "System.Variable") (function(_ENV)
+    __Sealed__() struct "System.Variable"       (function(_ENV)
         export { getprototypemethod = getprototypemethod, getobjectvalue = getobjectvalue, Any }
 
         --- the variable's name
@@ -13842,7 +13846,7 @@ do
     end)
 
     --- Represents variables list
-    __Sealed__() struct "System.Variables"          { __array = Variable + AnyType,
+    __Sealed__() struct "System.Variables"      { __array = Variable + AnyType,
         function(vars, onlyvalid)
             local opt           = false
             local lst           = false
@@ -13873,7 +13877,7 @@ do
     }
 
     --- Represents guid
-    __Sealed__() struct "System.Guid"               (function(_ENV)
+    __Sealed__() struct "System.Guid"           (function(_ENV)
         if _G.os and os.time then math.randomseed(os.time()) end
 
         export {
@@ -13913,7 +13917,7 @@ do
     -----------------------------------------------------------------------
     --- Represents the interface of attribute
     __Sealed__() __ObjectSource__{ Inheritable = true }
-    interface "System.IAttribute" (function(_ENV)
+    interface "System.IAttribute"       (function(_ENV)
         export {
             GetObjectSource     = Class.GetObjectSource,
             tostring            = tostring,
@@ -13970,7 +13974,7 @@ do
 
     --- Represents the interface to apply changes on the target
     __Sealed__()
-    IApplyAttribute = interface "System.IApplyAttribute" (function(_ENV)
+    interface "System.IApplyAttribute"  (function(_ENV)
         extend "IAttribute"
 
         -----------------------------------------------------------
@@ -14010,7 +14014,7 @@ do
 
     --- Represents the interface to modify the target's definition
     __Sealed__()
-    interface "System.IInitAttribute" (function(_ENV)
+    interface "System.IInitAttribute"   (function(_ENV)
         extend "IAttribute"
 
         -----------------------------------------------------------
@@ -14031,7 +14035,7 @@ do
 
     --- Set the class's object to be recyclable
     __Sealed__()
-    class "System.__Recyclable__" { IApplyAttribute,
+    class "System.__Recyclable__"       { IApplyAttribute,
         ApplyAttribute          = function (self, target, targettype, manager, owner, name, stack)
             if targettype == ATTRTAR_CLASS then
                 class.SetObjectRecyclable(target, self[1], stack + 1)
@@ -14043,7 +14047,7 @@ do
 
     --- Set the class's objects so access non-existent fields on them will be denied
     __Sealed__()
-    __NoNilValue__ = class "System.__NoNilValue__" { IApplyAttribute,
+    class "System.__NoNilValue__"       { IApplyAttribute,
         ApplyAttribute          = function (self, target, targettype, manager, owner, name, stack)
             if targettype == ATTRTAR_CLASS then
                 class.SetNilValueBlocked(target, self[1], stack + 1)
@@ -14055,7 +14059,7 @@ do
 
     --- Set the class's objects so save value to non-existent fields on them will be denied
     __Sealed__()
-    __NoRawSet__ = class "System.__NoRawSet__" { IApplyAttribute,
+    class "System.__NoRawSet__"         { IApplyAttribute,
         ApplyAttribute          = function (self, target, targettype, manager, owner, name, stack)
             if targettype == ATTRTAR_CLASS then
                 class.SetRawSetBlocked(target, self[1], stack + 1)
@@ -14067,7 +14071,7 @@ do
 
     --- Whether the class's objects use the super object access style like `super[self]:Method()`, `super[self].Name = xxx`
     __Sealed__()
-    __SuperObject__ = class "System.__SuperObject__" { IApplyAttribute,
+    class "System.__SuperObject__"      { IApplyAttribute,
         ApplyAttribute          = function (self, target, targettype, manager, owner, name, stack)
             if targettype == ATTRTAR_CLASS then
                 class.SetSuperObjectStyle(target, self[1], stack + 1)
@@ -14079,7 +14083,7 @@ do
 
     --- Represents the interface to of clone
     __Sealed__()
-    ICloneable = interface "System.ICloneable" (function(_ENV)
+    interface "System.ICloneable"       (function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -14090,9 +14094,11 @@ do
     end)
 
     --- Represents the interface for code environment
-    __Sealed__() __ObjectSource__{ Inheritable = true }
-    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    IEnvironment = interface "System.IEnvironment" (function(_ENV)
+    __Sealed__()
+    __ObjectSource__{ Inheritable = true }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
+    interface "System.IEnvironment"     (function(_ENV)
         export {
             tostring            = tostring,
             getmetatable        = getmetatable,
@@ -14115,7 +14121,7 @@ do
 
     --- Represents the interface of open/close resources
     __Sealed__()
-    IAutoClose = interface "System.IAutoClose" (function(_ENV)
+    interface "System.IAutoClose"       (function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
@@ -14125,7 +14131,7 @@ do
 
     -- Represents a toolset to provide several compatible apis
     __Sealed__() __Final__()
-    interface "System.Toolset" {
+    interface "System.Toolset"          {
         --- wipe the table
         -- @param   table
         wipe                    = wipe,
@@ -14224,7 +14230,7 @@ do
     --- the attribute to build the overload system, also can be used to set
     -- the target struct, class or interface as template
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
-    class (_PLoopEnv, "System.__Arguments__") (function(_ENV)
+    class "System.__Arguments__"        (function(_ENV)
         extend "IInitAttribute"
 
         local _OverloadStorage  = newstorage(WEAK_KEY)
@@ -15206,7 +15212,7 @@ do
 
     --- The attribtue used to validate the return values
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
-    class (_PLoopEnv, "System.__Return__") (function(_ENV)
+    class "System.__Return__"           (function(_ENV)
         extend "IInitAttribute"
 
         export {
@@ -15775,7 +15781,7 @@ do
 
     --- Represents containers of several functions as event handlers
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
-    Delegate = class (_PLoopEnv, "System.Delegate") (function(_ENV)
+    class "System.Delegate"             (function(_ENV)
         event "OnChange"
 
         -----------------------------------------------------------
@@ -15931,7 +15937,7 @@ do
 
     --- Wrap the target function within the given function like pcall
     __Sealed__() __Final__()
-    class "System.__Delegate__" (function(_ENV)
+    class "System.__Delegate__"         (function(_ENV)
         extend "IInitAttribute"
 
         -----------------------------------------------------------
@@ -15965,7 +15971,7 @@ do
 
     --- Represents errors that occur during application execution
     __Sealed__()
-    Exception = class "System.Exception"(function(_ENV)
+    class "System.Exception"            (function(_ENV)
         -----------------------------------------------------------
         --                       property                       --
         -----------------------------------------------------------
@@ -16026,7 +16032,7 @@ do
     --- Represents the tree containers for codes, it's the recommended
     -- environment for coding with PLoop
     __Sealed__()
-    Module = class (_PLoopEnv, "System.Module") (function(_ENV)
+    class "System.Module"               (function(_ENV)
         extend "IEnvironment"
 
         export {
@@ -16270,12 +16276,12 @@ do
     -----------------------------------------------------------------------
     --                              context                              --
     -----------------------------------------------------------------------
-    interface "System.IContext" {}
+    interface "System.IContext"         {}
 
     --- Represents the context object used to process the operations in an
     -- os thread, normally used in multi-os thread platforms
     __Sealed__() __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    Context = class (_PLoopEnv, "System.Context") (function(_ENV)
+    class "System.Context"              (function(_ENV)
         export {
             getlocal            = getlocal,
             getobjectclass      = Class.GetObjectClass,
@@ -16351,7 +16357,7 @@ do
     --- Represents the interface of thread related context, which will
     -- cache all sharable datas in the same os-thread
     __Sealed__()
-    interface "System.IContext" (function(_ENV)
+    interface "System.IContext"         (function(_ENV)
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
@@ -16374,7 +16380,7 @@ do
     -----------------------------------------------------------------------
     --- Represents the informations of the runtime
     __Final__() __Sealed__() __Abstract__()
-    class (_PLoopEnv, "System.Runtime", function(_ENV)
+    class "System.Runtime"              (function(_ENV)
         export{ Enum, Struct, Class, Interface, __Arguments__ }
 
         --- Fired when a new type is generated
