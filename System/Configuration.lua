@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2018/05/11                                               --
--- Update Date  :   2019/03/12                                               --
+-- Update Date  :   2022/03/10                                               --
 -- Version      :   1.0.1                                                    --
 --===========================================================================--
 
@@ -40,11 +40,11 @@ PLoop(function(_ENV)
         __Arguments__{ Table, Any * 0 }
         function ParseConfig(self, config, ...)
             local msg
-            local fields    = self.__Fields
-            local sections  = self.__Sections
+            local fields                = self.__Fields
+            local sections              = self.__Sections
 
             for _, name in self.__Order:GetIterator() do
-                local val   = config[name]
+                local val               = config[name]
 
                 if val ~= nil then
                     local fldtype       = fields[name]
@@ -73,18 +73,18 @@ PLoop(function(_ENV)
 
         --- Gets all fields with orders
         __Iterator__() function GetFields(self)
-            local fields        = self.__Fields
+            local fields                = self.__Fields
             for _, name in self.__Order:GetIterator() do
-                local type      = fields[name]
+                local type              = fields[name]
                 if type then yield(name, type) end
             end
         end
 
         --- Gets all sections with orders
         __Iterator__() function GetSections(self)
-            local sections      = self.__Sections
+            local sections              = self.__Sections
             for _, name in self.__Order:GetIterator() do
-                local sect      = sections[name]
+                local sect              = sections[name]
                 if sect then yield(name, sect) end
             end
         end
@@ -94,26 +94,24 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- The fields of the config section
         __Indexer__() property "Field" { type = EnumType + StructType,
-            set     = function(self, name, type)
+            set                         = function(self, name, type)
                 if not self.__Order:Contains(name) then self.__Order:Insert(name) end
 
                 self.__Fields[name]     = type or Any
                 self.__Sections[name]   = nil
             end,
-            get     = function(self, name)
-                return self.__Fields[name]
-            end,
+            get                         = function(self, name) return self.__Fields[name] end,
         }
 
         --- The sub-sections of the config section
         __Indexer__() property "Section" { type = ConfigSection,
-            set     = function(self, name, sect)
+            set                         = function(self, name, sect)
                 if not self.__Order:Contains(name) then self.__Order:Insert(name) end
 
                 self.__Sections[name]   = sect
                 self.__Fields[name]     = nil
             end,
-            get     = function(self, name)
+            get                         = function(self, name)
                 local secset            = self.__Sections[name]
                 if not secset and not self.__Fields[name] then
                     if not self.__Order:Contains(name) then self.__Order:Insert(name) end
@@ -130,9 +128,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         function __new(_)
             return {
-                __Order     = List(),
-                __Fields    = {},
-                __Sections  = {},
+                __Order                 = List(),
+                __Fields                = {},
+                __Sections              = {},
             }
         end
 
@@ -141,7 +139,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         function __index(self, key)
             if type(key) ~= "string" then return end
-            local val = self.__Fields[key]
+            local val                   = self.__Fields[key]
             return val or self.Section[key]
         end
     end)
@@ -161,11 +159,11 @@ PLoop(function(_ENV)
         extend "IAttachAttribute"
 
         export {
-            pairs               = pairs,
-            type                = type,
-            strformat           = string.format,
-            isenum              = Enum.Validate,
-            isstruct            = Struct.Validate,
+            pairs                       = pairs,
+            type                        = type,
+            strformat                   = string.format,
+            isenum                      = Enum.Validate,
+            isstruct                    = Struct.Validate,
         }
 
         -----------------------------------------------------------
@@ -180,17 +178,17 @@ PLoop(function(_ENV)
         -- @return  data                        the attribute data to be attached
         function AttachAttribute(self, target, targettype, owner, name, stack)
             if self[3] then
-                local section = self[1]
-                local fldname = self[2]
-                section.Field[fldname] = self[3]
+                local section           = self[1]
+                local fldname           = self[2]
+                section.Field[fldname]  = self[3]
 
-                section.OnFieldParse = section.OnFieldParse + function(self, fld, val, ...)
+                section.OnFieldParse    = section.OnFieldParse + function(self, fld, val, ...)
                     if fld == fldname then
                         return target(fld, val, ...)
                     end
                 end
             else
-                local section = self[1]
+                local section           = self[1]
                 if self[2] then
                     for k, v in pairs(self[2]) do
                         if type(k) == "string" and (isenum(v) or isstruct(v)) then
@@ -200,7 +198,7 @@ PLoop(function(_ENV)
                         end
                     end
                 end
-                section.OnParse = section.OnParse + function(self, ...) return target(...) end
+                section.OnParse         = section.OnParse + function(self, ...) return target(...) end
             end
         end
 
@@ -208,7 +206,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- the attribute target
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Function }
+        property "AttributeTarget" { set = false, default = AttributeTargets.Function }
 
         -----------------------------------------------------------
         --                      constructor                      --

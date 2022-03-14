@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                              System Observer                              --
+--                             Observer Pattern                              --
 --                                                                           --
 --===========================================================================--
 
@@ -14,7 +14,8 @@
 
 PLoop(function(_ENV)
     --- Defines a provider for push-based notification
-    __Sealed__() __AnonymousClass__() interface "System.IObservable" (function(_ENV)
+    __Sealed__() __AnonymousClass__()
+    interface "System.IObservable" (function(_ENV)
         export {
             pcall               = pcall,
             tostring            = tostring,
@@ -39,7 +40,8 @@ PLoop(function(_ENV)
     end)
 
     --- Provides a mechanism for receiving push-based notifications
-    __Sealed__() __AnonymousClass__() interface "System.IObserver" (function(_ENV)
+    __Sealed__() __AnonymousClass__()
+    interface "System.IObserver" (function(_ENV)
         -----------------------------------------------------------------------
         --                               event                               --
         -----------------------------------------------------------------------
@@ -75,7 +77,8 @@ PLoop(function(_ENV)
     end)
 
     --- Provide the Connect mechanism for observable queues
-    __Sealed__() interface "System.IConnectableObservable" (function(_ENV)
+    __Sealed__()
+    interface "System.IConnectableObservable" (function(_ENV)
         extend "IObservable"
 
         -----------------------------------------------------------------------

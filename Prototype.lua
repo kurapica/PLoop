@@ -314,6 +314,12 @@ do
 
         --- Whether only use the custom bit operation by PLoop
         USE_CUSTOM_BIT_IMPLEMENTATION       = false,
+
+        --- Whether save the argument definitions as attachment for __Arguments__
+        ENABLE_ARGUMENTS_ATTACHMENT         = false,
+
+        --- Whether save the return definitions as attachment for __Return__
+        ENABLE_RETURN_ATTACHMENT            = false,
     }
 
     -- Special constraint
@@ -14206,7 +14212,7 @@ do
         __Abstract__() function Close(self, error) end
     end)
 
-    -- Represents a toolset to provide several compatible apis
+    --- Represents a toolset to provide several compatible apis
     __Sealed__() __Final__()
     interface "System.Toolset"          {
         --- wipe the table
@@ -14310,6 +14316,11 @@ do
     class "System.__Arguments__"        (function(_ENV)
         extend "IInitAttribute"
 
+        --- Enable the attach attribute
+        if Platform.ENABLE_ARGUMENTS_ATTACHMENT then
+            extend "IAttachAttribute"
+        end
+
         local _OverloadStorage          = newstorage(WEAK_KEY)
 
         export {
@@ -14406,7 +14417,7 @@ do
             throw                       = throw,
         }
 
-        export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
+        export { Namespace, Enum, Struct, Interface, Class, Variables, Attribute, AttributeTargets, StructCategory, __Arguments__ }
 
         -- Helpers for this keyword
         if not getlocal then
@@ -15210,6 +15221,57 @@ do
             end
         end
 
+
+        if Platform.ENABLE_ARGUMENTS_ATTACHMENT then
+            --- apply changes on the target
+            -- @param target        the target
+            -- @param targettype    the target type
+            -- @param owner         the target's owner
+            -- @param name          the target's name in the owner
+            -- @param stack         the stack level
+            function AttachAttribute(self, target, targettype, owner, name, stack)
+                if targettype == AttributeTargets.Method then
+                    local pretarget
+
+                    -- Get the previous target
+                    if CTOR_METHOD[name] and Class.Validate(owner) then
+                        pretarget       = Class.GetMetaMethod(owner, name)
+                    else
+                        pretarget       = getmetatable(owner).GetMethod(owner, name)
+                    end
+
+                    -- Get the attached argument lists
+                    local data          = pretarget and Attribute.GetAttachedData(__Arguments__, pretarget, owner) or {}
+
+                    -- Check if override
+                    local eidx
+
+                    for i, args in ipairs, data, 0 do
+                        if #args == #self then
+                            eidx        = i
+                            for j, v in ipairs, args, 0 do
+                                if v.type ~= self[j].type then
+                                    eidx= nil
+                                    break
+                                end
+                            end
+                            if eidx then break end
+                        end
+                    end
+
+                    if eidx then
+                        data[eidx]      = { unpack(self) }
+                    else
+                        tinsert(data, { unpack(self) })
+                    end
+
+                    return data
+                else
+                    return { { unpack(self) } }
+                end
+            end
+        end
+
         -----------------------------------------------------------
         --                       property                       --
         -----------------------------------------------------------
@@ -15282,6 +15344,11 @@ do
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     class "System.__Return__"           (function(_ENV)
         extend "IInitAttribute"
+
+        --- Enable the attach attribute
+        if Platform.ENABLE_RETURN_ATTACHMENT then
+            extend "IAttachAttribute"
+        end
 
         export {
             -----------------------------------------------------------

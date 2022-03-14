@@ -429,7 +429,7 @@ PLoop(function(_ENV)
             local freq          = freqitems[i]
             if freq and freq > 0 then
                 insertLink{ byte = i, freq = freq }
-                count               = count + 1
+                count           = count + 1
             end
         end
 
@@ -811,7 +811,7 @@ PLoop(function(_ENV)
                         end
                         sendLength()
 
-                        -- The Huffman tree for Length - max level no more than 3 byte
+                        -- The Huffman tree for Length - max level no more than 3 bits (0-7)
                         local depDepths = calcHuffmanDepths(depths, 18, 7)
                         local lHTree    = HuffTableTree(depDepths)
 
