@@ -14322,7 +14322,7 @@ do
         end
 
         local _OverloadStorage          = newstorage(WEAK_KEY)
-        local _OverloadHistory          = Platform.ENABLE_ARGUMENTS_ATTACHMENT and newstorage(WEAK_KEY)
+        local _OverloadHistory          = Platform.ENABLE_ARGUMENTS_ATTACHMENT and newstorage(WEAK_KEY) or nil
 
         export {
             -----------------------------------------------------------
@@ -15137,6 +15137,20 @@ do
             vars[FLD_VAR_IMMTBL]        = immutable
 
             if targettype == AttributeTargets.Method then
+                -- Check the previous one for the overload history
+                if _OverloadHistory then
+                    local history       = _OverloadHistory[owner] and _OverloadHistory[owner][name]
+
+                    if not history then
+                        local previous  = Class.Validate(owner) and CTOR_METHOD[name] and Class.GetMetaMethod(owner, name) or getmetatable(owner).GetMethod(owner, name)
+                        if previous then
+                            _OverloadHistory[owner]       = _OverloadHistory[owner] or {}
+                            _OverloadHistory[owner][name] = { previous }
+                        end
+                    end
+                end
+
+                -- Generate the overloads
                 local hasself           = not getmetatable(owner).IsStaticMethod(owner, name)
                 buildUsage(vars, owner, name, targettype)
 
@@ -15231,21 +15245,9 @@ do
             -- @param name                      the target's name in the owner
             -- @param stack                     the stack level
             function AttachAttribute(self, target, targettype, owner, name, stack)
-                if targettype == AttributeTargets.Method then
-                    -- Register the overloads
-                    local nameMap       = _OverloadHistory[owner]
-                    if not nameMap then
-                        nameMap         = {}
-                        _OverloadHistory[owner] = nameMap
-                    end
-
-                    local history       = nameMap[name]
-                    if not history then
-                        history         = {}
-                        nameMap[name]   = history
-                    end
-
-                    tinsert(history, target)
+                -- Register the overloads
+                if targettype == AttributeTargets.Method and _OverloadHistory[owner] and _OverloadHistory[owner][name] then
+                    tinsert(_OverloadHistory[owner][name], target)
                 end
 
                 return { unpack(self) }
@@ -15264,7 +15266,15 @@ do
                         return next(history, n)
                     end
                 else
-                    return fakefunc
+                    local overload      = Class.Validate(target) and CTOR_METHOD[name] and Class.GetMetaMethod(target, name) or getmetatable(target).GetMethod(target, name)
+
+                    if overload then
+                        return function(_, n)
+                            if n == nil then return 1, overload end
+                        end
+                    else
+                        return fakefunc
+                    end
                 end
             end
         end
