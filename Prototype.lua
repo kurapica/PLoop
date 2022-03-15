@@ -14322,6 +14322,7 @@ do
         end
 
         local _OverloadStorage          = newstorage(WEAK_KEY)
+        local _OverloadHistory          = Platform.ENABLE_ARGUMENTS_ATTACHMENT and newstorage(WEAK_KEY)
 
         export {
             -----------------------------------------------------------
@@ -14406,6 +14407,7 @@ do
             turnonflags                 = turnonflags,
             validateflags               = validateflags,
             parseindex                  = parseindex,
+            fakefunc                    = fakefunc,
             unpack                      = unpack,
             error                       = error,
             select                      = select,
@@ -15221,53 +15223,48 @@ do
             end
         end
 
-
         if Platform.ENABLE_ARGUMENTS_ATTACHMENT then
-            --- apply changes on the target
-            -- @param target        the target
-            -- @param targettype    the target type
-            -- @param owner         the target's owner
-            -- @param name          the target's name in the owner
-            -- @param stack         the stack level
+            --- attach attribute
+            -- @param target                    the target
+            -- @param targettype                the target type
+            -- @param owner                     the target's owner
+            -- @param name                      the target's name in the owner
+            -- @param stack                     the stack level
             function AttachAttribute(self, target, targettype, owner, name, stack)
                 if targettype == AttributeTargets.Method then
-                    local pretarget
-
-                    -- Get the previous target
-                    if CTOR_METHOD[name] and Class.Validate(owner) then
-                        pretarget       = Class.GetMetaMethod(owner, name)
-                    else
-                        pretarget       = getmetatable(owner).GetMethod(owner, name)
+                    -- Register the overloads
+                    local nameMap       = _OverloadHistory[owner]
+                    if not nameMap then
+                        nameMap         = {}
+                        _OverloadHistory[owner] = nameMap
                     end
 
-                    -- Get the attached argument lists
-                    local data          = pretarget and Attribute.GetAttachedData(__Arguments__, pretarget, owner) or {}
-
-                    -- Check if override
-                    local eidx
-
-                    for i, args in ipairs, data, 0 do
-                        if #args == #self then
-                            eidx        = i
-                            for j, v in ipairs, args, 0 do
-                                if v.type ~= self[j].type then
-                                    eidx= nil
-                                    break
-                                end
-                            end
-                            if eidx then break end
-                        end
+                    local history       = nameMap[name]
+                    if not history then
+                        history         = {}
+                        nameMap[name]   = history
                     end
 
-                    if eidx then
-                        data[eidx]      = { unpack(self) }
-                    else
-                        tinsert(data, { unpack(self) })
-                    end
+                    tinsert(history, target)
+                end
 
-                    return data
+                return { unpack(self) }
+            end
+
+            --- Gets the overloads of the target type's method
+            -- @param target                    the target type like class
+            -- @param name                      the method name
+            __Static__()
+            function GetOverloads(target, name)
+                local nameMap           = _OverloadHistory[target]
+                local history           = nameMap and nameMap[name]
+
+                if history and #history > 0 then
+                    return function (_, n)
+                        return next(history, n)
+                    end
                 else
-                    return { { unpack(self) } }
+                    return fakefunc
                 end
             end
         end
@@ -15855,6 +15852,19 @@ do
 
             local validrets             = not nomulti and genReturns(retsets, defplace .. msghead) or retsets[1][FLD_VAR_VARVLD]
             if validrets then return function(...) return validrets(definition(...)) end end
+        end
+
+
+        if Platform.ENABLE_RETURN_ATTACHMENT then
+            --- attach attribute
+            -- @param target                    the target
+            -- @param targettype                the target type
+            -- @param owner                     the target's owner
+            -- @param name                      the target's name in the owner
+            -- @param stack                     the stack level
+            function AttachAttribute(self, target, targettype, owner, name, stack)
+                return { unpack(self) }
+            end
         end
 
         -----------------------------------------------------------
