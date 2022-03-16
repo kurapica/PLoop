@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2022/01/28                                               --
--- Version      :   1.6.36                                                   --
+-- Update Date  :   2022/03/16                                               --
+-- Version      :   1.7.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -15036,7 +15036,7 @@ do
             return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
-        -- Add the release method to clear the useless cache for sealed types
+        --- Clear the useless cache for sealed types
         __Static__() function ClearOverloads(ttype)
             if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
             _OverloadStorage[ttype]     = nil
