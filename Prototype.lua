@@ -15256,6 +15256,30 @@ do
             --- Gets the overloads of the target type's method
             -- @param target                    the target type like class
             -- @param name                      the method name
+            -- @usage
+            --    class "A" (function(_ENV)
+            --        __Arguments__{ String } __Return__{ Number }
+            --        function Test()
+            --        end
+
+            --        __Arguments__{ Number } __Return__ { Boolean }
+            --        function Test()
+            --        end
+
+            --        __Arguments__{ Boolean } __Return__{ String }
+            --        function Test()
+            --        end
+            --    end)
+            --
+            --    for i, v in __Arguments__.GetOverloads(A, "Test") do
+            --        local args = Attribute.GetAttachedData(__Arguments__, v, A)
+            --        local ret = Attribute.GetAttachedData(__Return__, v, A)
+            --
+            --        -- System.Number  A:Test(System.String) 
+            --        -- System.Boolean A:Test(System.Number) 
+            --        -- System.String  A:Test(System.Boolean) 
+            --        print(("%s A:Test(%s) "):format(tostring(ret[1][1].type), tostring(args[1].type)))
+            --    end
             __Static__()
             function GetOverloads(target, name)
                 local nameMap           = _OverloadHistory[target]
