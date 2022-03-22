@@ -5967,6 +5967,7 @@ end
 --          *  __new        the function used to generate the table that'd be converted to an object
 --          *  __ctor       the object constructor
 --          *  __dtor       the object destructor
+--          *  __close      the to-be-closed
 --
 --  There are several PLoop special meta-data, here are examples :
 --
@@ -14210,6 +14211,11 @@ do
         -----------------------------------------------------------
         __Abstract__() function Open(self) end
         __Abstract__() function Close(self, error) end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __Abstract__() function __close(self) self:Close() end
     end)
 
     --- Represents a toolset to provide several compatible apis
