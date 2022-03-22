@@ -70,7 +70,7 @@ PLoop(function(_ENV)
     --- Represents the interface of the service scope
     __Sealed__() __AnonymousClass__()
     interface "IServiceScope" (function(_ENV)
-        extend "IAutoClose"
+        extend "IAutoClose" "IContext"
 
         -----------------------------------------------------------
         --                        method                         --

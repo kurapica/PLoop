@@ -285,8 +285,9 @@ do
         -- Default 40
         THREAD_POOL_MAX_SIZE                = 40,
 
-        --- Wether disable the default thread pool, so each context has its own
-        -- thread pool, should be actived for http servers.
+        --- Whether enable the context features, so features like the default thread pool will
+        -- be deactived and switch to the context thread pool if possible
+        -- Default false
         ENABLE_CONTEXT_FEATURES             = false,
 
         --- Whether enable thread lock features like __Lock__
