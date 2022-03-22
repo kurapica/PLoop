@@ -104,11 +104,11 @@ PLoop(function(_ENV)
 
         --- Add a service descriptor to the collection
         local function add(self, descriptor)
-            self._Services[descriptor.ServiceType] = descriptor
+            self._Services[descriptor.serviceType] = descriptor
         end
 
         local function checkOverloads(classType)
-            for k, v in __Arguments__.GetOverloads(classType "__ctor") do
+            for k, v in __Arguments__.GetOverloads(classType, "__ctor") do
                 if Attribute.HasAttachedData(__Arguments__, v, classType) then
                     return true
                 end

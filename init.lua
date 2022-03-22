@@ -51,4 +51,7 @@ require "PLoop.System.Reactive.Operator"
 -- System.Message
 require "PLoop.System.Message"
 
+-- System.DependencyInjection
+require "PLoop.System.Service"
+
 return root
