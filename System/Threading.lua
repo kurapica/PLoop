@@ -14,39 +14,42 @@
 PLoop(function(_ENV)
     __Final__() __Sealed__() __Abstract__()
     class "System.Threading" (function(_ENV)
+
+        -- Use Threading as global
         Environment.RegisterGlobalNamespace("System.Threading")
 
         --- the thread pool used to generate and recycle coroutines
         __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
-        class "ThreadPool" (function(_ENV)
+        class "ThreadPool"              (function(_ENV)
+
             if Platform.ENABLE_CONTEXT_FEATURES then
                 extend "System.IContext"
             end
 
             export {
-                create              = coroutine.create,
-                resume              = coroutine.resume,
-                running             = coroutine.running,
-                status              = coroutine.status,
-                wrap                = coroutine.wrap,
-                yield               = coroutine.yield,
+                create                  = coroutine.create,
+                resume                  = coroutine.resume,
+                running                 = coroutine.running,
+                status                  = coroutine.status,
+                wrap                    = coroutine.wrap,
+                yield                   = coroutine.yield,
 
-                tinsert             = table.insert,
-                tremove             = table.remove,
+                tinsert                 = table.insert,
+                tremove                 = table.remove,
 
-                getmetatable        = getmetatable,
-                getlocal            = _G.debug and debug.getlocal or false,
+                getmetatable            = getmetatable,
+                getlocal                = _G.debug and debug.getlocal or false,
 
-                pcall               = pcall,
-                loadsnippet         = Toolset.loadsnippet,
-                safeset             = Toolset.safeset,
-                select              = select,
-                tblconcat           = table.concat,
-                strformat           = string.format,
+                pcall                   = pcall,
+                loadsnippet             = Toolset.loadsnippet,
+                safeset                 = Toolset.safeset,
+                select                  = select,
+                tblconcat               = table.concat,
+                strformat               = string.format,
 
-                GetContext          = Context.GetCurrentContext,
+                GetContext              = Context.GetCurrentContext,
 
-                PREPARE_CONFIRM     = Toolset.fakefunc,
+                PREPARE_CONFIRM         = Toolset.fakefunc,
 
                 ThreadPool
             }
@@ -54,17 +57,17 @@ PLoop(function(_ENV)
             -----------------------------------------------------------
             --                        helpers                        --
             -----------------------------------------------------------
-            local _PassArgs         = { [0] = function(thread, func) return func(yield(thread)) end }
-            local _PassGenCode      = [[return function (thread, func, %s) return func(%s, yield(thread)) end]]
+            local _PassArgs             = { [0] = function(thread, func) return func(yield(thread)) end }
+            local _PassGenCode          = [[return function (thread, func, %s) return func(%s, yield(thread)) end]]
 
             local function newPass(count)
-                local args          = {}
+                local args              = {}
 
                 for i = 1, count do args[i] = "arg" .. i end
-                args                = tblconcat(args, ", ")
+                args                    = tblconcat(args, ", ")
 
-                local pass          = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, _ENV)()
-                _PassArgs           = safeset(_PassArgs, count, pass)
+                local pass              = loadsnippet(strformat(_PassGenCode, args, args), "Thread_Pass_" .. count, _ENV)()
+                _PassArgs               = safeset(_PassArgs, count, pass)
 
                 return pass
             end
@@ -83,7 +86,7 @@ PLoop(function(_ENV)
 
             local function preparefunc(pool, thread, func, asiter, ...)
                 if not func then return end
-                local cnt = select("#", ...)
+                local cnt               = select("#", ...)
                 returnwithrecycle(pool, thread, asiter, (_PassArgs[cnt] or newPass(cnt))(thread, func, ...))
             end
 
@@ -92,13 +95,19 @@ PLoop(function(_ENV)
             end
 
             local function newrecyclethread(self)
-                local thread        = tremove(self)
+                local thread            = tremove(self)
 
                 -- Check Re-usable
-                if thread then for i= 1, 3 do if thread() == PREPARE_CONFIRM then return thread end end end
+                if thread then
+                    for i = 1, 3 do
+                        if thread() == PREPARE_CONFIRM then
+                            return thread
+                        end
+                    end
+                end
 
                 -- Create the new thread
-                thread              = wrap(recyclethread)
+                thread                  = wrap(recyclethread)
                 thread(self, thread)    -- pass the pool and thread to be recycled
                 return thread
             end
@@ -110,30 +119,30 @@ PLoop(function(_ENV)
 
             local function newpoolthread(self, func, aswrap)
                 if aswrap then
-                    local thread    = wrap(poolthread)
+                    local thread        = wrap(poolthread)
                     thread(self, func)
                     return thread
                 else
-                    local thread    = create(poolthread)
+                    local thread        = create(poolthread)
                     resume(thread, self, func)
                     return thread
                 end
             end
 
-            local getCurrentPool    = getlocal and function()
-                local curr, ismain  = running()
+            local getCurrentPool        = getlocal and function()
+                local curr, ismain      = running()
                 if not curr or ismain then return end
 
-                local stack         = 5
-                local n, v          = getlocal(stack, 1)
+                local stack             = 5
+                local n, v              = getlocal(stack, 1)
 
                 while true do
                     if n == "pool" and getmetatable(v) == ThreadPool then
                         return v
                     end
 
-                    stack           = stack + 1
-                    n, v            = getlocal(stack, 1)
+                    stack               = stack + 1
+                    n, v                = getlocal(stack, 1)
                 end
             end or Toolset.fakefunc
 
@@ -145,16 +154,16 @@ PLoop(function(_ENV)
             -- @param  func                 the target function
             -- @return wrap                 the wrap function or thread
             __Arguments__{ Function, Boolean/nil }
-            GetThread               = newpoolthread
+            GetThread                   = newpoolthread
 
             --- safe call the function within a coroutine, if the caller is already
             -- in a coroutine, no new coroutine will be used
             __Arguments__{ Function, Any * 0 }
             function SafeThreadCall(self, func, ...)
-                local curr, ismain  = running()
+                local curr, ismain      = running()
                 if curr and not ismain then return func(...) end
 
-                local thread        = newrecyclethread(self)
+                local thread            = newrecyclethread(self)
                 return thread(func)(...)
             end
 
@@ -171,7 +180,7 @@ PLoop(function(_ENV)
             --          -- thread: 00F95100 1   2   3
             __Arguments__{ Function, Any * 0 }
             function ThreadCall(self, func, ...)
-                local thread        = newrecyclethread(self)
+                local thread            = newrecyclethread(self)
                 return thread(func)(...)
             end
 
@@ -201,8 +210,8 @@ PLoop(function(_ENV)
 
                 __Arguments__{ Function, Any * 0 }
                 function GetIterator(self, func, ...)
-                    local thread    = newrecyclethread(self)
-                    local wrap      = thread(func, true, ...)
+                    local thread        = newrecyclethread(self)
+                    local wrap          = thread(func, true, ...)
 
                     return function(...)
                         return safeIteratorCall(wrap(...))
@@ -211,7 +220,7 @@ PLoop(function(_ENV)
             else
                 __Arguments__{ Function, Any * 0 }
                 function GetIterator(self, func, ...)
-                    local thread    = newrecyclethread(self)
+                    local thread        = newrecyclethread(self)
                     return thread(func, true, ...)
                 end
             end
@@ -219,22 +228,24 @@ PLoop(function(_ENV)
             -----------------------------------------------------------
             --                   static property                     --
             -----------------------------------------------------------
-            local DEFAULT_POOL_SIZE = (Platform.MULTI_OS_THREAD or Platform.ENABLE_CONTEXT_FEATURES) and 0 or nil
+            local DEFAULT_POOL_SIZE     = (Platform.MULTI_OS_THREAD or Platform.ENABLE_CONTEXT_FEATURES) and 0 or nil
 
             --- the default thread pool, can't be used in multi os thread mode
-            __Static__() property "Default" { set = false, default = function() return ThreadPool{ PoolSize = DEFAULT_POOL_SIZE } end }
+            __Static__()
+            property "Default"          { set = false, default = function() return ThreadPool{ PoolSize = DEFAULT_POOL_SIZE } end }
 
             --- the current thread pool if not use default
-            __Static__() property "Current" {
-                get                 = function()
-                    local ok, ret   = pcall(getCurrentPool)
+            __Static__()
+            property "Current"          {
+                get                     = function()
+                    local ok, ret       = pcall(getCurrentPool)
                     if ok and ret then return ret end
 
-                    local context   = GetContext()
+                    local context       = GetContext()
                     if context then
-                        local cpool = context[ThreadPool]
+                        local cpool     = context[ThreadPool]
                         if not cpool then
-                            cpool   = ThreadPool()
+                            cpool       = ThreadPool()
                             context[ThreadPool] = cpool
                         end
                         return cpool
@@ -248,19 +259,19 @@ PLoop(function(_ENV)
             --                       property                        --
             -----------------------------------------------------------
             --- the max pool size for idle coroutines
-            property "PoolSize"     { type = NaturalNumber, default = Platform.THREAD_POOL_MAX_SIZE }
+            property "PoolSize"         { type = NaturalNumber, default = Platform.THREAD_POOL_MAX_SIZE }
         end)
 
         --- represent an interface for lock manager
         __Sealed__() __AnonymousClass__()
-        interface "ILockManager" (function(_ENV)
+        interface "ILockManager"        (function(_ENV)
 
-            export {
-                GetContext          = Context.GetCurrentContext,
-                fakeobj             = {},
-                error               = error,
-                tostring            = tostring,
-                pcall               = pcall,
+            export                      {
+                GetContext              = Context.GetCurrentContext,
+                fakeobj                 = {},
+                error                   = error,
+                tostring                = tostring,
+                pcall                   = pcall,
 
                 ILockManager,
             }
@@ -270,7 +281,7 @@ PLoop(function(_ENV)
                     context[ILockManager][key] = nil
                 end
 
-                local ok, err       = manager:Release(obj, key)
+                local ok, err           = manager:Release(obj, key)
 
                 if not result then error(..., 0) end
 
@@ -285,26 +296,28 @@ PLoop(function(_ENV)
             --                          static property                          --
             -----------------------------------------------------------------------
             --- the unique lock manager
-            __Static__() property "Manager" { type = ILockManager, handler = function(self, new, old) if old then old:Dispose() end end, default = function() return ILockManager() end }
+            __Static__()
+            property "Manager"          { type = ILockManager, handler = function(self, new, old) if old then old:Dispose() end end, default = function() return ILockManager() end }
 
             -----------------------------------------------------------------------
             --                           static method                           --
             -----------------------------------------------------------------------
             --- Lock with a key and process the target function
-            -- @param   key                 the lock key
-            -- @param   func                the function
-            -- @param   ...                 the function arguments
-            __Static__() function RunWithLock(key, func, ...)
-                local context       = GetContext()
+            -- @param   key             the lock key
+            -- @param   func            the function
+            -- @param   ...             the function arguments
+            __Static__()
+            function RunWithLock(key, func, ...)
+                local context           = GetContext()
                 if context and context[ILockManager] and context[ILockManager][key] then
                     -- Already locked, continue job
                     return func(...)
                 end
 
-                local manager       = ILockManager.Manager
+                local manager           = ILockManager.Manager
 
                 -- lock the key
-                local lockObj, err  = manager:Lock(key)
+                local lockObj, err      = manager:Lock(key)
                 if not lockObj then
                     return error("Usage: ILockManager:Lock(key) - Lock key failed:" .. tostring(err))
                 end
@@ -318,20 +331,21 @@ PLoop(function(_ENV)
             end
 
             --- Try lock with a key and process the target function
-            -- @param   key                 the lock key
-            -- @param   func                the function
-            -- @param   ...                 the function arguments
-            __Static__() function TryRunWithLock(key, func, ...)
-                local context       = GetContext()
+            -- @param   key             the lock key
+            -- @param   func            the function
+            -- @param   ...             the function arguments
+            __Static__()
+            function TryRunWithLock(key, func, ...)
+                local context           = GetContext()
                 if context and context[ILockManager] and context[ILockManager][key] then
                     -- Already locked, continue job
                     return func(...)
                 end
 
-                local manager       = ILockManager.Manager
+                local manager           = ILockManager.Manager
 
                 -- lock the key
-                local lockObj, err  = manager:TryLock(key)
+                local lockObj, err      = manager:TryLock(key)
                 if not lockObj then return end
 
                 if context then
@@ -346,27 +360,30 @@ PLoop(function(_ENV)
             --                              method                               --
             -----------------------------------------------------------------------
             --- Lock with a key and return a lock object to release
-            -- @param   key                 the lock key
-            -- @return  object              the lock object
-            -- @return  error               the error message if failed
-            __Abstract__() function Lock(self, key)
+            -- @param   key             the lock key
+            -- @return  object          the lock object
+            -- @return  error           the error message if failed
+            __Abstract__()
+            function Lock(self, key)
                 return fakeobj
             end
 
             --- Try lock with a key and return a lock object to release
-            -- @param   key                 the lock key
-            -- @return  object              the lock object
-            -- @return  message             the error message if failed
-            __Abstract__() function TryLock(self, key)
+            -- @param   key             the lock key
+            -- @return  object          the lock object
+            -- @return  message         the error message if failed
+            __Abstract__()
+            function TryLock(self, key)
                 return fakeobj
             end
 
             --- Release the lock object
-            -- @param   object              the lock object
-            -- @param   key                 the lock key
-            -- @return  bool                true if released
-            -- @return  message             the error message if failed
-            __Abstract__() function Release(self, obj, key)
+            -- @param   object          the lock object
+            -- @param   key             the lock key
+            -- @return  bool            true if released
+            -- @return  message         the error message if failed
+            __Abstract__()
+            function Release(self, obj, key)
                 return true
             end
 
@@ -374,24 +391,24 @@ PLoop(function(_ENV)
             --                           initializer                            --
             -----------------------------------------------------------------------
             function __init(self)
-                ILockManager.Manager = self
+                ILockManager.Manager    = self
             end
         end)
 
         --- specify a method or function as asynchronous
         __Sealed__() __Final__()
-        class "__Async__" (function(_ENV)
+        class "__Async__"               (function(_ENV)
             extend "IInitAttribute"
 
             export { ThreadPool }
 
-            local wraptarget        = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+            local wraptarget            = Platform.ENABLE_CONTEXT_FEATURES and function(target)
                 return function(...) return ThreadPool.Current:ThreadCall(target, ...) end
             end or function(target)
                 return function(...) return ThreadPool.Default:ThreadCall(target, ...) end
             end
 
-            local safewrap          = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+            local safewrap              = Platform.ENABLE_CONTEXT_FEATURES and function(target)
                 return function(...) return ThreadPool.Current:SafeThreadCall(target, ...) end
             end or function(target)
                 return function(...) return ThreadPool.Default:SafeThreadCall(target, ...) end
@@ -401,13 +418,13 @@ PLoop(function(_ENV)
             --                        method                         --
             -----------------------------------------------------------
             --- modify the target's definition
-            -- @param   target                      the target
-            -- @param   targettype                  the target type
-            -- @param   definition                  the target's definition
-            -- @param   owner                       the target's owner
-            -- @param   name                        the target's name in the owner
-            -- @param   stack                       the stack level
-            -- @return  definition                  the new definition
+            -- @param   target          the target
+            -- @param   targettype      the target type
+            -- @param   definition      the target's definition
+            -- @param   owner           the target's owner
+            -- @param   name            the target's name in the owner
+            -- @param   stack           the stack level
+            -- @return  definition      the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
                 if self.SafeMode then
                     return safewrap(definition)
@@ -431,17 +448,19 @@ PLoop(function(_ENV)
             -----------------------------------------------------------
             --                      constructor                      --
             -----------------------------------------------------------
-            function __ctor(self, safe) self.SafeMode = safe and true or false end
+            function __ctor(self, safe)
+                self.SafeMode           = safe and true or false
+            end
         end)
 
         --- specify a method or function as iterator who use yield to generate values
         __Sealed__() __Final__()
-        class "__Iterator__" (function(_ENV)
+        class "__Iterator__"            (function(_ENV)
             extend "IInitAttribute"
 
             export { ThreadPool }
 
-            local wraptarget        = Platform.ENABLE_CONTEXT_FEATURES and function(target)
+            local wraptarget            = Platform.ENABLE_CONTEXT_FEATURES and function(target)
                 return function(...) return ThreadPool.Current:GetIterator(target, ...) end
             end or function(target)
                 return function(...) return ThreadPool.Default:GetIterator(target, ...) end
@@ -451,13 +470,13 @@ PLoop(function(_ENV)
             --                        method                         --
             -----------------------------------------------------------
             --- modify the target's definition
-            -- @param   target                      the target
-            -- @param   targettype                  the target type
-            -- @param   definition                  the target's definition
-            -- @param   owner                       the target's owner
-            -- @param   name                        the target's name in the owner
-            -- @param   stack                       the stack level
-            -- @return  definition                  the new definition
+            -- @param   target          the target
+            -- @param   targettype      the target type
+            -- @param   definition      the target's definition
+            -- @param   owner           the target's owner
+            -- @param   name            the target's name in the owner
+            -- @param   stack           the stack level
+            -- @return  definition      the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
                 return wraptarget(definition)
             end
@@ -474,26 +493,24 @@ PLoop(function(_ENV)
 
         --- specify a method or function to run with a lock key
         __Sealed__() __Final__()
-        class "__Lock__" (function(_ENV)
+        class "__Lock__"                (function(_ENV)
             extend "IInitAttribute"
 
-            export { RunWithLock = ILockManager.RunWithLock }
+            export { RunWithLock        = ILockManager.RunWithLock }
 
-            local wraptarget        = Platform.ENABLE_THREAD_LOCK and function(target, key)
-                return function(...) return RunWithLock(key, target, ...) end
-            end or Toolset.fakefunc
+            local wraptarget            = Platform.ENABLE_THREAD_LOCK and function(target, key) return function(...) return RunWithLock(key, target, ...) end end or Toolset.fakefunc
 
             -----------------------------------------------------------
             --                        method                         --
             -----------------------------------------------------------
             --- modify the target's definition
-            -- @param   target                      the target
-            -- @param   targettype                  the target type
-            -- @param   definition                  the target's definition
-            -- @param   owner                       the target's owner
-            -- @param   name                        the target's name in the owner
-            -- @param   stack                       the stack level
-            -- @return  definition                  the new definition
+            -- @param   target          the target
+            -- @param   targettype      the target type
+            -- @param   definition      the target's definition
+            -- @param   owner           the target's owner
+            -- @param   name            the target's name in the owner
+            -- @param   stack           the stack level
+            -- @return  definition      the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
                 return wraptarget(definition, self[1])
             end
@@ -518,26 +535,24 @@ PLoop(function(_ENV)
 
         --- specify a method or function to run with a lock key
         __Sealed__() __Final__()
-        class "__TryLock__" (function(_ENV)
+        class "__TryLock__"             (function(_ENV)
             extend "IInitAttribute"
 
-            export { TryRunWithLock = ILockManager.TryRunWithLock }
+            export { TryRunWithLock     = ILockManager.TryRunWithLock }
 
-            local wraptarget        = Platform.ENABLE_THREAD_LOCK and function(target, key)
-                return function(...) return TryRunWithLock(key, target, ...) end
-            end or Toolset.fakefunc
+            local wraptarget            = Platform.ENABLE_THREAD_LOCK and function(target, key) return function(...) return TryRunWithLock(key, target, ...) end end or Toolset.fakefunc
 
             -----------------------------------------------------------
             --                        method                         --
             -----------------------------------------------------------
             --- modify the target's definition
-            -- @param   target                      the target
-            -- @param   targettype                  the target type
-            -- @param   definition                  the target's definition
-            -- @param   owner                       the target's owner
-            -- @param   name                        the target's name in the owner
-            -- @param   stack                       the stack level
-            -- @return  definition                  the new definition
+            -- @param   target          the target
+            -- @param   targettype      the target type
+            -- @param   definition      the target's definition
+            -- @param   owner           the target's owner
+            -- @param   name            the target's name in the owner
+            -- @param   stack           the stack level
+            -- @return  definition      the new definition
             function InitDefinition(self, target, targettype, definition, owner, name, stack)
                 return wraptarget(definition, self[1])
             end

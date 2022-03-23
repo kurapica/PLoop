@@ -21,7 +21,7 @@ PLoop(function(_ENV)
     -- in anywhere with or without special handlers, so we can parse the
     -- configurations in one place for the whole system.
     __Sealed__() __NoNilValue__(true) __NoRawSet__(true)
-    class "ConfigSection" (function(_ENV)
+    class "ConfigSection"               (function(_ENV)
         export { "pairs", "type", "getmetatable", yield = coroutine.yield, Enum, Struct, Interface, Class, Any, ConfigSection, List }
 
         -----------------------------------------------------------
@@ -155,10 +155,11 @@ PLoop(function(_ENV)
     --      function JsonProviderConfig(field, value, ...)
     --          print("The new json provider is " .. value)
     --      end
-    __Sealed__() class "__ConfigSection__" (function(_ENV)
+    __Sealed__()
+    class "__ConfigSection__"           (function(_ENV)
         extend "IAttachAttribute"
 
-        export {
+        export                          {
             pairs                       = pairs,
             type                        = type,
             strformat                   = string.format,

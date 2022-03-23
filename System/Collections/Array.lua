@@ -36,37 +36,37 @@ PLoop(function(_ENV)
     --      end
     __ObjFuncAttr__() __SuperObject__(false) __Serializable__()
     __NoRawSet__(false) __NoNilValue__(false) __Arguments__{ AnyType }( Any )
-    class "Array" (function(_ENV, eletype)
+    class "Array"                       (function(_ENV, eletype)
         inherit (List[eletype])
 
         -----------------------------------------------------------
         --                        helper                         --
         -----------------------------------------------------------
-        local addeventlistener  = function() end
+        local addeventlistener          = function() end
 
         export {
-            parseindex      = Toolset.parseindex,
-            getErrorMessage = Struct.GetErrorMessage,
+            parseindex                  = Toolset.parseindex,
+            getErrorMessage             = Struct.GetErrorMessage,
         }
 
         if Interface.Validate(eletype) or Class.Validate(eletype) then
             export {
-                getfeature      = Interface.GetFeature,
-                validevent      = Event.Validate,
-                rawget          = rawget,
-                rawset          = rawset,
-                pairs           = pairs,
-                tinsert         = table.insert,
-                ARRAY_EVENT     = "__PLOOP_ARRAY_EVENT",
+                getfeature              = Interface.GetFeature,
+                validevent              = Event.Validate,
+                rawget                  = rawget,
+                rawset                  = rawset,
+                pairs                   = pairs,
+                tinsert                 = table.insert,
+                ARRAY_EVENT             = "__PLOOP_ARRAY_EVENT",
             }
 
             export { Event }
 
             function addeventlistener(self, obj)
-                local evts      = rawget(self, ARRAY_EVENT)
+                local evts              = rawget(self, ARRAY_EVENT)
                 if evts then
                     for k, v in pairs(evts) do
-                        obj[k]  = v
+                        obj[k]          = v
                     end
                 end
             end
@@ -95,11 +95,11 @@ PLoop(function(_ENV)
         if Interface.Validate(eletype) or Class.Validate(eletype) then
             __Arguments__{ String, Callable }
             function __newindex(self, key, value)
-                local evt       = getfeature(eletype, key)
+                local evt               = getfeature(eletype, key)
                 if evt and validevent(evt) then
-                    local evts  = rawget(self, ARRAY_EVENT) or {}
+                    local evts          = rawget(self, ARRAY_EVENT) or {}
                     rawset(self, ARRAY_EVENT, evts)
-                    evts[key]   = value
+                    evts[key]           = value
 
                     self:Each(key, value)
                 else
@@ -108,7 +108,7 @@ PLoop(function(_ENV)
             end
 
             __Arguments__{ Number, eletype }
-            __newindex          = rawset
+            __newindex                  = rawset
         else
             __Arguments__{ String, Callable }
             function __newindex(self, key)
@@ -116,7 +116,7 @@ PLoop(function(_ENV)
             end
 
             __Arguments__{ Number, eletype }
-            __newindex          = rawset
+            __newindex                  = rawset
         end
     end)
 end)

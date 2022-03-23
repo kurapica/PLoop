@@ -17,21 +17,21 @@ PLoop(function(_ENV)
     --- Logger is used to distribute log message.
     -- Logger object can use 'logObject(logLevel, logMessage, ...)' for short to send out log messages.
     __Sealed__()
-    class "Logger" (function(_ENV)
+    class "Logger"                      (function(_ENV)
 
-        export {
-            type                = type,
-            error               = error,
-            select              = select,
-            pairs               = pairs,
-            strformat           = string.format,
-            tblconcat           = table.concat,
-            rawset              = rawset,
-            pcall               = pcall,
-            tostring            = tostring,
-            throw               = throw,
-            Toolset             = Toolset,
-            isValidValue        = Struct.ValidateValue,
+        export                          {
+            type                        = type,
+            error                       = error,
+            select                      = select,
+            pairs                       = pairs,
+            strformat                   = string.format,
+            tblconcat                   = table.concat,
+            rawset                      = rawset,
+            pcall                       = pcall,
+            tostring                    = tostring,
+            throw                       = throw,
+            Toolset                     = Toolset,
+            isValidValue                = Struct.ValidateValue,
 
             Serialization.Serializable
         }
@@ -40,32 +40,30 @@ PLoop(function(_ENV)
 
         --- Represents the log levels
         __Sealed__() __AutoIndex__()
-        enum "LogLevel" { "Trace", "Debug", "Info", "Warn", "Error", "Fatal" }
+        enum "LogLevel"                 { "Trace", "Debug", "Info", "Warn", "Error", "Fatal" }
 
-        local date              = _G.os and os.date or _G.date
-        local regLogger         = setmetatable({}, {__mode="v"})
+        local date                      = _G.os and os.date or _G.date
+        local regLogger                 = setmetatable({}, {__mode="v"})
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- log out message for log level
         -- @format  (logLevel, message[, ...])
-        -- @param   logLevel                the message's log level, if lower than object.LogLevel, the message will be discarded
-        -- @param   message                 the send out message, can be a formatted string
-        -- @param   ...                     the list values to be included into the formatted string
+        -- @param   logLevel            the message's log level, if lower than object.LogLevel, the message will be discarded
+        -- @param   message             the send out message, can be a formatted string
+        -- @param   ...                 the list values to be included into the formatted string
         __Arguments__{ LogLevel, String, Any * 0 }:Throwable()
         function Log(self, logLvl, msg, ...)
             if logLvl >= self.LogLevel then
                 -- Prefix and TimeStamp
-                local tfmt      = self.UseTimeFormat and self.TimeFormat
+                local tfmt              = self.UseTimeFormat and self.TimeFormat
                 if select("#", ...) > 0 then
-                    local ok, r = pcall(strformat, msg, Toolset.tostringall(...))
+                    local ok, r         = pcall(strformat, msg, Toolset.tostringall(...))
                     if not ok then throw(r) end
-                    msg         = r
+                    msg                 = r
                 end
-                msg             = (tfmt and date and date(tfmt) or "") ..
-                                    (self.__Prefix[logLvl] or "") ..
-                                    msg
+                msg                     = (tfmt and date and date(tfmt) or "") .. (self.__Prefix[logLvl] or "") .. msg
 
                 -- Send message to handlers
                 for handler, lvl in pairs(self.__Handler) do
@@ -78,8 +76,8 @@ PLoop(function(_ENV)
 
         --- Add a log handler, when Logger object send out log messages, the handler will receive the message as it's first argument
         -- @format  (handler[, loglvl])
-        -- @param   handler                 the log handler
-        -- @param   loglvl                  the handler only receive this level's message if setted, or receive all level's message if keep nil
+        -- @param   handler             the log handler
+        -- @param   loglvl              the handler only receive this level's message if setted, or receive all level's message if keep nil
         __Arguments__{ Callable, LogLevel/nil }
         function AddHandler(self, handler, loglevel)
             if not self.__Handler[handler] then
@@ -101,7 +99,7 @@ PLoop(function(_ENV)
         -- @param   prefix                  the prefix string
         __Arguments__{ LogLevel, String/nil }
         function SetPrefix(self, loglvl, prefix)
-            self.__Prefix[loglvl] = prefix
+            self.__Prefix[loglvl]       = prefix
             return self[loglvl]
         end
 
@@ -109,17 +107,17 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- the log level
-        property "LogLevel"     { type = LogLevel, default = LogLevel.Info }
+        property "LogLevel"             { type = LogLevel, default = LogLevel.Info }
 
         --- if the timeformat is setted, the log message will add a timestamp at the header
-        property "TimeFormat"   { type = TimeFormat, default = "[%c]" }
+        property "TimeFormat"           { type = TimeFormat, default = "[%c]" }
 
         --- whether use the time format
-        property "UseTimeFormat"{ type = Boolean, default = true }
+        property "UseTimeFormat"        { type = Boolean, default = true }
 
         --- The system default logger
         __Static__()
-        property "Default"      { set = false, default = function() return Logger() end }
+        property "Default"              { set = false, default = function() return Logger() end }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -130,14 +128,12 @@ PLoop(function(_ENV)
         function __new() return { __Handler = {}, __Prefix  = {} } end
 
         __Arguments__{ String/nil }
-        function __ctor(self, name)
-            if name then regLogger[name] = self end
-        end
+        function __ctor(self, name) if name then regLogger[name] = self end end
 
         -----------------------------------------------------------
         --                      meta-method                      --
         -----------------------------------------------------------
-        __call = Log
+        __call                          = Log
 
         --- get a function for special log level to send the messages
         __Arguments__{ LogLevel }

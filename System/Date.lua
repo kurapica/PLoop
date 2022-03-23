@@ -17,9 +17,9 @@ PLoop(function(_ENV)
 
     import "System.Serialization"
 
-    export {
-        strfind             = string.find,
-        strgmatch           = string.gmatch,
+    export                              {
+        strfind                         = string.find,
+        strgmatch                       = string.gmatch,
 
         -- %a  Abbreviated weekday name                                                     Thu
         -- %A  Full weekday namespace                                                       Thursday
@@ -42,7 +42,7 @@ PLoop(function(_ENV)
         -- %y  Year, last two digits (00-99)                                                01
         -- %Y  Year                                                                         2001
         -- %Z  Timezone name or abbreviation                                                CDT
-        ALLOW_TIMEFORMAT    = (function() local r = {} ("aAbBcdHIjmMpSUwWxXyYZ"):gsub("%w", function(w) r[w] = true end) return r end)()
+        ALLOW_TIMEFORMAT                = (function() local r = {} ("aAbBcdHIjmMpSUwWxXyYZ"):gsub("%w", function(w) r[w] = true end) return r end)()
     }
 
     --- Represents the time format can be used in date api
@@ -52,10 +52,10 @@ PLoop(function(_ENV)
             if strfind(val, "*t") then
                 return onlyvalid or "the %s can't contains '*t' as time format"
             else
-                local hasfmt    = false
+                local hasfmt            = false
                 for s in strgmatch(val, "%%(.)") do
                     if ALLOW_TIMEFORMAT[s] then
-                        hasfmt  = true
+                        hasfmt          = true
                     else
                         return onlyvalid or "the '" .. s .. "' can't be used as time format"
                     end
@@ -69,22 +69,22 @@ PLoop(function(_ENV)
 
     --- Represents a time interval
     __Final__() __Sealed__() __Serializable__() __SerializeFormat__(TargetFormat.NUMBER)
-    class "TimeSpan"        (function(_ENV)
+    class "TimeSpan"                    (function(_ENV)
         extend "ICloneable" "ISerializable"
 
-        export {
+        export                          {
             TimeSpan,
 
-            floor               = math.floor,
-            abs                 = math.abs,
-            tonumber            = tonumber,
+            floor                       = math.floor,
+            abs                         = math.abs,
+            tonumber                    = tonumber,
         }
 
         local function parseString(str)
-            local n, d, h, m, s, ml = str:match("^(%-?)(%d*)%.?(%d+):(%d+):(%d+)%.?(%d*)")
-            h                   = h and tonumber(h)
-            m                   = m and tonumber(m)
-            s                   = s and tonumber(s)
+            local n, d, h, m, s, ml     = str:match("^(%-?)(%d*)%.?(%d+):(%d+):(%d+)%.?(%d*)")
+            h                           = h and tonumber(h)
+            m                           = m and tonumber(m)
+            s                           = s and tonumber(s)
 
             if h and m and s then
                 return (n == "-" and -1 or 1) * (tonumber(d or 0) * 86400 + h * 3600 + m * 60 + s + (tonumber(ml or 0) / 1000))
@@ -95,43 +95,43 @@ PLoop(function(_ENV)
         --                   static property                     --
         -----------------------------------------------------------
         __Static__()
-        property "Zero"         { set = false, default = function() return TimeSpan(0) end }
+        property "Zero"                 { set = false, default = function() return TimeSpan(0) end }
 
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         --- Gets the number of ticks that represent the value of the current TimeSpan structure.
-        property "Ticks"        { field = "ticks" }
+        property "Ticks"                { field = "ticks" }
 
         --- Gets the days component of the time interval represented by the current TimeSpan structure.
-        property "Days"         { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) / 86400) end }
+        property "Days"                 { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) / 86400) end }
 
         --- Gets the hours component of the time interval represented by the current TimeSpan structure.
-        property "Hours"        { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 86400 / 3600)  end }
+        property "Hours"                { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 86400 / 3600)  end }
 
         --- Gets the minutes component of the time interval represented by the current TimeSpan structure.
-        property "Minutes"      { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 3600 / 60)  end }
+        property "Minutes"              { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 3600 / 60)  end }
 
         --- Gets the seconds component of the time interval represented by the current TimeSpan structure.
-        property "Seconds"      { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 60) end }
+        property "Seconds"              { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks) % 60) end }
 
         --- Gets the milliseconds component of the time interval represented by the current TimeSpan structure
-        property "Milliseconds" { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks * 1000) % 1000) end }
+        property "Milliseconds"         { type = Integer, get = function(self) return (self.ticks < 0 and -1 or 1) * floor(abs(self.ticks * 1000) % 1000) end }
 
         --- Gets the value of the current TimeSpan structure expressed in whole and fractional days.
-        property "TotalDays"    { get = function(self) return self.ticks / 86400 end }
+        property "TotalDays"            { get = function(self) return self.ticks / 86400 end }
 
         --- Gets the value of the current TimeSpan structure expressed in whole and fractional hours.
-        property "TotalHours"   { get = function(self) return self.ticks / 3600  end }
+        property "TotalHours"           { get = function(self) return self.ticks / 3600  end }
 
         --- Gets the value of the current TimeSpan structure expressed in whole and fractional minutes.
-        property "TotalMinutes" { get = function(self) return self.ticks / 60 end }
+        property "TotalMinutes"         { get = function(self) return self.ticks / 60 end }
 
         --- Gets the value of the current TimeSpan structure expressed in whole and fractional seconds.
-        property "TotalSeconds" { get = function(self) return self.ticks end }
+        property "TotalSeconds"         { get = function(self) return self.ticks end }
 
         --- Gets the value of the current TimeSpan structure expressed in whole and fractional milliseconds
-        property "TotalMilliseconds" { get = function(self) return self.ticks * 1000 end }
+        property "TotalMilliseconds"    { get = function(self) return self.ticks * 1000 end }
 
         -----------------------------------------------------------
         --                    static method                      --
@@ -139,7 +139,7 @@ PLoop(function(_ENV)
         --- Parse the string to the TimeSpan
         __Static__() __Arguments__{ String }
         function Parse(str)
-            local ticks         = parseString(str)
+            local ticks                 = parseString(str)
             return ticks and TimeSpan(ticks)
         end
 
@@ -160,15 +160,15 @@ PLoop(function(_ENV)
         --- Converts the value of the current TimeSpan object to its equivalent string representation.
         function ToString(self)
             -- [-][d.]hh:mm:ss
-            local ticks         = self.ticks
-            local isneg         = ticks < 0
-            ticks               = abs(ticks)
+            local ticks                 = self.ticks
+            local isneg                 = ticks < 0
+            ticks                       = abs(ticks)
 
-            local day           = floor(ticks / 86400)
-            local hour          = floor(ticks % 86400 / 3600)
-            local mins          = floor(ticks % 3600 / 60)
-            local sec           = floor(ticks % 60)
-            local ml            = floor(ticks * 1000) % 1000
+            local day                   = floor(ticks / 86400)
+            local hour                  = floor(ticks % 86400 / 3600)
+            local mins                  = floor(ticks % 3600 / 60)
+            local sec                   = floor(ticks % 60)
+            local ml                    = floor(ticks * 1000) % 1000
 
             return (isneg and "-" or "") ..
                    (day > 0 and (day .. ".") or "") ..
@@ -186,11 +186,11 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ TargetFormat, Any }
         function __new(_, fmt, value)
-            local vtype         = type(value)
+            local vtype                 = type(value)
             if vtype == "number" then
                 return { ticks = floor(value) }, true
             elseif vtype == "string" then
-                local ticks     = parseString(value)
+                local ticks             = parseString(value)
                 if hour then return { ticks = ticks }, true end
             end
             throw("The value can't be deserialized to TimeSpan object")
@@ -259,50 +259,50 @@ PLoop(function(_ENV)
 
     --- Represents the date object
     __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
-    class "Date"            (function (_ENV)
+    class "Date"                        (function (_ENV)
         extend "ICloneable" "ISerializable"
 
         export {
-            date                = _G.os and os.date or _G.date,
-            time                = _G.os and os.time or _G.time,
-            diff                = _G.os and os.difftime or _G.difftime,
-            floor               = math.floor,
-            abs                 = math.abs,
-            pairs               = pairs,
-            type                = type,
-            getmetatable        = getmetatable,
-            strfind             = strfind,
-            rawset              = rawset,
-            tonumber            = tonumber,
+            date                        = _G.os and os.date or _G.date,
+            time                        = _G.os and os.time or _G.time,
+            diff                        = _G.os and os.difftime or _G.difftime,
+            floor                       = math.floor,
+            abs                         = math.abs,
+            pairs                       = pairs,
+            type                        = type,
+            getmetatable                = getmetatable,
+            strfind                     = strfind,
+            rawset                      = rawset,
+            tonumber                    = tonumber,
 
             Serialization.TargetFormat, TimeSpan
         }
 
-        local offset            = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
-        local r2Time            = function (self) self.time = time(self) + (self.msec and self.msec / 1000 or 0) end
-        local r4Time            = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
-        local getnow            = time
+        local offset                    = diff(time(date("*t", 10^8)), time(date("!*t", 10^8)))
+        local r2Time                    = function (self) self.time = time(self) + (self.msec and self.msec / 1000 or 0) end
+        local r4Time                    = function (self) for k, v in pairs(date("*t", self.time)) do rawset(self, k, v) end end
+        local getnow                    = time
 
-        local parseString       = function(s)
+        local parseString               = function(s)
             local year, month, day, hour, min, sec, msec
-            local index         = 0
+            local index                 = 0
 
             for n in s:gmatch("%d+") do
-                index           = index + 1
+                index                   = index + 1
                 if index == 1 then
-                    year        = tonumber(n)
+                    year                = tonumber(n)
                 elseif index == 2 then
-                    month       = tonumber(n)
+                    month               = tonumber(n)
                 elseif index == 3 then
-                    day         = tonumber(n)
+                    day                 = tonumber(n)
                 elseif index == 4 then
-                    hour        = tonumber(n)
+                    hour                = tonumber(n)
                 elseif index == 5 then
-                    min         = tonumber(n)
+                    min                 = tonumber(n)
                 elseif index == 6 then
-                    sec         = tonumber(n)
+                    sec                 = tonumber(n)
                 elseif index == 7 then
-                    msec        = tonumber(n)
+                    msec                = tonumber(n)
                     break
                 end
             end
@@ -318,10 +318,10 @@ PLoop(function(_ENV)
 
         local function handleMilliseconds(self, value)
             if value < 0 or value >= 1000 then
-                local sec       = floor(value / 1000)
-                value           = value - sec * 1000
+                local sec               = floor(value / 1000)
+                value                   = value - sec * 1000
 
-                sec             = self.sec + sec
+                sec                     = self.sec + sec
 
                 rawset(self, "sec", sec)
                 rawset(self, "msec", value)
@@ -330,7 +330,7 @@ PLoop(function(_ENV)
                 if sec < 0 or sec > 59 then r4Time(self) end
             else
                 -- simple modify the time
-                self.time       = floor(self.time) + value / 1000
+                self.time               = floor(self.time) + value / 1000
             end
         end
 
@@ -339,50 +339,50 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Gets a DateTime object that is set to the current date and time on this computer, expressed as the local time.
         __Static__()
-        property "Now"          { get = function() return Date() end }
+        property "Now"                  { get = function() return Date() end }
 
         --- Gets and Sets the function that return the current time value(the total second from 1970/1/1 00:00:00)
         __Static__()
-        property "GetTimeOfDay" { type = Function, set = function(self, val) getnow = val end, get = function() return getnow end }
+        property "GetTimeOfDay"         { type = Function, set = function(self, val) getnow = val end, get = function() return getnow end }
 
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         --- The year of the date
-        property "Year"         { type = Integer, field = "year", handler = r2Time }
+        property "Year"                 { type = Integer, field = "year", handler = r2Time }
 
         --- The month of the year, 1-12
-        property "Month"        { type = Integer,  field = "month",handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
+        property "Month"                { type = Integer,  field = "month",handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
 
         --- The day of the month, 1-31
-        property "Day"          { type = Integer, field = "day",  handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
+        property "Day"                  { type = Integer, field = "day",  handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
 
         --- The hour of the day, 0-23
-        property "Hour"         { type = Integer, field = "hour", handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
+        property "Hour"                 { type = Integer, field = "hour", handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
 
         --- The minute of the hour, 0-59
-        property "Minute"       { type = Integer, field = "min",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Minute"               { type = Integer, field = "min",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
         --- The Second of the minute, 0-61
-        property "Second"       { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Second"               { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
 
         --- Gets the milliseconds of date, 0-999
-        property "Milliseconds" { type = Integer, field = "msec", default = 0, handler = handleMilliseconds }
+        property "Milliseconds"         { type = Integer, field = "msec", default = 0, handler = handleMilliseconds }
 
         --- The week number, with the mondy is the first day
-        property "Week"         { get = function(self) return tonumber(date("%W", self.time)) end}
+        property "Week"                 { get = function(self) return tonumber(date("%W", self.time)) end}
 
         --- The weekday 0 (for Sunday) to 6 (for Saturday)
-        property "DayOfWeek"    { get = function(self) return self.wday -1 end }
+        property "DayOfWeek"            { get = function(self) return self.wday -1 end }
 
         --- The day of the year
-        property "DayOfYear"    { set = false, field = "yday" }
+        property "DayOfYear"            { set = false, field = "yday" }
 
         --- Indicates whether this instance of DateTime is within the daylight saving time range for the current time zone.
         property "IsDaylightSavingTime" { set = false, field = "isdst" }
 
         --- Gets the time that represent the date and time of this instance.
-        property "Time"         { type = Integer, field = "time", handler = r4Time }
+        property "Time"                 { type = Integer, field = "time", handler = r4Time }
 
         -----------------------------------------------------------
         --                     static method                     --
@@ -391,11 +391,11 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ NEString, TimeFormat, Boolean/false }
         function Parse(s, format, isutc)
             local year, month, day, hour, min, sec
-            local index         = 1
+            local index                 = 1
 
             if format:find("^!") then
-                isutc           = true
-                format          = format:sub(2)
+                isutc                   = true
+                format                  = format:sub(2)
             end
 
             -- %d  Day of the month, zero-padded (01-31)                                        23
@@ -405,41 +405,41 @@ PLoop(function(_ENV)
             -- %S  Second (00-61)                                                               02
             -- %X  Time representation                                                          14:55:02
             -- %Y  Year                                                                         2001
-            local pattern       = format:gsub("%%(.)", function(w)
+            local pattern               = format:gsub("%%(.)", function(w)
                 if w == "d" then
-                    day         = index
-                    index       = index + 1
+                    day                 = index
+                    index               = index + 1
                     return "(%d?%d)"
                 elseif w == "H" then
-                    hour        = index
-                    index       = index + 1
+                    hour                = index
+                    index               = index + 1
                     return "(%d?%d)"
                 elseif w == "m" then
-                    month       = index
-                    index       = index + 1
+                    month               = index
+                    index               = index + 1
                     return "(%d?%d)"
                 elseif w == "M" then
-                    min         = index
-                    index       = index + 1
+                    min                 = index
+                    index               = index + 1
                     return "(%d?%d)"
                 elseif w == "S" then
-                    sec         = index
-                    index       = index + 1
+                    sec                 = index
+                    index               = index + 1
                     return "(%d?%d)"
                 elseif w == "X" then
-                    hour        = index
-                    index       = index + 1
+                    hour                = index
+                    index               = index + 1
 
-                    min         = index
-                    index       = index + 1
+                    min                 = index
+                    index               = index + 1
 
-                    sec         = index
-                    index       = index + 1
+                    sec                 = index
+                    index               = index + 1
 
                     return "(%d?%d):(%d?%d):(%d?%d)"
                 elseif w == "Y" then
-                    year        = index
-                    index       = index + 1
+                    year                = index
+                    index               = index + 1
                     return "(%d%d%d%d)"
                 end
             end)
@@ -448,15 +448,15 @@ PLoop(function(_ENV)
                 error("Usage: Date.Parse(s[, format][,isutc]) - the format isn't valid", 2)
             end
 
-            local rs            = { s:match(pattern) }
-            year                = tonumber(rs[year])
-            month               = tonumber(rs[month])
-            day                 = tonumber(rs[day])
+            local rs                    = { s:match(pattern) }
+            year                        = tonumber(rs[year])
+            month                       = tonumber(rs[month])
+            day                         = tonumber(rs[day])
 
             if hour then
-                hour            = tonumber(rs[hour])
-                min             = tonumber(rs[min])
-                sec             = tonumber(rs[sec])
+                hour                    = tonumber(rs[hour])
+                min                     = tonumber(rs[min])
+                sec                     = tonumber(rs[sec])
             end
 
             if not (year and month and day) or ((hour or min or sec) and not (hour and min and sec)) then
@@ -569,9 +569,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ TargetFormat, Any }
         function __new(_, fmt, value)
-            local vtype         = type(value)
+            local vtype                 = type(value)
             if vtype == "number" then
-                local self      = { time = value, msec = floor(value * 1000) % 1000 / 1000 }
+                local self              = { time = value, msec = floor(value * 1000) % 1000 / 1000 }
                 r4Time(self)
                 return self, true
             elseif vtype == "string" then
@@ -604,7 +604,7 @@ PLoop(function(_ENV)
 
         __Arguments__{ SerializationInfo }
         function __new(_, info)
-            local self          = { time = info:GetValue("time") or 0 }
+            local self                  = { time = info:GetValue("time") or 0 }
             r4Time(self)
             return self, true
         end
@@ -619,7 +619,7 @@ PLoop(function(_ENV)
         function __new(_, tm)
             if (tm and tm < 0) then throw("Usage: Date(time) - the time must can't be negative") end
 
-            local self          = { time = tm or getnow(), msec = tm and floor(tm * 1000) % 1000 / 1000 }
+            local self                  = { time = tm or getnow(), msec = tm and floor(tm * 1000) % 1000 / 1000 }
             r4Time(self)
             return self, true
         end
@@ -634,13 +634,13 @@ PLoop(function(_ENV)
             Variable("utc",   Boolean, true, false)
         }
         function __new(_, year, month, day, hour, min, sec, utc)
-            local self          = {
-                year            = year,
-                month           = month,
-                day             = day,
-                hour            = hour,
-                min             = min,
-                sec             = utc and (sec + offset) or sec,
+            local self                  = {
+                year                    = year,
+                month                   = month,
+                day                     = day,
+                hour                    = hour,
+                min                     = min,
+                sec                     = utc and (sec + offset) or sec,
             }
 
             r2Time(self)
@@ -661,19 +661,19 @@ PLoop(function(_ENV)
         }
         function __new(_, year, month, day, hour, min, sec, msec, utc)
             if msec and (msec < 0 or msec >= 1000) then
-                local diff      = floor(msec/1000)
-                msec            = msec - diff * 1000
-                sec             = sec + diff
+                local diff              = floor(msec/1000)
+                msec                    = msec - diff * 1000
+                sec                     = sec + diff
             end
 
-            local self          = {
-                year            = year,
-                month           = month,
-                day             = day,
-                hour            = hour,
-                min             = min,
-                sec             = utc and (sec + offset) or sec,
-                msec            = msec,
+            local self                  = {
+                year                    = year,
+                month                   = month,
+                day                     = day,
+                hour                    = hour,
+                min                     = min,
+                sec                     = utc and (sec + offset) or sec,
+                msec                    = msec,
             }
 
             r2Time(self)
@@ -694,9 +694,9 @@ PLoop(function(_ENV)
         __Arguments__{ Date }
         function __le(self, obj) return self.time <= obj.time end
 
-        __add                   = AddSeconds
-        __sub                   = Diff
-        __tostring              = ToString
+        __add                           = AddSeconds
+        __sub                           = Diff
+        __tostring                      = ToString
 
         export { Date }
     end)

@@ -57,6 +57,9 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- Represents the interface of the service collection which should return a service provider to solve the class dependency
+    interface "IServiceCollection" {}
+
     --- Represents the interface of the service provider
     __Sealed__()
     interface "IServiceProvider" (function(_ENV)

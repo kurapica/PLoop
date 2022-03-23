@@ -47,16 +47,38 @@ PLoop(function(_ENV)
     --     end
     --
     __Sealed__() __NoRawSet__(false) __NoNilValue__(false)
-    class "Recycle" (function(_ENV)
-        export {
-            type                = type,
-            ipairs              = ipairs,
-            unpack              = table.unpack or unpack,
-            tinsert             = table.insert,
-            tremove             = table.remove,
-            strfind             = string.find,
-            strformat           = string.format,
+    class "Recycle"                     (function(_ENV)
+        export                          {
+            type                        = type,
+            ipairs                      = ipairs,
+            unpack                      = table.unpack or unpack,
+            tinsert                     = table.insert,
+            tremove                     = table.remove,
+            strfind                     = string.find,
+            strformat                   = string.format,
         }
+
+        -----------------------------------------------------------
+        --                        helper                         --
+        -----------------------------------------------------------
+        local function parseArgs(self, ...)
+            local index                 = (self.__index or 0) + 1
+            self.__index                = index
+
+            local cache                 = self.__args or {}
+
+            for i, arg in ipairs(self.__arguments) do
+                if type(arg) == "string" and strfind(arg, "%%d") then
+                    arg                 = strformat(arg, index)
+                end
+
+                cache[i]                = arg
+            end
+
+            self.__args                 = cache
+
+            return unpack(cache)
+        end
 
         -----------------------------------------------------------
         --                         event                         --
@@ -72,25 +94,6 @@ PLoop(function(_ENV)
         --- Fired when a new object is created
         -- @param   object
         event "OnInit"
-
-        local function parseArgs(self, ...)
-            local index     = (self.__index or 0) + 1
-            self.__index    = index
-
-            local cache     = self.__args or {}
-
-            for i, arg in ipairs(self.__arguments) do
-                if type(arg) == "string" and strfind(arg, "%%d") then
-                    arg     = strformat(arg, index)
-                end
-
-                cache[i]    = arg
-            end
-
-            self.__args     = cache
-
-            return unpack(cache)
-        end
 
         -----------------------------------------------------------
         --                        method                         --
@@ -125,10 +128,10 @@ PLoop(function(_ENV)
         --- Pop object from recycle bin
         -- @return  object              the object that pop out
         function Pop(self)
-            local ret = tremove(self)
+            local ret                   = tremove(self)
 
             if not ret then
-                ret = self:New()
+                ret                     = self:New()
                 OnInit(self, ret)
             end
 
@@ -141,7 +144,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The recycled object's type
-        property "Type" { Type = StructType + ClassType }
+        property "Type"                 { Type = StructType + ClassType }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -149,10 +152,10 @@ PLoop(function(_ENV)
         __Arguments__{ Variable("type", StructType + ClassType, true), Any * 0 }
         function Recycle(self, cls, ...)
             if cls then
-                self.Type = cls
-                self.__arguments = select('#', ...) > 0 and {...} or false
+                self.Type               = cls
+                self.__arguments        = select('#', ...) > 0 and {...} or false
                 if self.__arguments then
-                    self.__needparse = false
+                    self.__needparse    = false
                     for _, arg in ipairs(self.__arguments) do
                         if type(arg) == "string" and arg:find("%%d") then
                             self.__needparse = true
