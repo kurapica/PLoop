@@ -16,15 +16,15 @@ PLoop(function(_ENV)
     namespace "System.IO"
 
     __Final__() __Sealed__() __Abstract__()
-    class "File" (function (_ENV)
+    class "File"                        (function (_ENV)
         export {
-            fopen               = _G.io and _G.io.open or Toolset.fakefunc,
-            strmatch            = string.match,
-            strformat           = string.format,
-            strgsub             = string.gsub,
-            type                = type,
-            error               = error,
-            Error               = Logger.Default[Logger.LogLevel.Error],
+            fopen                       = _G.io and _G.io.open or Toolset.fakefunc,
+            strmatch                    = string.match,
+            strformat                   = string.format,
+            strgsub                     = string.gsub,
+            type                        = type,
+            error                       = error,
+            Error                       = Logger.Default[Logger.LogLevel.Error],
         }
 
         local function formatMacTime(result)
@@ -83,21 +83,21 @@ PLoop(function(_ENV)
             if type(target) ~= "string" then error("Usage: Path.Copy(source, target) - the target must be a string", 2) end
 
             if not force then
-                local f         = fopen(target, "r")
+                local f                 = fopen(target, "r")
                 if f then f:close() error("Usage: Path.Copy(source, target) - the target already existed", 2) end
             end
 
-            source              = fopen(source, "rb")
+            source                      = fopen(source, "rb")
             if not source then error("Usage: Path.Copy(source, target) - the source file can't be open", 2) end
 
-            target              = fopen(target, "wb")
+            target                      = fopen(target, "wb")
             if not target then error("Usage: Path.Copy(source, target) - the target file is not valid", 2) end
 
-            local line          = source:read(100)
+            local line                  = source:read(100)
             while line do
                 target:write(line)
                 if #line == 100 then
-                    line        = source:read(100)
+                    line                = source:read(100)
                 else
                     break
                 end

@@ -17,15 +17,15 @@ PLoop(function(_ENV)
 
     --- Repesents the operations system types
     __Sealed__() __Flags__()
-    enum "OperationSystemType" { Unknown = 0, "Windows", "MacOS", "Linux" }
+    enum "OperationSystemType"          { Unknown = 0, "Windows", "MacOS", "Linux" }
 
     --- Represents the operation system
     __Abstract__() __Final__() __Sealed__()
-    class "OperationSystem" (function(_ENV)
+    class "OperationSystem"             (function(_ENV)
         export {
-            popen                   = _G.io and _G.io.popen or Toolset.fakefunc,
-            ftyle                   = _G.io and _G.io.type  or Toolset.fakefunc,
-            loadsnippet             = Toolset.loadsnippet,
+            popen                       = _G.io and _G.io.popen or Toolset.fakefunc,
+            ftyle                       = _G.io and _G.io.type  or Toolset.fakefunc,
+            loadsnippet                 = Toolset.loadsnippet,
         }
 
         export { OperationSystemType }
@@ -34,24 +34,25 @@ PLoop(function(_ENV)
         --                    static property                    --
         -----------------------------------------------------------
         --- The current Operation system
-        __Static__() property "Current" {
-            default                 = function()
+        __Static__()
+        property "Current"              {
+            default                     = function()
 
                 -- Check for windows
-                local f             = popen("echo %OS%", "r")
+                local f                 = popen("echo %OS%", "r")
                 if f then
-                    local ct        = f:lines()()
+                    local ct            = f:lines()()
                     if ct and ct:match("^%w+") then
                         return OperationSystemType.Windows
                     end
                 end
 
                 -- Check for unix
-                f                   = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
+                f                       = popen("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nuname", "r")
                 if f then
-                    local ct        = f:lines()()
+                    local ct            = f:lines()()
                     f:close()
-                    if ct then ct   = ct:match("^%w+") end
+                    if ct then ct       = ct:match("^%w+") end
 
                     return ct == "Darwin" and OperationSystemType.MacOS
                         or ct == "Linux" and OperationSystemType.Linux
@@ -65,17 +66,17 @@ PLoop(function(_ENV)
 
     --- Provide informations based on the os
     __Final__() __Sealed__()
-    class "__PipeRead__" (function(_ENV)
+    class "__PipeRead__"                (function(_ENV)
         extend "IInitAttribute"
 
         export {
-            popen                   = _G.io and _G.io.popen or Toolset.fakefunc,
-            ftype                   = _G.io and _G.io.type or Toolset.fakefunc,
-            loadsnippet             = Toolset.loadsnippet,
+            popen                       = _G.io and _G.io.popen or Toolset.fakefunc,
+            ftype                       = _G.io and _G.io.type or Toolset.fakefunc,
+            loadsnippet                 = Toolset.loadsnippet,
 
             Enum, OperationSystem, OperationSystemType,
 
-            _PipeFunc               = [[
+            _PipeFunc                   = [[
                 local popen, ftype, definition, command, result = ...
                 return function (%s)
                     local f         = popen(%s, "r")
@@ -96,25 +97,25 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         --- modify the target's definition
-        -- @param   target                      the target
-        -- @param   targettype                  the target type
-        -- @param   definition                  the target's definition
-        -- @param   owner                       the target's owner
-        -- @param   name                        the target's name in the owner
-        -- @param   stack                       the stack level
-        -- @return  definition                  the new definition
+        -- @param   target              the target
+        -- @param   targettype          the target type
+        -- @param   definition          the target's definition
+        -- @param   owner               the target's owner
+        -- @param   name                the target's name in the owner
+        -- @param   stack               the stack level
+        -- @return  definition          the new definition
         function InitDefinition(self, target, targettype, definition, owner, name, stack)
             if self.OperationSystem and not (OperationSystem.Current ~= OperationSystemType.Unknown and Enum.ValidateFlags(OperationSystem.Current, self.OperationSystem)) then return end
             if not (self.CommandFormat or self.CommandProvider) then return end
 
-            local args          = ""
+            local args                  = ""
             if self.ArgumetCount > 0 then
-                args            = "arg1"
+                args                    = "arg1"
                 for i = 2, self.ArgumetCount do args = args .. ", arg" .. i end
             end
 
-            local commandCode   = self.CommandFormat and "command:format(" .. args .. ")" or self.CommandProvider and "command(" .. args .. ")"
-            local resultCode    = self.ResultFormat and "ct:match(result)" or self.ResultProvider and "result(ct)" or "ct"
+            local commandCode           = self.CommandFormat and "command:format(" .. args .. ")" or self.CommandProvider and "command(" .. args .. ")"
+            local resultCode            = self.ResultFormat and "ct:match(result)" or self.ResultProvider and "result(ct)" or "ct"
             if args ~= "" then resultCode = args .. ", " .. resultCode end
 
             return loadsnippet(_PipeFunc:format(args, commandCode, resultCode, args)) (popen, ftype, definition, self.CommandFormat or self.CommandProvider, self.ResultFormat or self.ResultProvider)
@@ -124,25 +125,25 @@ PLoop(function(_ENV)
         --                       property                       --
         -----------------------------------------------------------
         --- the attribute target
-        property "AttributeTarget"  { set = false, default = AttributeTargets.Method }
+        property "AttributeTarget"      { set = false, default = AttributeTargets.Method }
 
         --- The type of the operation system
-        property "OperationSystem"  { type = OperationSystemType }
+        property "OperationSystem"      { type = OperationSystemType }
 
         --- The command format
-        property "CommandFormat"    { type = String }
+        property "CommandFormat"        { type = String }
 
         --- The result capture format
-        property "ResultFormat"     { type = String }
+        property "ResultFormat"         { type = String }
 
         --- The provider to generate the command
-        property "CommandProvider"  { type = Function }
+        property "CommandProvider"      { type = Function }
 
         --- The provider to generate the result
-        property "ResultProvider"   { type = Function }
+        property "ResultProvider"       { type = Function }
 
         --- The method's argumet numbers, default 1
-        property "ArgumetCount"     { type = NaturalNumber, Default = 1 }
+        property "ArgumetCount"         { type = NaturalNumber, Default = 1 }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -152,34 +153,34 @@ PLoop(function(_ENV)
 
         __Arguments__{ Callable, Callable, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandProvider, resultProvider, ostype, argCount)
-            self.CommandProvider    = commandProvider
-            self.ResultProvider     = resultProvider
-            self.OperationSystem    = ostype
-            self.ArgumetCount       = argCount
+            self.CommandProvider        = commandProvider
+            self.ResultProvider         = resultProvider
+            self.OperationSystem        = ostype
+            self.ArgumetCount           = argCount
         end
 
         __Arguments__{ Callable, String, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandProvider, resultFormat, ostype, argCount)
-            self.CommandProvider    = commandProvider
-            self.ResultFormat       = resultFormat
-            self.OperationSystem    = ostype
-            self.ArgumetCount       = argCount
+            self.CommandProvider        = commandProvider
+            self.ResultFormat           = resultFormat
+            self.OperationSystem        = ostype
+            self.ArgumetCount           = argCount
         end
 
         __Arguments__{ String, Callable, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandFormat, resultProvider, ostype, argCount)
-            self.CommandFormat      = commandFormat
-            self.ResultProvider     = resultProvider
-            self.OperationSystem    = ostype
-            self.ArgumetCount       = argCount
+            self.CommandFormat          = commandFormat
+            self.ResultProvider         = resultProvider
+            self.OperationSystem        = ostype
+            self.ArgumetCount           = argCount
         end
 
         __Arguments__{ String, String, OperationSystemType, NaturalNumber/1 }
         function __PipeRead__(self, commandFormat, resultFormat, ostype, argCount)
-            self.CommandFormat      = commandFormat
-            self.ResultFormat       = resultFormat
-            self.OperationSystem    = ostype
-            self.ArgumetCount       = argCount
+            self.CommandFormat          = commandFormat
+            self.ResultFormat           = resultFormat
+            self.OperationSystem        = ostype
+            self.ArgumetCount           = argCount
         end
     end)
 end)

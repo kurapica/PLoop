@@ -17,36 +17,34 @@ PLoop(function(_ENV)
 
     --- Represents a writer that can write a sequential series of characters to files
     __Sealed__()
-    class "FileReader" (function(_ENV)
+    class "FileReader"                  (function(_ENV)
         inherit "System.Text.TextReader"
 
-        export {
-            fopen               = _G.io and _G.io.open or Toolset.fakefunc,
-            floor               = math.floor,
-            error               = error,
+        export                          {
+            fopen                       = _G.io and _G.io.open or Toolset.fakefunc,
+            floor                       = math.floor,
+            error                       = error,
         }
 
         --- the file read mode
         __Sealed__() __Default__("r")
-        enum "FileReadMode" {
-            Read                = "r",
-            ReadBinary          = "rb",
+        enum "FileReadMode"             {
+            Read                        = "r",
+            ReadBinary                  = "rb",
         }
 
         -- Field
-        field {
-            [0]                 = false,
-            [1]                 = false,
-            [2]                 = false,
+        field                           {
+            [0]                         = false,
+            [1]                         = false,
+            [2]                         = false,
         }
 
         --- Gets or sets the file position. negative number means start from the end of the file.
-        property "Position" { Type = Number,
-            Get = function(self)
-                return self[0]:seek()
-            end,
+        property "Position"             { Type = Number,
+            Get = function(self) return self[0]:seek() end,
             Set = function(self, pos)
-                pos = floor(pos)
+                pos                     = floor(pos)
                 if pos < 0 then
                     return self[0]:seek("end", pos)
                 else
@@ -56,9 +54,9 @@ PLoop(function(_ENV)
         }
 
         -- Method
-        function Read(self) return self[0]:read(1) end
+        function Read(self)      return self[0]:read(1) end
 
-        function ReadLine(self) return self[0]:read("*l") end
+        function ReadLine(self)  return self[0]:read("*l") end
 
         function ReadToEnd(self) return self[0]:read("*a") end
 
@@ -68,7 +66,7 @@ PLoop(function(_ENV)
         end
 
         function Open(self)
-            self[0] = fopen(self[1], self[2]) or false
+            self[0]                     = fopen(self[1], self[2]) or false
             if not self[0] then error("Failed to open the file - " .. self[1], 2) end
         end
 

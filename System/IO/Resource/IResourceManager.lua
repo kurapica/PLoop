@@ -14,36 +14,36 @@
 
 PLoop(function(_ENV)
     --- Represents the interface of resource manager
-    __AnonymousClass__()
-    __Sealed__() interface "System.IO.Resource.IResourceManager" (function(_ENV)
+    __Sealed__() __AnonymousClass__()
+    interface "System.IO.Resource.IResourceManager" (function(_ENV)
 
         export {
-            tostring            = tostring,
-            rawget              = rawget,
-            safeset             = Toolset.safeset,
-            pairs               = pairs,
+            tostring                    = tostring,
+            rawget                      = rawget,
+            safeset                     = Toolset.safeset,
+            pairs                       = pairs,
 
-            Trace               = Logger.Default[Logger.LogLevel.Trace],
-            Debug               = Logger.Default[Logger.LogLevel.Debug],
-            existfile           = IO.File.Exist,
-            loadresource        = IO.Resource.IResourceLoader.LoadResource,
-            isanonymous         = Namespace.IsAnonymousNamespace,
+            Trace                       = Logger.Default[Logger.LogLevel.Trace],
+            Debug                       = Logger.Default[Logger.LogLevel.Debug],
+            existfile                   = IO.File.Exist,
+            loadresource                = IO.Resource.IResourceLoader.LoadResource,
+            isanonymous                 = Namespace.IsAnonymousNamespace,
 
             IResourceManager,
         }
 
-        local _ResourcePathMap  = {}
-        local _ResourceMapInfo  = {}
+        local _ResourcePathMap          = {}
+        local _ResourceMapInfo          = {}
 
-        local preparepath       = pcall(_G.require, [[PLoop.System.IO.Resource.casesensitivetest]]) and string.lower or function(path) return path end
+        local preparepath               = pcall(_G.require, [[PLoop.System.IO.Resource.casesensitivetest]]) and string.lower or function(path) return path end
 
         -----------------------------------------------------------------------
         --                           LoadFileInfo                            --
         -----------------------------------------------------------------------
         --- the loaded resource info
         __NoRawSet__(false) __NoNilValue__(false)
-        local LoadFileInfo      = class {
-            AddRelatedPath      = function (self, info)
+        local LoadFileInfo              = class {
+            AddRelatedPath              = function (self, info)
                 if self.reloadWhenModified then
                     self.relativeFiles  = self.relativeFiles or {}
                     self.relativeFiles[info] = true
@@ -54,9 +54,9 @@ PLoop(function(_ENV)
                 end
             end;
 
-            CheckReload         = function (self)
-                local path          = self.resourcePath
-                local requireReload = self.requireReLoad
+            CheckReload                 = function (self)
+                local path              = self.resourcePath
+                local requireReload     = self.requireReLoad
 
                 Trace("[System.IO.Resource][CheckReload] %s - %s", path, tostring(requireReload))
 
@@ -97,37 +97,37 @@ PLoop(function(_ENV)
                 return requireReload or self.requireReLoad
             end;
 
-            LoadFile            = function (self, env)
-                local path      = self.resourcePath
+            LoadFile                    = function (self, env)
+                local path              = self.resourcePath
                 local ok, res
                 if self.resource then
-                    res         = loadresource(path, nil, env, true)
+                    res                 = loadresource(path, nil, env, true)
                     if not res then
-                        res     = self.resource
+                        res             = self.resource
                     else
                         Debug("[System.IO.Resource][ReGenerate] %s [For] %s", tostring(res), path)
                         if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                     end
                 else
-                    res         = loadresource(path, nil, env, false)
+                    res                 = loadresource(path, nil, env, false)
                     Debug("[System.IO.Resource][Generate] %s [For] %s", tostring(res), path)
                     if res then self.lastWriteTime = IResourceManager.Manager.GetLastWriteTime(path) end
                 end
 
-                self.requireReLoad = false
+                self.requireReLoad      = false
                 return res
             end;
 
-            Load                = function (self, env)
-                local res       = self.resource
+            Load                        = function (self, env)
+                local res               = self.resource
 
                 if res ~= nil and self.reloadWhenModified and self:CheckReload() then
-                    self.requireReLoad = false
-                    res         = nil
+                    self.requireReLoad  = false
+                    res                 = nil
                 end
 
                 if not res then
-                    res = self:LoadFile(env)
+                    res                 = self:LoadFile(env)
                     if res ~= self.resource then
                         -- notify the other files
                         if self.resource and self.notifyFileInfo then
@@ -138,27 +138,27 @@ PLoop(function(_ENV)
                             end
                         end
                         if res then _ResourceMapInfo = safeset(_ResourceMapInfo, res, self) end
-                        self.resource = res
+                        self.resource   = res
                     end
                 end
 
                 return res
             end;
 
-            __new               = function (_, path)
+            __new                       = function (_, path)
                 return {
-                    resource        = false,
-                    resourcePath    = path,
-                    relativeFiles   = false,
-                    notifyFileInfo  = false,
-                    requireReLoad   = false,
-                    lastWriteTime   = false,
-                    reloadWhenModified = IResourceManager.ReloadWhenModified,
+                    resource            = false,
+                    resourcePath        = path,
+                    relativeFiles       = false,
+                    notifyFileInfo      = false,
+                    requireReLoad       = false,
+                    lastWriteTime       = false,
+                    reloadWhenModified  = IResourceManager.ReloadWhenModified,
                 }, true
             end;
 
-            __ctor              = function (self)
-                _ResourcePathMap    = safeset(_ResourcePathMap, self.resourcePath, self)
+            __ctor                      = function (self)
+                _ResourcePathMap        = safeset(_ResourcePathMap, self.resourcePath, self)
             end;
         }
 
@@ -166,47 +166,53 @@ PLoop(function(_ENV)
         --                          static property                          --
         -----------------------------------------------------------------------
         --- the unique resource manager
-        __Static__() property "Manager"             { type = IResourceManager, handler = function(self, new, old) if old then old:Dispose() end end, default = function() return IResourceManager() end }
+        __Static__()
+        property "Manager"              { type = IResourceManager, handler = function(self, new, old) if old then old:Dispose() end end, default = function() return IResourceManager() end }
 
         --- whether reload the file when modified
-        __Static__() property "ReloadWhenModified"  { type = Boolean }
+        __Static__()
+        property "ReloadWhenModified"   { type = Boolean }
 
         -----------------------------------------------------------------------
         --                           static method                           --
         -----------------------------------------------------------------------
         --- Load the resource
-        -- @param   context         the http context
-        -- @param   path            the resource path
-        -- @param   env             the environment to load the file
-        __Static__() function LoadResource(path, env)
-            path                = preparepath(path)
-            local info          = _ResourcePathMap[path] or LoadFileInfo(path)
+        -- @param   context             the http context
+        -- @param   path                the resource path
+        -- @param   env                 the environment to load the file
+        __Static__()
+        function LoadResource(path, env)
+            path                        = preparepath(path)
+            local info                  = _ResourcePathMap[path] or LoadFileInfo(path)
             return info:Load(env)
         end
 
         --- Get the resource's path
         -- @param   resource            the resource
         -- @return  path                the resource's file path
-        __Static__() function GetResourcePath(res)
+        __Static__()
+        function GetResourcePath(res)
             return _ResourceMapInfo[res] and _ResourceMapInfo[res].resourcePath
         end
 
         --- Add a related path to the resource path for reload checking
         -- @param   path                the resource path
         -- @param   relative            the relative path
-        __Static__() function AddRelatedPath(path, relative)
-            path                = preparepath(path)
-            relative            = preparepath(relative)
-            local info          = _ResourcePathMap[path] or LoadFileInfo(path)
-            local rela          = _ResourcePathMap[relative] or LoadFileInfo(relative)
+        __Static__()
+        function AddRelatedPath(path, relative)
+            path                        = preparepath(path)
+            relative                    = preparepath(relative)
+            local info                  = _ResourcePathMap[path] or LoadFileInfo(path)
+            local rela                  = _ResourcePathMap[relative] or LoadFileInfo(relative)
             info:AddRelatedPath(rela)
         end
 
         --- Mark the path reload when modified
-        __Static__() function SetReloadWhenModified(path, flag)
-            path                = preparepath(path)
-            local info          = _ResourcePathMap[path] or LoadFileInfo(path)
-            info.reloadWhenModified = (flag ~= false)
+        __Static__()
+        function SetReloadWhenModified(path, flag)
+            path                        = preparepath(path)
+            local info                  = _ResourcePathMap[path] or LoadFileInfo(path)
+            info.reloadWhenModified     = (flag ~= false)
         end
 
         -----------------------------------------------------------------------
@@ -219,7 +225,7 @@ PLoop(function(_ENV)
         --                           initializer                            --
         -----------------------------------------------------------------------
         function __init(self)
-            IResourceManager.Manager = self
+            IResourceManager.Manager    = self
         end
     end)
 end)
