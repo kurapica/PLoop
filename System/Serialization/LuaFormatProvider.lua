@@ -16,13 +16,14 @@ PLoop(function(_ENV)
     namespace "System.Serialization"
 
     --- Serialization format provider for common lua data
+    __Sealed__() __Final__()
     class "LuaFormatProvider" (function(_ENV)
         inherit "FormatProvider"
 
         export { "type", "pairs", Serialization }
 
         local function removeObjType(data, fld)
-            data[fld]           = nil
+            data[fld]                   = nil
             for k, v in pairs(data) do
                 if type(v) == "table" then
                     removeObjType(data, fld)
