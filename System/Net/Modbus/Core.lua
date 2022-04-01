@@ -17,17 +17,17 @@ PLoop(function(_ENV)
 
     import "System.Net"
 
-    export {
-        strchar                 = string.char,
-        strbyte                 = string.byte,
-        strsub                  = string.sub,
-        band                    = Toolset.band,
-        lshift                  = Toolset.lshift,
-        rshift                  = Toolset.rshift,
-        tconcat                 = table.concat,
-        isObjectType            = Class.IsObjectType,
-        type                    = type,
-        throw                   = throw,
+    export                              {
+        strchar                         = string.char,
+        strbyte                         = string.byte,
+        strsub                          = string.sub,
+        band                            = Toolset.band,
+        lshift                          = Toolset.lshift,
+        rshift                          = Toolset.rshift,
+        tconcat                         = table.concat,
+        isObjectType                    = Class.IsObjectType,
+        type                            = type,
+        throw                           = throw,
     }
 
     -- Encoding as big-Endian
@@ -48,104 +48,104 @@ PLoop(function(_ENV)
     ---------------------------------------------------
     --- The Modbus Exception
     __Sealed__()
-    class "ModbusException"     { Exception }
+    class "ModbusException"             { Exception }
 
     --- The Modbus-TCP Function Code
     __Sealed__()
-    enum "PublicFunctionCode"   {
-        READ_COILS              = 1,
-        READ_DISCRETE_INPUTS    = 2,
-        READ_HOLDING_REGISTERS  = 3,
-        READ_INPUT_REGISTERS    = 4,
-        WRITE_SINGLE_COIL       = 5,
-        WRITE_SINGLE_REGISTER   = 6,
-        READ_EXCEPTION_STATUS   = 7, -- Serial Line only, not supported
-        DIAGNOSTICS             = 8, -- Serial Line only, not supported
-        GET_COMM_EVENT_COUNTER  =11, -- Serial Line only, not supported
-        GET_COMM_EVENT_LOG      =12, -- Serial Line only, not supported
-        WRITE_MULTIPLE_COILS    =15,
-        WRITE_MULTIPLE_REGISTERS=16,
-        REPORT_SLAVE_ID         =17, -- Serial Line only, not supported
-        READ_FILE_RECORD        =20,
-        WRITE_FILE_RECORD       =21,
-        MASK_WRITE_REGISTER     =22,
-        READ_WRITE_MULTIPLE_REGISTERS = 23,
-        READ_FIFO_QUEUE         =24,
-        ENCAPSULATED_INTERFACE_TRANSPORT =43,
+    enum "PublicFunctionCode"           {
+        READ_COILS                      = 1,
+        READ_DISCRETE_INPUTS            = 2,
+        READ_HOLDING_REGISTERS          = 3,
+        READ_INPUT_REGISTERS            = 4,
+        WRITE_SINGLE_COIL               = 5,
+        WRITE_SINGLE_REGISTER           = 6,
+        READ_EXCEPTION_STATUS           = 7, -- Serial Line only, not supported
+        DIAGNOSTICS                     = 8, -- Serial Line only, not supported
+        GET_COMM_EVENT_COUNTER          =11, -- Serial Line only, not supported
+        GET_COMM_EVENT_LOG              =12, -- Serial Line only, not supported
+        WRITE_MULTIPLE_COILS            =15,
+        WRITE_MULTIPLE_REGISTERS        =16,
+        REPORT_SLAVE_ID                 =17, -- Serial Line only, not supported
+        READ_FILE_RECORD                =20,
+        WRITE_FILE_RECORD               =21,
+        MASK_WRITE_REGISTER             =22,
+        READ_WRITE_MULTIPLE_REGISTERS   = 23,
+        READ_FIFO_QUEUE                 =24,
+        ENCAPSULATED_INTERFACE_TRANSPORT=43,
     }
 
     --- The Exception Code
     __Sealed__()
-    enum "ExceptionCode"        {
-        ILLEGAL_FUNCTION        = 0x1,
-        ILLEGAL_DATA_ADDRESS    = 0x2,
-        ILLEGAL_DATA_VALUE      = 0x3,
-        SLAVE_DEVICE_FAILURE    = 0x4,
-        ACKNOWLEDGE             = 0x5,
-        SLAVE_DEVICE_BUSY       = 0x6,
-        MEMORY_PARITY_ERROR     = 0x8,
-        GATEWAY_PATH_UNAVAILABLE= 0xA,
+    enum "ExceptionCode"                {
+        ILLEGAL_FUNCTION                = 0x1,
+        ILLEGAL_DATA_ADDRESS            = 0x2,
+        ILLEGAL_DATA_VALUE              = 0x3,
+        SLAVE_DEVICE_FAILURE            = 0x4,
+        ACKNOWLEDGE                     = 0x5,
+        SLAVE_DEVICE_BUSY               = 0x6,
+        MEMORY_PARITY_ERROR             = 0x8,
+        GATEWAY_PATH_UNAVAILABLE        = 0xA,
         GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND = 0xB,
     }
 
     --- The ON/OFF State
     __Sealed__()
-    enum "OnOffState"           {
-        ON                      = 0xFF00,
-        OFF                     = 0x0000,
+    enum "OnOffState"                   {
+        ON                              = 0xFF00,
+        OFF                             = 0x0000,
     }
 
     --- The quantity limit
     __Sealed__()
-    struct "Quantity"           { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x7D0) and (onlyvalid or "The %s must between 1 and 0x7D0") end }
+    struct "Quantity"                   { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x7D0) and (onlyvalid or "The %s must between 1 and 0x7D0") end }
 
     --- The quantity limit
     __Sealed__()
-    struct "QuantityRegister"   { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x007D) and (onlyvalid or "The %s must between 1 and 0x007D") end }
+    struct "QuantityRegister"           { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x007D) and (onlyvalid or "The %s must between 1 and 0x007D") end }
 
     --- The quantity limit
     __Sealed__()
-    struct "QuantityOutput"     { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x07B0) and (onlyvalid or "The %s must between 1 and 0x07B0") end }
+    struct "QuantityOutput"             { __base = NaturalNumber, function(val, onlyvalid) return (val < 1 or val > 0x07B0) and (onlyvalid or "The %s must between 1 and 0x07B0") end }
 
     --- The file number
     __Sealed__()
-    struct "FileNumber"         { __base = UInt16, function(val, onlyvalid) return val < 1 and (onlyvalid or "The %s must between 1 and 0xFFFF") end }
+    struct "FileNumber"                 { __base = UInt16, function(val, onlyvalid) return val < 1 and (onlyvalid or "The %s must between 1 and 0xFFFF") end }
 
     --- The Record Number
     __Sealed__()
-    struct "RecordNumber"       { __base = NaturalNumber, function(val, onlyvalid) return val > 0x270F and (onlyvalid or "The %s must between 0 and 0x270F") end }
+    struct "RecordNumber"               { __base = NaturalNumber, function(val, onlyvalid) return val > 0x270F and (onlyvalid or "The %s must between 0 and 0x270F") end }
 
     --- PDU
     __Sealed__()
-    struct "ProtocolDataUnit"   {
-        { name = "funcCode",    type = UInt16, require = true },
-        { name = "data",        type = String },
-        { name = "exception",   type = NaturalNumber }
+    struct "ProtocolDataUnit"           {
+        { name = "funcCode",            type = UInt16, require = true },
+        { name = "data",                type = String },
+        { name = "exception",           type = NaturalNumber }
     }
 
     --- The Read File Record
     __Sealed__()
-    struct "FileReadRecord"     {
-        { name = "file",        type = FileNumber,   require = true },
-        { name = "record",      type = RecordNumber, require = true },
-        { name = "length",      type = RecordNumber, require = true },
+    struct "FileReadRecord"             {
+        { name = "file",                type = FileNumber,   require = true },
+        { name = "record",              type = RecordNumber, require = true },
+        { name = "length",              type = RecordNumber, require = true },
     }
 
     --- The Write File Record
     __Sealed__()
-    struct "FileWriteRecord"     {
-        { name = "file",        type = FileNumber,   require = true },
-        { name = "record",      type = RecordNumber, require = true },
-        { name = "data",        type = struct { UInt16 }, require = true },
+    struct "FileWriteRecord"            {
+        { name = "file",                type = FileNumber,   require = true },
+        { name = "record",              type = RecordNumber, require = true },
+        { name = "data",                type = struct { UInt16 }, require = true },
     }
 
     ---------------------------------------------------
     --              The Modbus Protocol              --
     ---------------------------------------------------
     --- the Modbus Protocol
-    System.Net.Protocol "Modbus"  {
-        make                    = function(transId, unitId, pdu)
-            return tconcat      {
+    System.Net.Protocol "Modbus"        {
+        make                            = function(transId, unitId, pdu)
+            return tconcat              {
                 -- byte 0: transaction identifier – copied by server – usually 0
                 -- byte 1: transaction identifier – copied by server – usually 0
                 encodeByte(transId, 2),
@@ -168,7 +168,7 @@ PLoop(function(_ENV)
                 pdu.data
             }
         end,
-        parse                   =  function(socket)
+        parse                           = function(socket)
             if type(socket) == "string" then
                 if #socket < 7 then throw(ModbusException("The packet length is not valid")) end
 
@@ -176,13 +176,13 @@ PLoop(function(_ENV)
                 local b1, b2, b3, b4, b5, b6, b7 = strbyte(socket, 1, 7)
                 if b3 ~= 0 or b4 ~= 0 then throw(ModbusException("The Protocol Identifier is not valid")) end
 
-                local tid       = lshift(b1, 8) + b2
-                local length    = lshift(b5, 8) + b6
-                local unitId    = b7
+                local tid               = lshift(b1, 8) + b2
+                local length            = lshift(b5, 8) + b6
+                local unitId            = b7
 
                 if length + 6 ~= #socket then throw(ModbusException("The protocol data unit length not match")) end
 
-                local funcCode  = strbyte(socket, 8)
+                local funcCode          = strbyte(socket, 8)
 
                 if funcCode >= 128 then
                     -- With Exception
@@ -196,19 +196,19 @@ PLoop(function(_ENV)
                 end
 
                 -- Check MODBUS Application Protocol header
-                local mbap      = socket:Receive(6)
+                local mbap              = socket:Receive(6)
                 if not mbap then return end -- timeout
 
                 local b1, b2, b3, b4, b5, b6 = strbyte(mbap, 1, 6)
                 if b3 ~= 0 or b4 ~= 0 then throw(ModbusException("The Protocol Identifier is not valid")) end
 
-                local tid       = lshift(b1, 8) + b2
-                local length    = lshift(b5, 8) + b6
+                local tid               = lshift(b1, 8) + b2
+                local length            = lshift(b5, 8) + b6
 
-                local rest      = socket:Receive(length)
+                local rest              = socket:Receive(length)
                 if not rest then return end -- timeout
 
-                local unitId, funcCode = strbyte(rest, 1, 2)
+                local unitId, funcCode  = strbyte(rest, 1, 2)
 
                 if funcCode >= 128 then
                     -- With Exception
@@ -224,7 +224,8 @@ PLoop(function(_ENV)
     --               The Modbus Client               --
     ---------------------------------------------------
     --- Represents the Modbus client object
-    __Sealed__() class "Client" (function(_ENV)
+    __Sealed__()
+    class "Client"                      (function(_ENV)
         inherit "System.Context"
         extend "System.IAutoClose"
 
@@ -232,22 +233,22 @@ PLoop(function(_ENV)
             System.Net.Protocol.Modbus, PublicFunctionCode, ModbusException, TimeoutException,
             ProtocolDataUnit, OnOffState, List, XList,
 
-            throw               = throw,
-            select              = select,
-            unpack              = _G.unpack or table.unpack,
-            type                = type,
-            strbyte             = string.byte,
-            strchar             = string.char,
-            tconcat             = table.concat,
-            band                = Toolset.band,
-            rshift              = Toolset.rshift,
-            isObjectType        = Class.IsObjectType,
-            Trace               = Logger.Default[Logger.LogLevel.Trace],
+            throw                       = throw,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            type                        = type,
+            strbyte                     = string.byte,
+            strchar                     = string.char,
+            tconcat                     = table.concat,
+            band                        = Toolset.band,
+            rshift                      = Toolset.rshift,
+            isObjectType                = Class.IsObjectType,
+            Trace                       = Logger.Default[Logger.LogLevel.Trace],
         }
 
 
         -- Only use this for test or client side only
-        local SocketType        = System.Net.Socket
+        local SocketType                = System.Net.Socket
 
         local function convertByte(byte, shift)
             if type(byte) == "number" then
@@ -258,11 +259,11 @@ PLoop(function(_ENV)
         end
 
         local function receiveFlags(self, identifier, quantity)
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -271,27 +272,27 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception then return false, dataUnit.exception end
 
-                local data          = dataUnit.data
+                local data              = dataUnit.data
 
                 -- Byte count
-                local count         = strbyte(data, 1)
-                local rets          = {}
-                local index         = 0
+                local count             = strbyte(data, 1)
+                local rets              = {}
+                local index             = 0
 
                 for i = 2, count + 1 do
-                    local status    = strbyte(data, i) or 0
+                    local status        = strbyte(data, i) or 0
 
                     for j = 0, 7 do
-                        index       = index + 1
+                        index           = index + 1
                         if index > quantity then break end
 
-                        rets[index] = band(rshift(status, j), 1)
+                        rets[index]     = band(rshift(status, j), 1)
                     end
                 end
 
                 while index < quantity do
-                    index           = index + 1
-                    rets[index]     = 0
+                    index               = index + 1
+                    rets[index]         = 0
                 end
 
                 return rets
@@ -299,11 +300,11 @@ PLoop(function(_ENV)
         end
 
         local function returnValues(self, identifier, quantity)
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -312,23 +313,23 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception then return false, dataUnit.exception end
 
-                local data          = dataUnit.data
+                local data              = dataUnit.data
 
                 -- Byte count
-                local count         = strbyte(data, 1)
-                local rets          = {}
-                local index         = 0
+                local count             = strbyte(data, 1)
+                local rets              = {}
+                local index             = 0
 
                 for i = 2, count + 1, 2 do
-                    index           = index + 1
+                    index               = index + 1
                     if index > quantity then break end
 
-                    rets[index]     = lshift(strbyte(data, i), 8) + strbyte(data, i + 1)
+                    rets[index]         = lshift(strbyte(data, i), 8) + strbyte(data, i + 1)
                 end
 
                 while index < quantity do
-                    index           = index + 1
-                    rets[index]     = 0
+                    index               = index + 1
+                    rets[index]         = 0
                 end
 
                 return rets
@@ -383,9 +384,9 @@ PLoop(function(_ENV)
         --- Send the transfer data unit
         __Arguments__{ ProtocolDataUnit }
         function SendDataUnit(self, dataUnit)
-            local identifier        = self.TransferIdentifier + 1
-            identifier              = identifier > 0xFFF and 1 or identifier
-            self.TransferIdentifier = identifier
+            local identifier            = self.TransferIdentifier + 1
+            identifier                  = identifier > 0xFFF and 1 or identifier
+            self.TransferIdentifier     = identifier
 
             -- Trace("[MODBUS][SEND][%s] %s - %s", identifier, PublicFunctionCode(dataUnit.funcCode), dataUnit.data and { strbyte(dataUnit.data, 1, -1) } or "nil")
 
@@ -417,44 +418,44 @@ PLoop(function(_ENV)
         --- read from 1 to 2000 contiguous status of coils in a remote device
         __Arguments__{ UInt16, Quantity }
         function ReadCoils(self, startAddress, quantity)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_COILS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 2000 (0x7D0)
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_COILS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 2000 (0x7D0)
+                                        ))
             return receiveFlags(self, identifier, quantity)
         end
 
         ---  read from 1 to 2000 contiguous status of discrete inputs in a remote device
         __Arguments__{ UInt16, Quantity }
         function ReadDiscreteInputs(self, startAddress, quantity)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_DISCRETE_INPUTS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 2000 (0x7D0)
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_DISCRETE_INPUTS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 2000 (0x7D0)
+                                        ))
             return receiveFlags(self, identifier, quantity)
         end
 
         --- read the contents of a contiguous block of holding registers in a remote device
         __Arguments__{ UInt16, QuantityRegister }
         function ReadHoldingRegisters(self, startAddress, quantity)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_HOLDING_REGISTERS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 125 (0x7D)
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_HOLDING_REGISTERS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 125 (0x7D)
+                                        ))
             return returnValues(self, identifier, quantity)
         end
 
         --- read from 1 to 125 contiguous input registers in a remote device
         __Arguments__{ UInt16, QuantityRegister }
         function ReadInputRegisters(self, startAddress, quantity)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_INPUT_REGISTERS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 125 (0x7D)
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_INPUT_REGISTERS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address 2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2)         -- Quantity of coils 2 Bytes 1 to 125 (0x7D)
+                                        ))
             return returnValues(self, identifier, quantity)
         end
 
@@ -463,20 +464,20 @@ PLoop(function(_ENV)
         function WriteSingleCoil(self, outAddress, state)
             if type(state) == "boolean" then state = state and OnOffState.ON or OnOffState.OFF end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.WRITE_SINGLE_COIL,
-                                        encodeByte(outAddress, 2) ..    -- Output Address  2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(state, 2)            -- Output Value    2 Bytes 0x0000 or 0xFF00
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.WRITE_SINGLE_COIL,
+                                            encodeByte(outAddress, 2) ..    -- Output Address  2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(state, 2)            -- Output Value    2 Bytes 0x0000 or 0xFF00
+                                        ))
 
             -- Response:
             --      Output Address  2 Bytes 0x0000 to 0xFFFF
             --      Output Value    2 Bytes 0x0000 or 0xFF00
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -485,7 +486,7 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception or #dataUnit.data < 4 then return false, dataUnit.exception end
 
-                local b1, b2, b3, b4= strbyte(dataUnit.data, 1, 4)
+                local b1, b2, b3, b4    = strbyte(dataUnit.data, 1, 4)
                 return lshift(b1, 8) + b2 == outAddress and lshift(b3, 8) + b4
             end
         end
@@ -493,20 +494,20 @@ PLoop(function(_ENV)
         --- write a single holding register in a remote device
         __Arguments__{ UInt16, UInt16 }
         function WriteSingleRegister(self, regAddress, regValue)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.WRITE_SINGLE_REGISTER,
-                                        encodeByte(regAddress, 2) ..    -- Register Address 2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(regValue, 2)         -- Register Value   2 Bytes 0x0000 to 0xFFFF
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.WRITE_SINGLE_REGISTER,
+                                            encodeByte(regAddress, 2) ..    -- Register Address 2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(regValue, 2)         -- Register Value   2 Bytes 0x0000 to 0xFFFF
+                                        ))
 
             -- Response:
             --      Register Address 2 Bytes 0x0000 to 0xFFFF
             --      Register Value   2 Bytes 0x0000 to 0xFFFF
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -515,7 +516,7 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception or #dataUnit.data < 4 then return false, dataUnit.exception end
 
-                local b1, b2, b3, b4= strbyte(dataUnit.data, 1, 4)
+                local b1, b2, b3, b4    = strbyte(dataUnit.data, 1, 4)
                 return lshift(b1, 8) + b2 == regAddress and lshift(b3, 8) + b4
             end
         end
@@ -523,34 +524,34 @@ PLoop(function(_ENV)
         --- force each coil in a sequence of coils to either ON or OFF in a remote device
         __Arguments__{ UInt16, (Byte + Boolean) * 1 }
         function WriteMultipleCoils(self, startAddress, ...)
-            local bytes             = {}
-            local quantity          = select("#", ...)
-            local count             = 0
+            local bytes                 = {}
+            local quantity              = select("#", ...)
+            local count                 = 0
 
             if quantity > 0x07B0 then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
             for i = 1, quantity, 8 do
                 local b1, b2, b3, b4, b5, b6, b7, b8 = select(i, ...)
-                count               = count + 1
-                bytes[count]        = convertByte(b1, 0) + convertByte(b2, 1) + convertByte(b3, 2) + convertByte(b4, 3) + convertByte(b5, 4) + convertByte(b6, 5) + convertByte(b7, 6) + convertByte(b8, 7)
+                count                   = count + 1
+                bytes[count]            = convertByte(b1, 0) + convertByte(b2, 1) + convertByte(b3, 2) + convertByte(b4, 3) + convertByte(b5, 4) + convertByte(b6, 5) + convertByte(b7, 6) + convertByte(b8, 7)
             end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.WRITE_MULTIPLE_COILS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address    2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2) ..      -- Quantity of Outputs 2 Bytes 0x0001 to 0x07B0
-                                        encodeByte(count, 1) ..         -- Byte Count          1 Byte N*
-                                        strchar(unpack(bytes))          -- Outputs Value       N* x 1 Byte
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.WRITE_MULTIPLE_COILS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address    2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2) ..      -- Quantity of Outputs 2 Bytes 0x0001 to 0x07B0
+                                            encodeByte(count, 1) ..         -- Byte Count          1 Byte N*
+                                            strchar(unpack(bytes))          -- Outputs Value       N* x 1 Byte
+                                        ))
 
             -- Response:
             --      Starting Address    2 Bytes 0x0000 to 0xFFFF
             --      Quantity of Outputs 2 Bytes 0x0001 to 0x07B0
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -559,7 +560,7 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception or #dataUnit.data < 4 then return false, dataUnit.exception end
 
-                local b1, b2, b3, b4= strbyte(dataUnit.data, 1, 4)
+                local b1, b2, b3, b4    = strbyte(dataUnit.data, 1, 4)
                 return lshift(b1, 8) + b2 == startAddress and lshift(b3, 8) + b4
             end
         end
@@ -567,30 +568,30 @@ PLoop(function(_ENV)
         --- write a block of contiguous registers (1 to 123 registers) in a remote device
         __Arguments__{ UInt16, UInt16 * 1 }
         function WriteMultipleRegisters(self, startAddress, ...)
-            local bytes             = {}
-            local quantity          = select("#", ...)
-            local count             = 0
+            local bytes                 = {}
+            local quantity              = select("#", ...)
+            local count                 = 0
 
             if quantity > 0x007B then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.WRITE_MULTIPLE_REGISTERS,
-                                        encodeByte(startAddress, 2) ..  -- Starting Address        2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(quantity, 2) ..      -- Quantity of Registers   2 Bytes 0x0001 to 0x007B
-                                        encodeByte(quantity * 2, 1) ..  -- Byte Count              1 Byte 2 x N*
-                                        List{ ... }:Map(function(val)   -- Registers Value         N* x 2 Bytes value
-                                            return encodeByte(val, 2)
-                                        end):Join()
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.WRITE_MULTIPLE_REGISTERS,
+                                            encodeByte(startAddress, 2) ..  -- Starting Address        2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(quantity, 2) ..      -- Quantity of Registers   2 Bytes 0x0001 to 0x007B
+                                            encodeByte(quantity * 2, 1) ..  -- Byte Count              1 Byte 2 x N*
+                                            List{ ... }:Map(function(val)   -- Registers Value         N* x 2 Bytes value
+                                                return encodeByte(val, 2)
+                                            end):Join()
+                                        ))
 
             -- Response:
             --      Starting Address    2 Bytes 0x0000 to 0xFFFF
             --      Quantity of Outputs 2 Bytes 0x0001 to 0x07B0
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -599,7 +600,7 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception or #dataUnit.data < 4 then return false, dataUnit.exception end
 
-                local b1, b2, b3, b4= strbyte(dataUnit.data, 1, 4)
+                local b1, b2, b3, b4    = strbyte(dataUnit.data, 1, 4)
                 return lshift(b1, 8) + b2 == startAddress and lshift(b3, 8) + b4
             end
         end
@@ -607,25 +608,25 @@ PLoop(function(_ENV)
         --- perform a file record read
         __Arguments__{ FileReadRecord * 1 }
         function ReadFileRecord(self, ...)
-            local count             = select("#", ...) * 7
+            local count                 = select("#", ...) * 7
             if count > 0xF5 then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_FILE_RECORD,
-                                        encodeByte(count, 2) ..             -- Byte Count 1 Byte 0x07 to 0xF5 bytes
-                                        List{ ... }:Map(function(req)
-                                            return encodeByte(6, 1) ..      -- Sub-Req. x, Reference Type   1 Byte
-                                                encodeByte(req.file, 2) ..  -- Sub-Req. x, File Number      2 Bytes
-                                                encodeByte(req.record, 2) ..-- Sub-Req. x, Record Number    2 Bytes
-                                                encodeByte(req.length, 2)   -- Sub-Req. x, Record Length    2 Bytes
-                                        end):Join()
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_FILE_RECORD,
+                                            encodeByte(count, 2) ..             -- Byte Count 1 Byte 0x07 to 0xF5 bytes
+                                            List{ ... }:Map(function(req)
+                                                return encodeByte(6, 1) ..      -- Sub-Req. x, Reference Type   1 Byte
+                                                    encodeByte(req.file, 2) ..  -- Sub-Req. x, File Number      2 Bytes
+                                                    encodeByte(req.record, 2) ..-- Sub-Req. x, Record Number    2 Bytes
+                                                    encodeByte(req.length, 2)   -- Sub-Req. x, Record Length    2 Bytes
+                                            end):Join()
+                                        ))
 
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -634,35 +635,35 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception then return false, dataUnit.exception end
 
-                local data          = dataUnit.data
-                local length        = strbyte(data, 1) -- Resp. data Length
+                local data              = dataUnit.data
+                local length            = strbyte(data, 1) -- Resp. data Length
                 if length + 1 ~= #data then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-                local index         = 2
-                local rets          = {}
-                local rindex        = 0
+                local index             = 2
+                local rets              = {}
+                local rindex            = 0
 
                 while index <= length do
-                    local rlen      = strbyte(data, index)  -- Sub-Req. x, File Resp. length
+                    local rlen          = strbyte(data, index)  -- Sub-Req. x, File Resp. length
                     if rlen % 2 == 0 then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-                    rlen            = index + rlen
-                    index           = index + 2             -- Skip Reference Type
+                    rlen                = index + rlen
+                    index               = index + 2             -- Skip Reference Type
 
-                    local subret    = {}
-                    local sindex    = 0
+                    local subret        = {}
+                    local sindex        = 0
 
                     while index < rlen do
-                        local b1, b2= strbyte(data, index, index + 1)
+                        local b1, b2    = strbyte(data, index, index + 1)
 
-                        sindex      = sindex + 1
-                        subret[sindex] = lshift(b1, 8) + b2
+                        sindex          = sindex + 1
+                        subret[sindex]  = lshift(b1, 8) + b2
 
-                        index       = index + 2
+                        index           = index + 2
                     end
 
-                    rindex          = rindex + 1
-                    rets[rindex]    = subret
+                    rindex              = rindex + 1
+                    rets[rindex]        = subret
                 end
 
                 return rets
@@ -672,7 +673,7 @@ PLoop(function(_ENV)
         --- perform a file record write
         __Arguments__{ FileWriteRecord * 1 }
         function WriteFileRecord(self, ...)
-            local data              = List{ ... }:Map(function(req)
+            local data                  = List{ ... }:Map(function(req)
                                             return encodeByte(6, 1) ..          -- Sub-Req. x, Reference Type   1 Byte
                                                 encodeByte(req.file, 2) ..      -- Sub-Req. x, File Number      2 Bytes
                                                 encodeByte(req.record, 2) ..    -- Sub-Req. x, Record Number    2 Bytes
@@ -682,16 +683,16 @@ PLoop(function(_ENV)
                                                 end):Join()
                                         end):Join()
 
-            local count             = #data     -- Byte Count 1 Byte 0x09 to 0xFB
+            local count                 = #data     -- Byte Count 1 Byte 0x09 to 0xFB
             if count > 0xFB then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit( PublicFunctionCode.WRITE_FILE_RECORD, encodeByte(count, 1) .. data ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit( PublicFunctionCode.WRITE_FILE_RECORD, encodeByte(count, 1) .. data ))
 
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -700,38 +701,38 @@ PLoop(function(_ENV)
             if dataUnit then
                 if dataUnit.exception then return false, dataUnit.exception end
 
-                local data          = dataUnit.data
-                local length        = strbyte(data, 1) -- Resp. data Length
+                local data              = dataUnit.data
+                local length            = strbyte(data, 1) -- Resp. data Length
                 if length + 1 ~= #data then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-                local index         = 2
-                local rets          = {}
-                local rindex        = 0
+                local index             = 2
+                local rets              = {}
+                local rindex            = 0
 
                 while index < length do
-                    index           = index + 1     -- Skip Reference Type 1 Byte
+                    index               = index + 1     -- Skip Reference Type 1 Byte
 
                     local b1, b2, b3, b4, b5, b6 = strbyte(data, index, index + 5)
                     if not b6 then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-                    local record    = {
-                        file        = lshift(b1, 8) + b2, -- Sub-Req. x, File Number 2 Bytes 0x0001 to 0xFFFF
-                        record      = lshift(b3, 8) + b4, -- Sub-Req. x, Record number 2 Bytes 0x0000 to 0x270F
-                        data        = {}
+                    local record        = {
+                        file            = lshift(b1, 8) + b2, -- Sub-Req. x, File Number 2 Bytes 0x0001 to 0xFFFF
+                        record          = lshift(b3, 8) + b4, -- Sub-Req. x, Record number 2 Bytes 0x0000 to 0x270F
+                        data            = {}
                     }
 
-                    rindex          = rindex + 1
-                    rets[rindex]    = record
+                    rindex              = rindex + 1
+                    rets[rindex]        = record
 
-                    local length    = lshift(b5, 8) + b6  -- Sub-Req. x, Record length 2 Bytes N
-                    index           = index + 6
+                    local length        = lshift(b5, 8) + b6  -- Sub-Req. x, Record length 2 Bytes N
+                    index               = index + 6
 
                     -- Sub-Req. x, Record Data N x 2 Bytes
                     for i = 1, length do
-                        b1, b2      = strbyte(data, index, index + 1)
+                        b1, b2          = strbyte(data, index, index + 1)
 
-                        record.data[i] = lshift(b1, 8) + b2
-                        index       = index + 2
+                        record.data[i]  = lshift(b1, 8) + b2
+                        index           = index + 2
                     end
                 end
 
@@ -743,22 +744,22 @@ PLoop(function(_ENV)
         __Arguments__{ UInt16, UInt16, UInt16 }
         function MaskWriteRegister(self, refAddress, andMask, orMask)
             -- Result = (Current Contents AND And_Mask) OR (Or_Mask AND (NOT And_Mask))
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.MASK_WRITE_REGISTER,
-                                        encodeByte(refAddress, 2) ..    -- Reference Address   2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(andMask, 2) ..       -- And_Mask            2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(orMask, 2)           -- Or_Mask             2 Bytes 0x0000 to 0xFFFF
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.MASK_WRITE_REGISTER,
+                                            encodeByte(refAddress, 2) ..    -- Reference Address   2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(andMask, 2) ..       -- And_Mask            2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(orMask, 2)           -- Or_Mask             2 Bytes 0x0000 to 0xFFFF
+                                        ))
 
             -- Response:
             --      Reference Address 2 Bytes 0x0000 to 0xFFFF
             --      And_Mask 2 Bytes 0x0000 to 0xFFFF
             --      Or_Mask 2 Bytes 0x0000 to 0xFFFF
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
@@ -773,20 +774,20 @@ PLoop(function(_ENV)
         --- performs a combination of one read operation and one write operation in a single MODBUS transaction
         __Arguments__{ UInt16, QuantityRegister, UInt16, UInt16 * 1 }
         function ReadWriteMultipleregisters(self, readAddress, readQuantity, writeAddress, ...)
-            local writeQuantity     = select("#", ...)
+            local writeQuantity         = select("#", ...)
             if writeQuantity > 0X0079 then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_WRITE_MULTIPLE_REGISTERS,
-                                        encodeByte(readAddress, 2) ..       -- Read Starting Address    2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(readQuantity, 2) ..      -- Quantity to Read         2 Bytes 0x0001 to 0x007D
-                                        encodeByte(writeAddress, 2) ..      -- Write Starting Address   2 Bytes 0x0000 to 0xFFFF
-                                        encodeByte(writeQuantity, 2) ..     -- Quantity to Write        2 Bytes 0x0001 to 0X0079
-                                        encodeByte(writeQuantity * 2, 1) .. -- Write Byte Count         1 Byte 2 x N*
-                                        List{ ... }:Map(function(reg)       -- Write Registers Value    N*x 2 Bytes
-                                            return encodeByte(reg, 2)
-                                        end):Join()
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_WRITE_MULTIPLE_REGISTERS,
+                                            encodeByte(readAddress, 2) ..       -- Read Starting Address    2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(readQuantity, 2) ..      -- Quantity to Read         2 Bytes 0x0001 to 0x007D
+                                            encodeByte(writeAddress, 2) ..      -- Write Starting Address   2 Bytes 0x0000 to 0xFFFF
+                                            encodeByte(writeQuantity, 2) ..     -- Quantity to Write        2 Bytes 0x0001 to 0X0079
+                                            encodeByte(writeQuantity * 2, 1) .. -- Write Byte Count         1 Byte 2 x N*
+                                            List{ ... }:Map(function(reg)       -- Write Registers Value    N*x 2 Bytes
+                                                return encodeByte(reg, 2)
+                                            end):Join()
+                                        ))
 
             return returnValues(self, identifier, readQuantity)
         end
@@ -794,39 +795,39 @@ PLoop(function(_ENV)
         --- read the contents of a First-In-First-Out (FIFO) queue of register in a remote device
         __Arguments__{ UInt16 }
         function ReadQueue(self, pointAddress)
-            local identifier        = self:SendDataUnit(ProtocolDataUnit(
-                                        PublicFunctionCode.READ_FIFO_QUEUE,
-                                        encodeByte(pointAddress, 2)         -- FIFO Pointer Address
-                                    ))
+            local identifier            = self:SendDataUnit(ProtocolDataUnit(
+                                            PublicFunctionCode.READ_FIFO_QUEUE,
+                                            encodeByte(pointAddress, 2)         -- FIFO Pointer Address
+                                        ))
 
-            local tid, uid, dataUnit= self:ReceiveDataUnit()
+            local tid, uid, dataUnit    = self:ReceiveDataUnit()
 
             -- Skip the preivous response
             while tid and tid ~= identifier do
-                tid, uid, dataUnit  = self:ReceiveDataUnit()
+                tid, uid, dataUnit      = self:ReceiveDataUnit()
             end
 
             -- Return nil                       - if time out
             -- return false, exception code     - if return error
             -- return queue array
             if dataUnit then
-                local length        = dataUnit.data and #dataUnit.data
+                local length            = dataUnit.data and #dataUnit.data
                 if dataUnit.exception or length < 4 then return false, dataUnit.exception end
 
-                local data          = dataUnit.data
-                local b1, b2, b3, b4= strbyte(data, 1, 4)
+                local data              = dataUnit.data
+                local b1, b2, b3, b4    = strbyte(data, 1, 4)
 
-                local byteCount     = lshift(b1, 8) + b2
-                local fifoCount     = lshift(b3, 8) + b4
+                local byteCount         = lshift(b1, 8) + b2
+                local fifoCount         = lshift(b3, 8) + b4
 
                 if byteCount + 2 ~= length or fifoCount * 2 + 4 ~= length then return false, ExceptionCode.ILLEGAL_DATA_VALUE end
 
-                local index         = 5
-                local rets          = {}
+                local index             = 5
+                local rets              = {}
                 for i = 1, fifoCount do
-                    b1, b2          = strbyte(data, index, index + 1)
-                    rets[i]         = lshift(b1, 8) + b2
-                    index           = index + 2
+                    b1, b2              = strbyte(data, index, index + 1)
+                    rets[i]             = lshift(b1, 8) + b2
+                    index               = index + 2
                 end
 
                 return rets

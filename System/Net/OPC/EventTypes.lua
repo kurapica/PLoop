@@ -18,7 +18,7 @@ PLoop(function(_ENV)
 
     --- BaseEventType
     __Sealed__() __Abstract__() __Node__{ NodeId = 2041 }
-    class "BaseEventType"       { BaseObjectType }
+    class "BaseEventType"                           { BaseObjectType }
 
     __Sealed__() __Abstract__() __Node__{ NodeId = 2130 }
     class "SystemEventType"                         { BaseEventType }

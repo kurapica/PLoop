@@ -17,10 +17,10 @@ PLoop(function(_ENV)
 
     --- the base ObjectType and all other ObjectTypes shall either directly or indirectly inherit from it
     __Sealed__() __Node__{ NodeId = 58 }
-    class "BaseObjectType"      { Object }
+    class "BaseObjectType"              { Object }
 
     __Sealed__() __Node__{ NodeId = 77 }
-    class "ModellingRuleType"   (function(_ENV)
+    class "ModellingRuleType"           (function(_ENV)
         inherit "BaseObjectType"
 
         -----------------------------------------------------------
@@ -28,14 +28,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- the NamingRule of a ModellingRule
         __Node__{ NodeId = 111 }
-        property  "NamingRule"  { type = NamingRuleType, require = true }
+        property  "NamingRule"          { type = NamingRuleType, require = true }
     end)
 
     __Sealed__() __Node__{ NodeId = 61 }
-    class "FolderType"          { BaseObjectType }
+    class "FolderType"                  { BaseObjectType }
 
     __Sealed__() __Node__{ NodeId = 11564 }
-    class "OperationLimitsType" (function(_ENV)
+    class "OperationLimitsType"         (function(_ENV)
         inherit "FolderType"
 
         -----------------------------------------------------------
@@ -79,7 +79,7 @@ PLoop(function(_ENV)
     end)
 
     __Sealed__() __Node__{ NodeId = 15620 }
-    class "RoleType"            (function(_ENV)
+    class "RoleType"                    (function(_ENV)
         inherit "BaseObjectType"
 
         -----------------------------------------------------------
@@ -154,14 +154,14 @@ PLoop(function(_ENV)
     end)
 
     __Sealed__() __Node__{ NodeId = 15607 }
-    class "RoleSetType"         (function(_ENV)
+    class "RoleSetType"                 (function(_ENV)
         inherit "BaseObjectType"
 
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
         __Node__{ HasModellingRule = ModellingRule.OptionalPlaceholder }
-        property "RoleName"     { type = RoleType }
+        property "RoleName"             { type = RoleType }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -188,7 +188,7 @@ PLoop(function(_ENV)
     end)
 
     __Sealed__() __Node__{ NodeId = 2013 }
-    class "ServerCapabilitiesType" (function(_ENV)
+    class "ServerCapabilitiesType"      (function(_ENV)
         inherit "BaseObjectType"
 
         -----------------------------------------------------------
@@ -242,7 +242,7 @@ PLoop(function(_ENV)
 
     --- the capabilities supported by the OPC UA Server
     __Node__{ NodeId = 2004 }
-    class "ServerType"          (function(_ENV)
+    class "ServerType"                  (function(_ENV)
         inherit "BaseObjectType"
 
         -----------------------------------------------------------
@@ -280,10 +280,7 @@ PLoop(function(_ENV)
     end)
 
     __Node__{ NodeId = 61 }
-    class "FolderType"          { BaseObjectType }
+    class "FolderType"                  { BaseObjectType }
 
-    class "DataTypeEncodingType"{}
-
-
-
+    class "DataTypeEncodingType"        {}
 end)
