@@ -15,30 +15,30 @@
 PLoop(function(_ENV)
 
     export {
-        yield                   = coroutine.yield,
-        strbyte                 = string.byte,
-        strchar                 = string.char,
-        pairs                   = pairs,
-        ipairs                  = ipairs,
-        min                     = math.min,
-        max                     = math.max,
-        floor                   = math.floor,
-        ceil                    = math.ceil,
-        log                     = math.log,
-        unpack                  = _G.unpack or table.unpack,
-        band                    = Toolset.band,
-        bor                     = Toolset.bor,
-        bnot                    = Toolset.bnot,
-        bxor                    = Toolset.bxor,
-        lshift                  = Toolset.lshift,
-        rshift                  = Toolset.rshift,
-        tinsert                 = table.insert,
-        tremove                 = table.remove,
+        yield                           = coroutine.yield,
+        strbyte                         = string.byte,
+        strchar                         = string.char,
+        pairs                           = pairs,
+        ipairs                          = ipairs,
+        min                             = math.min,
+        max                             = math.max,
+        floor                           = math.floor,
+        ceil                            = math.ceil,
+        log                             = math.log,
+        unpack                          = _G.unpack or table.unpack,
+        band                            = Toolset.band,
+        bor                             = Toolset.bor,
+        bnot                            = Toolset.bnot,
+        bxor                            = Toolset.bxor,
+        lshift                          = Toolset.lshift,
+        rshift                          = Toolset.rshift,
+        tinsert                         = table.insert,
+        tremove                         = table.remove,
 
-        LAZY_MATCH_LIMIT        = 8,
+        LAZY_MATCH_LIMIT                = 8,
 
-        BAND_LENGTH             = List(19, 'i=>2^i - 1'),
-        MAGIC_HUFFMAN_ORDER     = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 },
+        BAND_LENGTH                     = List(19, 'i=>2^i - 1'),
+        MAGIC_HUFFMAN_ORDER             = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 },
     }
 
     -----------------------------------------------------------------------
@@ -48,275 +48,275 @@ PLoop(function(_ENV)
     local FIXED_DIST_HTREE
 
     __Sealed__() __AutoCache__()
-    BitStreamReader             = class {
-        __new                   = function(_, reader)
-            local buff          = reader:ReadBlock(4096)
+    BitStreamReader                     = class {
+        __new                           = function(_, reader)
+            local buff                  = reader:ReadBlock(4096)
 
             return {
-                reader          = reader,
+                reader                  = reader,
 
-                buff            = buff or false,
-                length          = buff and #buff or 0,
+                buff                    = buff or false,
+                length                  = buff and #buff or 0,
 
-                cursor          = 0,
-                byte            = 0,
-                remain          = 0,
+                cursor                  = 0,
+                byte                    = 0,
+                remain                  = 0,
             }, true
         end,
 
         --- Get the bits by the length, don't move the cursor
-        Peek                    = function(self, length)
-            length              = length or 1
+        Peek                            = function(self, length)
+            length                      = length or 1
 
             while self.remain < length do
                 if self.cursor >= self.length then
-                    self.buff   = self.reader:ReadBlock(4096) or false
-                    self.length = self.buff and #self.buff or 0
-                    self.cursor = 0
+                    self.buff           = self.reader:ReadBlock(4096) or false
+                    self.length         = self.buff and #self.buff or 0
+                    self.cursor         = 0
                 end
 
                 if not self.buff then return self.byte end
 
-                self.cursor     = self.cursor + 1
-                self.byte       = self.byte + lshift(self.buff:byte(self.cursor), self.remain)
-                self.remain     = self.remain + 8
+                self.cursor             = self.cursor + 1
+                self.byte               = self.byte + lshift(self.buff:byte(self.cursor), self.remain)
+                self.remain             = self.remain + 8
             end
 
             return band(self.byte, BAND_LENGTH[length] or (lshift(1, length) - 1))
         end,
 
         --- Get the bits by the length, also move the cursor
-        Get                     = function(self, length)
-            local bits          = self:Peek(length)
+        Get                             = function(self, length)
+            local bits                  = self:Peek(length)
             if bits then self:Skip(length) end
             return bits
         end,
 
         --- Skip the bit length
-        Skip                    = function(self, length)
+        Skip                            = function(self, length)
             if not length then
                 -- Skip the remain bits in the byte
                 if self.remain == 8 then return end
-                self.byte       = 0
-                self.remain     = 0
+                self.byte               = 0
+                self.remain             = 0
                 return
             end
 
             if self.remain < length then return end
 
-            self.remain         = self.remain - length
-            self.byte           = rshift(self.byte, length)
+            self.remain                 = self.remain - length
+            self.byte                   = rshift(self.byte, length)
         end,
 
         --- Close the reader and reset the reader's Position
-        Close                   = function(self)
-            self.reader.Position= self.reader.Position - self.length + self.cursor
+        Close                           = function(self)
+            self.reader.Position        = self.reader.Position - self.length + self.cursor
         end,
     }
 
     __Sealed__() __AutoCache__()
-    BitStreamWriter             = class {
-        __new                   = function()
+    BitStreamWriter                     = class {
+        __new                           = function()
             return {
-                main            = {},
-                size            = 0,
-                byte            = 0,
-                bytelen         = 0,
+                main                    = {},
+                size                    = 0,
+                byte                    = 0,
+                bytelen                 = 0,
             }, true
         end,
 
         --- Write the byte
-        Write                   = function(self, byte, len)
+        Write                           = function(self, byte, len)
             if self.size >= 1024 then self:Flush() end
 
-            self.byte           = self.byte + lshift(byte, self.bytelen)
-            self.bytelen        = self.bytelen + len
+            self.byte                   = self.byte + lshift(byte, self.bytelen)
+            self.bytelen                = self.bytelen + len
 
             while self.bytelen >= 8 do
-                self.size       = self.size + 1
-                self.main[self.size] = band(self.byte, 0xff)
-                self.byte       = rshift(self.byte, 8)
-                self.bytelen    = self.bytelen - 8
+                self.size               = self.size + 1
+                self.main[self.size]    = band(self.byte, 0xff)
+                self.byte               = rshift(self.byte, 8)
+                self.bytelen            = self.bytelen - 8
             end
         end,
 
-        FillByte                = function(self)
+        FillByte                        = function(self)
             if self.bytelen > 0 then
-                self.size       = self.size + 1
+                self.size               = self.size + 1
                 self.main[self.size] = self.byte
             end
 
-            self.byte           = 0
-            self.bytelen        = 0
+            self.byte                   = 0
+            self.bytelen                = 0
         end,
 
         --- Close the writer
-        Close                   = function(self)
+        Close                           = function(self)
             self:FillByte()
 
             return self:Flush()
         end,
 
-        Flush                   = function(self)
-            local size          = self.size
+        Flush                           = function(self)
+            local size                  = self.size
             if size == 0 then return end
-            local index         = 0
+            local index                 = 0
 
             while index < size do
-                local last      = min(size, index + 2048)
+                local last              = min(size, index + 2048)
                 yield(strchar(unpack(self.main, index + 1, last)))
-                index           = last
+                index                   = last
             end
 
-            self.main           = {}
-            self.size           = 0
+            self.main                   = {}
+            self.size                   = 0
         end,
     }
 
     __Sealed__() __AutoCache__()
-    ByteStreamWriter            = class {
-        __new                   = function()
+    ByteStreamWriter                    = class {
+        __new                           = function()
             return {
-                main            = {},
-                prev            = false,
-                psize           = 0,
-                size            = 0,
+                main                    = {},
+                prev                    = false,
+                psize                   = 0,
+                size                    = 0,
             }, true
         end,
 
         --- Write the byte
-        Write                   = function(self, byte)
+        Write                           = function(self, byte)
             if self.size >= 32768 then self:Flush() end
 
-            self.size           = self.size + 1
-            self.main[self.size]= byte
+            self.size                   = self.size + 1
+            self.main[self.size]        = byte
         end,
 
         --- Get the bytes from the cache
-        Copy                    = function(self, length, distance)
-            local main          = self.main
-            local size          = self.size
+        Copy                            = function(self, length, distance)
+            local main                  = self.main
+            local size                  = self.size
 
             if size < distance then
-                local pdis      = distance - size
+                local pdis              = distance - size
                 if not (self.psize >= pdis) then return false end
 
-                local prev      = self.prev
-                local psize     = self.psize
-                local index     = psize - pdis + 1
+                local prev              = self.prev
+                local psize             = self.psize
+                local index             = psize - pdis + 1
 
                 for i = index, min(psize, index + length - 1) do
-                    size        = size + 1
-                    main[size]  = prev[i]
+                    size                = size + 1
+                    main[size]          = prev[i]
                 end
 
-                distance        = size
-                length          = max(0, length - pdis)
+                distance                = size
+                length                  = max(0, length - pdis)
             end
 
-            local index         = size - distance + 1
+            local index                 = size - distance + 1
 
             for i = 1, length do
-                size            = size + 1
-                main[size]      = main[index]
-                index           = index + 1
+                size                    = size + 1
+                main[size]              = main[index]
+                index                   = index + 1
             end
 
-            self.size           = size
+            self.size                   = size
 
             return true
         end,
 
-        Flush                   = function(self)
-            local size          = self.size
-            local index         = 0
+        Flush                           = function(self)
+            local size                  = self.size
+            local index                 = 0
             if size == 0 then return end
 
             while index < size do
-                local last      = min(size, index + 2048)
+                local last              = min(size, index + 2048)
                 yield(strchar(unpack(self.main, index + 1, last)))
-                index           = last
+                index                   = last
             end
 
-            self.prev           = self.main
-            self.main           = {}
-            self.psize          = size
-            self.size           = 0
+            self.prev                   = self.main
+            self.main                   = {}
+            self.psize                  = size
+            self.size                   = 0
         end,
     }
 
     __Sealed__() __AutoCache__()
-    HuffTableTree               = class {
-        __new                   = function(_, depths)
+    HuffTableTree                       = class {
+        __new                           = function(_, depths)
             -- From 0 ~ xx
-            local mbyte         = #depths
-            local max_bits      = 0
-            local bl_count      = {}
+            local mbyte                 = #depths
+            local max_bits              = 0
+            local bl_count              = {}
 
             for i = 0, mbyte do
-                local d         = depths[i]
+                local d                 = depths[i]
                 if d > max_bits then max_bits = d end
-                bl_count[d]     = (bl_count[d] or 0) + 1
+                bl_count[d]             = (bl_count[d] or 0) + 1
             end
 
-            bl_count[0]         = 0 -- Clear
+            bl_count[0]                 = 0 -- Clear
 
-            local code          = 0
-            local next_code     = {}
+            local code                  = 0
+            local next_code             = {}
 
             for i = 1, max_bits do
-                code            = lshift( (code + (bl_count[i - 1] or 0)), 1 )
-                next_code[i]    = code
+                code                    = lshift( (code + (bl_count[i - 1] or 0)), 1 )
+                next_code[i]            = code
             end
 
-            local max_code      = 2^max_bits - 1
+            local max_code              = 2^max_bits - 1
 
-            local codes         = {}
-            local map           = {}
+            local codes                 = {}
+            local map                   = {}
 
             for i = 0, mbyte do
-                local d         = depths[i]
+                local d                 = depths[i]
                 if d > 0 then
-                    code        = next_code[d]
-                    next_code[d]= next_code[d] + 1
+                    code                = next_code[d]
+                    next_code[d]        = next_code[d] + 1
 
                     -- Map code -> byte
-                    local mcode = 0
+                    local mcode         = 0
                     for j = 1, d do
-                        mcode   = mcode + lshift(band(1, rshift(code, j - 1)), d - j)
+                        mcode           = mcode + lshift(band(1, rshift(code, j - 1)), d - j)
                     end
-                    codes[i]    = mcode
+                    codes[i]            = mcode
 
                     for j = mcode, max_code, 2^d do
-                        map[j]  = i
+                        map[j]          = i
                     end
                 end
             end
 
             return {
-                depths          = depths,
-                codes           = codes,
-                map             = map,
-                nbits           = max_bits,
+                depths                  = depths,
+                codes                   = codes,
+                map                     = map,
+                nbits                   = max_bits,
             }, true
         end,
-        ParseByte               = function(self, reader)
-            local sbyte         = reader.byte
-            local bits          = reader:Peek(self.nbits)
-            local byte          = self.map[bits]
+        ParseByte                       = function(self, reader)
+            local sbyte                 = reader.byte
+            local bits                  = reader:Peek(self.nbits)
+            local byte                  = self.map[bits]
             if byte then
                 reader:Skip(self.depths[byte])
                 return byte
             end
         end,
-        ToByte                  = function(self, byte)
+        ToByte                          = function(self, byte)
             return self.codes[byte], self.depths[byte]
         end,
     }
 
-    uncompression               = function(writer, reader, litHtree, distHtree)
+    uncompression                       = function(writer, reader, litHtree, distHtree)
         repeat
-            local byte          = litHtree:ParseByte(reader)
+            local byte                  = litHtree:ParseByte(reader)
             if not byte then return end
 
             if byte < 256 then
@@ -327,34 +327,34 @@ PLoop(function(_ENV)
                 return true
             elseif byte > 256 then
                 -- <Length, Distance>
-                local length    = 3
-                local distance  = 1
+                local length            = 3
+                local distance          = 1
 
                 if byte < 265 then
-                    length      = length + byte - 257
+                    length              = length + byte - 257
                 elseif byte < 285 then
                     local extra = rshift(byte - 261, 2)
-                    length      = length + lshift(band(byte - 261, 3) + 4, extra)
-                    extra       = reader:Get(extra)
+                    length              = length + lshift(band(byte - 261, 3) + 4, extra)
+                    extra               = reader:Get(extra)
                     if not extra then return end
-                    length      = length + extra
+                    length              = length + extra
                 else
-                    length      = 258
+                    length              = 258
                 end
 
-                local dbyte     = distHtree:ParseByte(reader)
+                local dbyte             = distHtree:ParseByte(reader)
                 if not dbyte then return end
 
                 if dbyte < 4 then
-                    distance    = distance + dbyte
+                    distance            = distance + dbyte
                 else
-                    local extra = rshift(dbyte - 2, 1)
-                    distance    = distance + lshift(band(dbyte, 1) + 2, extra)
+                    local extra         = rshift(dbyte - 2, 1)
+                    distance            = distance + lshift(band(dbyte, 1) + 2, extra)
 
-                    extra       = reader:Get(extra)
+                    extra               = reader:Get(extra)
                     if not extra then return end
 
-                    distance    = distance + extra
+                    distance            = distance + extra
                 end
 
                 if not writer:Copy(length, distance) then return end
@@ -362,54 +362,54 @@ PLoop(function(_ENV)
         until not byte
     end
 
-    initFixedHuffmanCodes       = function()
+    initFixedHuffmanCodes               = function()
         if not FIXED_LIT_HTREE then
             -- Init the fixed huffman code tree
-            local depths        = {}
+            local depths                = {}
 
-            for i = 0,   143    do depths[i] = 8 end
-            for i = 144, 255    do depths[i] = 9 end
-            for i = 256, 279    do depths[i] = 7 end
-            for i = 280, 287    do depths[i] = 8 end
+            for i = 0,   143 do depths[i] = 8 end
+            for i = 144, 255 do depths[i] = 9 end
+            for i = 256, 279 do depths[i] = 7 end
+            for i = 280, 287 do depths[i] = 8 end
 
-            FIXED_LIT_HTREE     = HuffTableTree(depths)
+            FIXED_LIT_HTREE             = HuffTableTree(depths)
         end
 
         if not FIXED_DIST_HTREE then
-            local depths        = {}
+            local depths                = {}
 
-            for i = 0, 31       do depths[i] = 5 end
+            for i = 0, 31    do depths[i] = 5 end
 
-            FIXED_DIST_HTREE    = HuffTableTree(depths)
+            FIXED_DIST_HTREE            = HuffTableTree(depths)
         end
     end
 
-    calcHuffmanDepths           = function(freqitems, mbyte, maxLevel)
+    calcHuffmanDepths                   = function(freqitems, mbyte, maxLevel)
         local root
-        local count             = 0
-        local depths            = {}
+        local count                     = 0
+        local depths                    = {}
 
-        local insertLink        = function(node)
-            local parent        = root
+        local insertLink                = function(node)
+            local parent                = root
             local upper
-            local freq          = node.freq
+            local freq                  = node.freq
 
             while parent and parent.freq <= freq do
-                upper           = parent
-                parent          = parent.next
+                upper                   = parent
+                parent                  = parent.next
             end
 
-            node.next           = parent
+            node.next                   = parent
 
             if upper then
-                upper.next      = node
+                upper.next              = node
             else
-                root            = node
+                root                    = node
             end
         end
 
         local convertToLevel
-        convertToLevel          = function(node, level)
+        convertToLevel                  = function(node, level)
             -- Normally enough
             if maxLevel and maxLevel < level then level = maxLevel end
 
@@ -418,37 +418,37 @@ PLoop(function(_ENV)
                 if node.right then convertToLevel(node.right, level + 1) end
             else
                 -- Leaf node
-                depths[node.byte] = level
+                depths[node.byte]       = level
             end
         end
 
         -- build a link list based on the freq
         for i = 0, mbyte do
-            depths[i]           = 0
+            depths[i]                   = 0
 
-            local freq          = freqitems[i]
+            local freq                  = freqitems[i]
             if freq and freq > 0 then
                 insertLink{ byte = i, freq = freq }
-                count           = count + 1
+                count                   = count + 1
             end
         end
 
         if count == 0 then
             return depths
         elseif count == 1 then
-            depths[root.byte]   = 1
+            depths[root.byte]           = 1
             return depths
         end
 
         -- Build the huffman tree
         for i = 1, max(1, count - 1) do
-            local a             = root
-            local b             = root.next
+            local a                     = root
+            local b                     = root.next
 
-            a.next              = nil
+            a.next                      = nil
             if b then
-                root            = b and b.next
-                b.next          = nil
+                root                    = b and b.next
+                b.next                  = nil
             end
 
             insertLink{ freq = a.freq + (b and b.freq or 0), left = a, right = b }
@@ -460,21 +460,22 @@ PLoop(function(_ENV)
         return depths
     end
 
-    __Sealed__() enum "System.Text.DeflateMode" {
+    __Sealed__()
+    enum "System.Text.DeflateMode"      {
         "NoCompression",
         "FixedHuffmanCodes",
         "DynamicHuffmanCodes",
     }
 
     --- System.Text.Encoder.Deflate
-    System.Text.Encoder "Deflate" {
-        encode                  = function(reader, mode)
+    System.Text.Encoder "Deflate"       {
+        encode                          = function(reader, mode)
             if mode == DeflateMode.NoCompression then
-                local text      = reader:ReadBlock(32768)
+                local text              = reader:ReadBlock(32768)
                 while text do
-                    local len   = #text
-                    local nxt   = len == 32768 and reader:ReadBlock(32768)
-                    local writer= BitStreamWriter()
+                    local len           = #text
+                    local nxt           = len == 32768 and reader:ReadBlock(32768)
+                    local writer        = BitStreamWriter()
 
                     writer:Write(nxt and 0 or 1, 1) -- BFINAL
                     writer:Write(0, 2)              -- BTYPE
@@ -485,64 +486,64 @@ PLoop(function(_ENV)
 
                     yield(text)
 
-                    text        = nxt
+                    text                = nxt
                 end
             else
-                local buff      = reader:ReadBlock(16384)
+                local buff              = reader:ReadBlock(16384)
                 if not buff then return end
 
-                local length    = #buff
-                local writer    = BitStreamWriter()
-                local prev      = false
-                local nxt       = false
-                local matchlst  = {}
-                local base      = 0
-                local cpcursor  = nil
-                local cplen     = 0
-                local cpdist    = 0
-                local widx      = 0
+                local length            = #buff
+                local writer            = BitStreamWriter()
+                local prev              = false
+                local nxt               = false
+                local matchlst          = {}
+                local base              = 0
+                local cpcursor          = nil
+                local cplen             = 0
+                local cpdist            = 0
+                local widx              = 0
 
-                local b1, b2, b3= buff:byte(1, 3)
-                local cursor    = 3
+                local b1, b2, b3        = buff:byte(1, 3)
+                local cursor            = 3
 
-                local readByte  = function(index, move)
+                local readByte          = function(index, move)
                     if not index then
-                        cursor  = cursor + 1
-                        index   = cursor
-                        move    = true
+                        cursor          = cursor + 1
+                        index           = cursor
+                        move            = true
                     elseif move then
-                        cursor  = index
+                        cursor          = index
                     end
 
-                    local offset= index - base
+                    local offset        = index - base
 
                     if offset <= 0 then
                         return prev and prev:byte(16384 + offset) or nil
                     elseif offset > length and length == 16384 then
-                        nxt     = nxt or reader:ReadBlock(16384) or false
-                        offset  = offset - length
+                        nxt             = nxt or reader:ReadBlock(16384) or false
+                        offset          = offset - length
 
                         if move then
-                            prev            = buff
-                            buff            = nxt
-                            nxt             = false
-                            length          = buff and #buff or 0
+                            prev        = buff
+                            buff        = nxt
+                            nxt         = false
+                            length      = buff and #buff or 0
 
                             if buff then
                                 -- Clear matchlst that out of the window
                                 for k, v in pairs(matchlst) do
-                                    local l = #v
-                                    local b = 0
-                                    for i = 1, l do
+                                    local l     = #v
+                                    local b     = 0
+                                    for i       = 1, l do
                                         if v[i] > base then
-                                            b = i
+                                            b   = i
                                             break
                                         end
                                     end
 
                                     if b == 0 then
                                         for i = l, 1, -1 do
-                                            v[i]        = nil
+                                            v[i] = nil
                                         end
                                     elseif b > 1 then
                                         for j = b, l do
@@ -555,7 +556,7 @@ PLoop(function(_ENV)
                                     end
                                 end
 
-                                base        = base + 16384
+                                base    = base + 16384
 
                                 return buff:byte(offset)
                             end
@@ -573,17 +574,17 @@ PLoop(function(_ENV)
                 if mode == DeflateMode.FixedHuffmanCodes or mode == true then
                     initFixedHuffmanCodes()
 
-                    litHtree    = FIXED_LIT_HTREE
-                    distHtree   = FIXED_DIST_HTREE
+                    litHtree            = FIXED_LIT_HTREE
+                    distHtree           = FIXED_DIST_HTREE
 
-                    sendPair    = function(length, distance)
+                    sendPair            = function(length, distance)
                         -- <Length, Distance>
                         if length < 11 then
                             writer:Write(litHtree:ToByte(254 + length))
                         elseif length < 258 then
-                            local e = ceil(log(2 + rshift(length - 11, 3)) / log(2))
-                            local b = 261 + lshift(e, 2) + rshift(length - 3, e) - 4
-                            local d = length - 3 - lshift(band(b - 261, 3) + 4, e)
+                            local e     = ceil(log(2 + rshift(length - 11, 3)) / log(2))
+                            local b     = 261 + lshift(e, 2) + rshift(length - 3, e) - 4
+                            local d     = length - 3 - lshift(band(b - 261, 3) + 4, e)
 
                             writer:Write(litHtree:ToByte(b))
                             writer:Write(d, e)
@@ -594,9 +595,9 @@ PLoop(function(_ENV)
                         if distance < 5 then
                             writer:Write(distHtree:ToByte(distance - 1))
                         else
-                            local e = ceil(log(2 + rshift(distance - 5, 2)) / log(2))
-                            local b = rshift(distance - 1, e) + lshift(e, 1)
-                            local d = distance - 1 - lshift(band(b, 1) + 2, e)
+                            local e     = ceil(log(2 + rshift(distance - 5, 2)) / log(2))
+                            local b     = rshift(distance - 1, e) + lshift(e, 1)
+                            local d     = distance - 1 - lshift(band(b, 1) + 2, e)
 
                             writer:Write(distHtree:ToByte(b))
                             writer:Write(d, e)
@@ -606,30 +607,30 @@ PLoop(function(_ENV)
                     sendRaw     = function(index)
                         if index == true then
                             -- End
-                            widx    = widx + 1
-                            local b = readByte(widx)
+                            widx        = widx + 1
+                            local b     = readByte(widx)
                             while b do
                                 writer:Write(litHtree:ToByte(b))
-                                widx= widx + 1
-                                b   = readByte(widx)
+                                widx    = widx + 1
+                                b       = readByte(widx)
                             end
                         else
                             for i = widx + 1, index do
                                 writer:Write(litHtree:ToByte(readByte(i)))
                             end
-                            widx    = index
+                            widx        = index
                         end
                     end
 
                     writer:Write(1, 1)
                     writer:Write(1, 2)
                 else
-                    local bidx  = 0
-                    local block = {}
-                    local litefr= { [256] = 1 }
-                    local distfr= {}
+                    local bidx          = 0
+                    local block         = {}
+                    local litefr        = { [256] = 1 }
+                    local distfr        = {}
 
-                    sendPair    = function(length, distance)
+                    sendPair            = function(length, distance)
                         -- <Length, Distance>
                         if length < 11 then
                             local b     = 254 + length
@@ -706,10 +707,10 @@ PLoop(function(_ENV)
                         end
                     end
 
-                    sendBlock   = function(final)
+                    sendBlock           = function(final)
                         writer:Write(final and 1 or 0, 1)
                         writer:Write(2, 2)
-                        writer:Write(286 - 257, 5) -- HLIT
+                        writer:Write(286- 257, 5) -- HLIT
                         writer:Write(30 - 1,    5) -- HDIST
 
                         -- Calc the depths
@@ -884,31 +885,31 @@ PLoop(function(_ENV)
                         -- End of Block
                         writer:Write(litHtree:ToByte(256))
 
-                        bidx    = 0
-                        block   = {}
-                        litefr  = {}
-                        distfr  = {}
+                        bidx            = 0
+                        block           = {}
+                        litefr          = {}
+                        distfr          = {}
                     end
                 end
 
                 while b3 do
                     -- Check th matchlist
-                    local bytes     = b1 + 256 * (b2 + 256 * b3)
-                    local match     = matchlst[bytes]
+                    local bytes         = b1 + 256 * (b2 + 256 * b3)
+                    local match         = matchlst[bytes]
 
                     if match then
                         local maxcur, maxlen = 0, 0
-                        local midx  = #match
+                        local midx      = #match
 
                         for i = midx, 1, -1 do
-                            local c = match[i] + 2
+                            local c     = match[i] + 2
                             if c < cursor then
-                                local l = 0
+                                local l     = 0
                                 local a, b
 
                                 repeat
-                                    l   = l + 1
-                                    b   = readByte(cursor + l)
+                                    l       = l + 1
+                                    b       = readByte(cursor + l)
 
                                     if c + l > base then
                                         a   = strbyte(buff, c + l - base)
@@ -917,7 +918,7 @@ PLoop(function(_ENV)
                                     end
                                 until a ~= b or l == 256
 
-                                l       = l + 2 -- (3 - 1)
+                                l           = l + 2 -- (3 - 1)
 
                                 if l > maxlen then
                                     maxcur  = match[i]
@@ -1001,40 +1002,40 @@ PLoop(function(_ENV)
                 writer:Close()
             end
         end,
-        decode                  = function(reader)
-            local moreBlocks    = true
-            local streamReader  = BitStreamReader(reader)
-            local streamWriter  = ByteStreamWriter()
+        decode                          = function(reader)
+            local moreBlocks            = true
+            local streamReader          = BitStreamReader(reader)
+            local streamWriter          = ByteStreamWriter()
 
             while moreBlocks do
-                local bfinal    = streamReader:Get(1)
-                local btype     = streamReader:Get(2)
+                local bfinal            = streamReader:Get(1)
+                local btype             = streamReader:Get(2)
                 if not (bfinal and btype) then return "", "The BFINAL and BTYPE can't be fetched" end
 
-                moreBlocks      = bfinal == 0
+                moreBlocks              = bfinal == 0
 
                 if btype == 0 then
                     -- No compression
                     streamReader:Skip() -- Skip the remain bits
 
-                    local len   = streamReader:Get(16)
-                    local nlen  = streamReader:Get(16)
+                    local len           = streamReader:Get(16)
+                    local nlen          = streamReader:Get(16)
                     if not (len and nlen and bxor(len, nlen) == 65535) then
                         return "", "The LEN and NLEN not existed or doesn't match"
                     end
                     streamReader:Close()
 
-                    local total = 0
+                    local total         = 0
 
                     while total < len do
-                        local b = reader:ReadBlock(min(4096, len - total))
+                        local b         = reader:ReadBlock(min(4096, len - total))
                         if not b then break end
 
-                        local l = #b
+                        local l         = #b
 
                         for i = 1, l do streamWriter:Write(strbyte(b, i)) end
 
-                        total   = total + l
+                        total           = total + l
                     end
 
                     if total < len then
@@ -1049,42 +1050,42 @@ PLoop(function(_ENV)
                     end
                 elseif btype == 2 then
                     -- Compressed with dynamic Huffman codes
-                    local hlit  = streamReader:Get(5) -- # of Literal/Length codes - 257
-                    local hdist = streamReader:Get(5) -- # of Distance codes - 1
-                    local hclen = streamReader:Get(4) -- # of Code Length codes - 4
+                    local hlit          = streamReader:Get(5) -- # of Literal/Length codes - 257
+                    local hdist         = streamReader:Get(5) -- # of Distance codes - 1
+                    local hclen         = streamReader:Get(4) -- # of Code Length codes - 4
                     if not (hlit and hdist and hclen) then return "", "The input data can't be decompressed" end
 
-                    local depths= { [0] = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+                    local depths        = { [0] = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
                     for i = 1, hclen + 4 do
-                        local c = streamReader:Get(3)
+                        local c         = streamReader:Get(3)
                         if not c then return "", "The input data can't be decompressed" end
                         depths[MAGIC_HUFFMAN_ORDER[i]] = c
                     end
 
                     -- The Huffman tree for Length
-                    local lHTree= HuffTableTree(depths)
+                    local lHTree        = HuffTableTree(depths)
 
-                    depths      = {}
+                    depths              = {}
 
-                    hlit        = hlit  + 257
-                    hdist       = hdist + 1
+                    hlit                = hlit  + 257
+                    hdist               = hdist + 1
 
-                    local idx   = 1
+                    local idx           = 1
                     local ext
                     while idx <= hlit + hdist do
-                        local c = lHTree:ParseByte(streamReader)
+                        local c         = lHTree:ParseByte(streamReader)
                         if not c then return "", "The input data can't be decompressed" end
 
                         if c < 16 then
                             -- Represent code lengths of 0 - 15
                             depths[idx] = c
-                            idx = idx + 1
+                            idx         = idx + 1
                         elseif c == 16 then
                             -- Copy the previous code length 3 - 6 times. (2 bits of length)
-                            ext = streamReader:Get(2)
+                            ext         = streamReader:Get(2)
                             if not ext then return "", "The input data can't be decompressed" end
 
-                            c   = depths[idx - 1]
+                            c           = depths[idx - 1]
                             if not c then return "", "The input data can't be decompressed" end
 
                             for i = 1, 3 + ext do
@@ -1093,40 +1094,40 @@ PLoop(function(_ENV)
                             end
                         elseif c == 17 then
                             -- Repeat a code length of 0 for 3 - 10 times. (3 bits of length)
-                            ext = streamReader:Get(3)
+                            ext         = streamReader:Get(3)
                             if not ext then return "", "The input data can't be decompressed" end
 
-                            c   = 0
+                            c           = 0
 
                             for i = 1, 3 + ext do
                                 depths[idx] = c
-                                idx         = idx + 1
+                                idx     = idx + 1
                             end
                         elseif c == 18 then
                             -- Repeat a code length of 0 for 11 - 138 times. (7 bits of length)
-                            ext = streamReader:Get(7)
+                            ext         = streamReader:Get(7)
                             if not ext then return "", "The input data can't be decompressed" end
 
-                            c   = 0
+                            c           = 0
 
                             for i = 1, 11 + ext do
                                 depths[idx] = c
-                                idx         = idx + 1
+                                idx     = idx + 1
                             end
                         else
                             return "", "The input data can't be decompressed"
                         end
                     end
 
-                    local ldep  = {}
+                    local ldep          = {}
                     for i = 1, hlit do
-                        ldep[i - 1] = depths[i]
+                        ldep[i - 1]     = depths[i]
                     end
 
-                    local ddep  = {}
-                    local base  = hlit + 1
+                    local ddep          = {}
+                    local base          = hlit + 1
                     for i = base, #depths do
-                        ddep[i - base] = depths[i]
+                        ddep[i - base]  = depths[i]
                     end
 
                     if not uncompression(streamWriter, streamReader, HuffTableTree(ldep), HuffTableTree(ddep)) then
@@ -1143,6 +1144,6 @@ PLoop(function(_ENV)
             -- Clear the buff
             streamWriter:Flush()
         end,
-        strategy                = System.Text.TextReaderStrategy.READER,
+        strategy                        = System.Text.TextReaderStrategy.READER,
     }
 end)
