@@ -3110,7 +3110,7 @@ do
                     -- Pass
                 elseif tval == "table" then
                     -- Check if the value can be convert to a struct type
-                    local tval          = tryConvertToMember(value)
+                    local tval          = tryConvertToMember(value, key)
                     if not tval then    _Cache(temp) return end
                     temp[key]           = tval
                 else
@@ -3149,22 +3149,24 @@ do
         return structType
     end
 
-    tryConvertToMember                  = function (table)
-        local typeKey
+    tryConvertToMember                  = function (table, name)
+        local typeKey, nameKey
 
         -- Check fields
-        for key in pairs, table do
-            if type(key) ~= "string" then typeKey = nil break end
+        for key, value in pairs, table do
+            if type(key) == "string" then
 
-            local lkey                  = strlower(key)
-            if lkey ~= "type" and lkey ~= "name" and lkey ~= "require" then typeKey = nil break end
+                local lkey              = strlower(key)
 
-            if lkey == "type" then
-                typeKey                 = key
+                if lkey == "type" then
+                    typeKey             = key
+                elseif lkey == "name" and type(value) == "string" then
+                    nameKey             = key
+                end
             end
         end
 
-        if typeKey then
+        if typeKey and (name or nameKey) then
             local value                 = table[typeKey]
             -- Check the type value
             if getprototypemethod(value, "ValidateValue") then
@@ -3172,8 +3174,10 @@ do
                 return table
             elseif type(value) == "table" then
                 local vtype             = tryConvertToStruct(value)
-                table[key]              = vtype
-                return table
+                if vtype then
+                    table[typeKey]      = vtype
+                    return table
+                end
             end
         end
 
@@ -3221,7 +3225,7 @@ do
                 return true
             elseif tval == "table" and notenvset then
                 -- Check if the value can be convert to a struct type
-                local vtype             = tryConvertToMember(value)
+                local vtype             = tryConvertToMember(value, key)
                 struct.AddMember(owner, key, vtype and getmetatable(vtype) == nil and vtype or { type = vtype } or value, stack)
                 return true
             end
