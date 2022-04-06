@@ -512,7 +512,7 @@ PLoop(function(_ENV)
 
     --- Convert the data to string
     __Static__()
-    function Toolset.tostring(data, dtype, pretty)
+    function Toolset.tostring(data, dtype, pretty, noSerial)
         if data == nil then return "nil" end
         if type(data) ~= "table" then return tostring(data) end
 
@@ -526,6 +526,8 @@ PLoop(function(_ENV)
             if isValidValue(SerializableType, dtype) then
                 return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data, dtype)
             end
+        elseif noSerial then
+            return StringFormatProvider{ Indent = pretty or false }:Serialize(data)
         elseif isValidValue(Serializable, data) then
             return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data)
         else
