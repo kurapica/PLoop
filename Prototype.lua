@@ -3087,6 +3087,10 @@ do
         if info then return info, true else return _StructInfo[target], false end
     end
 
+    local convertToStruct               = function(table, couldBeMember)
+
+    end
+
     local setStructBuilderValue         = function (self, key, value, stack, notenvset)
         local owner                     = environment.GetNamespace(self)
         if not (owner and _StructBuilderInDefine[self]) then return end
@@ -3096,6 +3100,7 @@ do
 
         stack                           = stack + 1
 
+        -- Add to struct feature
         if tkey == "string" and not tonumber(key) then
             if key == STRUCT_KEYWORD_DFLT then
                 struct.SetDefault(owner, value, stack)
@@ -3126,6 +3131,9 @@ do
                 end
                 return true
             elseif tval == "table" and notenvset then
+                -- Check if the value can be convert to a struct type
+
+
                 struct.AddMember(owner, key, value, stack)
                 return true
             end
@@ -3196,7 +3204,7 @@ do
         return info and (def or not validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]))
     end
 
-    local checkStructDependence = function (target, chkType)
+    local checkStructDependence         = function (target, chkType)
         if chkType and target ~= chkType then
             if chkStructContents(chkType, isNotSealedStruct, true) then
                 _DependenceMap[chkType]         = _DependenceMap[chkType] or newstorage(WEAK_KEY)
@@ -4924,12 +4932,10 @@ do
             if select("#", ...) == 1 then
                 local definition        = ...
                 if type(definition) == "table" then
-                    local k, v
-                    for i, j in pairs, definition do
-                        if k then k     = nil break end
-                        k, v            = i, j
-                    end
-                    if k and v then
+                    -- Check if only contains one pair
+                    local k, v          = next(definition)
+
+                    if k and v and next(definition, k) == nil then
                         if type(k) == "number" then
                             if getprototypemethod(v, "ValidateValue") then
                                 _arrayType  = v
