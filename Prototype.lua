@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2022/03/16                                               --
--- Version      :   1.7.1                                                    --
+-- Update Date  :   2022/04/07                                               --
+-- Version      :   1.8.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -3141,12 +3141,11 @@ do
         end
 
         local structType
+        local ok, msg                   = pcall(attribute.IndependentCall, function() structType = struct(temp) end)
 
-        Attribute.IndependentCall(function()
-            structType                  = struct(temp)
-        end)
+        _Cache(temp)
 
-        return structType
+        return ok and structType
     end
 
     tryConvertToMember                  = function (table, name)
