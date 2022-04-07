@@ -1196,6 +1196,12 @@ do
         end
     end
 
+    local function independentCall(back, ...)
+        environment.RestoreKeywordAccess(back)
+        _RegisteredAttrs                = tremove(_RegisteredAttrsStack) or _Cache()
+        return ...
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -1363,22 +1369,11 @@ do
             -- @owner   attribute
             -- @format  definition[, stack]
             -- @param   definition                  the function to be processed
-            -- @param   stack                       the stack level
-            ["IndependentCall"]         = function(definition, static)
-                if type(definition)    ~= "function" then
-                    error("Usage : attribute.Register(definition) - the definition must be a function", parsestack(stack) + 1)
-                end
-
+            -- @param   ...                         the parameters
+            ["IndependentCall"]         = function(definition, ...)
                 tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
                 _RegisteredAttrs        = _Cache()
-
-                local back              = environment.BackupKeywordAccess()
-                local ok, msg           = pcall(definition)
-                environment.RestoreKeywordAccess(back)
-
-                _RegisteredAttrs        = tremove(_RegisteredAttrsStack) or _Cache()
-
-                if not ok then error(msg, 0) end
+                return independentCall(environment.BackupKeywordAccess(), pcall(definition, ...))
             end;
 
             --- Register the super's inheritable attributes to the target, must be called after
@@ -3102,6 +3097,7 @@ do
                 if key == STRUCT_KEYWORD_DFLT then
                     -- Pass
                 elseif tval == "function" then
+                    -- No method allowed
                     if key ~= STRUCT_KEYWORD_INIT and key ~= STRUCT_KEYWORD_VALD then
                         _Cache(temp)
                         return
@@ -3110,7 +3106,12 @@ do
                     -- Pass
                 elseif tval == "table" then
                     -- Check if the value can be convert to a struct type
-                    local tval          = tryConvertToMember(value, key)
+                    local tval
+                    if key == STRUCT_KEYWORD_ARRAY  then
+                        tval            = tryConvertToStruct(value)
+                    else
+                        tval            = tryConvertToMember(value, key)
+                    end
                     if not tval then    _Cache(temp) return end
                     temp[key]           = tval
                 else
@@ -3140,12 +3141,10 @@ do
             end
         end
 
-        local structType
-        local ok, msg                   = pcall(attribute.IndependentCall, function() structType = struct(temp) end)
-
+        local ok, structType            = attribute.IndependentCall(function(temp) local type = struct(temp) return type end, temp)
         _Cache(temp)
 
-        return ok and structType
+        return ok and structType or nil
     end
 
     tryConvertToMember                  = function (table, name)
@@ -3224,6 +3223,14 @@ do
                 return true
             elseif tval == "table" and notenvset then
                 -- Check if the value can be convert to a struct type
+                if key == STRUCT_KEYWORD_ARRAY then
+                    local vtype         = tryConvertToStruct(value)
+                    if vtype then
+                        struct.SetArrayElement(owner, vtype, stack)
+                        return true
+                    end
+                end
+
                 local vtype             = tryConvertToMember(value, key)
                 struct.AddMember(owner, key, vtype and getmetatable(vtype) == nil and vtype or { type = vtype } or value, stack)
                 return true
@@ -4035,7 +4042,7 @@ do
             local implement             = getTemplateImplement(implements, key)
             if implement then return implement end
 
-            local ok, err               = pcall(attribute.IndependentCall, function()
+            local ok, err               = attribute.IndependentCall(function()
                 implement               = struct {}
                 local bder              = struct (info[FLD_STRUCT_TEMPENV], implement, true)
                 struct.SetSealed(implement)
@@ -7996,7 +8003,7 @@ do
             local implement             = getTemplateImplement(implements, key)
             if implement then return implement end
 
-            local ok, err               = pcall(attribute.IndependentCall, function()
+            local ok, err               = attribute.IndependentCall(function()
                 local ptype             = getmetatable(self)
                 implement               = ptype {}
                 local bder              = ptype (info[FLD_IC_TEMPENV], implement, true)
