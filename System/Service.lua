@@ -63,10 +63,38 @@ PLoop(function(_ENV)
     --- Represents the interface of the service provider
     __Sealed__()
     interface "IServiceProvider" (function(_ENV)
+
+        export                          {
+            ipairs                      = ipairs,
+            getmetatable                = getmetatable,
+            throw                       = throw,
+
+            Class, Attribute, __Arguments__
+        }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
         --- Gets the service object of the specified type
         __Abstract__() __Arguments__{ AnyType }:AsInheritable()
         function GetService(self, type)
 
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Abstract__()
+        function __ctor(self, descriptors)
+            local descMap               = {}
+            self._Descriptors           = descMap
+
+            for i, descriptor in ipairs(descriptors) do
+                if descMap[descriptor.serviceType] then
+                    descriptor.next     = descMap[descriptor.serviceType]
+                end
+                descMap[descriptor.serviceType] = descriptor
+            end
         end
     end)
 
@@ -94,21 +122,14 @@ PLoop(function(_ENV)
     __Sealed__() __AnonymousClass__()
     interface "IServiceCollection" (function(_ENV)
 
-        export { Class, Attribute, __Arguments__ }
-
-        export {
+        export                          {
+            tinsert                     = table.insert,
             getmetatable                = getmetatable,
             throw                       = throw,
+
+            Class, Attribute, __Arguments__
         }
 
-        field {
-            _Services                   = {}
-        }
-
-        --- Add a service descriptor to the collection
-        local function add(self, descriptor)
-            self._Services[descriptor.serviceType] = descriptor
-        end
 
         local function checkOverloads(classType)
             for k, v in __Arguments__.GetOverloads(classType, "__ctor") do
@@ -126,11 +147,25 @@ PLoop(function(_ENV)
         --- Generate the service provider
         __Abstract__() __Return__{ IServiceProvider }:AsInheritable()
         function BuildServiceProvider(self)
+            local descriptors           = self._Descriptors
+            self._Descriptors           = nil
+            return IServiceProvider(descriptors or {})
         end
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
+        __Abstract__() __Arguments__{ ServiceDescriptor }:AsInheritable()
+        function Add(self, descriptor)
+            local descriptors           = self._Descriptors
+
+            if not descriptors then
+                descriptors             = {}
+                self._Descriptors       = descriptors
+            end
+
+            tinsert(descriptors, descriptor)
+        end
 
         --- Add a singleton service type
         __Arguments__{ ClassType }:Throwable()
@@ -139,11 +174,11 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(type) - the system can't figure out the arguments of the type's constructor")
             end
 
-            return add(self,    {
+            return self:Add             {
                 serviceType             = type,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationType      = type,
-            })
+            }
         end
 
         --- Add a singleton service instance
@@ -155,11 +190,11 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(object) - the object must be generated from a service type")
             end
 
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationInstance  = object,
-            })
+            }
         end
 
         __Arguments__{ InterfaceType + ClassType, ClassType }:Throwable()
@@ -172,21 +207,21 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationType      = type,
-            })
+            }
         end
 
         --- Add a singleton service generator for the target service type
         __Arguments__{ InterfaceType + ClassType + StructType, Callable }
         function AddSingleton(self, serviceType, generator)
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationFactory   = generator,
-            })
+            }
         end
 
         --- Add a singleton service object for the target service type
@@ -196,11 +231,11 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(serviceType, value) - the value must be generated from the service type")
             end
 
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationInstance  = value,
-            })
+            }
         end
 
         --- Add a scoped service type for the target service type
@@ -214,21 +249,21 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddScoped(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Scoped,
                 implementationType      = type,
-            })
+            }
         end
 
         --- Add a scoped service generator for the target service type
         __Arguments__{ InterfaceType + ClassType, Callable }
         function AddScoped(self, serviceType, generator)
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Scoped,
                 implementationFactory   = generator,
-            })
+            }
         end
 
         --- Add a transient service type for the target service type
@@ -242,21 +277,21 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddTransient(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Transient,
                 implementationType      = type,
-            })
+            }
         end
 
         --- Add a transient service generator for the target service type
         __Arguments__{ InterfaceType + ClassType, Callable }
         function AddTransient(self, serviceType, generator)
-            return add(self, {
+            return self:Add             {
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Transient,
                 implementationFactory   = generator,
-            })
+            }
         end
     end)
 end)
