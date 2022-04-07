@@ -86,7 +86,6 @@ PLoop(function(_ENV)
     interface "IServiceCollection"      (function(_ENV)
 
         export                          {
-            tinsert                     = table.insert,
             getmetatable                = getmetatable,
             throw                       = throw,
 
@@ -246,16 +245,12 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- The default service provider
     class "ServiceProvider"             (function(_ENV)
         extend "IServiceProvider"
 
-
         export                          {
             ipairs                      = ipairs,
-            getmetatable                = getmetatable,
-            throw                       = throw,
-
-            Class, Attribute, __Arguments__
         }
 
         -----------------------------------------------------------
@@ -282,9 +277,16 @@ PLoop(function(_ENV)
         end
     end)
 
+    --- The default service collection
     __Sealed__()
     class "ServiceCollection"           (function(_ENV)
         extend "IServiceCollection"
+
+        export                          {
+            tinsert                     = table.insert,
+
+            ServiceProvider
+        }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -293,7 +295,7 @@ PLoop(function(_ENV)
         function BuildServiceProvider(self)
             local descriptors           = self._Descriptors
             self._Descriptors           = nil
-            return IServiceProvider(descriptors or {})
+            return ServiceProvider(descriptors or {})
         end
 
         --- Add the descriptor to the collection
@@ -307,6 +309,5 @@ PLoop(function(_ENV)
 
             tinsert(descriptors, descriptor)
         end
-
     end)
 end)
