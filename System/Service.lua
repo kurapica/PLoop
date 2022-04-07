@@ -31,7 +31,8 @@ PLoop(function(_ENV)
 
     --- Describes a service with its service type, implementation, and lifetime
     __Sealed__()
-    struct "ServiceDescriptor"  (function(_ENV)
+    struct "ServiceDescriptor"          (function(_ENV)
+
         -- The service type
         member "serviceType"            { type = InterfaceType + ClassType + StructType, require = true }
 
@@ -57,60 +58,22 @@ PLoop(function(_ENV)
         end
     end)
 
-    --- Represents the interface of the service collection which should return a service provider to solve the class dependency
-    interface "IServiceCollection" {}
-
     --- Represents the interface of the service provider
     __Sealed__()
-    interface "IServiceProvider" (function(_ENV)
-
-        export                          {
-            ipairs                      = ipairs,
-            getmetatable                = getmetatable,
-            throw                       = throw,
-
-            Class, Attribute, __Arguments__
-        }
-
+    interface "IServiceProvider"        (function(_ENV)
         -----------------------------------------------------------
-        --                        method                         --
+        --                    abstract method                    --
         -----------------------------------------------------------
         --- Gets the service object of the specified type
         __Abstract__() __Arguments__{ AnyType }:AsInheritable()
-        function GetService(self, type)
-
-        end
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        __Abstract__()
-        function __ctor(self, descriptors)
-            local descMap               = {}
-            self._Descriptors           = descMap
-
-            for i, descriptor in ipairs(descriptors) do
-                if descMap[descriptor.serviceType] then
-                    descriptor.next     = descMap[descriptor.serviceType]
-                end
-                descMap[descriptor.serviceType] = descriptor
-            end
-        end
+        function GetService(self, type) end
     end)
 
     --- Represents the interface of the service scope
-    __Sealed__() __AnonymousClass__()
-    interface "IServiceScope" (function(_ENV)
+    __Sealed__()
+    interface "IServiceScope"           (function(_ENV)
         extend "IAutoClose" "IContext"
 
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
-        function Open(self)
-        end
-
-        function Close(self, error)
-        end
 
         -----------------------------------------------------------
         --                       property                        --
@@ -119,8 +82,8 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the interface of the service collection which should return a service provider to solve the class dependency
-    __Sealed__() __AnonymousClass__()
-    interface "IServiceCollection" (function(_ENV)
+    __Sealed__()
+    interface "IServiceCollection"      (function(_ENV)
 
         export                          {
             tinsert                     = table.insert,
@@ -146,27 +109,15 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Generate the service provider
         __Abstract__() __Return__{ IServiceProvider }:AsInheritable()
-        function BuildServiceProvider(self)
-            local descriptors           = self._Descriptors
-            self._Descriptors           = nil
-            return IServiceProvider(descriptors or {})
-        end
+        function BuildServiceProvider(self) end
+
+        --- Add the descriptor to the collection
+        __Abstract__() __Arguments__{ ServiceDescriptor }:AsInheritable()
+        function Add(self, descriptor) end
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        __Abstract__() __Arguments__{ ServiceDescriptor }:AsInheritable()
-        function Add(self, descriptor)
-            local descriptors           = self._Descriptors
-
-            if not descriptors then
-                descriptors             = {}
-                self._Descriptors       = descriptors
-            end
-
-            tinsert(descriptors, descriptor)
-        end
-
         --- Add a singleton service type
         __Arguments__{ ClassType }:Throwable()
         function AddSingleton(self, type)
@@ -293,5 +244,69 @@ PLoop(function(_ENV)
                 implementationFactory   = generator,
             }
         end
+    end)
+
+    class "ServiceProvider"             (function(_ENV)
+        extend "IServiceProvider"
+
+
+        export                          {
+            ipairs                      = ipairs,
+            getmetatable                = getmetatable,
+            throw                       = throw,
+
+            Class, Attribute, __Arguments__
+        }
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Gets the service object of the specified type
+        function GetService(self, type)
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Abstract__()
+        function __ctor(self, descriptors)
+            local descMap               = {}
+            self._Descriptors           = descMap
+
+            for i, descriptor in ipairs(descriptors) do
+                if descMap[descriptor.serviceType] then
+                    descriptor.next     = descMap[descriptor.serviceType]
+                end
+                descMap[descriptor.serviceType] = descriptor
+            end
+        end
+    end)
+
+    __Sealed__()
+    class "ServiceCollection"           (function(_ENV)
+        extend "IServiceCollection"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        --- Generate the service provider
+        function BuildServiceProvider(self)
+            local descriptors           = self._Descriptors
+            self._Descriptors           = nil
+            return IServiceProvider(descriptors or {})
+        end
+
+        --- Add the descriptor to the collection
+        function Add(self, descriptor)
+            local descriptors           = self._Descriptors
+
+            if not descriptors then
+                descriptors             = {}
+                self._Descriptors       = descriptors
+            end
+
+            tinsert(descriptors, descriptor)
+        end
+
     end)
 end)
