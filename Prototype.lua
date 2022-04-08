@@ -3128,7 +3128,7 @@ do
                 if getprototypemethod(value, "ValidateValue") then
                     -- pass
                 elseif tval == "table" then
-                    local vtype         = tryConvertToStruct(tval)
+                    local vtype         = tryConvertToStruct(value)
                     if not vtype then   _Cache(temp) return end
                     temp[key]           = vtype
                 else
