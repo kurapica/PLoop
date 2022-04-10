@@ -9,7 +9,7 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2022/03/11                                               --
 -- Update Date  :   2022/03/16                                               --
--- Version      :   1.0.0                                                    --
+-- Version      :   0.9.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -65,8 +65,12 @@ PLoop(function(_ENV)
         --                    abstract method                    --
         -----------------------------------------------------------
         --- Gets the service object of the specified type
-        __Abstract__() __Arguments__{ AnyType }:AsInheritable()
+        __Abstract__()
         function GetService(self, type) end
+
+        --- Create a new service scope
+        __Abstract__()
+        function CreateScope(self)      end
     end)
 
     --- Represents the interface of the service scope
@@ -124,7 +128,7 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(type) - the system can't figure out the arguments of the type's constructor")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = type,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationType      = type,
@@ -140,7 +144,7 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(object) - the object must be generated from a service type")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationInstance  = object,
@@ -157,7 +161,7 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddSingleton(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationType      = type,
@@ -167,7 +171,7 @@ PLoop(function(_ENV)
         --- Add a singleton service generator for the target service type
         __Arguments__{ InterfaceType + ClassType + StructType, Callable }
         function AddSingleton(self, serviceType, generator)
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationFactory   = generator,
@@ -178,10 +182,10 @@ PLoop(function(_ENV)
         __Arguments__{ InterfaceType + ClassType + StructType, Any }:Throwable()
         function AddSingleton(self, serviceType, value)
             if getmetatable(serviceType).ValidateValue(serviceType, value) == nil then
-                throw("Usage: IServiceProvider:AddSingleton(serviceType, value) - the value must be generated from the service type")
+                throw("Usage: IServiceProvider:AddSingleton(serviceType, value) - the value must match the service type")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationInstance  = value,
@@ -199,7 +203,7 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddScoped(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Scoped,
                 implementationType      = type,
@@ -209,7 +213,7 @@ PLoop(function(_ENV)
         --- Add a scoped service generator for the target service type
         __Arguments__{ InterfaceType + ClassType, Callable }
         function AddScoped(self, serviceType, generator)
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Scoped,
                 implementationFactory   = generator,
@@ -227,7 +231,7 @@ PLoop(function(_ENV)
                 throw("Usage: IServiceProvider:AddTransient(serviceType, type) - the type must be a sub type of the service type")
             end
 
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Transient,
                 implementationType      = type,
@@ -237,7 +241,7 @@ PLoop(function(_ENV)
         --- Add a transient service generator for the target service type
         __Arguments__{ InterfaceType + ClassType, Callable }
         function AddTransient(self, serviceType, generator)
-            return self:Add             {
+            return self:Add{
                 serviceType             = serviceType,
                 lifetime                = ServiceLifetime.Transient,
                 implementationFactory   = generator,
@@ -246,11 +250,15 @@ PLoop(function(_ENV)
     end)
 
     --- The default service provider
+    __Sealed__()
     class "ServiceProvider"             (function(_ENV)
         extend "IServiceProvider"
 
         export                          {
             ipairs                      = ipairs,
+            unpack                      = _G.unpack or table.unpack,
+
+            Class, Struct, Interface, __Arguments__, Attribute, ServiceLifetime
         }
 
         -----------------------------------------------------------
@@ -258,12 +266,68 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Gets the service object of the specified type
         function GetService(self, type)
+            local descMap               = self._Descriptors
+            local descriptor            = descMap and descMap[type]
+            if not descriptor then return end
+
+            if Struct.Validate(type) then
+                -- Only instance or factory allowed for the struct type
+                return descriptor.implementationInstance
+                    or descriptor.implementationFactory()
+            else
+                local instance          =   descriptor.implementationInstance
+                                        or  descriptor.implementationFactory
+                                        and descriptor.implementationFactory()
+
+                if instance then return instance end
+
+                -- Check implementation type
+                local impType           = descriptor.implementationType
+                if not impType then return end
+
+                -- Check how to create the instance
+                for _, overload in __Arguments__.GetOverloads(impType, "__ctor") do
+                    local args          = Attribute.GetAttachedData(__Arguments__, overload, impType)
+
+                    if args then
+                        if #args == 0 then
+                            instance    = impType()
+                            break
+                        else
+                            local full  = true
+                            local cnt   = #args
+
+                            for i = 1, #args do
+                                local a = args[i]
+                                local b = a.type and self:GetService(a.type) or a.default
+                                if b ~= nil or a.optional then
+                                    args[i] = b
+                                else
+                                    full= false
+                                    break
+                                end
+                            end
+
+                            if full then
+                                instance= impType(unpack(args, 1, cnt))
+                                break
+                            end
+                        end
+                    end
+                end
+
+                -- Check the lifetime
+                if instance and descriptor.lifetime == ServiceLifetime.Singleton then
+                    descriptor.implementationInstance = instance
+                end
+
+                return instance
+            end
         end
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Abstract__()
         function __ctor(self, descriptors)
             local descMap               = {}
             self._Descriptors           = descMap

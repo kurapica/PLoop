@@ -10933,7 +10933,7 @@ end
 --                          print("SetName", name)
 --                      end
 --
---                      property "Name" { type = String }
+--                      property "Name" { type = String, auto = true }
 --                  end)
 --
 --                  -- SetName  Ann
