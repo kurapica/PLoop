@@ -40,6 +40,8 @@ PLoop(function(_ENV)
         member "lifetime"               { type = ServiceLifetime, require = true }
 
         -- The implementation factory to generate the instances
+
+
         member "implementationFactory"  { type = Callable }
 
         -- The singleton instance of the service
@@ -78,10 +80,10 @@ PLoop(function(_ENV)
     interface "IServiceScope"           (function(_ENV)
         extend "IAutoClose" "IContext"
 
-
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
+        __Abstract__()
         property "ServiceProvider "     { type = IServiceProvider }
     end)
 
@@ -249,79 +251,171 @@ PLoop(function(_ENV)
         end
     end)
 
+    __Sealed__()
+    class "ServiceScope"                (function(_ENV)
+        extend "IServiceScope"
+
+        -----------------------------------------------------------
+        --                        method                         --
+        -----------------------------------------------------------
+        function Close(self)
+            self.ServiceProvider:CloseScope(self)
+        end
+
+        -----------------------------------------------------------
+        --                      constructor                      --
+        -----------------------------------------------------------
+        __Arguments__{ IServiceProvider }
+        function __ctor(self, serviceProvider, context)
+            self.ServiceProvider        = serviceProvider
+        end
+    end)
+
     --- The default service provider
     __Sealed__()
     class "ServiceProvider"             (function(_ENV)
-        extend "IServiceProvider"
+        extend "IServiceProvider" "IAutoClose"
 
         export                          {
             ipairs                      = ipairs,
             unpack                      = _G.unpack or table.unpack,
+            tinsert                     = table.insert,
+            tremove                     = table.remove,
+            pcall                       = pcall,
 
-            Class, Struct, Interface, __Arguments__, Attribute, ServiceLifetime
+            Class, Struct, Interface, IAutoClose,
+            __Arguments__, Attribute, ServiceLifetime, ServiceScope, List
         }
+
+        field                           {
+            __Descriptors               = {}
+        }
+
+        local addScope, removeScope, getScope
+
+
+        if Platform.ENABLE_CONTEXT_FEATURES then
+            export { getcontext         = Context.GetCurrentContext }
+
+        else
+            -- Single thread
+            field { __Scopes            = {} }
+
+            addScope                    = function(self, scope)
+                return tinsert(self.__Scopes, scope)
+            end
+
+            removeScope                 = function(self, scope)
+                local scopes            = self.__Scopes
+
+                for i = 1, #scopes do
+                    if scopes[i] == scope then
+                        for j = #scopes, i, -1 do
+                            scope       = scopes[j]
+                            scopes[j]   = nil
+
+                            scope:Close()
+                        end
+
+                        break
+                    end
+                end
+            end
+        end
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Gets the service object of the specified type
         function GetService(self, type)
-            local descMap               = self._Descriptors
+            local descMap               = self.__Descriptors
             local descriptor            = descMap and descMap[type]
             if not descriptor then return end
 
+            local instance              = descriptor.implementationInstance
+            if instance then return instance end
+
             if Struct.Validate(type) then
                 -- Only instance or factory allowed for the struct type
-                return descriptor.implementationInstance
-                    or descriptor.implementationFactory()
-            else
-                local instance          =   descriptor.implementationInstance
-                                        or  descriptor.implementationFactory
-                                        and descriptor.implementationFactory()
+                return descriptor.implementationFactory()
+            end
 
-                if instance then return instance end
+            local instance          =   descriptor.implementationInstance
+                                    or  descriptor.implementationFactory
+                                    and descriptor.implementationFactory()
 
-                -- Check implementation type
-                local impType           = descriptor.implementationType
-                if not impType then return end
+            if instance then return instance end
 
-                -- Check how to create the instance
-                for _, overload in __Arguments__.GetOverloads(impType, "__ctor") do
-                    local args          = Attribute.GetAttachedData(__Arguments__, overload, impType)
+            -- Check implementation type
+            local impType           = descriptor.implementationType
+            if not impType then return end
 
-                    if args then
-                        if #args == 0 then
-                            instance    = impType()
-                            break
-                        else
-                            local full  = true
-                            local cnt   = #args
+            -- Check how to create the instance
+            for _, overload in __Arguments__.GetOverloads(impType, "__ctor") do
+                local args          = Attribute.GetAttachedData(__Arguments__, overload, impType)
 
-                            for i = 1, #args do
-                                local a = args[i]
-                                local b = a.type and self:GetService(a.type) or a.default
-                                if b ~= nil or a.optional then
-                                    args[i] = b
-                                else
-                                    full= false
-                                    break
-                                end
-                            end
+                if args then
+                    if #args == 0 then
+                        instance    = impType()
+                        break
+                    else
+                        local full  = true
+                        local cnt   = #args
 
-                            if full then
-                                instance= impType(unpack(args, 1, cnt))
+                        for i = 1, #args do
+                            local a = args[i]
+                            local b = a.type and self:GetService(a.type) or a.default
+                            if b ~= nil or a.optional then
+                                args[i] = b
+                            else
+                                full= false
                                 break
                             end
                         end
+
+                        if full then
+                            instance= impType(unpack(args, 1, cnt))
+                            break
+                        end
                     end
                 end
+            end
 
-                -- Check the lifetime
-                if instance and descriptor.lifetime == ServiceLifetime.Singleton then
+            -- Check the lifetime
+            if instance then
+                if descriptor.lifetime == ServiceLifetime.Singleton then
                     descriptor.implementationInstance = instance
                 end
+            end
 
-                return instance
+            return instance
+        end
+
+        --- Create a new service scope
+        function CreateScope(self)
+            local scope                 = ServiceScope(self)
+            addScope(self, scope)
+            return scope
+        end
+
+        --- Close the service scope
+        function CloseScope(self, scope)
+
+        end
+
+        --- Close the service provider
+        function Close(self)
+            for type, descriptor in pairs(self.__Descriptors) do
+                while descriptor do
+                    local instance      = descriptor.implementationInstance
+
+                    if instance and Class.IsSubType(Class.GetObjectClass(instance), IAutoClose) then
+                        local ok, msg   = pcall(instance.Close, instance)
+
+                    end
+
+                    descriptor          = descriptor.prev
+                end
             end
         end
 
@@ -329,12 +423,11 @@ PLoop(function(_ENV)
         --                      constructor                      --
         -----------------------------------------------------------
         function __ctor(self, descriptors)
-            local descMap               = {}
-            self._Descriptors           = descMap
+            local descMap               = self.__Descriptors
 
             for i, descriptor in ipairs(descriptors) do
                 if descMap[descriptor.serviceType] then
-                    descriptor.next     = descMap[descriptor.serviceType]
+                    descriptor.prev     = descMap[descriptor.serviceType]
                 end
                 descMap[descriptor.serviceType] = descriptor
             end
@@ -352,23 +445,28 @@ PLoop(function(_ENV)
             ServiceProvider
         }
 
+        field                           {
+            __Descriptors               = false
+        }
+
+
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Generate the service provider
         function BuildServiceProvider(self)
-            local descriptors           = self._Descriptors
-            self._Descriptors           = nil
+            local descriptors           = self.__Descriptors
+            self.__Descriptors           = false
             return ServiceProvider(descriptors or {})
         end
 
         --- Add the descriptor to the collection
         function Add(self, descriptor)
-            local descriptors           = self._Descriptors
+            local descriptors           = self.__Descriptors
 
             if not descriptors then
                 descriptors             = {}
-                self._Descriptors       = descriptors
+                self.__Descriptors      = descriptors
             end
 
             tinsert(descriptors, descriptor)
