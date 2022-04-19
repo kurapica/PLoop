@@ -308,9 +308,15 @@ PLoop(function(_ENV)
         }
 
         field                           {
-            __Descriptors               = {}
+            __Descriptors               = {},
             __Instances                 = {}
         }
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The service scope
+        property "Scope"                { type = ServiceScope }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -427,6 +433,7 @@ PLoop(function(_ENV)
         --- Construct the scope service provider
         __Arguments__{ ServiceScope }
         function __ctor(self, scope)
+            self.ServiceScope           = scope
             self.__Descriptors          = scope.RootServiceProvider.__Descriptors
         end
     end)
@@ -446,7 +453,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The service descriptors
-        property "Descriptors"          { type = List[ServiceDescriptor], default = function() return List[ServiceDescriptor]() }
+        property "Descriptors"          { type = List[ServiceDescriptor], default = function() return List[ServiceDescriptor]() end }
 
         -----------------------------------------------------------
         --                        method                         --
