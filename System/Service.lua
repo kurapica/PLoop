@@ -40,8 +40,6 @@ PLoop(function(_ENV)
         member "lifetime"               { type = ServiceLifetime, require = true }
 
         -- The implementation factory to generate the instances
-
-
         member "implementationFactory"  { type = Callable }
 
         -- The singleton instance of the service
@@ -78,7 +76,7 @@ PLoop(function(_ENV)
     --- Represents the interface of the service scope
     __Sealed__()
     interface "IServiceScope"           (function(_ENV)
-        extend "IAutoClose" "IContext"
+        extend "IAutoClose"
 
         -----------------------------------------------------------
         --                       property                        --
@@ -251,23 +249,44 @@ PLoop(function(_ENV)
         end
     end)
 
+    ---------------------------------------------------------------
+    -- Implementation
+    ---------------------------------------------------------------
+    -- Declare first
+    class "ServiceCollection"           {}
+    class "ServiceProvider"             {}
+
+    --- The default service scope
     __Sealed__()
     class "ServiceScope"                (function(_ENV)
-        extend "IServiceScope"
+        extend "IServiceScope" "IContext"
+
+        export                          {
+            ServiceProvider
+        }
+
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The root service provider
+        property "RootServiceProvider"  { type = IServiceProvider }
+
+        --- The service provider
+        property "ServiceProvider"      { set = false, default = function(self) return ServiceProvider(self) end }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         function Close(self)
-            self.ServiceProvider:CloseScope(self)
+            self.ServiceProvider:Close()
         end
 
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        __Arguments__{ IServiceProvider }
-        function __ctor(self, serviceProvider, context)
-            self.ServiceProvider        = serviceProvider
+        __Arguments__{ ServiceProvider }
+        function __ctor(self, serviceProvider)
+            self.RootServiceProvider    = serviceProvider
         end
     end)
 
@@ -284,44 +303,14 @@ PLoop(function(_ENV)
             pcall                       = pcall,
 
             Class, Struct, Interface, IAutoClose,
-            __Arguments__, Attribute, ServiceLifetime, ServiceScope, List
+            __Arguments__, Attribute, List,
+            ServiceLifetime, ServiceScope, IServiceProvider
         }
 
         field                           {
             __Descriptors               = {}
+            __Instances                 = {}
         }
-
-        local addScope, removeScope, getScope
-
-
-        if Platform.ENABLE_CONTEXT_FEATURES then
-            export { getcontext         = Context.GetCurrentContext }
-
-        else
-            -- Single thread
-            field { __Scopes            = {} }
-
-            addScope                    = function(self, scope)
-                return tinsert(self.__Scopes, scope)
-            end
-
-            removeScope                 = function(self, scope)
-                local scopes            = self.__Scopes
-
-                for i = 1, #scopes do
-                    if scopes[i] == scope then
-                        for j = #scopes, i, -1 do
-                            scope       = scopes[j]
-                            scopes[j]   = nil
-
-                            scope:Close()
-                        end
-
-                        break
-                    end
-                end
-            end
-        end
 
         -----------------------------------------------------------
         --                        method                         --
@@ -393,14 +382,7 @@ PLoop(function(_ENV)
 
         --- Create a new service scope
         function CreateScope(self)
-            local scope                 = ServiceScope(self)
-            addScope(self, scope)
-            return scope
-        end
-
-        --- Close the service scope
-        function CloseScope(self, scope)
-
+            return ServiceScope(self)
         end
 
         --- Close the service provider
@@ -422,15 +404,30 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
-        function __ctor(self, descriptors)
+        --- Construct the root service provider
+        __Arguments__{ ServiceCollection }
+        function __ctor(self, collection)
             local descMap               = self.__Descriptors
 
-            for i, descriptor in ipairs(descriptors) do
+            for i, descriptor in ipairs(collection.Descriptors) do
                 if descMap[descriptor.serviceType] then
                     descriptor.prev     = descMap[descriptor.serviceType]
                 end
                 descMap[descriptor.serviceType] = descriptor
             end
+
+            -- Register self
+            descMap[IServiceProvider]   = {
+                serviceType             = IServiceProvider,
+                lifetime                = ServiceLifetime.Singleton,
+                implementationInstance  = self,
+            }
+        end
+
+        --- Construct the scope service provider
+        __Arguments__{ ServiceScope }
+        function __ctor(self, scope)
+            self.__Descriptors          = scope.RootServiceProvider.__Descriptors
         end
     end)
 
@@ -442,34 +439,28 @@ PLoop(function(_ENV)
         export                          {
             tinsert                     = table.insert,
 
-            ServiceProvider
+            ServiceProvider, List
         }
 
-        field                           {
-            __Descriptors               = false
-        }
-
+        -----------------------------------------------------------
+        --                       property                        --
+        -----------------------------------------------------------
+        --- The service descriptors
+        property "Descriptors"          { type = List[ServiceDescriptor], default = function() return List[ServiceDescriptor]() }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         --- Generate the service provider
         function BuildServiceProvider(self)
-            local descriptors           = self.__Descriptors
-            self.__Descriptors           = false
-            return ServiceProvider(descriptors or {})
+            local provider              = ServiceProvider(self)
+            self.Descriptors            = nil
+            return provider
         end
 
         --- Add the descriptor to the collection
         function Add(self, descriptor)
-            local descriptors           = self.__Descriptors
-
-            if not descriptors then
-                descriptors             = {}
-                self.__Descriptors      = descriptors
-            end
-
-            tinsert(descriptors, descriptor)
+            self.Descriptors:Insert(descriptor)
         end
     end)
 end)
