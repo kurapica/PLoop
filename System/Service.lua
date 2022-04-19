@@ -61,6 +61,8 @@ PLoop(function(_ENV)
     --- Represents the interface of the service provider
     __Sealed__()
     interface "IServiceProvider"        (function(_ENV)
+        extend "IAutoClose"
+
         -----------------------------------------------------------
         --                    abstract method                    --
         -----------------------------------------------------------
@@ -116,7 +118,7 @@ PLoop(function(_ENV)
 
         --- Add the descriptor to the collection
         __Abstract__() __Arguments__{ ServiceDescriptor }:AsInheritable()
-        function Add(self, descriptor) end
+        function Add(self, descriptor)  end
 
         -----------------------------------------------------------
         --                        method                         --
@@ -259,7 +261,7 @@ PLoop(function(_ENV)
     --- The default service scope
     __Sealed__()
     class "ServiceScope"                (function(_ENV)
-        extend "IServiceScope" "IContext"
+        extend "IServiceScope"
 
         export                          {
             ServiceProvider
@@ -272,7 +274,7 @@ PLoop(function(_ENV)
         property "RootServiceProvider"  { type = IServiceProvider }
 
         --- The service provider
-        property "ServiceProvider"      { set = false, default = function(self) return ServiceProvider(self) end }
+        property "ServiceProvider"      { set  = false, default = function(self) return ServiceProvider(self) end }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -302,8 +304,7 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             pcall                       = pcall,
 
-            Class, Struct, Interface, IAutoClose,
-            __Arguments__, Attribute, List,
+            Class, Struct, Interface, IAutoClose, __Arguments__, Attribute, List,
             ServiceLifetime, ServiceScope, IServiceProvider
         }
 
@@ -324,6 +325,7 @@ PLoop(function(_ENV)
         --- Gets the service object of the specified type
         function GetService(self, type)
             local descMap               = self.__Descriptors
+            local instances             = self.__Instances
             local descriptor            = descMap and descMap[type]
             if not descriptor then return end
 
