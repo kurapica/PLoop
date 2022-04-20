@@ -326,6 +326,7 @@ PLoop(function(_ENV)
         function GetService(self, type)
             local descMap               = self.__Descriptors
             local instances             = self.__Instances
+
             local descriptor            = descMap and descMap[type]
             if not descriptor then return end
 
@@ -337,42 +338,45 @@ PLoop(function(_ENV)
                 return descriptor.implementationFactory()
             end
 
-            local instance          =   descriptor.implementationInstance
-                                    or  descriptor.implementationFactory
-                                    and descriptor.implementationFactory()
-
+            -- Check generated instances
+            instance                    = instances[type]
             if instance then return instance end
 
-            -- Check implementation type
-            local impType           = descriptor.implementationType
-            if not impType then return end
+            -- Generate the instance from factory
+            if descriptor.implementationFactory then
+                instance                = descriptor.implementationFactory()
+            else
+                -- Check implementation type
+                local impType           = descriptor.implementationType
+                if not impType then return end
 
-            -- Check how to create the instance
-            for _, overload in __Arguments__.GetOverloads(impType, "__ctor") do
-                local args          = Attribute.GetAttachedData(__Arguments__, overload, impType)
+                -- Check how to create the instance
+                for _, overload in __Arguments__.GetOverloads(impType, "__ctor") do
+                    local args          = Attribute.GetAttachedData(__Arguments__, overload, impType)
 
-                if args then
-                    if #args == 0 then
-                        instance    = impType()
-                        break
-                    else
-                        local full  = true
-                        local cnt   = #args
+                    if args then
+                        if #args == 0 then
+                            instance    = impType()
+                            break
+                        else
+                            local full  = true
+                            local cnt   = #args
 
-                        for i = 1, #args do
-                            local a = args[i]
-                            local b = a.type and self:GetService(a.type) or a.default
-                            if b ~= nil or a.optional then
-                                args[i] = b
-                            else
-                                full= false
+                            for i = 1, #args do
+                                local a = args[i]
+                                local b = a.type and self:GetService(a.type) or a.default
+                                if b ~= nil or a.optional then
+                                    args[i] = b
+                                else
+                                    full= false
+                                    break
+                                end
+                            end
+
+                            if full then
+                                instance= impType(unpack(args, 1, cnt))
                                 break
                             end
-                        end
-
-                        if full then
-                            instance= impType(unpack(args, 1, cnt))
-                            break
                         end
                     end
                 end
@@ -382,6 +386,8 @@ PLoop(function(_ENV)
             if instance then
                 if descriptor.lifetime == ServiceLifetime.Singleton then
                     descriptor.implementationInstance = instance
+                elseif descriptor.lifetime == ServiceLifetime.Scoped then
+                    instances[type]     = instance
                 end
             end
 
