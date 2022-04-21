@@ -303,6 +303,8 @@ PLoop(function(_ENV)
             tinsert                     = table.insert,
             tremove                     = table.remove,
             pcall                       = pcall,
+            error                       = error,
+            tostring                    = tostring,
 
             Class, Struct, Interface, IAutoClose, __Arguments__, Attribute, List,
             ServiceLifetime, ServiceScope, IServiceProvider
@@ -380,6 +382,10 @@ PLoop(function(_ENV)
                         end
                     end
                 end
+            end
+
+            if not (instance and Class.IsObjectType(instance, type)) then
+                error("The instance  of " .. tostring(type) .. " can't be generated", 2)
             end
 
             -- Check the lifetime
