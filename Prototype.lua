@@ -115,6 +115,9 @@ do
 
             -- Share API
             fakefunc                    = function() end,
+
+            -- Placeholder
+            namespace                   = false,
         }, {
             __index                     = function(self, k)
                 -- For System namespaces access only, the keyword are already saved
@@ -1189,7 +1192,7 @@ do
     end
 
     local saveAttributeData             = function (attrType, target, data, owner)
-        if owner then
+        if owner and (not namespace or namespace.Validate(owner)) then
             _AttrOwnerSubData           = savestorage(_AttrOwnerSubData, attrType, savestorage(_AttrOwnerSubData[attrType] or newstorage(WEAK_KEY), owner, savestorage(_AttrOwnerSubData[attrType] and _AttrOwnerSubData[attrType][owner] or newstorage(WEAK_KEY), target, data)))
         else
             _AttrTargetData             = savestorage(_AttrTargetData, attrType, savestorage(_AttrTargetData[attrType] or newstorage(WEAK_KEY), target, data))
@@ -13936,7 +13939,11 @@ do
 
     --- Represents any validation type
     __Sealed__()
-    struct "System.AnyType"             { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+    struct "System.AnyType"             { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end }
+
+    --- Represents the object generated from class
+    __Sealed__()
+    struct "System.Object"              { function(val, onlyvalid) return not class.GetObjectClass(val) and (onlyvalid or "the %s is not an object") or nil end }
 
     --- Represents lambda value, used to string like 'x, y => x + y' to function
     __Sealed__()
@@ -14110,7 +14117,6 @@ do
             end
         end
     end)
-
 
     -----------------------------------------------------------------------
     --                             interface                             --

@@ -95,19 +95,8 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             throw                       = throw,
 
-            Class, Attribute, __Arguments__
+            Class
         }
-
-
-        local function checkOverloads(classType)
-            for k, v in __Arguments__.GetOverloads(classType, "__ctor") do
-                if Attribute.HasAttachedData(__Arguments__, v, classType) then
-                    return true
-                end
-            end
-
-            return false
-        end
 
         -----------------------------------------------------------
         --                    abstract method                    --
@@ -126,10 +115,6 @@ PLoop(function(_ENV)
         --- Add a singleton service type
         __Arguments__{ ClassType }:Throwable()
         function AddSingleton(self, type)
-            if not checkOverloads(type) then
-                throw("Usage: IServiceProvider:AddSingleton(type) - the system can't figure out the arguments of the type's constructor")
-            end
-
             return self:Add{
                 serviceType             = type,
                 lifetime                = ServiceLifetime.Singleton,
@@ -155,10 +140,6 @@ PLoop(function(_ENV)
 
         __Arguments__{ InterfaceType + ClassType, ClassType }:Throwable()
         function AddSingleton(self, serviceType, type)
-            if not checkOverloads(type) then
-                throw("Usage: IServiceProvider:AddSingleton(type) - the system can't figure out the arguments of the type's constructor")
-            end
-
             if not Class.IsSubType(type, serviceType) then
                 throw("Usage: IServiceProvider:AddSingleton(serviceType, type) - the type must be a sub type of the service type")
             end
@@ -197,10 +178,6 @@ PLoop(function(_ENV)
         --- Add a scoped service type for the target service type
         __Arguments__{ InterfaceType + ClassType, ClassType }:Throwable()
         function AddScoped(self, serviceType, type)
-            if not checkOverloads(type) then
-                throw("Usage: IServiceProvider:AddScoped(type) - the system can't figure out the arguments of the type's constructor")
-            end
-
             if not Class.IsSubType(type, serviceType) then
                 throw("Usage: IServiceProvider:AddScoped(serviceType, type) - the type must be a sub type of the service type")
             end
@@ -225,10 +202,6 @@ PLoop(function(_ENV)
         --- Add a transient service type for the target service type
         __Arguments__{ InterfaceType + ClassType, ClassType }:Throwable()
         function AddTransient(self, serviceType, type)
-            if not checkOverloads(type) then
-                throw("Usage: IServiceProvider:AddTransient(type) - the system can't figure out the arguments of the type's constructor")
-            end
-
             if not Class.IsSubType(type, serviceType) then
                 throw("Usage: IServiceProvider:AddTransient(serviceType, type) - the type must be a sub type of the service type")
             end
@@ -299,12 +272,15 @@ PLoop(function(_ENV)
 
         export                          {
             ipairs                      = ipairs,
+            pairs                       = pairs,
+            type                        = type,
             unpack                      = _G.unpack or table.unpack,
             tinsert                     = table.insert,
             tremove                     = table.remove,
             pcall                       = pcall,
             error                       = error,
             tostring                    = tostring,
+            Error                       = Logger.Default[Logger.LogLevel.Error],
 
             Class, Struct, Interface, IAutoClose, __Arguments__, Attribute, List,
             ServiceLifetime, ServiceScope, IServiceProvider
@@ -319,7 +295,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The service scope
-        property "Scope"                { type = ServiceScope }
+        property "ServiceScope"         { type = ServiceScope }
 
         -----------------------------------------------------------
         --                        method                         --
@@ -384,8 +360,8 @@ PLoop(function(_ENV)
                 end
             end
 
-            if not (instance and Class.IsObjectType(instance, type)) then
-                error("The instance  of " .. tostring(type) .. " can't be generated", 2)
+            if instance and not Class.IsObjectType(instance, type) then
+                error("The instance generated for " .. tostring(type) .. " isn't valid", 2)
             end
 
             -- Check the lifetime
@@ -394,6 +370,12 @@ PLoop(function(_ENV)
                     descriptor.implementationInstance = instance
                 elseif descriptor.lifetime == ServiceLifetime.Scoped then
                     instances[type]     = instance
+                end
+
+                if Class.IsObjectType(instance, IAutoClose) then
+                    -- open the instance
+                    -- @todo: handle error
+                    instance:Open()
                 end
             end
 
@@ -407,18 +389,158 @@ PLoop(function(_ENV)
 
         --- Close the service provider
         function Close(self)
-            for type, descriptor in pairs(self.__Descriptors) do
-                while descriptor do
-                    local instance      = descriptor.implementationInstance
-
-                    if instance and Class.IsSubType(Class.GetObjectClass(instance), IAutoClose) then
+            for type, instance in pairs(self.__Instances) do
+                if Class.GetObjectClass(instance) then
+                    if Class.IsObjectType(instance, IAutoClose) then
                         local ok, msg   = pcall(instance.Close, instance)
+                        if not ok then
+                            Error("CLose instance of %s failed - %s", tostring(type), msg)
+                        end
 
+                        if instance.Dispose then
+                            instance:Dispose()
+                        end
                     end
-
-                    descriptor          = descriptor.prev
                 end
             end
+
+            if not self.ServiceScope then
+                for type, descriptor in pairs(self.__Descriptors) do
+                    while descriptor and not descriptor.closed do
+                        descriptor.closed       = true
+                        local instance          = descriptor.implementationInstance
+
+                        if instance and Class.GetObjectClass(instance) then
+                            if Class.IsObjectType(instance, IAutoClose) then
+                                local ok, msg   = pcall(instance.Close, instance)
+                                if not ok then
+                                    Error("CLose instance of %s failed - %s", tostring(type), msg)
+                                end
+
+                                if instance.Dispose then
+                                    instance:Dispose()
+                                end
+                            end
+                        end
+
+                        descriptor      = descriptor.prev
+                    end
+                end
+            end
+        end
+
+        function CallMethod(self, object, name)
+            if type(object) == "function" then
+                -- Call Module function
+                local args              = Attribute.GetAttachedData(__Arguments__, object)
+
+                if args then
+                    if #args == 0 then
+                        return object()
+                    else
+                        local full      = true
+                        local cnt       = #args
+
+                        for i = 1, #args do
+                            local a     = args[i]
+                            local b     = a.type and self:GetService(a.type) or a.default
+                            if b ~= nil or a.optional then
+                                args[i] = b
+                            else
+                                full    = false
+                                break
+                            end
+                        end
+
+                        if full then
+                            return object(unpack(args, 1, cnt))
+                        end
+                    end
+                end
+
+                error("Usage: ServiceProvider:CallMethod(func[, owner]) - can't figure out the arguments of the function", 2)
+            end
+
+            if Namespace.Validate(object) and type(name) == "string" then
+                -- Call static method
+                -- Check how to create the instance
+                for _, overload in __Arguments__.GetOverloads(object, name) do
+                    local args          = Attribute.GetAttachedData(__Arguments__, overload, object)
+
+                    if args then
+                        if #args == 0 then
+                            return overload()
+                        else
+                            local full      = true
+                            local cnt       = #args
+
+                            for i = 1, #args do
+                                local a     = args[i]
+                                local b     = a.type and self:GetService(a.type) or a.default
+                                if b ~= nil or a.optional then
+                                    args[i] = b
+                                else
+                                    full    = false
+                                    break
+                                end
+                            end
+
+                            if full then
+                                return overload(unpack(args, 1, cnt))
+                            end
+                        end
+                    end
+                end
+
+                error("Usage: ServiceProvider:CallMethod(type, name) - can't figure out the arguments of the static method", 2)
+            end
+
+            local clsType               = Class.GetObjectClass(object)
+
+            if clsType then
+                local method            = Class.GetNormalMethod(clsType, name)
+
+                while not method and clsType do
+                    clsType             = Class.GetSuperClass(clsType)
+                    method              = Class.GetNormalMethod(clsType, name)
+                end
+
+                -- Don't use throw here to avoid coroutine conflict
+                if method then
+                    -- Check how to create the instance
+                    for _, overload in __Arguments__.GetOverloads(clsType, name) do
+                        local args      = Attribute.GetAttachedData(__Arguments__, overload, clsType)
+
+                        if args then
+                            if #args == 0 then
+                                return overload(object)
+                            else
+                                local full      = true
+                                local cnt       = #args
+
+                                for i = 1, #args do
+                                    local a     = args[i]
+                                    local b     = a.type and self:GetService(a.type) or a.default
+                                    if b ~= nil or a.optional then
+                                        args[i] = b
+                                    else
+                                        full    = false
+                                        break
+                                    end
+                                end
+
+                                if full then
+                                    return overload(object, unpack(args, 1, cnt))
+                                end
+                            end
+                        end
+                    end
+                end
+
+                error("Usage: ServiceProvider:CallMethod(object, methodName) - can't figure out the arguments or the method", 2)
+            end
+
+            error("Usage: ServiceProvider:CallMethod(func)|(object, name)|(type, name) - can't figure out target", 2)
         end
 
         -----------------------------------------------------------
@@ -441,6 +563,7 @@ PLoop(function(_ENV)
                 serviceType             = IServiceProvider,
                 lifetime                = ServiceLifetime.Singleton,
                 implementationInstance  = self,
+                closed                  = true,
             }
         end
 
