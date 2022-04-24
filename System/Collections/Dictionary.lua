@@ -20,54 +20,49 @@ PLoop(function(_ENV)
     -- Helpers
     export { yield = coroutine.yield, ipairs = ipairs }
 
-    __Iterator__() iterforpair  = function (lstKey, lstValue)
-        local yield = yield
-        local iter, o, idx, value = (lstValue.GetIterator or ipairs)(lstValue)
+    __Iterator__() iterforpair          = function (lstKey, lstValue)
+        local yield                     = yield
+        local iter, o, idx, value       = (lstValue.GetIterator or ipairs)(lstValue)
         for _, key in (lstValue.GetIterator or ipairs)(lstKey) do
-            idx, value = iter(o, idx)
+            idx, value                  = iter(o, idx)
             if idx then yield(key, value) else break end
         end
     end
 
     --- Represents the key-value pairs collections
-    interface "IDictionary" { Iterable }
+    interface "IDictionary"             { Iterable }
 
     --- The un-safe dictionary, it'll use the table as the object directly to gain
     -- the best performance, it's safe when no method name, property name will be
     -- used as keys.
     __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
     __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    class "Dictionary" (function (_ENV, keytype, valtype)
+    class "Dictionary"                  (function (_ENV, keytype, valtype)
         extend "IDictionary" "ISerializable"
 
-        export {
-            ipairs              = ipairs,
-            pairs               = pairs,
-            GetErrorMessage     = Struct.GetErrorMessage,
-            tostring            = tostring,
+        export                          {
+            ipairs                      = ipairs,
+            pairs                       = pairs,
+            GetErrorMessage             = Struct.GetErrorMessage,
+            tostring                    = tostring,
+            rawset                      = rawset,
+            kvalid                      = keytype ~= Any and getmetatable(keytype).ValidateValue or nil,
+            vvalid                      = valtype ~= Any and getmetatable(valtype).ValidateValue or nil,
 
             List[keytype], List[valtype]
         }
-
-        if keytype ~= Any then
-            export { kvalid     = getmetatable(keytype).ValidateValue, rawset = rawset }
-        end
-
-        if valtype ~= Any then
-            export { vvalid     = getmetatable(valtype).ValidateValue, rawset = rawset }
-        end
 
         -----------------------------------------------------------
         --                     serialization                     --
         -----------------------------------------------------------
         function Serialize(self, info)
-            local key   = {}
-            local val   = {}
-            local idx   = 1
+            local key                   = {}
+            local val                   = {}
+            local idx                   = 1
             for k, v in self:GetIterator() do
-                key[idx]= k
-                val[idx]= v
-                idx     = idx + 1
+                key[idx]                = k
+                val[idx]                = v
+                idx                     = idx + 1
             end
 
             info:SetValue(1, List[keytype](key))
@@ -76,8 +71,8 @@ PLoop(function(_ENV)
 
         __Arguments__{ SerializationInfo }
         function __new(_, info)
-            local key     = info:GetValue(1, List[keytype])
-            local val     = info:GetValue(2, List[valtype])
+            local key                   = info:GetValue(1, List[keytype])
+            local val                   = info:GetValue(2, List[valtype])
 
             return this(_, key, val)
         end
@@ -85,7 +80,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        GetIterator     = pairs
+        GetIterator                     = pairs
 
         if keytype == Any and valtype == Any then
             --- Update the dictionary
@@ -110,9 +105,9 @@ PLoop(function(_ENV)
             __Arguments__{ RawTable }
             function Update(self, dict)
                 for k, v in pairs(dict) do
-                    local ret, msg  = vvalid(valtype, v, true)
+                    local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -121,9 +116,9 @@ PLoop(function(_ENV)
             __Arguments__{ IDictionary }
             function Update(self, dict)
                 for k, v in dict:GetIterator() do
-                    local ret, msg  = vvalid(valtype, v, true)
+                    local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -132,9 +127,9 @@ PLoop(function(_ENV)
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Update(self, iter, obj, idx)
                 for k, v in iter, obj, idx do
-                    local ret, msg  = vvalid(valtype, v, true)
+                    local ret, msg      = vvalid(valtype, v, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -143,9 +138,9 @@ PLoop(function(_ENV)
             __Arguments__{ RawTable }
             function Update(self, dict)
                 for k, v in pairs(dict) do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -154,9 +149,9 @@ PLoop(function(_ENV)
             __Arguments__{ IDictionary }
             function Update(self, dict)
                 for k, v in dict:GetIterator() do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -165,9 +160,9 @@ PLoop(function(_ENV)
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Update(self, iter, obj, idx)
                 for k, v in iter, obj, idx do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        self[k]     = v
+                        self[k]         = v
                     end
                 end
                 return self
@@ -176,11 +171,11 @@ PLoop(function(_ENV)
             __Arguments__{ RawTable }
             function Update(self, dict)
                 for k, v in pairs(dict) do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        ret, msg    = vvalid(valtype, v, true)
+                        ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[k] = v
+                            self[k]     = v
                         end
                     end
                 end
@@ -190,11 +185,11 @@ PLoop(function(_ENV)
             __Arguments__{ IDictionary }
             function Update(self, dict)
                 for k, v in dict:GetIterator() do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        ret, msg    = vvalid(valtype, v, true)
+                        ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[k] = v
+                            self[k]     = v
                         end
                     end
                 end
@@ -204,11 +199,11 @@ PLoop(function(_ENV)
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Update(self, iter, obj, idx)
                 for k, v in iter, obj, idx do
-                    local ret, msg  = kvalid(keytype, k, true)
+                    local ret, msg      = kvalid(keytype, k, true)
                     if not msg then
-                        ret, msg    = vvalid(valtype, v, true)
+                        ret, msg        = vvalid(valtype, v, true)
                         if not msg then
-                            self[k] = v
+                            self[k]     = v
                         end
                     end
                 end
@@ -227,12 +222,12 @@ PLoop(function(_ENV)
 
         __Arguments__{ RawTable + IList, RawTable + IList }
         function __new(_, lstKey, lstValue)
-            local dict  = {}
-            local iter, o, idx, value = (lstValue.GetIterator or ipairs)(lstValue)
+            local dict                  = {}
+            local iter, o, idx, value   = (lstValue.GetIterator or ipairs)(lstValue)
             for _, key in (lstKey.GetIterator or ipairs)(lstKey) do
-                idx, value = iter(o, idx)
+                idx, value              = iter(o, idx)
                 if idx then
-                    dict[key] = value
+                    dict[key]           = value
                 else
                     break
                 end
@@ -242,27 +237,27 @@ PLoop(function(_ENV)
 
         __Arguments__{ RawTable + IList, Any }
         function __new(_, lstKey, value)
-            local dict  = {}
+            local dict                  = {}
             for _, key in (lstKey.GetIterator or ipairs)(lstKey) do
-                dict[key] = value
+                dict[key]               = value
             end
             return dict, true
         end
 
         __Arguments__{ IDictionary }
         function __new(_, obj)
-            local dict  = {}
+            local dict                  = {}
             for key, value in obj:GetIterator() do
-                dict[key] = value
+                dict[key]               = value
             end
             return dict, true
         end
 
         __Arguments__{ Callable, Any/nil, Any/nil }
         function __new(_, iter, obj, idx)
-            local dict  = {}
+            local dict                  = {}
             for key, value in iter, obj, idx do
-                dict[key] = value
+                dict[key]               = value
             end
             return dict, true
         end
@@ -271,19 +266,19 @@ PLoop(function(_ENV)
             function __ctor(self)
                 local msg
                 for k, v in self:GetIterator() do
-                    k, msg = kvalid(keytype, k)
+                    k, msg              = kvalid(keytype, k)
                     if msg then throw(GetErrorMessage(msg, "field")) end
 
-                    v, msg = vvalid(valtype, v)
+                    v, msg              = vvalid(valtype, v)
                     if msg then throw(GetErrorMessage(msg, "value")) end
-                    self[k]= v
+                    self[k]             = v
                 end
             end
         elseif keytype ~= Any then
             function __ctor(self)
                 local msg
                 for k, v in self:GetIterator() do
-                    k, msg = kvalid(keytype, k)
+                    k, msg              = kvalid(keytype, k)
                     if msg then throw(GetErrorMessage(msg, "field")) end
                 end
             end
@@ -291,9 +286,9 @@ PLoop(function(_ENV)
             function __ctor(self)
                 local msg
                 for k, v in self:GetIterator() do
-                    v, msg = vvalid(valtype, v)
+                    v, msg              = vvalid(valtype, v)
                     if msg then throw(GetErrorMessage(msg, "value")) end
-                    self[k]= v
+                    self[k]             = v
                 end
             end
         end
@@ -303,25 +298,25 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         if keytype ~= Any or valtype ~= Any then
             __Arguments__{ keytype, valtype }
-            __newindex = rawset
+            __newindex                  = rawset
         end
     end)
 
     --- The dynamic dictionary
     __Sealed__() __NoRawSet__(true)
-    class "XDictionary" (function(_ENV)
+    class "XDictionary"                 (function(_ENV)
         extend "IDictionary"
         export { iterforpair = iterforpair, pairs = pairs }
 
-        XDICT_TYPE_ITER         = 1
-        XDICT_TYPE_DICT         = 2
-        XDICT_TYPE_PAIR         = 3
+        XDICT_TYPE_ITER                 = 1
+        XDICT_TYPE_DICT                 = 2
+        XDICT_TYPE_PAIR                 = 3
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         function GetIterator(self)
-            local type          = self[1]
+            local type                  = self[1]
 
             if type == XDICT_TYPE_ITER then
                 return self[2], self[3], self[4]
@@ -352,16 +347,16 @@ PLoop(function(_ENV)
     -- etc operations on a dictionary without creating any temp caches
     __Final__() __Sealed__() __SuperObject__(false)
     __NoRawSet__(false) __NoNilValue__(false)
-    class "DictionaryStreamWorker" (function (_ENV)
+    class "DictionaryStreamWorker"      (function (_ENV)
         extend "IDictionary"
 
         export {
             DictionaryStreamWorker,
 
-            type                = type,
-            yield               = coroutine.yield,
-            tinsert             = table.insert,
-            tremove             = table.remove,
+            type                        = type,
+            yield                       = coroutine.yield,
+            tinsert                     = table.insert,
+            tremove                     = table.remove,
         }
 
         -----------------------------------------------------------
@@ -371,36 +366,36 @@ PLoop(function(_ENV)
         local rycIdleworkers
 
         if Platform.MULTI_OS_THREAD then
-            getIdleworkers      = Toolset.fakefunc
-            rycIdleworkers      = Toolset.fakefunc
+            getIdleworkers              = Toolset.fakefunc
+            rycIdleworkers              = Toolset.fakefunc
         else
             -- Keep idle workers for re-usage
-            local idleworkers   = {}
-            getIdleworkers      = function() return tremove(idleworkers) end
-            rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
+            local idleworkers           = {}
+            getIdleworkers              = function() return tremove(idleworkers) end
+            rycIdleworkers              = function(worker) tinsert(idleworkers, worker) end
         end
 
         -----------------------------------------------------------
         --                       constant                        --
         -----------------------------------------------------------
-        export {
-            FLD_TARGETDICT      = 0,
-            FLD_MAPACTITON      = 1,
-            FLD_FILTERACTN      = 2,
+        export                          {
+            FLD_TARGETDICT              = 0,
+            FLD_MAPACTITON              = 1,
+            FLD_FILTERACTN              = 2,
         }
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         __Iterator__()
         function GetIterator(self)
-            local targetDict    = self[FLD_TARGETDICT]
-            local map           = self[FLD_MAPACTITON]
-            local filter        = self[FLD_FILTERACTN]
+            local targetDict            = self[FLD_TARGETDICT]
+            local map                   = self[FLD_MAPACTITON]
+            local filter                = self[FLD_FILTERACTN]
 
             -- Clear self and put self into recycle
-            self[FLD_TARGETDICT] = nil
-            self[FLD_MAPACTITON] = nil
-            self[FLD_FILTERACTN] = nil
+            self[FLD_TARGETDICT]        = nil
+            self[FLD_MAPACTITON]        = nil
+            self[FLD_FILTERACTN]        = nil
 
             rycIdleworkers(self)
 
@@ -413,7 +408,7 @@ PLoop(function(_ENV)
                 if map then
                     for key, value in targetDict:GetIterator() do
                         if filter(key, value) then
-                            value = map(key, value)
+                            value       = map(key, value)
                             if value ~= nil then
                                 yield(key, value)
                             end
@@ -428,7 +423,7 @@ PLoop(function(_ENV)
                 -- No filter
                 if map then
                     for key, value in targetDict:GetIterator() do
-                        value   = map(key, value)
+                        value           = map(key, value)
                         if value ~= nil then
                             yield(key, value)
                         end
@@ -448,7 +443,7 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Map(self, func)
             if self[FLD_MAPACTITON] then return DictionaryStreamWorker(self):Map(func) end
-            self[FLD_MAPACTITON] = func
+            self[FLD_MAPACTITON]        = func
             return self
         end
 
@@ -456,7 +451,7 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Filter(self, func)
             if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return DictionaryStreamWorker(self):Filter(func) end
-            self[FLD_FILTERACTN] = func
+            self[FLD_FILTERACTN]        = func
             return self
         end
 
@@ -465,7 +460,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IDictionary }
         function __ctor(self, dict)
-            self[FLD_TARGETDICT] = dict
+            self[FLD_TARGETDICT]        = dict
         end
 
         -----------------------------------------------------------
@@ -473,16 +468,16 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IDictionary }
         function __exist(_, dict)
-            local worker = getIdleworkers()
+            local worker                = getIdleworkers()
             if worker then worker[FLD_TARGETDICT] = dict end
             return worker
         end
     end)
 
     __Sealed__()
-    interface "IDictionary" (function (_ENV)
-        export {
-            yield               = coroutine.yield,
+    interface "IDictionary"             (function (_ENV)
+        export                          {
+            yield                       = coroutine.yield,
         }
 
         export { DictionaryStreamWorker, ListStreamWorker, XDictionary }
@@ -492,7 +487,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Map the items to other type datas
         __Arguments__{ Callable }
-        function Map(self, func) return DictionaryStreamWorker(self):Map(func) end
+        function Map(self, func)    return DictionaryStreamWorker(self):Map(func) end
 
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
@@ -503,7 +498,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Convert the selected items to a raw hash table
         function ToTable(self)
-            local result        = {}
+            local result                = {}
             for key, value in self:GetIterator() do result[key] = value end
             return result
         end
@@ -529,9 +524,9 @@ PLoop(function(_ENV)
         --- get the keys
         __Iterator__()
         function GetKeys(self)
-            local index = 0
+            local index                 = 0
             for key in self:GetIterator() do
-                index = index + 1
+                index                   = index + 1
                 yield(index, key)
             end
         end
@@ -539,9 +534,9 @@ PLoop(function(_ENV)
         -- get the values
         __Iterator__()
         function GetValues(self)
-            local index = 0
+            local index                 = 0
             for _, value in self:GetIterator() do
-                index = index + 1
+                index                   = index + 1
                 yield(index, value)
             end
         end
@@ -550,17 +545,9 @@ PLoop(function(_ENV)
         --                     list property                     --
         -----------------------------------------------------------
         --- Get a list stream worker of the dictionary's keys
-        property "Keys" {
-            Get = function (self)
-                return ListStreamWorker( self:GetKeys() )
-            end
-        }
+        property "Keys"                 { get = function (self) return ListStreamWorker( self:GetKeys() ) end }
 
         --- Get a list stream worker of the dictionary's values
-        property "Values" {
-            Get = function (self)
-                return ListStreamWorker( self:GetValues() )
-            end
-        }
+        property "Values"               { get = function (self) return ListStreamWorker( self:GetValues() ) end }
     end)
 end)

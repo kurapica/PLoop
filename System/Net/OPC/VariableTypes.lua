@@ -16,25 +16,25 @@ PLoop(function(_ENV)
     namespace "System.Net.OPC"
 
     __Sealed__() __Node__{ NodeId = 62 }
-    class "BaseVariableType"  	{ Variable }
+    class "BaseVariableType"            { Variable }
 
     __Node__() __Node__{ NodeId = 68, ValueRank = -2 }
-    class "PropertyType"        (function(_ENV)
+    class "PropertyType"                (function(_ENV)
         inherit "BaseVariableType"
 
         ---------------------------------------------------
         --                   property                    --
         ---------------------------------------------------
         --- The owner of the property
-        property "Owner"        { type = Any }
+        property "Owner"                { type = Any }
     end)
 
     __Sealed__() __Node__{ NodeId = 63, ValueRank = -2, DataType = Any }
-    class "BaseDataVariableType"{ BaseVariableType }
+    class "BaseDataVariableType"        { BaseVariableType }
 
     __Sealed__() __Node__{ NodeId = 2138, ValueRank = -1, DataType = ServerStatusDataType }
-    class "ServerStatusType"    { BaseDataVariableType }
+    class "ServerStatusType"            { BaseDataVariableType }
 
     __Sealed__() __Abstract__() __Node__{ NodeId = 2137, ValueRank = -1, DataType = Any }
-    class "ServerVendorCapabilityType" { BaseDataVariableType }
+    class "ServerVendorCapabilityType"  { BaseDataVariableType }
 end)

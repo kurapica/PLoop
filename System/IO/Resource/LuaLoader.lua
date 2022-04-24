@@ -13,54 +13,56 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    __Sealed__() System.IO.Resource.__ResourceLoader__"lua"
-    class "System.IO.Resource.LuaLoader" (function (_ENV)
-        extend (System.IO.Resource.IResourceLoader)
+    namespace "System.IO.Resource"
+
+    __Sealed__() __ResourceLoader__"lua"
+    class "LuaLoader"                   (function (_ENV)
+        extend "IResourceLoader"
 
         export {
-            pairs               = pairs,
-            strlower            = string.lower,
-            getfilename         = System.IO.Path.GetFileNameWithoutSuffix,
-            getname             = Namespace.GetNamespaceName,
-            require             = _G.require,
-            loadfile            = _G.loadfile,
-            setfenv             = _G.setfenv or false,
-            loadsnippet         = Toolset.loadsnippet,
-            pcall               = pcall,
-            error               = error,
+            pairs                       = pairs,
+            strlower                    = string.lower,
+            getfilename                 = System.IO.Path.GetFileNameWithoutSuffix,
+            getname                     = Namespace.GetNamespaceName,
+            require                     = _G.require,
+            loadfile                    = _G.loadfile,
+            setfenv                     = _G.setfenv or false,
+            loadsnippet                 = Toolset.loadsnippet,
+            pcall                       = pcall,
+            error                       = error,
 
             Runtime,
         }
 
         function Load(self, path, reader, env)
-            local name          = strlower(getfilename(path))
+            local name                  = strlower(getfilename(path))
 
             local type
 
-            local ontypedefined = function(ftype, target)
+            local ontypedefined         = function(ftype, target)
                 if strlower(getname(target, true)) == name then
-                    type        = target
+                    type                = target
                 end
             end
 
-            Runtime.OnTypeDefined = Runtime.OnTypeDefined + ontypedefined
+            Runtime.OnTypeDefined       = Runtime.OnTypeDefined + ontypedefined
 
             local func, msg
 
             if reader then
-                func, msg       = loadsnippet(reader:ReadToEnd(), path, env)
+                func, msg               = loadsnippet(reader:ReadToEnd(), path, env)
                 if func then
-                    func, msg   = pcall(func)
+                    func, msg           = pcall(func)
                 end
             else
-                func, msg       = loadfile(path, nil, env)
+                func, msg               = loadfile(path, nil, env)
                 if func then
                     if setfenv and env then setfenv(func, env) end
-                    func, msg   = pcall(func)
+                    func, msg           = pcall(func)
                 end
             end
 
-            Runtime.OnTypeDefined = Runtime.OnTypeDefined - ontypedefined
+            Runtime.OnTypeDefined       = Runtime.OnTypeDefined - ontypedefined
 
             if not func then error(msg, 0) end
 

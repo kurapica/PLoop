@@ -24,11 +24,11 @@ PLoop(function(_ENV)
     __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
 
     --- Represents the list collections that only elements has meanings
-    interface "IList" { Iterable }
+    interface "IList"                   { Iterable }
 
     --- Represents countable list collections
     __Sealed__()
-    interface "ICountable" { IList,
+    interface "ICountable"              { IList,
         --- Get the count of items in the object
         __Abstract__(),
         Count = { set = false, get = function (self) return #self end },
@@ -36,23 +36,23 @@ PLoop(function(_ENV)
 
     --- Represents the indexed list collections that can use obj[idx] to access the its elements
     __Sealed__()
-    interface "IIndexedList" { ICountable }
+    interface "IIndexedList"            { ICountable }
 
     --- The default indexed list
     __Sealed__() __Serializable__() __Arguments__{ AnyType }( Any )
     __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    class "List" (function (_ENV, lsttype)
+    class "List" (function              (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
         export { type = type, ipairs = ipairs }
 
-        lsttype = lsttype ~= Any and lsttype or nil
+        lsttype                         = lsttype ~= Any and lsttype or nil
 
         if lsttype then
-            export {
-                valid           = getmetatable(lsttype).ValidateValue,
-                GetErrorMessage = Struct.GetErrorMessage,
-                parseindex      = Toolset.parseindex,
+            export                      {
+                valid                   = getmetatable(lsttype).ValidateValue,
+                GetErrorMessage         = Struct.GetErrorMessage,
+                parseindex              = Toolset.parseindex,
             }
         end
 
@@ -67,13 +67,13 @@ PLoop(function(_ENV)
 
         __Arguments__{ SerializationInfo }
         function __new(_, info)
-            local i = 1
-            local v = info:GetValue(i, lsttype)
-            local self  = {}
+            local i                     = 1
+            local v                     = info:GetValue(i, lsttype)
+            local self                  = {}
             while v ~= nil do
-                self[i] = v
-                i   = i + 1
-                v   = info:GetValue(i, lsttype)
+                self[i]                 = v
+                i                       = i + 1
+                v                       = info:GetValue(i, lsttype)
             end
             return self, true
         end
@@ -81,17 +81,17 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        GetIterator = ipairs
+        GetIterator                     = ipairs
 
         --- Insert an item to the list
         if lsttype then
             __Arguments__{ Integer, lsttype }
-            Insert  = table.insert
+            Insert                      = table.insert
 
             __Arguments__{ lsttype }
-            Insert  = table.insert
+            Insert                      = table.insert
         else
-            Insert  = table.insert
+            Insert                      = table.insert
         end
 
         --- Whether an item existed in the list
@@ -104,7 +104,7 @@ PLoop(function(_ENV)
         function Remove(self, item) local i = self:IndexOf(item) if i then return self:RemoveByIndex(i) end end
 
         --- Remove an item from the tail or the given index
-        RemoveByIndex = table.remove
+        RemoveByIndex                   = table.remove
 
         --- Clear the list
         function Clear(self)
@@ -116,9 +116,9 @@ PLoop(function(_ENV)
         if lsttype then
             __Arguments__{ RawTable }
             function Extend(self, lst)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for _, item in ipairs(lst) do
-                    local ret, msg = valid(lsttype, item, true)
+                    local ret, msg      = valid(lsttype, item, true)
                     if not msg then ins(self, item) end
                 end
                 return self
@@ -126,9 +126,9 @@ PLoop(function(_ENV)
 
             __Arguments__{ IList }
             function Extend(self, lst)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for _, item in lst:GetIterator() do
-                    local ret, msg = valid(lsttype, item, true)
+                    local ret, msg      = valid(lsttype, item, true)
                     if not msg then ins(self, item) end
                 end
                 return self
@@ -136,10 +136,10 @@ PLoop(function(_ENV)
 
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Extend(self, iter, obj, idx)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for key, item in iter, obj, idx do
                     if item == nil then item = key end
-                    local ret, msg = valid(lsttype, item, true)
+                    local ret, msg      = valid(lsttype, item, true)
                     if not msg then ins(self, item) end
                 end
                 return self
@@ -147,21 +147,21 @@ PLoop(function(_ENV)
         else
             __Arguments__{ RawTable }
             function Extend(self, lst)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for _, item in ipairs(lst) do ins(self, item) end
                 return self
             end
 
             __Arguments__{ IList }
             function Extend(self, lst)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for _, item in lst:GetIterator() do ins(self, item) end
                 return self
             end
 
             __Arguments__{ Callable, System.Any/nil, System.Any/nil }
             function Extend(self, iter, obj, idx)
-                local ins   = self.Insert
+                local ins               = self.Insert
                 for key, item in iter, obj, idx do
                     if item == nil then item = key end
                     ins(self, item)
@@ -178,26 +178,26 @@ PLoop(function(_ENV)
 
         __Arguments__{ IList }
         function __new(_, lst)
-            local i     = 1
-            local obj   = {}
+            local i                     = 1
+            local obj                   = {}
             for idx, item in lst:GetIterator() do
-                obj[i]  = item
-                i       = i + 1
+                obj[i]                  = item
+                i                       = i + 1
             end
             return obj, true
         end
 
         __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function __new(_, iter, obj, idx)
-            local i     = 1
-            local lst   = {}
+            local i                     = 1
+            local lst                   = {}
             for key, item in iter, obj, idx do
                 if item ~= nil then
-                    lst[i]  = item
-                    i   = i + 1
+                    lst[i]              = item
+                    i                   = i + 1
                 else
-                    lst[i]  = key
-                    i   = i + 1
+                    lst[i]              = key
+                    i                   = i + 1
                 end
             end
             return lst, true
@@ -205,23 +205,23 @@ PLoop(function(_ENV)
 
         __Arguments__{ NaturalNumber, Callable }
         function __new(_, count, initValue)
-            local obj   = {}
+            local obj                   = {}
             for i = 1, count do
-                obj[i]  = initValue(i)
+                obj[i]                  = initValue(i)
             end
             return obj, true
         end
 
         __Arguments__{ NaturalNumber, System.Any/nil }
         function __new(_, count, initValue)
-            local obj   = {}
+            local obj                   = {}
             if initValue ~= nil then
                 for i = 1, count do
-                    obj[i]  = initValue
+                    obj[i]              = initValue
                 end
             else
                 for i = 1, count do
-                    obj[i]  = i
+                    obj[i]              = i
                 end
             end
             return obj, true
@@ -236,9 +236,9 @@ PLoop(function(_ENV)
             function __ctor(self)
                 local msg
                 for k, v in self:GetIterator() do
-                    v, msg = valid(lsttype, v)
+                    v, msg              = valid(lsttype, v)
                     if msg then throw(GetErrorMessage(msg, parseindex(k))) end
-                    self[k]= v
+                    self[k]             = v
                 end
             end
         end
@@ -248,9 +248,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         function __index(self, idx)
             if type(idx) ~= "number" or idx >= 0 then return end
-            local cnt = self.Count
+            local cnt                   = self.Count
 
-            idx = cnt + idx + 1
+            idx                         = cnt + idx + 1
             if idx >= 1 and idx <= cnt then
                 return self[idx]
             else
@@ -261,19 +261,19 @@ PLoop(function(_ENV)
 
     --- The dynamic list
     __Sealed__() __NoRawSet__(true)
-    class "XList" (function(_ENV)
+    class "XList"                       (function(_ENV)
         extend "IList"
         export { ipairs = ipairs, type = type, iterforstep = iterforstep, iterforlist = iterforlist }
 
-        XLIST_TYPE_STEP         = 1
-        XLIST_TYPE_ITER         = 2
-        XLIST_TYPE_LIST         = 3
+        XLIST_TYPE_STEP                 = 1
+        XLIST_TYPE_ITER                 = 2
+        XLIST_TYPE_LIST                 = 3
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
         function GetIterator(self)
-            local type          = self[1]
+            local type                  = self[1]
 
             if type == XLIST_TYPE_STEP then
                 return iterforstep(self[2], self[3], self[4])
@@ -313,17 +313,17 @@ PLoop(function(_ENV)
     -- operations on a list without creating any temp caches
     __Final__() __Sealed__() __SuperObject__(false)
     __NoRawSet__(false) __NoNilValue__(false)
-    class "ListStreamWorker" (function (_ENV)
+    class "ListStreamWorker"            (function (_ENV)
         extend "IList"
 
         export {
-            type                = type,
-            yield               = coroutine.yield,
-            MATH_HUGE           = math.huge,
-            tinsert             = table.insert,
-            tremove             = table.remove,
-            getobjectclass      = Class.GetObjectClass,
-            issubtype           = Class.IsSubType,
+            type                        = type,
+            yield                       = coroutine.yield,
+            MATH_HUGE                   = math.huge,
+            tinsert                     = table.insert,
+            tremove                     = table.remove,
+            getobjectclass              = Class.GetObjectClass,
+            issubtype                   = Class.IsSubType,
 
             ListStreamWorker, IIndexedList, ICountable
         }
@@ -335,29 +335,29 @@ PLoop(function(_ENV)
         local rycIdleworkers
 
         if Platform.MULTI_OS_THREAD then
-            getIdleworkers      = Toolset.fakefunc
-            rycIdleworkers      = Toolset.fakefunc
+            getIdleworkers              = Toolset.fakefunc
+            rycIdleworkers              = Toolset.fakefunc
         else
             -- Keep idle workers for re-usage
-            local idleworkers   = {}
-            getIdleworkers      = function() return tremove(idleworkers) end
-            rycIdleworkers      = function(worker) tinsert(idleworkers, worker) end
+            local idleworkers           = {}
+            getIdleworkers              = function() return tremove(idleworkers) end
+            rycIdleworkers              = function(worker) tinsert(idleworkers, worker) end
         end
 
         -----------------------------------------------------------
         --                       constant                        --
         -----------------------------------------------------------
         export {
-            FLD_TARGETLIST      = 0,
-            FLD_TARGETITER      = 1,
-            FLD_ITEROBJECT      = 2,
-            FLD_ITERINDEX       = 3,
+            FLD_TARGETLIST              = 0,
+            FLD_TARGETITER              = 1,
+            FLD_ITEROBJECT              = 2,
+            FLD_ITERINDEX               = 3,
 
-            FLD_MAPACTITON      = 4,
-            FLD_FILTERACTN      = 5,
-            FLD_RANGESTART      = 6,
-            FLD_RANGESTOP       = 7,
-            FLD_RANGESTEP       = 8,
+            FLD_MAPACTITON              = 4,
+            FLD_FILTERACTN              = 5,
+            FLD_RANGESTART              = 6,
+            FLD_RANGESTOP               = 7,
+            FLD_RANGESTEP               = 8,
         }
 
         -----------------------------------------------------------
@@ -365,28 +365,28 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Iterator__()
         function GetIterator(self)
-            local targetList    = self[FLD_TARGETLIST]
-            local targetIter    = self[FLD_TARGETITER]
-            local targetObj     = self[FLD_ITEROBJECT]
-            local targetIdx     = self[FLD_ITERINDEX]
+            local targetList            = self[FLD_TARGETLIST]
+            local targetIter            = self[FLD_TARGETITER]
+            local targetObj             = self[FLD_ITEROBJECT]
+            local targetIdx             = self[FLD_ITERINDEX]
 
-            local map           = self[FLD_MAPACTITON]
-            local filter        = self[FLD_FILTERACTN]
-            local rangeStart    = self[FLD_RANGESTART]
-            local rangeStop     = self[FLD_RANGESTOP]
-            local rangeStep     = self[FLD_RANGESTEP]
+            local map                   = self[FLD_MAPACTITON]
+            local filter                = self[FLD_FILTERACTN]
+            local rangeStart            = self[FLD_RANGESTART]
+            local rangeStop             = self[FLD_RANGESTOP]
+            local rangeStep             = self[FLD_RANGESTEP]
 
             -- Clear self and put self into idleworkers
-            self[FLD_TARGETLIST] = nil
-            self[FLD_TARGETITER] = nil
-            self[FLD_ITEROBJECT] = nil
-            self[FLD_ITERINDEX]  = nil
+            self[FLD_TARGETLIST]        = nil
+            self[FLD_TARGETITER]        = nil
+            self[FLD_ITEROBJECT]        = nil
+            self[FLD_ITERINDEX]         = nil
 
-            self[FLD_MAPACTITON] = nil
-            self[FLD_FILTERACTN] = nil
-            self[FLD_RANGESTART] = nil
-            self[FLD_RANGESTOP]  = nil
-            self[FLD_RANGESTEP]  = nil
+            self[FLD_MAPACTITON]        = nil
+            self[FLD_FILTERACTN]        = nil
+            self[FLD_RANGESTART]        = nil
+            self[FLD_RANGESTOP]         = nil
+            self[FLD_RANGESTEP]         = nil
 
             rycIdleworkers(self)
 
@@ -399,12 +399,12 @@ PLoop(function(_ENV)
 
             -- Process the iterator
             if not rangeStart then
-                rangeStart  = 1
-                rangeStop   = MATH_HUGE
-                rangeStep   = 1
+                rangeStart              = 1
+                rangeStop               = MATH_HUGE
+                rangeStep               = 1
             else
                 local lstCount
-                local targetCls = getobjectclass(targetList)
+                local targetCls         = getobjectclass(targetList)
 
                 -- If the targetCls is ICountable, we can deal with negative position
                 if targetCls and issubtype(targetCls, ICountable) then lstCount = targetList.Count end
@@ -483,14 +483,14 @@ PLoop(function(_ENV)
 
             if rangeStep < 1 then return end
 
-            local idx = 1
-            local stepCnt = rangeStep
+            local idx                   = 1
+            local stepCnt               = rangeStep
             local item
 
             while idx < rangeStart do
-                targetIdx, item = targetIter(targetObj, targetIdx)
+                targetIdx, item         = targetIter(targetObj, targetIdx)
                 if targetIdx == nil then return end
-                idx = idx + 1
+                idx                     = idx + 1
             end
 
             if map then
@@ -500,7 +500,7 @@ PLoop(function(_ENV)
                         if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
-                            stepCnt = 0
+                            stepCnt     = 0
                             if item ~= nil and filter(item) then
                                 local mitem = map(item)
                                 if mitem ~= nil then
@@ -510,8 +510,8 @@ PLoop(function(_ENV)
                             end
                         end
 
-                        stepCnt = stepCnt + 1
-                        idx = idx + 1
+                        stepCnt         = stepCnt + 1
+                        idx             = idx + 1
                     end
                 else
                     while idx <= rangeStop do
@@ -519,7 +519,7 @@ PLoop(function(_ENV)
                         if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
-                            stepCnt = 0
+                            stepCnt     = 0
                             if item ~= nil then
                                 local mitem = map(item)
                                 if mitem ~= nil then
@@ -529,8 +529,8 @@ PLoop(function(_ENV)
                             end
                         end
 
-                        stepCnt = stepCnt + 1
-                        idx = idx + 1
+                        stepCnt         = stepCnt + 1
+                        idx             = idx + 1
                     end
                 end
             else
@@ -540,15 +540,15 @@ PLoop(function(_ENV)
                         if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
-                            stepCnt = 0
+                            stepCnt     = 0
                             if item ~= nil and filter(item) then
                                 _, _, stop = yield(targetIdx, item)
                                 if stop then return end
                             end
                         end
 
-                        stepCnt = stepCnt + 1
-                        idx = idx + 1
+                        stepCnt         = stepCnt + 1
+                        idx             = idx + 1
                     end
                 else
                     while idx <= rangeStop do
@@ -556,15 +556,15 @@ PLoop(function(_ENV)
                         if targetIdx == nil then return end
 
                         if stepCnt == rangeStep then
-                            stepCnt = 0
+                            stepCnt     = 0
                             if item ~= nil then
                                 _, _, stop = yield(targetIdx, item)
                                 if stop then return end
                             end
                         end
 
-                        stepCnt = stepCnt + 1
-                        idx = idx + 1
+                        stepCnt         = stepCnt + 1
+                        idx             = idx + 1
                     end
                 end
             end
@@ -577,14 +577,14 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Map(self, func)
             if self[FLD_MAPACTITON] then return ListStreamWorker(self):Map(func) end
-            self[FLD_MAPACTITON] = func
+            self[FLD_MAPACTITON]        = func
             return self
         end
 
         __Arguments__{ String }
         function Map(self, feature)
             if self[FLD_MAPACTITON] then return ListStreamWorker(self):Map(feature) end
-            self[FLD_MAPACTITON] = function(item)
+            self[FLD_MAPACTITON]        = function(item)
                 if type(item) == "table" then
                     return item[feature]
                 end
@@ -595,21 +595,21 @@ PLoop(function(_ENV)
         __Arguments__{ Table }
         function Map(self, map)
             if self[FLD_MAPACTITON] then return ListStreamWorker(self):Map(feature) end
-            self[FLD_MAPACTITON] = function(item) if map[item] ~= nil then return map[item] else return item end end
+            self[FLD_MAPACTITON]        = function(item) if map[item] ~= nil then return map[item] else return item end end
             return self
         end
 
         __Arguments__{ Callable }
         function Filter(self, func)
             if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(func) end
-            self[FLD_FILTERACTN] = func
+            self[FLD_FILTERACTN]        = func
             return self
         end
 
         __Arguments__{ Table }
         function Filter(self, filter)
             if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(func) end
-            self[FLD_FILTERACTN] = function(item) return filter[item] end
+            self[FLD_FILTERACTN]        = function(item) return filter[item] end
             return self
         end
 
@@ -617,7 +617,7 @@ PLoop(function(_ENV)
         __Arguments__{ String, System.Any/nil }
         function Filter(self, feature, value)
             if self[FLD_FILTERACTN] or self[FLD_MAPACTITON] then return ListStreamWorker(self):Filter(feature, value) end
-            self[FLD_FILTERACTN] = value ~= nil and function(item)
+            self[FLD_FILTERACTN]        = value ~= nil and function(item)
                 if type(item) == "table" then
                     return item[feature] == value
                 else
@@ -646,14 +646,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IList }
         function __ctor(self, list)
-            self[FLD_TARGETLIST] = list
+            self[FLD_TARGETLIST]        = list
         end
 
         __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function __ctor(self, iter, obj, idx)
-            self[FLD_TARGETITER] = iter
-            self[FLD_ITEROBJECT] = obj
-            self[FLD_ITERINDEX] = idx
+            self[FLD_TARGETITER]        = iter
+            self[FLD_ITEROBJECT]        = obj
+            self[FLD_ITERINDEX]         = idx
         end
 
         -----------------------------------------------------------
@@ -661,33 +661,33 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ IList }
         function __exist(_, list)
-            local worker = getIdleworkers()
+            local worker                = getIdleworkers()
             if worker then worker[FLD_TARGETLIST] = list end
             return worker
         end
 
         __Arguments__{ Callable, System.Any/nil, System.Any/nil }
         function __exist(_, iter, obj, idx)
-            local worker = getIdleworkers()
+            local worker                = getIdleworkers()
             if worker then
-                worker[FLD_TARGETITER] = iter
-                worker[FLD_ITEROBJECT] = obj
-                worker[FLD_ITERINDEX]  = idx
+                worker[FLD_TARGETITER]  = iter
+                worker[FLD_ITEROBJECT]  = obj
+                worker[FLD_ITERINDEX]   = idx
             end
             return worker
         end
     end)
 
     __Sealed__()
-    interface "IList" (function (_ENV)
+    interface "IList"                   (function (_ENV)
 
         export {
-            type                = type,
-            rawget              = rawget,
-            getobjectclass      = Class.GetObjectClass,
-            isObjectType        = Class.IsObjectType,
-            tblconcat           = table.concat,
-            tonumber            = tonumber,
+            type                        = type,
+            rawget                      = rawget,
+            getobjectclass              = Class.GetObjectClass,
+            isObjectType                = Class.IsObjectType,
+            tblconcat                   = table.concat,
+            tonumber                    = tonumber,
         }
 
         export { ListStreamWorker, IIndexedList, XList }
@@ -697,23 +697,23 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Map the items to other type datas
         __Arguments__{ Callable }
-        function Map(self, func) return ListStreamWorker(self):Map(func) end
+        function Map(self, func)                return ListStreamWorker(self):Map(func) end
 
         __Arguments__{ Table }
-        function Map(self, map) return ListStreamWorker(self):Map(map) end
+        function Map(self, map)                 return ListStreamWorker(self):Map(map) end
 
         __Arguments__{ String }
-        function Map(self, feature) return ListStreamWorker(self):Map(feature) end
+        function Map(self, feature)             return ListStreamWorker(self):Map(feature) end
 
         --- Used to filter the items with a check function
         __Arguments__{ Callable }
-        function Filter(self, func) return ListStreamWorker(self):Filter(func) end
+        function Filter(self, func)             return ListStreamWorker(self):Filter(func) end
 
         __Arguments__{ Table }
-        function Filter(self, filter) return ListStreamWorker(self):Filter(filter) end
+        function Filter(self, filter)           return ListStreamWorker(self):Filter(filter) end
 
         __Arguments__{ String, System.Any/nil }
-        function Filter(self, feature, value) return ListStreamWorker(self):Filter(feature, value) end
+        function Filter(self, feature, value)   return ListStreamWorker(self):Filter(feature, value) end
 
         --- Used to select items with ranged index
         __Arguments__{ Integer/1, Integer/-1, Integer/1 }
@@ -724,11 +724,11 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --- Convert the selected items to a raw hash table
         function ToTable(self)
-            local result        = {}
-            local index         = 1
+            local result                = {}
+            local index                 = 1
             for _, value in self:GetIterator() do
-                result[index]   = value
-                index           = index + 1
+                result[index]           = value
+                index                   = index + 1
             end
             return result
         end
@@ -745,9 +745,9 @@ PLoop(function(_ENV)
         function Reduce(self, func, init)
             for _, obj in self:GetIterator() do
                 if init == nil then
-                    init = obj
+                    init                = obj
                 else
-                    init = func(obj, init)
+                    init                = func(obj, init)
                 end
             end
             return init
@@ -768,20 +768,20 @@ PLoop(function(_ENV)
             for _, obj in self:GetIterator() do
                 if type(obj) == "table" then
                     if getobjectclass(obj) ~= cls then
-                        cls = getobjectclass(obj)
-                        cmethod = nil
+                        cls             = getobjectclass(obj)
+                        cmethod         = nil
                         if cls then
-                            local ret = cls[feature]
+                            local ret   = cls[feature]
                             if type(ret) == "function" then cmethod = ret end
                         end
                     end
 
-                    local method = rawget(obj, feature) or cmethod
+                    local method        = rawget(obj, feature) or cmethod
 
                     if type(method) == "function" then
                         method(obj, ...)
                     else
-                        obj[feature] = ...
+                        obj[feature]    = ...
                     end
                 end
             end
@@ -790,15 +790,15 @@ PLoop(function(_ENV)
         --- Check if any element meet the requirement of the target function
         __Arguments__{ Callable, System.Any * 0 }
         function Any(self, chk, ...)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
+            local iter, obj, idx, val   = self:GetIterator()
+            idx, val                    = iter(obj, idx)
             while idx do
                 if chk(val, ...) then
                     -- Pass true to end iter if it support
                     iter(obj, idx, true)
                     return true
                 end
-                idx, val = iter(obj, idx)
+                idx, val                = iter(obj, idx)
             end
             return false
         end
@@ -806,15 +806,15 @@ PLoop(function(_ENV)
         --- Check if all elements meet the requirement of the target function
         __Arguments__{ Callable, System.Any * 0 }
         function All(self, chk, ...)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
+            local iter, obj, idx, val   = self:GetIterator()
+            idx, val                    = iter(obj, idx)
             while idx do
                 if not chk(val, ...) then
                     -- Pass true to end iter if it support
                     iter(obj, idx, true)
                     return false
                 end
-                idx, val = iter(obj, idx)
+                idx, val                = iter(obj, idx)
             end
             return true
         end
@@ -822,22 +822,22 @@ PLoop(function(_ENV)
         --- Get the first element of the list
         __Arguments__{ Callable, System.Any * 0 }
         function First(self, chk, ...)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
+            local iter, obj, idx, val   = self:GetIterator()
+            idx, val                    = iter(obj, idx)
             while idx do
                 if chk(val, ...) then
                     -- Pass true to end iter if it support
                     iter(obj, idx, true)
                     return val
                 end
-                idx, val = iter(obj, idx)
+                idx, val                = iter(obj, idx)
             end
         end
 
         __Arguments__ {}
         function First(self)
-            local iter, obj, idx, val = self:GetIterator()
-            idx, val = iter(obj, idx)
+            local iter, obj, idx, val   = self:GetIterator()
+            idx, val                    = iter(obj, idx)
             while idx do
                 iter(obj, idx, true)
                 return val
@@ -851,7 +851,7 @@ PLoop(function(_ENV)
 
             for _, val in self:GetIterator() do
                 if chk(val, ...) then
-                    last = val
+                    last                = val
                 end
             end
 
@@ -865,7 +865,7 @@ PLoop(function(_ENV)
             local last
 
             for _, val in self:GetIterator() do
-                last = val
+                last                    = val
             end
 
             return last
@@ -879,7 +879,7 @@ PLoop(function(_ENV)
 
         --- Get the sum of the list
         function Sum(self)
-            local sum = 0
+            local sum                   = 0
             for _, val in self:GetIterator() do sum = sum + (tonumber(val) or 0) end
             return sum
         end
@@ -888,13 +888,13 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                       Serialization Extend                        --
     -----------------------------------------------------------------------
-    export {
-        isListType              = Class.IsSubType,
-        isstruct                = Struct.Validate,
-        getstructcategory       = Struct.GetStructCategory,
-        pairs                   = pairs,
-        type                    = type,
-        floor                   = math.floor,
+    export                              {
+        isListType                      = Class.IsSubType,
+        isstruct                        = Struct.Validate,
+        getstructcategory               = Struct.GetStructCategory,
+        pairs                           = pairs,
+        type                            = type,
+        floor                           = math.floor,
 
         Serialization
     }
@@ -902,11 +902,11 @@ PLoop(function(_ENV)
     --- Whether the data is a list object
     __Static__() function Serialization.IsArrayData(data)
         -- Check the data type
-        local objField          = data[Serialization.ObjectTypeField]
+        local objField                  = data[Serialization.ObjectTypeField]
         if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
 
         -- Check the data
-        local count             = #data
+        local count                     = #data
 
         for k in pairs(data) do
             if type(k) ~= "number" or (floor(k) ~= k or k < 0 or k > count) then

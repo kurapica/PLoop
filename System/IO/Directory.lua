@@ -16,17 +16,17 @@ PLoop(function(_ENV)
     namespace "System.IO"
 
     __Final__() __Sealed__() __Abstract__()
-    class "Directory" (function (_ENV)
+    class "Directory"                   (function (_ENV)
 
         export {
-            strfind             = string.find,
-            strmatch            = string.match,
-            strgmatch           = string.gmatch,
-            strsub              = string.sub,
-            strgsub             = string.gsub,
-            strformat           = string.format,
-            select              = select,
-            yield               = coroutine.yield,
+            strfind                     = string.find,
+            strmatch                    = string.match,
+            strgmatch                   = string.gmatch,
+            strsub                      = string.sub,
+            strgsub                     = string.gsub,
+            strformat                   = string.format,
+            select                      = select,
+            yield                       = coroutine.yield,
         }
 
         if OperationSystem.Current == OperationSystemType.Windows then

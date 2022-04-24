@@ -17,30 +17,30 @@ PLoop(function(_ENV)
 
     --- Represents a writer that can write a sequential series of characters to files
     __Sealed__()
-    class "FileWriter" (function(_ENV)
+    class "FileWriter"                  (function(_ENV)
         inherit "System.Text.TextWriter"
 
         export {
-            fopen               = _G.io and _G.io.open or Toolset.fakefunc
+            fopen                       = _G.io and _G.io.open or Toolset.fakefunc
         }
 
         __Sealed__() __Default__"w"
-        enum "FileWriteMode" {
-            Write               = "w",
-            Append              = "a",
-            WritePlus           = "w+",
-            AppendPlus          = "a+",
-            WriteBinary         = "wb",
-            AppendBinary        = "ab",
-            WritePlusBinary     = "w+b",
-            AppendPlusBinary    = "a+b",
+        enum "FileWriteMode"            {
+            Write                       = "w",
+            Append                      = "a",
+            WritePlus                   = "w+",
+            AppendPlus                  = "a+",
+            WriteBinary                 = "wb",
+            AppendBinary                = "ab",
+            WritePlusBinary             = "w+b",
+            AppendPlusBinary            = "a+b",
         }
 
         -- Field
-        field {
-            [0]                 = false,
-            [1]                 = false,
-            [2]                 = false,
+        field                           {
+            [0]                         = false,
+            [1]                         = false,
+            [2]                         = false,
         }
 
         -- Method

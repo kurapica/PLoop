@@ -16,14 +16,14 @@ PLoop(function(_ENV)
     namespace "System.IO"
 
     __Final__() __Sealed__() __Abstract__()
-    class "Path" (function (_ENV)
+    class "Path"                        (function (_ENV)
 
         export {
-            strfind             = string.find,
-            strmatch            = string.match,
-            strsub              = string.sub,
-            strgsub             = string.gsub,
-            select              = select,
+            strfind                     = string.find,
+            strmatch                    = string.match,
+            strsub                      = string.sub,
+            strgsub                     = string.gsub,
+            select                      = select,
         }
 
         --- Get the current operation path
@@ -53,30 +53,30 @@ PLoop(function(_ENV)
             for i = 1, select('#', ...) do
                 local part = select(i, ...)
                 if not path then
-                    local root = GetPathRoot(part)
+                    local root          = GetPathRoot(part)
                     if root then
-                        path = part
-                        if #root == 1 then dirSep = root else dirSep = strsub(root, -1) end
+                        path            = part
+                        if #root == 1   then dirSep = root else dirSep = strsub(root, -1) end
                     end
                 else
                     -- Check . & ..
-                    part, up = strgsub(part, "^%.%.[\\/]", "")
+                    part, up            = strgsub(part, "^%.%.[\\/]", "")
                     while up > 0 do
-                        local updir = GetDirectory(path)
+                        local updir     = GetDirectory(path)
                         if updir and #updir > 0 then path = updir end
 
-                        part, up = strgsub(part, "^%.%.[\\/]", "")
+                        part, up        = strgsub(part, "^%.%.[\\/]", "")
                     end
 
-                    repeat part, up = strgsub(part, "^%.[\\/]", "") until up == 0
+                    repeat part, up     = strgsub(part, "^%.[\\/]", "") until up == 0
 
                     local prevSep, nxtSep = strfind(path, "[\\/]$"), strfind(part, "^[[\\/]")
                     if prevSep and nxtSep then
-                        path = path .. strsub(part, 2)
+                        path            = path .. strsub(part, 2)
                     elseif prevSep or nxtSep then
-                        path = path .. part
+                        path            = path .. part
                     else
-                        path = path .. dirSep .. part
+                        path            = path .. dirSep .. part
                     end
                 end
             end
@@ -96,9 +96,9 @@ PLoop(function(_ENV)
         function GetFileNameWithoutSuffix(path) return (strgsub(GetFileName(path), "%.[_%w]+$", "")) end
 
         export {
-            GetFileName         = Path.GetFileName,
-            GetDirectory        = Path.GetDirectory,
-            GetPathRoot         = Path.GetPathRoot,
+            GetFileName                 = Path.GetFileName,
+            GetDirectory                = Path.GetDirectory,
+            GetPathRoot                 = Path.GetPathRoot,
         }
     end)
 end)

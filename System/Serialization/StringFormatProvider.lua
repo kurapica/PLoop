@@ -16,26 +16,26 @@ PLoop(function(_ENV)
     namespace "System.Serialization"
 
     export {
-        pairs                   = pairs,
-        type                    = type,
-        tostring                = tostring,
-        next                    = next,
-        select                  = select,
-        getmetatable            = getmetatable,
-        floor                   = math.floor,
-        tinsert                 = table.insert,
-        tblconcat               = table.concat,
-        strformat               = string.format,
-        safeset                 = Toolset.safeset,
-        loadsnippet             = Toolset.loadsnippet,
-        validnamespace          = Namespace.Validate,
-        isValidValue            = Struct.ValidateValue,
-        isanonymous             = Namespace.IsAnonymousNamespace,
-        Serialize               = Serialization.Serialize,
-        Deserialize             = Serialization.Deserialize,
-        getClass                = Class.GetObjectClass,
-        getMetaMethod           = Class.GetMetaMethod,
-        isArray                 = Serialization.IsArrayData,
+        pairs                           = pairs,
+        type                            = type,
+        tostring                        = tostring,
+        next                            = next,
+        select                          = select,
+        getmetatable                    = getmetatable,
+        floor                           = math.floor,
+        tinsert                         = table.insert,
+        tblconcat                       = table.concat,
+        strformat                       = string.format,
+        safeset                         = Toolset.safeset,
+        loadsnippet                     = Toolset.loadsnippet,
+        validnamespace                  = Namespace.Validate,
+        isValidValue                    = Struct.ValidateValue,
+        isanonymous                     = Namespace.IsAnonymousNamespace,
+        Serialize                       = Serialization.Serialize,
+        Deserialize                     = Serialization.Deserialize,
+        getClass                        = Class.GetObjectClass,
+        getMetaMethod                   = Class.GetMetaMethod,
+        isArray                         = Serialization.IsArrayData,
 
         Serialization.Serializable, Serialization.SerializableType, List, Toolset, Serialization
     }
@@ -44,7 +44,7 @@ PLoop(function(_ENV)
     --                              prepare                              --
     -----------------------------------------------------------------------
     function SerializeSimpleData(data)
-        local dtType            = type(data)
+        local dtType                    = type(data)
 
         if dtType == "string" then
             return strformat("%q", data)
@@ -58,11 +58,11 @@ PLoop(function(_ENV)
     function SerializeDataWithWriteNoIndent(data, write, objectTypeIgnored)
         write("{")
 
-        local isarray           = isArray(data)
-        local field             = Serialization.ObjectTypeField
-        local val               = data[field]
+        local isarray                   = isArray(data)
+        local field                     = Serialization.ObjectTypeField
+        local val                       = data[field]
         if val then
-            data[field]         = nil
+            data[field]                 = nil
 
             if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
@@ -74,9 +74,9 @@ PLoop(function(_ENV)
         end
 
         if isarray then
-            local count         = #data
+            local count                 = #data
 
-            local v             = data[0]
+            local v                     = data[0]
             if v ~= nil then
                 if type(v) == "table" then
                     write("[0]=")
@@ -92,7 +92,7 @@ PLoop(function(_ENV)
             end
 
             for i = 1, count do
-                local v         = data[i]
+                local v                 = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
                     SerializeDataWithWriteNoIndent(v, write, objectTypeIgnored)
                     if i < count then write(",") end
@@ -105,11 +105,11 @@ PLoop(function(_ENV)
                 end
             end
         else
-            local k, v          = next(data)
+            local k, v                  = next(data)
             local nk, nv
 
             while k do
-                nk, nv          = next(data, k)
+                nk, nv                  = next(data, k)
 
                 if type(v) == "table" then
                     write(strformat("[%s]=", SerializeSimpleData(k)))
@@ -123,7 +123,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v            = nk, nv
+                k, v                    = nk, nv
             end
         end
 
@@ -133,13 +133,13 @@ PLoop(function(_ENV)
     function SerializeDataWithWrite(data, write, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
         write("{" .. lineBreak)
 
-        local subIndentChar     = preIndentChar .. indentChar
+        local subIndentChar             = preIndentChar .. indentChar
 
-        local isarray           = isArray(data)
-        local field             = Serialization.ObjectTypeField
-        local val               = data[field]
+        local isarray                   = isArray(data)
+        local field                     = Serialization.ObjectTypeField
+        local val                       = data[field]
         if val then
-            data[field]         = nil
+            data[field]                 = nil
 
             if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
@@ -151,10 +151,10 @@ PLoop(function(_ENV)
         end
 
         if isarray then
-            local subIndentChar = preIndentChar .. indentChar
-            local count         = #data
+            local subIndentChar         = preIndentChar .. indentChar
+            local count                 = #data
 
-            local v             = data[0]
+            local v                     = data[0]
             if v ~= nil then
                 if type(v) == "table" then
                     write(strformat("%s[0] = ", subIndentChar))
@@ -174,7 +174,7 @@ PLoop(function(_ENV)
             end
 
             for i = 1, count do
-                local v     = data[i]
+                local v                 = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
                     write(subIndentChar)
                     SerializeDataWithWrite(v, write, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
@@ -192,11 +192,11 @@ PLoop(function(_ENV)
                 end
             end
         else
-            local k, v          = next(data)
+            local k, v                  = next(data)
             local nk, nv
 
             while k do
-                nk, nv          = next(data, k)
+                nk, nv                  = next(data, k)
 
                 if type(v) == "table" then
                     write(strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
@@ -214,7 +214,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v            = nk, nv
+                k, v                    = nk, nv
             end
         end
 
@@ -224,11 +224,11 @@ PLoop(function(_ENV)
     function SerializeDataWithWriterNoIndent(data, write, object, objectTypeIgnored)
         write(object, "{")
 
-        local isarray           = isArray(data)
-        local field             = Serialization.ObjectTypeField
-        local val               = data[field]
+        local isarray                   = isArray(data)
+        local field                     = Serialization.ObjectTypeField
+        local val                       = data[field]
         if val then
-            data[field]         = nil
+            data[field]                 = nil
 
             if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
@@ -240,9 +240,9 @@ PLoop(function(_ENV)
         end
 
         if isarray then
-            local count         = #data
+            local count                 = #data
 
-            local v             = data[0]
+            local v                     = data[0]
             if v ~= nil then
                 if type(v) == "table" then
                     write(object, "[0]=")
@@ -258,7 +258,7 @@ PLoop(function(_ENV)
             end
 
             for i = 1, count do
-                local v         = data[i]
+                local v                 = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
                     SerializeDataWithWriterNoIndent(v, write, object, objectTypeIgnored)
                     if i < count then write(object, ",") end
@@ -271,11 +271,11 @@ PLoop(function(_ENV)
                 end
             end
         else
-            local k, v          = next(data)
+            local k, v                  = next(data)
             local nk, nv
 
             while k do
-                nk, nv          = next(data, k)
+                nk, nv                  = next(data, k)
 
                 if type(v) == "table" then
                     write(object, strformat("[%s]=", SerializeSimpleData(k)))
@@ -289,7 +289,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v            = nk, nv
+                k, v                    = nk, nv
             end
         end
 
@@ -299,13 +299,13 @@ PLoop(function(_ENV)
     function SerializeDataWithWriter(data, write, object, indentChar, preIndentChar, lineBreak, objectTypeIgnored)
         write(object, "{" .. lineBreak)
 
-        local subIndentChar     = preIndentChar .. indentChar
+        local subIndentChar             = preIndentChar .. indentChar
 
-        local isarray           = isArray(data)
-        local field             = Serialization.ObjectTypeField
-        local val               = data[field]
+        local isarray                   = isArray(data)
+        local field                     = Serialization.ObjectTypeField
+        local val                       = data[field]
         if val then
-            data[field]         = nil
+            data[field]                 = nil
 
             if not objectTypeIgnored and not isanonymous(val) then
                 if next(data) then
@@ -317,10 +317,10 @@ PLoop(function(_ENV)
         end
 
         if isarray then
-            local subIndentChar = preIndentChar .. indentChar
-            local count         = #data
+            local subIndentChar         = preIndentChar .. indentChar
+            local count                 = #data
 
-            local v             = data[0]
+            local v                     = data[0]
             if v ~= nil then
                 if type(v) == "table" then
                     write(object, strformat("%s[0] = ", subIndentChar))
@@ -340,7 +340,7 @@ PLoop(function(_ENV)
             end
 
             for i = 1, count do
-                local v         = data[i]
+                local v                 = data[i]
                 if type(v) == "table" and getmetatable(v) == nil then
                     write(object, subIndentChar)
                     SerializeDataWithWriter(v, write, object, indentChar, subIndentChar, lineBreak, objectTypeIgnored)
@@ -358,11 +358,11 @@ PLoop(function(_ENV)
                 end
             end
         else
-            local k, v          = next(data)
+            local k, v                  = next(data)
             local nk, nv
 
             while k do
-                nk, nv          = next(data, k)
+                nk, nv                  = next(data, k)
 
                 if type(v) == "table" then
                     write(object, strformat("%s[%s] = ", subIndentChar, SerializeSimpleData(k)))
@@ -380,7 +380,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                k, v            = nk, nv
+                k, v                    = nk, nv
             end
         end
 
@@ -412,15 +412,15 @@ PLoop(function(_ENV)
 
         local function loadData(str)
             if strbyte(str, 1) == 0xEF and strbyte(str, 2) == 0xBB and strbyte(str, 3) == 0xBF then
-                str             = strsub(str, 4, -1)
+                str                     = strsub(str, 4, -1)
             end
 
             -- the date format 2021-12-12 can be load as expression, should be check standalone
             if str:match("^%s*%d+[%-/]%d+") then return str end
 
-            local func          = loadsnippet("return " .. str)
+            local func                  = loadsnippet("return " .. str)
             if func then
-                local ok, val   = pcall(func)
+                local ok, val           = pcall(func)
                 if ok and val ~= nil then return val end
             end
 
@@ -431,16 +431,16 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- Whether using indented format, default false
-        property "Indent"           { type = Boolean }
+        property "Indent"               { type = Boolean }
 
         --- The line break, default '\n'
-        property "LineBreak"        { type = String, Default = "\n" }
+        property "LineBreak"            { type = String, Default = "\n" }
 
         --- The char used as the indented character, default '\t'
-        property "IndentChar"       { type = String, Default = "\t" }
+        property "IndentChar"           { type = String, Default = "\t" }
 
         --- Whether ignore the object's type for serialization
-        property "ObjectTypeIgnored"{ type = Boolean, default = false }
+        property "ObjectTypeIgnored"    { type = Boolean, default = false }
 
         -----------------------------------------------------------------------
         --                              Method                               --
@@ -448,7 +448,7 @@ PLoop(function(_ENV)
         __Arguments__{ Any }
         function Serialize(self, data)
             if type(data) == "table" then
-                local cache = {}
+                local cache             = {}
 
                 if self.Indent then
                     SerializeDataWithWriter(data, tinsert, cache, self.IndentChar, "", self.LineBreak, self.ObjectTypeIgnored)
@@ -456,7 +456,7 @@ PLoop(function(_ENV)
                     SerializeDataWithWriterNoIndent(data, tinsert, cache, self.ObjectTypeIgnored)
                 end
 
-                local ret = tblconcat(cache)
+                local ret               = tblconcat(cache)
 
                 return ret
             else
@@ -494,13 +494,13 @@ PLoop(function(_ENV)
         --- Deserialize the data to common lua data.
         __Arguments__{ System.Text.TextReader }
         function Deserialize(self, reader)
-            local data = reader:ReadToEnd()
+            local data                  = reader:ReadToEnd()
             return data and loadData(data)
         end
 
         __Arguments__{ Function }
         function Deserialize(self, read)
-            local data = List(read):Join()
+            local data                  = List(read):Join()
             return data and loadData(data)
         end
 
@@ -512,12 +512,12 @@ PLoop(function(_ENV)
 
     --- Convert the data to string
     __Static__()
-    function Toolset.tostring(data, dtype, pretty)
+    function Toolset.tostring(data, dtype, pretty, noSerial)
         if data == nil then return "nil" end
         if type(data) ~= "table" then return tostring(data) end
 
         -- Check __tostring
-        local cls               = getClass(data)
+        local cls                       = getClass(data)
         if cls and getMetaMethod(cls, "__tostring", true) then
             return tostring(data)
         end
@@ -526,6 +526,8 @@ PLoop(function(_ENV)
             if isValidValue(SerializableType, dtype) then
                 return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data, dtype)
             end
+        elseif noSerial then
+            return StringFormatProvider{ Indent = pretty or false }:Serialize(data)
         elseif isValidValue(Serializable, data) then
             return Serialize(StringFormatProvider{ Indent = pretty or false, ObjectTypeIgnored = true }, data)
         else
@@ -539,17 +541,17 @@ PLoop(function(_ENV)
         return Deserialize(StringFormatProvider(), string, type)
     end
 
-    local _ToStringAllHandler   = {}
+    local _ToStringAllHandler           = {}
 
     --- Convert multiple data to string
     __Static__()
     function Toolset.tostringall(...)
-        local count             = select("#", ...)
+        local count                     = select("#", ...)
         if count == 0 then return end
 
-        local handler           = _ToStringAllHandler[count]
+        local handler                   = _ToStringAllHandler[count]
         if not handler then
-            handler             = loadsnippet(
+            handler                     = loadsnippet(
                 [[
                     local conv  = ...
                     return function(]] .. List(count, "i=>'arg' .. i"):Join(",") .. [[)
@@ -558,7 +560,7 @@ PLoop(function(_ENV)
                 ]]
             )(Toolset.tostring)
 
-            _ToStringAllHandler = safeset(_ToStringAllHandler, count, handler)
+            _ToStringAllHandler         = safeset(_ToStringAllHandler, count, handler)
         end
 
         return handler(...)

@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2022/01/28                                               --
--- Version      :   1.6.36                                                   --
+-- Update Date  :   2022/04/24                                               --
+-- Version      :   1.8.1                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -115,6 +115,9 @@ do
 
             -- Share API
             fakefunc                    = function() end,
+
+            -- Placeholder
+            namespace                   = false,
         }, {
             __index                     = function(self, k)
                 -- For System namespaces access only, the keyword are already saved
@@ -285,8 +288,9 @@ do
         -- Default 40
         THREAD_POOL_MAX_SIZE                = 40,
 
-        --- Wether disable the default thread pool, so each context has its own
-        -- thread pool, should be actived for http servers.
+        --- Whether enable the context features, so features like the default thread pool will
+        -- be deactived and switch to the context thread pool if possible
+        -- Default false
         ENABLE_CONTEXT_FEATURES             = false,
 
         --- Whether enable thread lock features like __Lock__
@@ -314,6 +318,12 @@ do
 
         --- Whether only use the custom bit operation by PLoop
         USE_CUSTOM_BIT_IMPLEMENTATION       = false,
+
+        --- Whether save the argument definitions as attachment for __Arguments__
+        ENABLE_ARGUMENTS_ATTACHMENT         = false,
+
+        --- Whether save the return definitions as attachment for __Return__
+        ENABLE_RETURN_ATTACHMENT            = false,
     }
 
     -- Special constraint
@@ -865,7 +875,7 @@ do
     -----------------------------------------------------------------------
     --                         private constants                         --
     -----------------------------------------------------------------------
-    local FLD_PROTOTYPE_META            = "__PLOOP_PROTOTYPE_META"
+    FLD_PROTOTYPE_META                  = "__PLOOP_PROTOTYPE_META"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -1182,11 +1192,17 @@ do
     end
 
     local saveAttributeData             = function (attrType, target, data, owner)
-        if owner then
+        if owner and (not namespace or namespace.Validate(owner)) then
             _AttrOwnerSubData           = savestorage(_AttrOwnerSubData, attrType, savestorage(_AttrOwnerSubData[attrType] or newstorage(WEAK_KEY), owner, savestorage(_AttrOwnerSubData[attrType] and _AttrOwnerSubData[attrType][owner] or newstorage(WEAK_KEY), target, data)))
         else
             _AttrTargetData             = savestorage(_AttrTargetData, attrType, savestorage(_AttrTargetData[attrType] or newstorage(WEAK_KEY), target, data))
         end
+    end
+
+    local function independentCall(back, ...)
+        environment.RestoreKeywordAccess(back)
+        _RegisteredAttrs                = tremove(_RegisteredAttrsStack) or _Cache()
+        return ...
     end
 
     -----------------------------------------------------------------------
@@ -1356,22 +1372,11 @@ do
             -- @owner   attribute
             -- @format  definition[, stack]
             -- @param   definition                  the function to be processed
-            -- @param   stack                       the stack level
-            ["IndependentCall"]         = function(definition, static)
-                if type(definition)    ~= "function" then
-                    error("Usage : attribute.Register(definition) - the definition must be a function", parsestack(stack) + 1)
-                end
-
+            -- @param   ...                         the parameters
+            ["IndependentCall"]         = function(definition, ...)
                 tinsert(_RegisteredAttrsStack, _RegisteredAttrs)
                 _RegisteredAttrs        = _Cache()
-
-                local back              = environment.BackupKeywordAccess()
-                local ok, msg           = pcall(definition)
-                environment.RestoreKeywordAccess(back)
-
-                _RegisteredAttrs        = tremove(_RegisteredAttrsStack) or _Cache()
-
-                if not ok then error(msg, 0) end
+                return independentCall(environment.BackupKeywordAccess(), pcall(definition, ...))
             end;
 
             --- Register the super's inheritable attributes to the target, must be called after
@@ -1611,11 +1616,11 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- Environment Special Field
-    local ENV_NS_OWNER                  = "__PLOOP_ENV_OWNNS"
-    local ENV_NS_IMPORTS                = "__PLOOP_ENV_IMPNS"
-    local ENV_BASE_ENV                  = "__PLOOP_ENV_BSENV"
-    local ENV_GLOBAL_CACHE              = "__PLOOP_ENV_GLBCA"
-    local ENV_DEFINE_MODE               = "__PLOOP_ENV_DEFINEMODE"
+    ENV_NS_OWNER                        = "__PLOOP_ENV_OWNNS"
+    ENV_NS_IMPORTS                      = "__PLOOP_ENV_IMPNS"
+    ENV_BASE_ENV                        = "__PLOOP_ENV_BSENV"
+    ENV_GLOBAL_CACHE                    = "__PLOOP_ENV_GLBCA"
+    ENV_DEFINE_MODE                     = "__PLOOP_ENV_DEFINEMODE"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -2351,8 +2356,8 @@ do
     -----------------------------------------------------------------------
     --                         private constants                         --
     -----------------------------------------------------------------------
-    local FLD_NS_SUBNS                  = "__PLOOP_NS_SUBNS"
-    local FLD_NS_NAME                   = "__PLOOP_NS_NAME"
+    FLD_NS_SUBNS                        = "__PLOOP_NS_SUBNS"
+    FLD_NS_NAME                         = "__PLOOP_NS_NAME"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -2972,78 +2977,78 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_STRUCT             = newflags(true)    -- SEALED
-    local MOD_IMMUTABLE_STRUCT          = newflags()        -- IMMUTABLE
-    local MOD_TEMPLATE_STRUCT           = newflags()        -- AS TEMPLATE
-    local MOD_ALLOWOBJ_STRUCT           = newflags()        -- ALLOW OBJECT PASS VALIDATION
+    MOD_SEALED_STRUCT                   = newflags(true)    -- SEALED
+    MOD_IMMUTABLE_STRUCT                = newflags()        -- IMMUTABLE
+    MOD_TEMPLATE_STRUCT                 = newflags()        -- AS TEMPLATE
+    MOD_ALLOWOBJ_STRUCT                 = newflags()        -- ALLOW OBJECT PASS VALIDATION
 
     -- FIELD INDEX
-    local FLD_STRUCT_MOD                = -newindex(1)      -- FIELD MODIFIER
-    local FLD_STRUCT_KEYTYPE            = -newindex()       -- FIELD DICT  KEY TYPE
-    local FLD_STRUCT_VALTYPE            = -newindex()       -- FIELD DICT  VAL TYPE
-    local FLD_STRUCT_KEYVALID           = -newindex()       -- FIELD DICT  KEY VALIDATOR
-    local FLD_STRUCT_VALVALID           = -newindex()       -- FIELD IDCT  VAL VALIDATOR
-    local FLD_STRUCT_TYPEMETHOD         = -newindex()       -- FIELD OBJECT METHODS
-    local FLD_STRUCT_DEFAULT            = -newindex()       -- FEILD DEFAULT
-    local FLD_STRUCT_BASE               = -newindex()       -- FIELD BASE STRUCT
-    local FLD_STRUCT_VALID              = -newindex()       -- FIELD VALIDATOR
-    local FLD_STRUCT_CTOR               = -newindex()       -- FIELD CONSTRUCTOR
-    local FLD_STRUCT_NAME               = -newindex()       -- FEILD STRUCT NAME
-    local FLD_STRUCT_ERRMSG             = -newindex()       -- FIELD ERROR MESSAGE
-    local FLD_STRUCT_VALIDCACHE         = -newindex()       -- FIELD VALIDATOR CACHE
-    local FLD_STRUCT_TEMPPRM            = -newindex()       -- FIELD TEMPLATE PARAMS
-    local FLD_STRUCT_TEMPDEF            = -newindex()       -- FIELD TEMPLATE DEFINITION
-    local FLD_STRUCT_TEMPIMP            = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION
-    local FLD_STRUCT_TEMPENV            = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
-    local FLD_STRUCT_MAINTYPE           = -newindex()       -- FIELD MAIN TYPE
-    local FLD_STRUCT_COMBTYPE1          = -newindex()       -- FIELD COMBO TYPE
-    local FLD_STRUCT_COMBTYPE2          = -newindex()       -- FIELD COMBO TYPE
+    FLD_STRUCT_MOD                      = -newindex(1)      -- FIELD MODIFIER
+    FLD_STRUCT_KEYTYPE                  = -newindex()       -- FIELD DICT  KEY TYPE
+    FLD_STRUCT_VALTYPE                  = -newindex()       -- FIELD DICT  VAL TYPE
+    FLD_STRUCT_KEYVALID                 = -newindex()       -- FIELD DICT  KEY VALIDATOR
+    FLD_STRUCT_VALVALID                 = -newindex()       -- FIELD IDCT  VAL VALIDATOR
+    FLD_STRUCT_TYPEMETHOD               = -newindex()       -- FIELD OBJECT METHODS
+    FLD_STRUCT_DEFAULT                  = -newindex()       -- FEILD DEFAULT
+    FLD_STRUCT_BASE                     = -newindex()       -- FIELD BASE STRUCT
+    FLD_STRUCT_VALID                    = -newindex()       -- FIELD VALIDATOR
+    FLD_STRUCT_CTOR                     = -newindex()       -- FIELD CONSTRUCTOR
+    FLD_STRUCT_NAME                     = -newindex()       -- FEILD STRUCT NAME
+    FLD_STRUCT_ERRMSG                   = -newindex()       -- FIELD ERROR MESSAGE
+    FLD_STRUCT_VALIDCACHE               = -newindex()       -- FIELD VALIDATOR CACHE
+    FLD_STRUCT_TEMPPRM                  = -newindex()       -- FIELD TEMPLATE PARAMS
+    FLD_STRUCT_TEMPDEF                  = -newindex()       -- FIELD TEMPLATE DEFINITION
+    FLD_STRUCT_TEMPIMP                  = -newindex()       -- FIELD TEMPLATE IMPLEMENTATION
+    FLD_STRUCT_TEMPENV                  = -newindex()       -- FIELD TEMPLATE ENVIRONMENT
+    FLD_STRUCT_MAINTYPE                 = -newindex()       -- FIELD MAIN TYPE
+    FLD_STRUCT_COMBTYPE1                = -newindex()       -- FIELD COMBO TYPE
+    FLD_STRUCT_COMBTYPE2                = -newindex()       -- FIELD COMBO TYPE
 
-    local FLD_STRUCT_ARRAY              =  0                -- FIELD ARRAY ELEMENT
-    local FLD_STRUCT_MEMBERSTART        =  1                -- FIELD START INDEX OF MEMBER
-    local FLD_STRUCT_ARRVALID           =  2                -- FIELD ARRAY ELEMENT VALIDATOR
-    local FLD_STRUCT_VALIDSTART         =  10000            -- FIELD START INDEX OF VALIDATOR
-    local FLD_STRUCT_INITSTART          =  20000            -- FIELD START INDEX OF INITIALIZE
+    FLD_STRUCT_ARRAY                    =  0                -- FIELD ARRAY ELEMENT
+    FLD_STRUCT_MEMBERSTART              =  1                -- FIELD START INDEX OF MEMBER
+    FLD_STRUCT_ARRVALID                 =  2                -- FIELD ARRAY ELEMENT VALIDATOR
+    FLD_STRUCT_VALIDSTART               =  10000            -- FIELD START INDEX OF VALIDATOR
+    FLD_STRUCT_INITSTART                =  20000            -- FIELD START INDEX OF INITIALIZE
 
     -- MEMBER FIELD INDEX
-    local FLD_MEMBER_REQUIRE            =  newindex(0)      -- MEMBER FIELD REQUIRED
-    local FLD_MEMBER_OBJ                =  newindex()       -- MEMBER FIELD OBJECT
-    local FLD_MEMBER_NAME               =  newindex()       -- MEMBER FIELD NAME
-    local FLD_MEMBER_TYPE               =  newindex()       -- MEMBER FIELD TYPE
-    local FLD_MEMBER_VALID              =  newindex()       -- MEMBER FIELD TYPE VALIDATOR
-    local FLD_MEMBER_DEFAULT            =  newindex()       -- MEMBER FIELD DEFAULT
-    local FLD_MEMBER_DEFTFACTORY        =  newindex()       -- MEMBER FIELD AS DEFAULT FACTORY
+    FLD_MEMBER_REQUIRE                  =  newindex(0)      -- MEMBER FIELD REQUIRED
+    FLD_MEMBER_OBJ                      =  newindex()       -- MEMBER FIELD OBJECT
+    FLD_MEMBER_NAME                     =  newindex()       -- MEMBER FIELD NAME
+    FLD_MEMBER_TYPE                     =  newindex()       -- MEMBER FIELD TYPE
+    FLD_MEMBER_VALID                    =  newindex()       -- MEMBER FIELD TYPE VALIDATOR
+    FLD_MEMBER_DEFAULT                  =  newindex()       -- MEMBER FIELD DEFAULT
+    FLD_MEMBER_DEFTFACTORY              =  newindex()       -- MEMBER FIELD AS DEFAULT FACTORY
 
     -- TYPE FLAGS
-    local FLG_CUSTOM_STRUCT             = newflags(true)    -- CUSTOM STRUCT FLAG
-    local FLG_MEMBER_STRUCT             = newflags()        -- MEMBER STRUCT FLAG
-    local FLG_ARRAY_STRUCT              = newflags()        -- ARRAY  STRUCT FLAG
-    local FLG_DICT_STRUCT               = newflags()        -- DICT   STRUCT FLAG
-    local FLG_STRUCT_SINGLE_VLD         = newflags()        -- SINGLE VALID  FLAG
-    local FLG_STRUCT_MULTI_VLD          = newflags()        -- MULTI  VALID  FLAG
-    local FLG_STRUCT_SINGLE_INIT        = newflags()        -- SINGLE INIT   FLAG
-    local FLG_STRUCT_MULTI_INIT         = newflags()        -- MULTI  INIT   FLAG
-    local FLG_STRUCT_OBJ_METHOD         = newflags()        -- OBJECT METHOD FLAG
-    local FLG_STRUCT_VALIDCACHE         = newflags()        -- VALID  CACHE  FLAG
-    local FLG_STRUCT_MULTI_REQ          = newflags()        -- MULTI  FIELD  REQUIRE FLAG
-    local FLG_STRUCT_FIRST_TYPE         = newflags()        -- FIRST  MEMBER TYPE    FLAG
-    local FLG_STRUCT_IMMUTABLE          = newflags()        -- IMMUTABLE     FLAG
-    local FLG_STRUCT_ALLOW_OBJ          = newflags()        -- ALLOW  OBjECT FLAG
-    local FLG_STRUCT_VALID_KEY          = newflags()        -- KEY    VALID  FLAG
-    local FLG_STRUCT_VALID_VAL          = newflags()        -- VALUE  VALID  FLAG
-    local FLG_STRUCT_IMTBL_KEY          = newflags()        -- IMMUTBL KEY   LFAG
+    FLG_CUSTOM_STRUCT                   = newflags(true)    -- CUSTOM STRUCT FLAG
+    FLG_MEMBER_STRUCT                   = newflags()        -- MEMBER STRUCT FLAG
+    FLG_ARRAY_STRUCT                    = newflags()        -- ARRAY  STRUCT FLAG
+    FLG_DICT_STRUCT                     = newflags()        -- DICT   STRUCT FLAG
+    FLG_STRUCT_SINGLE_VLD               = newflags()        -- SINGLE VALID  FLAG
+    FLG_STRUCT_MULTI_VLD                = newflags()        -- MULTI  VALID  FLAG
+    FLG_STRUCT_SINGLE_INIT              = newflags()        -- SINGLE INIT   FLAG
+    FLG_STRUCT_MULTI_INIT               = newflags()        -- MULTI  INIT   FLAG
+    FLG_STRUCT_OBJ_METHOD               = newflags()        -- OBJECT METHOD FLAG
+    FLG_STRUCT_VALIDCACHE               = newflags()        -- VALID  CACHE  FLAG
+    FLG_STRUCT_MULTI_REQ                = newflags()        -- MULTI  FIELD  REQUIRE FLAG
+    FLG_STRUCT_FIRST_TYPE               = newflags()        -- FIRST  MEMBER TYPE    FLAG
+    FLG_STRUCT_IMMUTABLE                = newflags()        -- IMMUTABLE     FLAG
+    FLG_STRUCT_ALLOW_OBJ                = newflags()        -- ALLOW  OBjECT FLAG
+    FLG_STRUCT_VALID_KEY                = newflags()        -- KEY    VALID  FLAG
+    FLG_STRUCT_VALID_VAL                = newflags()        -- VALUE  VALID  FLAG
+    FLG_STRUCT_IMTBL_KEY                = newflags()        -- IMMUTBL KEY   LFAG
 
-    local STRUCT_KEYWORD_ARRAY          = "__array"
-    local STRUCT_KEYWORD_BASE           = "__base"
-    local STRUCT_KEYWORD_DFLT           = "__default"
-    local STRUCT_KEYWORD_INIT           = "__init"
-    local STRUCT_KEYWORD_VALD           = "__valid"
-    local STRUCT_KEYWORD_KEY            = "__key"
-    local STRUCT_KEYWORD_VAL            = "__value"
+    STRUCT_KEYWORD_ARRAY                = "__array"
+    STRUCT_KEYWORD_BASE                 = "__base"
+    STRUCT_KEYWORD_DFLT                 = "__default"
+    STRUCT_KEYWORD_INIT                 = "__init"
+    STRUCT_KEYWORD_VALD                 = "__valid"
+    STRUCT_KEYWORD_KEY                  = "__key"
+    STRUCT_KEYWORD_VAL                  = "__value"
 
     -- UNSAFE MODE FIELDS
-    local FLD_STRUCT_META               = "__PLOOP_STRUCT_META"
-    local FLD_MEMBER_META               = "__PLOOP_STRUCT_MEMBER_META"
+    FLD_STRUCT_META                     = "__PLOOP_STRUCT_META"
+    FLD_MEMBER_META                     = "__PLOOP_STRUCT_MEMBER_META"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -3080,6 +3085,106 @@ do
         if info then return info, true else return _StructInfo[target], false end
     end
 
+    local tryConvertToStruct, tryConvertToMember
+
+    tryConvertToStruct                  = function(table)
+        local temp                      = _Cache()
+
+        for key, value in pairs, table do
+            local tkey                  = type(key)
+            local tval                  = type(value)
+
+            temp[key]                   = value
+
+            if tkey == "string" and not tonumber(key) then
+                if key == STRUCT_KEYWORD_DFLT then
+                    -- Pass
+                elseif tval == "function" then
+                    -- No method allowed
+                    if key ~= STRUCT_KEYWORD_INIT and key ~= STRUCT_KEYWORD_VALD then
+                        _Cache(temp)
+                        return
+                    end
+                elseif getprototypemethod(value, "ValidateValue") then
+                    -- Pass
+                elseif tval == "table" then
+                    -- Check if the value can be convert to a struct type
+                    local tval
+                    if key == STRUCT_KEYWORD_ARRAY  then
+                        tval            = tryConvertToStruct(value)
+                    else
+                        tval            = tryConvertToMember(value, key)
+                    end
+                    if not tval then    _Cache(temp) return end
+                    temp[key]           = tval
+                else
+                    _Cache(temp)
+                    return
+                end
+            elseif tkey == "number" then
+                if tval == "table" and getmetatable(value) == nil then
+                    local vtype         = tryConvertToMember(value)
+                    if not vtype then   _Cache(temp) return end
+                    temp[key]           = vtype
+                end
+            elseif getprototypemethod(key,   "ValidateValue") then
+                if getprototypemethod(value, "ValidateValue") then
+                    -- pass
+                elseif tval == "table" then
+                    local vtype         = tryConvertToStruct(value)
+                    if not vtype then   _Cache(temp) return end
+                    temp[key]           = vtype
+                else
+                    _Cache(temp)
+                    return
+                end
+            else
+                _Cache(temp)
+                return
+            end
+        end
+
+        local ok, structType            = attribute.IndependentCall(function(temp) local type = struct(temp) return type end, temp)
+        _Cache(temp)
+
+        return ok and structType or nil
+    end
+
+    tryConvertToMember                  = function (table, name)
+        local typeKey, nameKey
+
+        -- Check fields
+        for key, value in pairs, table do
+            if type(key) == "string" then
+
+                local lkey              = strlower(key)
+
+                if lkey == "type" then
+                    typeKey             = key
+                elseif lkey == "name" and type(value) == "string" then
+                    nameKey             = key
+                end
+            end
+        end
+
+        if typeKey and (name or nameKey) then
+            local value                 = table[typeKey]
+            -- Check the type value
+            if getprototypemethod(value, "ValidateValue") then
+                -- Use the table directly
+                return table
+            elseif type(value) == "table" then
+                local vtype             = tryConvertToStruct(value)
+                if vtype then
+                    table[typeKey]      = vtype
+                    return table
+                end
+            end
+        end
+
+        return tryConvertToStruct(table)
+    end
+
     local setStructBuilderValue         = function (self, key, value, stack, notenvset)
         local owner                     = environment.GetNamespace(self)
         if not (owner and _StructBuilderInDefine[self]) then return end
@@ -3089,6 +3194,7 @@ do
 
         stack                           = stack + 1
 
+        -- Add to struct feature
         if tkey == "string" and not tonumber(key) then
             if key == STRUCT_KEYWORD_DFLT then
                 struct.SetDefault(owner, value, stack)
@@ -3115,11 +3221,21 @@ do
                 elseif key == STRUCT_KEYWORD_VAL then
                     struct.SetDictionaryValue(owner, value, stack)
                 else
-                    struct.AddMember(owner, key, { Type = value }, stack)
+                    struct.AddMember(owner, key, { type = value }, stack)
                 end
                 return true
             elseif tval == "table" and notenvset then
-                struct.AddMember(owner, key, value, stack)
+                -- Check if the value can be convert to a struct type
+                if key == STRUCT_KEYWORD_ARRAY then
+                    local vtype         = tryConvertToStruct(value)
+                    if vtype then
+                        struct.SetArrayElement(owner, vtype, stack)
+                        return true
+                    end
+                end
+
+                local vtype             = tryConvertToMember(value, key)
+                struct.AddMember(owner, key, vtype and getmetatable(vtype) == nil and vtype or { type = vtype } or value, stack)
                 return true
             end
         elseif tkey == "number" then
@@ -3130,13 +3246,29 @@ do
                 struct.SetArrayElement(owner, value, stack)
                 return true
             elseif tval == "table" then
-                struct.AddMember(owner, value, stack)
+                local vtype             = tryConvertToMember(value)
+
+                if vtype and getprototypemethod(vtype, "ValidateValue") then
+                    struct.SetArrayElement(owner, vtype, stack)
+                else
+                    struct.AddMember(owner, vtype or value, stack)
+                end
+
                 return true
             else
                 struct.SetDefault(owner, value, stack)
                 return true
             end
-        elseif getprototypemethod(key, "ValidateValue") and getprototypemethod(value, "ValidateValue") then
+        elseif getprototypemethod(key, "ValidateValue") then
+            if not getprototypemethod(value, "ValidateValue") then
+                if tval == "table" then
+                    value               = tryConvertToStruct(value)
+                    if not value then return false end
+                else
+                    return false
+                end
+            end
+
             struct.SetDictionaryKey(owner, key, stack)
             struct.SetDictionaryValue(owner, value, stack)
             return true
@@ -3189,7 +3321,7 @@ do
         return info and (def or not validateflags(MOD_SEALED_STRUCT, info[FLD_STRUCT_MOD]))
     end
 
-    local checkStructDependence = function (target, chkType)
+    local checkStructDependence         = function (target, chkType)
         if chkType and target ~= chkType then
             if chkStructContents(chkType, isNotSealedStruct, true) then
                 _DependenceMap[chkType]         = _DependenceMap[chkType] or newstorage(WEAK_KEY)
@@ -3913,7 +4045,7 @@ do
             local implement             = getTemplateImplement(implements, key)
             if implement then return implement end
 
-            local ok, err               = pcall(attribute.IndependentCall, function()
+            local ok, err               = attribute.IndependentCall(function()
                 implement               = struct {}
                 local bder              = struct (info[FLD_STRUCT_TEMPENV], implement, true)
                 struct.SetSealed(implement)
@@ -4917,12 +5049,10 @@ do
             if select("#", ...) == 1 then
                 local definition        = ...
                 if type(definition) == "table" then
-                    local k, v
-                    for i, j in pairs, definition do
-                        if k then k     = nil break end
-                        k, v            = i, j
-                    end
-                    if k and v then
+                    -- Check if only contains one pair
+                    local k, v          = next(definition)
+
+                    if k and v and next(definition, k) == nil then
                         if type(k) == "number" then
                             if getprototypemethod(v, "ValidateValue") then
                                 _arrayType  = v
@@ -5382,24 +5512,24 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_ENUM               = newflags(true)    -- SEALED
-    local MOD_FLAGS_ENUM                = newflags()        -- FLAGS
-    local MOD_NOT_FLAGS                 = newflags()        -- NOT FLAG
-    local MOD_SHARE_VALUE               = newflags()        -- ALLOW THE SAME VALUE
+    MOD_SEALED_ENUM                     = newflags(true)    -- SEALED
+    MOD_FLAGS_ENUM                      = newflags()        -- FLAGS
+    MOD_NOT_FLAGS                       = newflags()        -- NOT FLAG
+    MOD_SHARE_VALUE                     = newflags()        -- ALLOW THE SAME VALUE
 
     -- FIELD INDEX
-    local FLD_ENUM_MOD                  = newindex(0)       -- FIELD MODIFIER
-    local FLD_ENUM_ITEMS                = newindex()        -- FIELD ENUMERATIONS
-    local FLD_ENUM_CACHE                = newindex()        -- FIELD CACHE : VALUE -> NAME
-    local FLD_ENUM_ERRMSG               = newindex()        -- FIELD ERROR MESSAGE
-    local FLD_ENUM_MAXVAL               = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
-    local FLD_ENUM_DEFAULT              = newindex()        -- FIELD DEFAULT
+    FLD_ENUM_MOD                        = newindex(0)       -- FIELD MODIFIER
+    FLD_ENUM_ITEMS                      = newindex()        -- FIELD ENUMERATIONS
+    FLD_ENUM_CACHE                      = newindex()        -- FIELD CACHE : VALUE -> NAME
+    FLD_ENUM_ERRMSG                     = newindex()        -- FIELD ERROR MESSAGE
+    FLD_ENUM_MAXVAL                     = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
+    FLD_ENUM_DEFAULT                    = newindex()        -- FIELD DEFAULT
 
     -- Flags
-    local FLG_FLAGS_ENUM                = newflags(true)
+    FLG_FLAGS_ENUM                      = newflags(true)
 
     -- UNSAFE FIELD
-    local FLD_ENUM_META                 = "__PLOOP_ENUM_META"
+    FLD_ENUM_META                       = "__PLOOP_ENUM_META"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -5961,6 +6091,7 @@ end
 --          *  __new        the function used to generate the table that'd be converted to an object
 --          *  __ctor       the object constructor
 --          *  __dtor       the object destructor
+--          *  __close      the to-be-closed
 --
 --  There are several PLoop special meta-data, here are examples :
 --
@@ -6253,110 +6384,110 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- FEATURE MODIFIER
-    local MOD_SEALED_IC                 = newflags(true)            -- SEALED TYPE
-    local MOD_FINAL_IC                  = newflags()                -- FINAL TYPE
-    local MOD_ABSTRACT_CLS              = newflags()                -- ABSTRACT CLASS
-    local MOD_SINGLEVER_CLS             = newflags()                -- SINGLE VERSION CLASS - NO MULTI VERSION
-    local MOD_ATTRFUNC_OBJ              = newflags()                -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
-    local MOD_NORAWSET_OBJ              = newflags()                -- NO RAW SET FOR OBJECTS
-    local MOD_NONILVAL_OBJ              = newflags()                -- NO NIL FIELD ACCESS
-    local MOD_NOSUPER_OBJ               = newflags()                -- OLD SUPER ACCESS STYLE
-    local MOD_ANYMOUS_CLS               = newflags()                -- HAS ANONYMOUS CLASS
-    local MOD_ATTROBJ_CLS               = newflags()                -- CAN APPLY ATTRIBUTES ON OBJECTS
-    local MOD_TEMPLATE_IC               = newflags()                -- AS TEMPLATE INTERFACE/CLASS
-    local MOD_AUTOCACHE_OBJ             = newflags()                -- OBJECT METHOD AUTO-CACHE
-    local MOD_RECYCLABLE_OBJ            = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
+    MOD_SEALED_IC                       = newflags(true)            -- SEALED TYPE
+    MOD_FINAL_IC                        = newflags()                -- FINAL TYPE
+    MOD_ABSTRACT_CLS                    = newflags()                -- ABSTRACT CLASS
+    MOD_SINGLEVER_CLS                   = newflags()                -- SINGLE VERSION CLASS - NO MULTI VERSION
+    MOD_ATTRFUNC_OBJ                    = newflags()                -- ENABLE FUNCTION ATTRIBUTE ON OBJECT
+    MOD_NORAWSET_OBJ                    = newflags()                -- NO RAW SET FOR OBJECTS
+    MOD_NONILVAL_OBJ                    = newflags()                -- NO NIL FIELD ACCESS
+    MOD_NOSUPER_OBJ                     = newflags()                -- OLD SUPER ACCESS STYLE
+    MOD_ANYMOUS_CLS                     = newflags()                -- HAS ANONYMOUS CLASS
+    MOD_ATTROBJ_CLS                     = newflags()                -- CAN APPLY ATTRIBUTES ON OBJECTS
+    MOD_TEMPLATE_IC                     = newflags()                -- AS TEMPLATE INTERFACE/CLASS
+    MOD_AUTOCACHE_OBJ                   = newflags()                -- OBJECT METHOD AUTO-CACHE
+    MOD_RECYCLABLE_OBJ                  = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
 
-    local MOD_INITVAL_CLS               = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
+    MOD_INITVAL_CLS                     = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_RAWSEST             and MOD_NORAWSET_OBJ  or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.OBJECT_NO_NIL_ACCESS          and MOD_NONILVAL_OBJ  or 0)
 
-    local MOD_INITVAL_IF                = (PLOOP_PLATFORM_SETTINGS.INTERFACE_ALL_ANONYMOUS_CLASS and MOD_ANYMOUS_CLS   or 0)
+    MOD_INITVAL_IF                      = (PLOOP_PLATFORM_SETTINGS.INTERFACE_ALL_ANONYMOUS_CLASS and MOD_ANYMOUS_CLS   or 0)
 
-    local INI_FLD_DEBUGSR               = PLOOP_PLATFORM_SETTINGS.OBJECT_DEBUG_SOURCE or nil
+    INI_FLD_DEBUGSR                     = PLOOP_PLATFORM_SETTINGS.OBJECT_DEBUG_SOURCE or false
 
     -- STATIC FIELDS
-    local FLD_IC_STEXT                  =  1                        -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
-    local FLD_IC_SUPCLS                 =  newindex(0)              -- FIELD SUPER CLASS
-    local FLD_IC_MOD                    = -newindex()               -- FIELD MODIFIER
-    local FLD_IC_INIT                   = -newindex()               -- FIELD INITIALIZER
-    local FLD_IC_DTOR                   = -newindex()               -- FIELD DESTRUCTOR
-    local FLD_IC_FIELD                  = -newindex()               -- FIELD INIT FIELDS
-    local FLD_IC_TYPMTD                 = -newindex()               -- FIELD TYPE METHODS
-    local FLD_IC_TYPMTM                 = -newindex()               -- FIELD TYPE META-METHODS
-    local FLD_IC_TYPFTR                 = -newindex()               -- FILED TYPE FEATURES
-    local FLD_IC_INHRTP                 = -newindex()               -- FIELD INHERITANCE PRIORITY
-    local FLD_IC_REQCLS                 = -newindex()               -- FIELD REQUIR CLASS FOR INTERFACE
-    local FLD_IC_SUPER                  = -newindex()               -- FIELD SUPER
-    local FLD_IC_ANYMSCL                = -newindex()               -- FIELD ANONYMOUS CLASS FOR INTERFACE
-    local FLD_IC_DEBUGSR                = -newindex()               -- FIELD WHETHER DEBUG THE OBJECT SOURCE
-    local FLD_IC_TEMPPRM                = -newindex()               -- FIELD TEMPLATE ARGUMENTS
-    local FLD_IC_TEMPDEF                = -newindex()               -- FIELD TEMPlATE DEFINITION
-    local FLD_IC_TEMPIMP                = -newindex()               -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
-    local FLD_IC_TEMPENV                = -newindex()               -- FIELD TEMPLATE ENVIRONMENT
+    FLD_IC_STEXT                        =  1                        -- FIELD EXTEND INTERFACE START INDEX(keep 1 so we can use unpack on it)
+    FLD_IC_SUPCLS                       =  newindex(0)              -- FIELD SUPER CLASS
+    FLD_IC_MOD                          = -newindex()               -- FIELD MODIFIER
+    FLD_IC_INIT                         = -newindex()               -- FIELD INITIALIZER
+    FLD_IC_DTOR                         = -newindex()               -- FIELD DESTRUCTOR
+    FLD_IC_FIELD                        = -newindex()               -- FIELD INIT FIELDS
+    FLD_IC_TYPMTD                       = -newindex()               -- FIELD TYPE METHODS
+    FLD_IC_TYPMTM                       = -newindex()               -- FIELD TYPE META-METHODS
+    FLD_IC_TYPFTR                       = -newindex()               -- FILED TYPE FEATURES
+    FLD_IC_INHRTP                       = -newindex()               -- FIELD INHERITANCE PRIORITY
+    FLD_IC_REQCLS                       = -newindex()               -- FIELD REQUIR CLASS FOR INTERFACE
+    FLD_IC_SUPER                        = -newindex()               -- FIELD SUPER
+    FLD_IC_ANYMSCL                      = -newindex()               -- FIELD ANONYMOUS CLASS FOR INTERFACE
+    FLD_IC_DEBUGSR                      = -newindex()               -- FIELD WHETHER DEBUG THE OBJECT SOURCE
+    FLD_IC_TEMPPRM                      = -newindex()               -- FIELD TEMPLATE ARGUMENTS
+    FLD_IC_TEMPDEF                      = -newindex()               -- FIELD TEMPlATE DEFINITION
+    FLD_IC_TEMPIMP                      = -newindex()               -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
+    FLD_IC_TEMPENV                      = -newindex()               -- FIELD TEMPLATE ENVIRONMENT
 
     -- CACHE FIELDS
-    local FLD_IC_STAFTR                 = -newindex()               -- FIELD STATIC TYPE FEATURES
-    local FLD_IC_OBJMTD                 = -newindex()               -- FIELD OBJECT METHODS
-    local FLD_IC_OBJMTM                 = -newindex()               -- FIELD OBJECT META-METHODS
-    local FLD_IC_OBJFTR                 = -newindex()               -- FIELD OBJECT FEATURES
-    local FLD_IC_OBJFLD                 = -newindex()               -- FIELD OBJECT INIT-FIELDS
-    local FLD_IC_ONEABS                 = -newindex()               -- FIELD ONE ABSTRACT-METHOD INTERFACE
-    local FLD_IC_SUPINFO                = -newindex()               -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
-    local FLD_IC_SUPMTD                 = -newindex()               -- FIELD SUPER METHOD & META-METHODS
-    local FLD_IC_SUPFTR                 = -newindex()               -- FIELD SUPER FEATURE
+    FLD_IC_STAFTR                       = -newindex()               -- FIELD STATIC TYPE FEATURES
+    FLD_IC_OBJMTD                       = -newindex()               -- FIELD OBJECT METHODS
+    FLD_IC_OBJMTM                       = -newindex()               -- FIELD OBJECT META-METHODS
+    FLD_IC_OBJFTR                       = -newindex()               -- FIELD OBJECT FEATURES
+    FLD_IC_OBJFLD                       = -newindex()               -- FIELD OBJECT INIT-FIELDS
+    FLD_IC_ONEABS                       = -newindex()               -- FIELD ONE ABSTRACT-METHOD INTERFACE
+    FLD_IC_SUPINFO                      = -newindex()               -- FIELD INFO CACHE FOR SUPER CLASS & EXTEND INTERFACES
+    FLD_IC_SUPMTD                       = -newindex()               -- FIELD SUPER METHOD & META-METHODS
+    FLD_IC_SUPFTR                       = -newindex()               -- FIELD SUPER FEATURE
 
     -- Ctor & Dispose
-    local FLD_IC_OBCTOR                 = 10000                     -- FIELD THE OBJECT CONSTRUCTOR
-    local FLD_IC_ENDISP                 = FLD_IC_OBCTOR - 1         -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
-    local FLD_IC_STINIT                 = FLD_IC_OBCTOR + 1         -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
+    FLD_IC_OBCTOR                       = 10000                     -- FIELD THE OBJECT CONSTRUCTOR
+    FLD_IC_ENDISP                       = FLD_IC_OBCTOR - 1         -- FIELD ALL EXTEND INTERFACE DISPOSE END INDEX
+    FLD_IC_STINIT                       = FLD_IC_OBCTOR + 1         -- FIELD ALL EXTEND INTERFACE INITIALIZER START INDEX
 
     -- Inheritance priority
-    local INRT_PRIORITY_FINAL           =  1
-    local INRT_PRIORITY_NORMAL          =  0
-    local INRT_PRIORITY_ABSTRACT        = -1
+    INRT_PRIORITY_FINAL                 =  1
+    INRT_PRIORITY_NORMAL                =  0
+    INRT_PRIORITY_ABSTRACT              = -1
 
     -- Flags for object accessing
-    local FLG_IC_OBJMTD                 = newflags(true)            -- HAS OBJECT METHOD
-    local FLG_IC_OBJFTR                 = newflags()                -- HAS OBJECT FEATURE
-    local FLG_IC_IDXFUN                 = newflags()                -- HAS INDEX FUNCTION
-    local FLG_IC_IDXTBL                 = newflags()                -- HAS INDEX TABLE
-    local FLG_IC_NEWIDX                 = newflags()                -- HAS NEW INDEX
-    local FLG_IC_OMDATR                 = newflags()                -- ENABLE OBJECT METHOD ATTRIBUTE
-    local FLG_IC_NRAWST                 = newflags()                -- ENABLE NO RAW SET
-    local FLG_IC_NNILVL                 = newflags()                -- NO NIL VALUE ACCESS
-    local FLG_IC_SUPACC                 = newflags()                -- SUPER OBJECT ACCESS
-    local FLG_IC_ATCACH                 = newflags()                -- OBJECT METHOD AUTO CACHE
+    FLG_IC_OBJMTD                       = newflags(true)            -- HAS OBJECT METHOD
+    FLG_IC_OBJFTR                       = newflags()                -- HAS OBJECT FEATURE
+    FLG_IC_IDXFUN                       = newflags()                -- HAS INDEX FUNCTION
+    FLG_IC_IDXTBL                       = newflags()                -- HAS INDEX TABLE
+    FLG_IC_NEWIDX                       = newflags()                -- HAS NEW INDEX
+    FLG_IC_OMDATR                       = newflags()                -- ENABLE OBJECT METHOD ATTRIBUTE
+    FLG_IC_NRAWST                       = newflags()                -- ENABLE NO RAW SET
+    FLG_IC_NNILVL                       = newflags()                -- NO NIL VALUE ACCESS
+    FLG_IC_SUPACC                       = newflags()                -- SUPER OBJECT ACCESS
+    FLG_IC_ATCACH                       = newflags()                -- OBJECT METHOD AUTO CACHE
 
     -- Flags for constructor
-    local FLG_IC_EXIST                  = newflags(FLG_IC_IDXFUN)   -- HAS __exist
-    local FLG_IC_NEWOBJ                 = newflags()                -- HAS __new
-    local FLG_IC_FIELD                  = newflags()                -- HAS __field
-    local FLG_IC_HSCLIN                 = newflags()                -- HAS CLASS INITIALIZER
-    local FLG_IC_HSIFIN                 = newflags()                -- NEED CALL INTERFACE'S INITIALIZER
-    local FLG_IC_OBJATR                 = newflags()                -- OBJECT ATTRIBUTE
+    FLG_IC_EXIST                        = newflags(FLG_IC_IDXFUN)   -- HAS __exist
+    FLG_IC_NEWOBJ                       = newflags()                -- HAS __new
+    FLG_IC_FIELD                        = newflags()                -- HAS __field
+    FLG_IC_HSCLIN                       = newflags()                -- HAS CLASS INITIALIZER
+    FLG_IC_HSIFIN                       = newflags()                -- NEED CALL INTERFACE'S INITIALIZER
+    FLG_IC_OBJATR                       = newflags()                -- OBJECT ATTRIBUTE
 
     -- Meta Datas
-    local IC_META_DISPOB                = "Dispose"
-    local IC_META_DISPOSED              = "Disposed"
-    local IC_META_EXIST                 = "__exist"                 -- Existed objecj check
-    local IC_META_FIELD                 = "__field"                 -- Init fields
-    local IC_META_NEW                   = "__new"                   -- New object
-    local IC_META_CTOR                  = "__ctor"                  -- Constructor
-    local IC_META_DTOR                  = "__dtor"                  -- Destructor, short for Dispose
-    local IC_META_INIT                  = "__init"                  -- Initializer
+    IC_META_DISPOB                      = "Dispose"
+    IC_META_DISPOSED                    = "Disposed"
+    IC_META_EXIST                       = "__exist"                 -- Existed objecj check
+    IC_META_FIELD                       = "__field"                 -- Init fields
+    IC_META_NEW                         = "__new"                   -- New object
+    IC_META_CTOR                        = "__ctor"                  -- Constructor
+    IC_META_DTOR                        = "__dtor"                  -- Destructor, short for Dispose
+    IC_META_INIT                        = "__init"                  -- Initializer
 
-    local IC_META_INDEX                 = "__index"
-    local IC_META_NEWIDX                = "__newindex"
-    local IC_META_TABLE                 = "__metatable"
-    local IC_META_GC                    = "__gc"
+    IC_META_INDEX                       = "__index"
+    IC_META_NEWIDX                      = "__newindex"
+    IC_META_TABLE                       = "__metatable"
+    IC_META_GC                          = "__gc"
 
     -- Super & This
-    local IC_KEYWORD_SUPER              = "super"
-    local OBJ_SUPER_ACCESS              = "__PLOOP_SUPER_ACCESS"
+    IC_KEYWORD_SUPER                    = "super"
+    OBJ_SUPER_ACCESS                    = "__PLOOP_SUPER_ACCESS"
 
-    local META_KEYS                     = {
+    META_KEYS                           = {
         -- inheritable with priority
         __add                           = "__add",                  -- a + b
         __sub                           = "__sub",                  -- a - b
@@ -6398,10 +6529,10 @@ do
     }
 
     -- UNSAFE FIELD
-    local FLD_IC_META                   = "__PLOOP_IC_META"
-    local FLD_IC_TYPE                   = "__PLOOP_IC_TYPE"
-    local FLD_OBJ_SOURCE                = "__PLOOP_OBJ_SOURCE"
-    local FLD_EXD_METHOD                = "__PLOOP_EXD_METHOD"
+    FLD_IC_META                         = "__PLOOP_IC_META"
+    FLD_IC_TYPE                         = "__PLOOP_IC_TYPE"
+    FLD_OBJ_SOURCE                      = "__PLOOP_OBJ_SOURCE"
+    FLD_EXD_METHOD                      = "__PLOOP_EXD_METHOD"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -7875,7 +8006,7 @@ do
             local implement             = getTemplateImplement(implements, key)
             if implement then return implement end
 
-            local ok, err               = pcall(attribute.IndependentCall, function()
+            local ok, err               = attribute.IndependentCall(function()
                 local ptype             = getmetatable(self)
                 implement               = ptype {}
                 local bder              = ptype (info[FLD_IC_TEMPENV], implement, true)
@@ -10321,15 +10452,15 @@ do
     -----------------------------------------------------------------------
     --                         private constants                         --
     -----------------------------------------------------------------------
-    local FLD_EVENT_HANDLER             = newindex(0)
-    local FLD_EVENT_NAME                = newindex()
-    local FLD_EVENT_FIELD               = newindex()
-    local FLD_EVENT_OWNER               = newindex()
-    local FLD_EVENT_STATIC              = newindex()
-    local FLD_EVENT_DELEGATE            = newindex()
+    FLD_EVENT_HANDLER                   = newindex(0)
+    FLD_EVENT_NAME                      = newindex()
+    FLD_EVENT_FIELD                     = newindex()
+    FLD_EVENT_OWNER                     = newindex()
+    FLD_EVENT_STATIC                    = newindex()
+    FLD_EVENT_DELEGATE                  = newindex()
 
-    local FLD_EVENT_META                = "__PLOOP_EVENT_META"
-    local FLD_EVENT_PREFIX              = "__PLOOP_EVENT_"
+    FLD_EVENT_META                      = "__PLOOP_EVENT_META"
+    FLD_EVENT_PREFIX                    = "__PLOOP_EVENT_"
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -10805,7 +10936,7 @@ end
 --                          print("SetName", name)
 --                      end
 --
---                      property "Name" { type = String }
+--                      property "Name" { type = String, auto = true }
 --                  end)
 --
 --                  -- SetName  Ann
@@ -10880,85 +11011,85 @@ do
     --                         private constants                         --
     -----------------------------------------------------------------------
     -- MODIFIER
-    local MOD_PROP_STATIC               = newflags(true)
+    MOD_PROP_STATIC                     = newflags(true)
 
-    local MOD_PROP_SETCLONE             = newflags()
-    local MOD_PROP_SETDEEPCL            = newflags()
-    local MOD_PROP_SETRETAIN            = newflags()
-    local MOD_PROP_SETWEAK              = newflags()
+    MOD_PROP_SETCLONE                   = newflags()
+    MOD_PROP_SETDEEPCL                  = newflags()
+    MOD_PROP_SETRETAIN                  = newflags()
+    MOD_PROP_SETWEAK                    = newflags()
 
-    local MOD_PROP_GETCLONE             = newflags()
-    local MOD_PROP_GETDEEPCL            = newflags()
+    MOD_PROP_GETCLONE                   = newflags()
+    MOD_PROP_GETDEEPCL                  = newflags()
 
-    local MOD_PROP_AUTOSCAN             = newflags()
-    local MOD_PROP_INDEXER              = newflags()
-    local MOD_PROP_THROWABLE            = newflags()
-    local MOD_PROP_REQUIRE              = newflags()
+    MOD_PROP_AUTOSCAN                   = newflags()
+    MOD_PROP_INDEXER                    = newflags()
+    MOD_PROP_THROWABLE                  = newflags()
+    MOD_PROP_REQUIRE                    = newflags()
 
     -- PROPERTY FIELDS
-    local FLD_PROP_MOD                  = newindex(0)
-    local FLD_PROP_RAWGET               = newindex()
-    local FLD_PROP_RAWSET               = newindex()
-    local FLD_PROP_NAME                 = newindex()
-    local FLD_PROP_OWNER                = newindex()
-    local FLD_PROP_TYPE                 = newindex()
-    local FLD_PROP_VALID                = newindex()
-    local FLD_PROP_FIELD                = newindex()
-    local FLD_PROP_GET                  = newindex()
-    local FLD_PROP_SET                  = newindex()
-    local FLD_PROP_GETMETHOD            = newindex()
-    local FLD_PROP_SETMETHOD            = newindex()
-    local FLD_PROP_DEFAULT              = newindex()
-    local FLD_PROP_DEFAULTFUNC          = newindex()
-    local FLD_PROP_HANDLER              = newindex()
-    local FLD_PROP_EVENT                = newindex()
-    local FLD_PROP_STATIC               = newindex()
-    local FLD_PROP_INDEXERTYP           = newindex()
-    local FLD_PROP_INDEXERVLD           = newindex()
-    local FLD_PROP_INDEXERGET           = newindex()
-    local FLD_PROP_INDEXERSET           = newindex()
-    local FLD_PROP_INDEXERFLD           = newindex()
+    FLD_PROP_MOD                        = newindex(0)
+    FLD_PROP_RAWGET                     = newindex()
+    FLD_PROP_RAWSET                     = newindex()
+    FLD_PROP_NAME                       = newindex()
+    FLD_PROP_OWNER                      = newindex()
+    FLD_PROP_TYPE                       = newindex()
+    FLD_PROP_VALID                      = newindex()
+    FLD_PROP_FIELD                      = newindex()
+    FLD_PROP_GET                        = newindex()
+    FLD_PROP_SET                        = newindex()
+    FLD_PROP_GETMETHOD                  = newindex()
+    FLD_PROP_SETMETHOD                  = newindex()
+    FLD_PROP_DEFAULT                    = newindex()
+    FLD_PROP_DEFAULTFUNC                = newindex()
+    FLD_PROP_HANDLER                    = newindex()
+    FLD_PROP_EVENT                      = newindex()
+    FLD_PROP_STATIC                     = newindex()
+    FLD_PROP_INDEXERTYP                 = newindex()
+    FLD_PROP_INDEXERVLD                 = newindex()
+    FLD_PROP_INDEXERGET                 = newindex()
+    FLD_PROP_INDEXERSET                 = newindex()
+    FLD_PROP_INDEXERFLD                 = newindex()
 
     -- FLAGS FOR PROPERTY BUILDING
-    local FLG_PROPGET_DISABLE           = newflags(true)
-    local FLG_PROPGET_DEFAULT           = newflags()
-    local FLG_PROPGET_DEFTFUNC          = newflags()
-    local FLG_PROPGET_GET               = newflags()
-    local FLG_PROPGET_GETMETHOD         = newflags()
-    local FLG_PROPGET_FIELD             = newflags()
-    local FLG_PROPGET_SETWEAK           = newflags()
-    local FLG_PROPGET_SETFALSE          = newflags()
-    local FLG_PROPGET_CLONE             = newflags()
-    local FLG_PROPGET_DEEPCLONE         = newflags()
-    local FLG_PROPGET_STATIC            = newflags()
-    local FLG_PROPGET_INDEXER           = newflags()
-    local FLG_PROPGET_INDEXTYP          = newflags()
+    FLG_PROPGET_DISABLE                 = newflags(true)
+    FLG_PROPGET_DEFAULT                 = newflags()
+    FLG_PROPGET_DEFTFUNC                = newflags()
+    FLG_PROPGET_GET                     = newflags()
+    FLG_PROPGET_GETMETHOD               = newflags()
+    FLG_PROPGET_FIELD                   = newflags()
+    FLG_PROPGET_SETWEAK                 = newflags()
+    FLG_PROPGET_SETFALSE                = newflags()
+    FLG_PROPGET_CLONE                   = newflags()
+    FLG_PROPGET_DEEPCLONE               = newflags()
+    FLG_PROPGET_STATIC                  = newflags()
+    FLG_PROPGET_INDEXER                 = newflags()
+    FLG_PROPGET_INDEXTYP                = newflags()
 
-    local FLG_PROPSET_DISABLE           = newflags(true)
-    local FLG_PROPSET_TYPE              = newflags()
-    local FLG_PROPSET_CLONE             = newflags()
-    local FLG_PROPSET_DEEPCLONE         = newflags()
-    local FLG_PROPSET_SET               = newflags()
-    local FLG_PROPSET_SETMETHOD         = newflags()
-    local FLG_PROPSET_FIELD             = newflags()
-    local FLG_PROPSET_DEFAULT           = newflags()
-    local FLG_PROPSET_SETWEAK           = newflags()
-    local FLG_PROPSET_RETAIN            = newflags()
-    local FLG_PROPSET_SIMPDEFT          = newflags()
-    local FLG_PROPSET_HANDLER           = newflags()
-    local FLG_PROPSET_EVENT             = newflags()
-    local FLG_PROPSET_STATIC            = newflags()
-    local FLG_PROPSET_INDEXER           = newflags()
-    local FLG_PROPSET_INDEXTYP          = newflags()
-    local FLG_PROPSET_THROWABLE         = newflags()
-    local FLG_PROPSET_REQUIRE           = newflags()
+    FLG_PROPSET_DISABLE                 = newflags(true)
+    FLG_PROPSET_TYPE                    = newflags()
+    FLG_PROPSET_CLONE                   = newflags()
+    FLG_PROPSET_DEEPCLONE               = newflags()
+    FLG_PROPSET_SET                     = newflags()
+    FLG_PROPSET_SETMETHOD               = newflags()
+    FLG_PROPSET_FIELD                   = newflags()
+    FLG_PROPSET_DEFAULT                 = newflags()
+    FLG_PROPSET_SETWEAK                 = newflags()
+    FLG_PROPSET_RETAIN                  = newflags()
+    FLG_PROPSET_SIMPDEFT                = newflags()
+    FLG_PROPSET_HANDLER                 = newflags()
+    FLG_PROPSET_EVENT                   = newflags()
+    FLG_PROPSET_STATIC                  = newflags()
+    FLG_PROPSET_INDEXER                 = newflags()
+    FLG_PROPSET_INDEXTYP                = newflags()
+    FLG_PROPSET_THROWABLE               = newflags()
+    FLG_PROPSET_REQUIRE                 = newflags()
 
-    local FLD_PROP_META                 = "__PLOOP_PROPERTY_META"
-    local FLD_PROP_OBJ_WEAK             = "__PLOOP_PROPERTY_WEAK"
+    FLD_PROP_META                       = "__PLOOP_PROPERTY_META"
+    FLD_PROP_OBJ_WEAK                   = "__PLOOP_PROPERTY_WEAK"
 
-    local FLD_INDEXER_OBJECT            = function() end
-    local FLD_INDEXER_GET               = function() end
-    local FLD_INDEXER_SET               = function() end
+    FLD_INDEXER_OBJECT                  = function() end
+    FLD_INDEXER_GET                     = function() end
+    FLD_INDEXER_SET                     = function() end
 
     -----------------------------------------------------------------------
     --                          private storage                          --
@@ -13808,7 +13939,11 @@ do
 
     --- Represents any validation type
     __Sealed__()
-    struct "System.AnyType"             { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end}
+    struct "System.AnyType"             { function(val, onlyvalid) return not getprototypemethod(val, "ValidateValue") and (onlyvalid or "the %s is not a validation type") or nil end }
+
+    --- Represents the object generated from class
+    __Sealed__()
+    struct "System.Object"              { function(val, onlyvalid) return not class.GetObjectClass(val) and (onlyvalid or "the %s is not an object") or nil end }
 
     --- Represents lambda value, used to string like 'x, y => x + y' to function
     __Sealed__()
@@ -13982,7 +14117,6 @@ do
             end
         end
     end)
-
 
     -----------------------------------------------------------------------
     --                             interface                             --
@@ -14204,9 +14338,14 @@ do
         -----------------------------------------------------------
         __Abstract__() function Open(self) end
         __Abstract__() function Close(self, error) end
+
+        -----------------------------------------------------------
+        --                      meta-method                      --
+        -----------------------------------------------------------
+        __Abstract__() function __close(self) self:Close() end
     end)
 
-    -- Represents a toolset to provide several compatible apis
+    --- Represents a toolset to provide several compatible apis
     __Sealed__() __Final__()
     interface "System.Toolset"          {
         --- wipe the table
@@ -14310,7 +14449,13 @@ do
     class "System.__Arguments__"        (function(_ENV)
         extend "IInitAttribute"
 
+        --- Enable the attach attribute
+        if Platform.ENABLE_ARGUMENTS_ATTACHMENT then
+            extend "IAttachAttribute"
+        end
+
         local _OverloadStorage          = newstorage(WEAK_KEY)
+        local _OverloadHistory          = Platform.ENABLE_ARGUMENTS_ATTACHMENT and newstorage(WEAK_KEY) or nil
 
         export {
             -----------------------------------------------------------
@@ -14395,6 +14540,7 @@ do
             turnonflags                 = turnonflags,
             validateflags               = validateflags,
             parseindex                  = parseindex,
+            fakefunc                    = fakefunc,
             unpack                      = unpack,
             error                       = error,
             select                      = select,
@@ -14406,7 +14552,7 @@ do
             throw                       = throw,
         }
 
-        export { Namespace, Enum, Struct, Interface, Class, Variables, AttributeTargets, StructCategory, __Arguments__ }
+        export { Namespace, Enum, Struct, Interface, Class, Variables, Attribute, AttributeTargets, StructCategory, __Arguments__ }
 
         -- Helpers for this keyword
         if not getlocal then
@@ -15023,7 +15169,7 @@ do
             return Class.AttachObjectSource(__Arguments__{ { varargs = true } }, 2)
         end
 
-        -- Add the release method to clear the useless cache for sealed types
+        --- Clear the useless cache for sealed types
         __Static__() function ClearOverloads(ttype)
             if not (ttype and getmetatable(ttype).IsSealed(ttype)) then return end
             _OverloadStorage[ttype]     = nil
@@ -15124,6 +15270,20 @@ do
             vars[FLD_VAR_IMMTBL]        = immutable
 
             if targettype == AttributeTargets.Method then
+                -- Check the previous one for the overload history
+                if _OverloadHistory then
+                    local history       = _OverloadHistory[owner] and _OverloadHistory[owner][name]
+
+                    if not history then
+                        local previous  = Class.Validate(owner) and CTOR_METHOD[name] and Class.GetMetaMethod(owner, name) or getmetatable(owner).GetMethod(owner, name)
+                        if previous then
+                            _OverloadHistory[owner]       = _OverloadHistory[owner] or {}
+                            _OverloadHistory[owner][name] = { previous }
+                        end
+                    end
+                end
+
+                -- Generate the overloads
                 local hasself           = not getmetatable(owner).IsStaticMethod(owner, name)
                 buildUsage(vars, owner, name, targettype)
 
@@ -15210,6 +15370,72 @@ do
             end
         end
 
+        if Platform.ENABLE_ARGUMENTS_ATTACHMENT then
+            --- attach attribute
+            -- @param target                    the target
+            -- @param targettype                the target type
+            -- @param owner                     the target's owner
+            -- @param name                      the target's name in the owner
+            -- @param stack                     the stack level
+            function AttachAttribute(self, target, targettype, owner, name, stack)
+                -- Register the overloads
+                if targettype == AttributeTargets.Method and _OverloadHistory[owner] and _OverloadHistory[owner][name] then
+                    tinsert(_OverloadHistory[owner][name], target)
+                end
+
+                return { unpack(self) }
+            end
+
+            --- Gets the overloads of the target type's method
+            -- @param target                    the target type like class
+            -- @param name                      the method name
+            -- @usage
+            --    class "A" (function(_ENV)
+            --        __Arguments__{ String } __Return__{ Number }
+            --        function Test()
+            --        end
+
+            --        __Arguments__{ Number } __Return__ { Boolean }
+            --        function Test()
+            --        end
+
+            --        __Arguments__{ Boolean } __Return__{ String }
+            --        function Test()
+            --        end
+            --    end)
+            --
+            --    for i, v in __Arguments__.GetOverloads(A, "Test") do
+            --        local args = Attribute.GetAttachedData(__Arguments__, v, A)
+            --        local ret = Attribute.GetAttachedData(__Return__, v, A)
+            --
+            --        -- System.Number  A:Test(System.String) 
+            --        -- System.Boolean A:Test(System.Number) 
+            --        -- System.String  A:Test(System.Boolean) 
+            --        print(("%s A:Test(%s) "):format(tostring(ret[1][1].type), tostring(args[1].type)))
+            --    end
+            __Static__()
+            function GetOverloads(target, name)
+                local nameMap           = _OverloadHistory[target]
+                local history           = nameMap and nameMap[name]
+
+                if history and #history > 0 then
+                    return function (_, n)
+                        return next(history, n)
+                    end
+                else
+                    local overload      = Class.Validate(target) and CTOR_METHOD[name] and Class.GetMetaMethod(target, name) or getmetatable(target).GetMethod(target, name)
+
+                    if overload then
+                        return function(_, n)
+                            if n == nil then return 1, overload end
+                        end
+                    else
+                        return fakefunc
+                    end
+                end
+            end
+        end
+
         -----------------------------------------------------------
         --                       property                       --
         -----------------------------------------------------------
@@ -15282,6 +15508,11 @@ do
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
     class "System.__Return__"           (function(_ENV)
         extend "IInitAttribute"
+
+        --- Enable the attach attribute
+        if Platform.ENABLE_RETURN_ATTACHMENT then
+            extend "IAttachAttribute"
+        end
 
         export {
             -----------------------------------------------------------
@@ -15788,6 +16019,19 @@ do
 
             local validrets             = not nomulti and genReturns(retsets, defplace .. msghead) or retsets[1][FLD_VAR_VARVLD]
             if validrets then return function(...) return validrets(definition(...)) end end
+        end
+
+
+        if Platform.ENABLE_RETURN_ATTACHMENT then
+            --- attach attribute
+            -- @param target                    the target
+            -- @param targettype                the target type
+            -- @param owner                     the target's owner
+            -- @param name                      the target's name in the owner
+            -- @param stack                     the stack level
+            function AttachAttribute(self, target, targettype, owner, name, stack)
+                return { unpack(self) }
+            end
         end
 
         -----------------------------------------------------------

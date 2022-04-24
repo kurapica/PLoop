@@ -19,30 +19,30 @@ PLoop(function(_ENV)
     --                              prepare                              --
     -----------------------------------------------------------------------
     export {
-        strbyte                 = string.byte,
-        strchar                 = string.char,
-        tinsert                 = table.insert,
-        tconcat                 = table.concat,
-        floor                   = math.floor,
-        LUA_VERSION             = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
-        loadsnippet             = Toolset.loadsnippet,
-        error                   = error,
+        strbyte                         = string.byte,
+        strchar                         = string.char,
+        tinsert                         = table.insert,
+        tconcat                         = table.concat,
+        floor                           = math.floor,
+        LUA_VERSION                     = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
+        loadsnippet                     = Toolset.loadsnippet,
+        error                           = error,
 
-        band                    = Toolset.band,
-        lshift                  = Toolset.lshift,
-        rshift                  = Toolset.rshift,
+        band                            = Toolset.band,
+        lshift                          = Toolset.lshift,
+        rshift                          = Toolset.rshift,
 
         -- Declare here
-        decodeLE                = false,
-        encodeLE                = false,
-        decodeBE                = false,
-        encodeBE                = false,
+        decodeLE                        = false,
+        encodeLE                        = false,
+        decodeBE                        = false,
+        encodeBE                        = false,
     }
 
     function decodeLE(str, startp)
-        startp                  = startp or 1
+        startp                          = startp or 1
 
-        local sbyte, obyte      = strbyte(str, startp, startp + 1)
+        local sbyte, obyte              = strbyte(str, startp, startp + 1)
         if not obyte or not sbyte then return nil end
 
         if obyte <= 0xD7 or obyte >= 0xE0 then
@@ -50,7 +50,7 @@ PLoop(function(_ENV)
             return lshift(obyte, 8) + sbyte, 2
         elseif obyte >= 0xD8 and obyte <= 0xDB then
             -- four byte
-            local fbyte, tbyte  = strbyte(str, startp + 2, startp + 3)
+            local fbyte, tbyte          = strbyte(str, startp + 2, startp + 3)
             if not tbyte or not fbyte then return nil end
 
             if tbyte >= 0xDC and tbyte <= 0xDF then
@@ -75,9 +75,9 @@ PLoop(function(_ENV)
 
             -- 4 surrogate pairs
             if code >= 0x10000 and code <= 0x10FFFF then
-                code            = code - 0x10000
-                local high      = rshift(code, 10)
-                local low       = band(code, 0x3ff)
+                code                    = code - 0x10000
+                local high              = rshift(code, 10)
+                local low               = band(code, 0x3ff)
                 return strchar(
                     band(high, 0xff),
                     0xD8 + rshift(high, 8),
@@ -91,9 +91,9 @@ PLoop(function(_ENV)
     end
 
     function decodeBE(str, startp)
-        startp                  = startp or 1
+        startp                          = startp or 1
 
-        local obyte, sbyte      = strbyte(str, startp, startp + 1)
+        local obyte, sbyte              = strbyte(str, startp, startp + 1)
         if not obyte or not sbyte then return nil end
 
         if obyte <= 0xD7 or obyte >= 0xE0 then
@@ -101,7 +101,7 @@ PLoop(function(_ENV)
             return lshift(obyte, 8) + sbyte, 2
         elseif obyte >= 0xD8 and obyte <= 0xDB then
             -- four byte
-            local tbyte, fbyte  = strbyte(str, startp + 2, startp + 3)
+            local tbyte, fbyte          = strbyte(str, startp + 2, startp + 3)
             if not tbyte or not fbyte then return nil end
 
             if tbyte >= 0xDC and tbyte <= 0xDF then
@@ -126,9 +126,9 @@ PLoop(function(_ENV)
 
             -- 4 surrogate pairs
             if code >= 0x10000 and code <= 0x10FFFF then
-                code            = code - 0x10000
-                local high      = rshift(code, 10)
-                local low       = band(code, 0x3ff)
+                code                    = code - 0x10000
+                local high              = rshift(code, 10)
+                local low               = band(code, 0x3ff)
                 return strchar(
                     0xD8 + rshift(high, 8),
                     band(high, 0xff),
@@ -143,13 +143,13 @@ PLoop(function(_ENV)
 
    --- Represents the utf-16 encoding with little-endian.
     System.Text.Encoding "UTF16EncodingLE" {
-        encode                  = encodeLE,
-        decode                  = decodeLE,
+        encode                          = encodeLE,
+        decode                          = decodeLE,
     }
 
    --- Represents the utf-16 encoding with big-endian.
     System.Text.Encoding "UTF16EncodingBE" {
-        encode                  = encodeBE,
-        decode                  = decodeBE,
+        encode                          = encodeBE,
+        decode                          = decodeBE,
     }
 end)

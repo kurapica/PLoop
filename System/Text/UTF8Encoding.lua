@@ -19,26 +19,26 @@ PLoop(function(_ENV)
     --                              prepare                              --
     -----------------------------------------------------------------------
     export {
-        REPLACE_CHARACTER       = "\0xFFFD",
+        REPLACE_CHARACTER               = "\0xFFFD",
 
-        strbyte                 = string.byte,
-        strchar                 = string.char,
-        tinsert                 = table.insert,
-        tconcat                 = table.concat,
-        floor                   = math.floor,
-        LUA_VERSION             = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
-        loadsnippet             = Toolset.loadsnippet,
-        error                   = error,
+        strbyte                         = string.byte,
+        strchar                         = string.char,
+        tinsert                         = table.insert,
+        tconcat                         = table.concat,
+        floor                           = math.floor,
+        LUA_VERSION                     = tonumber(_G._VERSION:match("[%d%.]+")) or 5.1,
+        loadsnippet                     = Toolset.loadsnippet,
+        error                           = error,
 
-        band                    = Toolset.band,
-        lshift                  = Toolset.lshift,
-        rshift                  = Toolset.rshift,
+        band                            = Toolset.band,
+        lshift                          = Toolset.lshift,
+        rshift                          = Toolset.rshift,
     }
 
     function decode(str, startp)
-        startp                  = startp or 1
+        startp                          = startp or 1
 
-        local byte              = strbyte(str, startp)
+        local byte                      = strbyte(str, startp)
         if not byte then return nil end
 
         if byte < 0x80 then
@@ -49,7 +49,7 @@ PLoop(function(_ENV)
             return byte + 0xDC00, 1
         elseif byte < 0xE0 then
             -- 2-byte
-            local sbyte         = strbyte(str, startp + 1)
+            local sbyte                 = strbyte(str, startp + 1)
             if not sbyte or band(sbyte, 0xC0) ~= 0x80 then
                 -- Error
                 return byte + 0xDC00, 1
@@ -122,7 +122,7 @@ PLoop(function(_ENV)
     ]]
     --- Represents the utf-8 encoding.
     System.Text.Encoding "UTF8Encoding" {
-        encode                  = encode,
-        decode                  = decode,
+        encode                          = encode,
+        decode                          = decode,
     }
 end)
