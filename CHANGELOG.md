@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 - Method overlaod informations can be fetched when `ENABLE_ARGUMENTS_ATTACHMENT` is on.
 - Return informations can be fetched when `ENABLE_RETURN_ATTACHMENT` is on.
 - `System.DependencyInjection` is added, check the 024.dependencyinjection.md for more informations.
+- Complex Struct mechanism added to simply the definition of the struct, check 005.struct.md for more informations.
 
 
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
