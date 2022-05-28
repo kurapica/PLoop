@@ -12888,6 +12888,7 @@ do
     --                          private helpers                          --
     -----------------------------------------------------------------------
     local getClassMeta                  = class.GetMetaMethod
+    local getStructCategory             = struct.GetStructCategory
 
     local genBasicValidator             = function(tname)
         local msg                       = "the %s must be " .. tname .. ", got "
@@ -12900,6 +12901,11 @@ do
         local msg                       = "the %s must be a" .. (pname:match("^[aeiou]") and "n" or "") .. " " .. pname
         local valid                     = ptype.Validate
         return function(val, onlyvalid) return not valid(val) and (onlyvalid or msg) or nil end
+    end
+
+    local genStructTypeValidator        = function(category, name)
+        local msg                       = "the %s must be a " .. name .. " struct type"
+        return function(val, onlyvalid) return getStructCategory(val) ~= category and (onlyvalid or msg) or nil end
     end
 
     local getAttributeName              = function(self) return namespace.GetNamespaceName(namespace.Validate(self) and self or getmetatable(self)) end
@@ -13920,6 +13926,18 @@ do
     --- Represents struct type
     __Sealed__()
     struct "System.StructType"          { genTypeValidator(struct)      }
+
+    --- Represents custom struct type
+    struct "System.CustomStructType"    { genStructTypeValidator(StructCategory.CUSTOM, "custom") }
+
+    --- Represents member struct type
+    struct "System.MemberStructType"    { genStructTypeValidator(StructCategory.MEMBER, "member") }
+
+    --- Represents array struct type
+    struct "System.ArrayStructType"     { genStructTypeValidator(StructCategory.ARRAY, "array") }
+
+    --- Represents dictionary struct type
+    struct "System.DictStructType"      { genStructTypeValidator(StructCategory.DICTIONARY, "dictionary") }
 
     --- Represents interface type
     __Sealed__()
