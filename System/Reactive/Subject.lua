@@ -182,7 +182,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
             local observer              = super.Subscribe(self, ...)
-            if self[0] > 0 then observer:OnNext(unpack(self, 1, self[0])) end
+            return self[0] > 0 and observer:OnNext(unpack(self, 1, self[0]))
         end
 
         --- Provides the observer with new data
@@ -198,7 +198,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Any * nil }
+        __Arguments__{ IObservable, Any * 0 }
         function __ctor(self, observable, ...)
             self[0]                     = select("#", ...)
             for i = 1, self[0] do
@@ -208,7 +208,7 @@ PLoop(function(_ENV)
             super(self, observable)
         end
 
-        __Arguments__{ Any * nil }
+        __Arguments__{ Any * 0 }
         function __ctor(self, ...)
             self[0]                     = select("#", ...)
             for i = 1, self[0] do
