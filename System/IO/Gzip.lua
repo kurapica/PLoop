@@ -9,11 +9,14 @@
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2021/02/16                                               --
 -- Update Date  :   2021/02/16                                               --
--- Version      :   1.0.0                                                    --
+-- Version      :   0.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
 
+    -----------------------------------------------------------------------
+    --                   RFC 1952 -  GZIP file format                    --
+    -----------------------------------------------------------------------
     __Final__() __Sealed__()
     interface "System.IO.Gzip"          (function(_ENV)
 
@@ -66,7 +69,7 @@ PLoop(function(_ENV)
             end
 
             local id1, id2, cm, flg     = header:byte(1, 4)
-            if id1 ~= 31 or id2 ~= 139 then
+            if id1 ~= 0x1f or id2 ~= 0x8b then
                 error("Usage: System.IO.Gzip(source[, targetdir]) - invalid gzip header", 2)
             end
 
