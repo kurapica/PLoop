@@ -228,7 +228,7 @@ PLoop(function(_ENV)
         function __eq(self, obj) return self.ticks == obj.ticks end
 
         __Arguments__{ Integer }
-        function __eq(self, int) return self.ticks == obj.int end
+        function __eq(self, int) return self.ticks == int end
 
         __Arguments__{ TimeSpan }
         function __lt(self, obj) return self.ticks < obj.ticks end
