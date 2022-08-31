@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2022-08-31 WangXh <kurapica125@outlook.com>
+## Fixed
+- When use `__Set__(PropertySet.Clone)` or `__Set__(PropertySet.DeepClone` on the property with default value, access the object property value twice will return different value, that's since the first value is created by the default and saved to the object, the clone method will save a clone one and return the clone one for the next acceess, FIXED.
+
 ## [1.8.1] - 2022-04-24 WangXh <kurapica125@outlook.com>
 ### Added
 - `ENABLE_ARGUMENTS_ATTACHMENT` and `ENABLE_RETURN_ATTACHMENT` is added to the platform settings.

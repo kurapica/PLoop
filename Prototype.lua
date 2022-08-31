@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2022/04/24                                               --
--- Version      :   1.8.1                                                    --
+-- Update Date  :   2022/08/31                                               --
+-- Version      :   1.8.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -11064,6 +11064,7 @@ do
     FLG_PROPGET_STATIC                  = newflags()
     FLG_PROPGET_INDEXER                 = newflags()
     FLG_PROPGET_INDEXTYP                = newflags()
+    FLG_PROPGET_SETCLONE                = newflags()
 
     FLG_PROPSET_DISABLE                 = newflags(true)
     FLG_PROPSET_TYPE                    = newflags()
@@ -11186,17 +11187,24 @@ do
                 end
             end
 
-            if info[FLD_PROP_DEFAULTFUNC] then
-                token                   = turnonflags(FLG_PROPGET_DEFTFUNC, token)
-                tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
+            if info[FLD_PROP_DEFAULTFUNC] or info[FLD_PROP_DEFAULT] ~= nil then
+                if info[FLD_PROP_DEFAULTFUNC] then
+                    token               = turnonflags(FLG_PROPGET_DEFTFUNC, token)
+                    tinsert(upval, info[FLD_PROP_DEFAULTFUNC])
+                else
+                    token               = turnonflags(FLG_PROPGET_DEFAULT, token)
+                    tinsert(upval, info[FLD_PROP_DEFAULT])
+                end
+
                 if info[FLD_PROP_SET] == false then
                     token               = turnonflags(FLG_PROPGET_SETFALSE, token)
                 else
                     usename             = true
                 end
-            elseif info[FLD_PROP_DEFAULT] ~= nil then
-                token                   = turnonflags(FLG_PROPGET_DEFAULT, token)
-                tinsert(upval, info[FLD_PROP_DEFAULT])
+
+                if validateflags(MOD_PROP_SETCLONE, info[FLD_PROP_MOD]) then
+                    token               = turnonflags(FLG_PROPGET_SETCLONE, token)
+                end
             end
 
             if validateflags(MOD_PROP_SETWEAK, info[FLD_PROP_MOD]) then
@@ -11329,6 +11337,10 @@ do
                                 end
                             else
                                 tinsert(body, [[self[name]=value]])
+
+                                if validateflags(FLG_PROPGET_SETCLONE, token) and not validateflags(FLG_PROPGET_CLONE, token) then
+                                    tinsert(body, [[value=self[name] ]])
+                                end
                             end
                         else
                             if validateflags(FLG_PROPGET_SETFALSE, token) then
@@ -11351,12 +11363,21 @@ do
                                 end
                             else
                                 tinsert(body, [[self[name]=value]])
+
+                                if validateflags(FLG_PROPGET_SETCLONE, token) and not validateflags(FLG_PROPGET_CLONE, token) then
+                                    tinsert(body, [[value=self[name] ]])
+                                end
                             end
                         end
 
                         tinsert(body, [[end]])
                     elseif validateflags(FLG_PROPGET_DEFAULT, token) then
                         tinsert(body, [[value = default]])
+
+                        if validateflags(FLG_PROPGET_SETCLONE, token) and not validateflags(FLG_PROPGET_SETFALSE, token) and not validateflags(FLG_PROPGET_CLONE, token) then
+                            tinsert(body, [[self[name]=value]])
+                            tinsert(body, [[value=self[name] ]])
+                        end
                     end
 
                     tinsert(body, [[end]])
