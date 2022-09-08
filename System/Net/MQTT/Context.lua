@@ -61,6 +61,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                               event                               --
         -----------------------------------------------------------------------
+        --- Fired when the client is connected so the client information can be used
+        event "OnConnected"
+
         --- Fired when the client has topic subscribed
         -- @param topic         the subscribed topic
         -- @param qos           the QoS of the topic
@@ -288,6 +291,7 @@ PLoop(function(_ENV)
                 end
 
                 self:ConnectAck(ret)
+                OnConnected(self)
 
             elseif ptype == PacketType.PUBLISH then
                 -- Publish the message
