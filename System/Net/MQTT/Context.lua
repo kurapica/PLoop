@@ -260,6 +260,8 @@ PLoop(function(_ENV)
             if ptype == PacketType.CONNECT then
                 -- CLIENT -> SERVER
                 self.ProtocolLevel      = packet.level
+                self.UserName           = packet.userName
+                self.Password           = packet.password
 
                 -- Will Message
                 self.WillMessage        = packet.will
