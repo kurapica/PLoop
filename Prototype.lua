@@ -152,6 +152,9 @@ do
         end
         return default
     end) {
+        --- Whether the system enable the tail call optimizations(TCO)
+        ENABLE_TAIL_CALL_OPTIMIZATIONS      = not (LUA_VERSION == 5.1 and not _G.jit),
+
         --- Whether the attribute system use warning instead of error for
         -- invalid attribute target type.
         -- Default false
@@ -14583,7 +14586,7 @@ do
             unpack                      = unpack,
             error                       = error,
             select                      = select,
-            stackmod                    = (LUA_VERSION == 5.1 and not _G.jit) and 1 or 0,
+            stackmod                    = PLOOP_PLATFORM_SETTINGS.ENABLE_TAIL_CALL_OPTIMIZATIONS and 0 or 1,
             chkandret                   = function (stack, ok, msg, ...) if ok then return msg, ... end error(tostring(msg), stackmod + stack) end,
             pcall                       = pcall,
             getfenv                     = getfenv,
