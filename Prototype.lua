@@ -11314,7 +11314,7 @@ do
                         uinsert(apis, "rawget")
                         if validateflags(FLG_PROPGET_SETWEAK, token) then
                             tinsert(body, [[
-                                value = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                value = rawget(self, "]] .. FLD_PROP_OBJ_WEAK .. [[")
                                 if type(value) == "table" then value = value[field] else value = nil end
                             ]])
                         else
@@ -11354,10 +11354,10 @@ do
                                     uinsert(apis, "setmetatable")
                                     uinsert(apis, "WEAK_VALUE")
                                     tinsert(body, [[
-                                        local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                        local container = rawget(self, "]] .. FLD_PROP_OBJ_WEAK .. [[")
                                         if type(container) ~= "table" then
                                             container   = setmetatable({}, WEAK_VALUE)
-                                            rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                            rawset(self, "]] .. FLD_PROP_OBJ_WEAK .. [[", container)
                                         end
                                         container[field] = value
                                     ]])
@@ -11717,10 +11717,10 @@ do
                                 uinsert(apis, "setmetatable")
                                 uinsert(apis, "WEAK_VALUE")
                                 tinsert(body, [[
-                                    local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                    local container = rawget(self, "]] .. FLD_PROP_OBJ_WEAK .. [[")
                                     if type(container) ~= "table" then
                                         container   = setmetatable({}, WEAK_VALUE)
-                                        rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                        rawset(self, "]] .. FLD_PROP_OBJ_WEAK .. [[", container)
                                     end
                                     local old = container[field]
                                 ]])
@@ -11749,10 +11749,10 @@ do
                                 tinsert(body, [[container[field] = value)]])
                             else
                                 tinsert(body, [[
-                                    local container = rawget(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[")
+                                    local container = rawget(self, "]] .. FLD_PROP_OBJ_WEAK .. [[")
                                     if type(container) ~= "table" then
                                         container   = setmetatable({}, WEAK_VALUE)
-                                        rawset(self, "]] .. __PLOOP_PROPERTY_WEAK .. [[", container)
+                                        rawset(self, "]] .. FLD_PROP_OBJ_WEAK .. [[", container)
                                     end
                                     container[field] = value
                                 ]])

@@ -1,19 +1,6 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [1.8.2] - 2022-08-31 WangXh <kurapica125@outlook.com>
-## Fixed
-- When use `__Set__(PropertySet.Clone)` or `__Set__(PropertySet.DeepClone` on the property with default value, access the object property value twice will return different value, that's since the first value is created by the default and saved to the object, the clone method will save a clone one and return the clone one for the next acceess, FIXED.
-
-## [1.8.1] - 2022-04-24 WangXh <kurapica125@outlook.com>
-### Added
-- `ENABLE_ARGUMENTS_ATTACHMENT` and `ENABLE_RETURN_ATTACHMENT` is added to the platform settings.
-- Method overlaod informations can be fetched when `ENABLE_ARGUMENTS_ATTACHMENT` is on.
-- Return informations can be fetched when `ENABLE_RETURN_ATTACHMENT` is on.
-- `System.DependencyInjection` is added, check the 024.dependencyinjection.md for more informations.
-- Complex Struct mechanism added to simply the definition of the struct, check 005.struct.md for more informations.
-
-
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
 ### Changed
 - `System.Web.JsonFormatProvider` is moved to `System.Serialization.JsonFormatProvider`
