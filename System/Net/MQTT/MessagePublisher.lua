@@ -51,6 +51,8 @@ PLoop(function(_ENV)
                 end
             end):gsub("(.?)#$", function(a)
                 if not a or a == "" or a == "/" then
+                    return ".*"
+                else
                     return a .. ".*"
                 end
             end) .. "$"
