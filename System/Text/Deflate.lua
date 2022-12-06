@@ -75,7 +75,7 @@ PLoop(function(_ENV)
                     self.cursor         = 0
                 end
 
-                if not self.buff then return self.byte end
+                if not self.buff then return end --self.byte end
 
                 self.cursor             = self.cursor + 1
                 self.byte               = self.byte + lshift(self.buff:byte(self.cursor), self.remain)
@@ -102,7 +102,11 @@ PLoop(function(_ENV)
                 return
             end
 
-            if self.remain < length then return end
+            if self.remain < length then
+                self.remain             = 0
+                self.byte               = 0
+                return
+            end
 
             self.remain                 = self.remain - length
             self.byte                   = rshift(self.byte, length)
@@ -301,7 +305,6 @@ PLoop(function(_ENV)
             }, true
         end,
         ParseByte                       = function(self, reader)
-            local sbyte                 = reader.byte
             local bits                  = reader:Peek(self.nbits)
             local byte                  = self.map[bits]
             if byte then
