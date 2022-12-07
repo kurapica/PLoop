@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2022/12/07                                               --
+-- Version      :   1.1.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -82,7 +82,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                    static  method                     --
         -----------------------------------------------------------
-        __Static__() function IsObservableProperty(prop)
+        __Static__()
+        function IsObservableProperty(prop)
             return _PropertyMap[prop] ~= nil
         end
 
@@ -204,6 +205,7 @@ PLoop(function(_ENV)
 
             getProperty                 = Class.GetFeature,
             getObjectClass              = Class.GetObjectClass,
+            onNextIterKey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
         }
 
         -----------------------------------------------------------------------
@@ -322,15 +324,48 @@ PLoop(function(_ENV)
             return _DeferAutoGen[select("#", ...)](ctor, ...)
         end
 
+        --- Converts list objects into Observables
+        __Static__() __Arguments__{ IList }
+        function From(list)
+            return Observable(function(observer, token)
+                for key, value in list:GetIterator() do
+                    if value == nil then value, key = key, nil end
+                    observer:OnNext(value, key)
+                end
+                observer:OnCompleted()
+            end)
+        end
+
+        --- Converts dictionary objects into Observables
+        __Static__() __Arguments__{ IDictionary }
+        function From(dict)
+            return Observable(function(observer, token)
+                for key, value in dict:GetIterator() do
+                    observer:OnNext(key, value)
+                end
+                observer:OnCompleted()
+            end)
+        end
+
         --- Converts collection objects into Observables
         __Static__() __Arguments__{ Iterable }
         function From(iter)
             return Observable(function(observer, token)
-                for key, value in iter:GetIterator() do
-                    if token:IsCancelled() then return end
-                    if value == nil then value, key = key, nil end
-                    observer:OnNext(value, key)
-                end
+                local f, t, k           = iter:GetIterator()
+                repeat
+                    k                   = onNextIterKey(observer, f(t, k))
+                until k == nil or token:IsCancelled()
+                observer:OnCompleted()
+            end)
+        end
+
+        --- Creates an Observable that emits the return value of a function-like directive
+        __Static__() __Arguments__{ Callable, Any/nil, Any/nil }
+        function From(func, t, k)
+            return Observable(function(observer, token)
+                repeat
+                    k                   = onNextIterKey(observer, func(t, k))
+                until k == nil or token:IsCancelled()
                 observer:OnCompleted()
             end)
         end

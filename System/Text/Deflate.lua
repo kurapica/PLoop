@@ -75,7 +75,7 @@ PLoop(function(_ENV)
                     self.cursor         = 0
                 end
 
-                if not self.buff then return end --self.byte end
+                if not self.buff then return end
 
                 self.cursor             = self.cursor + 1
                 self.byte               = self.byte + lshift(self.buff:byte(self.cursor), self.remain)
