@@ -359,17 +359,6 @@ PLoop(function(_ENV)
             end)
         end
 
-        --- Creates an Observable that emits the return value of a function-like directive
-        __Static__() __Arguments__{ Callable, Any/nil, Any/nil }
-        function From(func, t, k)
-            return Observable(function(observer, token)
-                repeat
-                    k                   = onNextIterKey(observer, func(t, k))
-                until k == nil or token:IsCancelled()
-                observer:OnCompleted()
-            end)
-        end
-
         --- Converts event delegate objects into Observables
         __Static__() __Arguments__{ Delegate }
         function From(delegate)
@@ -380,6 +369,17 @@ PLoop(function(_ENV)
                 delegate[Observable]    = subject
             end
             return subject
+        end
+
+        --- Creates an Observable that emits the return value of a function-like directive
+        __Static__() __Arguments__{ Callable, Any/nil, Any/nil }
+        function From(func, t, k)
+            return Observable(function(observer, token)
+                repeat
+                    k                   = onNextIterKey(observer, func(t, k))
+                until k == nil or token:IsCancelled()
+                observer:OnCompleted()
+            end)
         end
 
         --- Converts tables into Observables
