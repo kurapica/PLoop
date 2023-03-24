@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2021 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2023 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --

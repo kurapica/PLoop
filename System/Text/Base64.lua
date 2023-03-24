@@ -40,6 +40,7 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     System.Text.Encoder "Base64" {
         encode                          = function (text, noret)
+            local yield                 = yield
             local total                 = 0
             local length                = #text
             local i                     = 1
@@ -70,6 +71,7 @@ PLoop(function(_ENV)
             end
         end,
         decode                          = function (text, encode)
+            local yield                 = yield
             local cache                 = 0
             local clen                  = 0
 
@@ -93,5 +95,7 @@ PLoop(function(_ENV)
                 end
             end
         end,
+        strategy                        = Text.TextReaderStrategy.BLOCK,
+        block                           = 4096,
     }
 end)

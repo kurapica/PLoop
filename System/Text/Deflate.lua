@@ -320,7 +320,8 @@ PLoop(function(_ENV)
     uncompression                       = function(writer, reader, litHtree, distHtree)
         repeat
             local byte                  = litHtree:ParseByte(reader)
-            if not byte then return end
+
+            if not byte then return true end
 
             if byte < 256 then
                 -- Literal

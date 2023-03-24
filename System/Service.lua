@@ -84,7 +84,7 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         __Abstract__()
-        property "ServiceProvider "     { type = IServiceProvider }
+        property "ServiceProvider"      { type = IServiceProvider }
     end)
 
     --- Represents the interface of the service collection which should return a service provider to solve the class dependency

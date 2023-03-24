@@ -64,12 +64,12 @@ PLoop(function(_ENV)
         elseif strategy == TextReaderStrategy.BLOCK then
             block                       = block or DEFAULT_BLOCK
             local index                 = reader.Position + 1
-            local text                  = reader:Read(block)
+            local text                  = reader:ReadBlock(block)
             while text do
                 yield(index, text)
 
                 index                   = reader.Position + 1
-                text                    = reader:Read(block)
+                text                    = reader:ReadBlock(block)
             end
         else
             -- Read Line, As Default
@@ -188,7 +188,7 @@ PLoop(function(_ENV)
         __call                          = function(self, name)
             if type(name) ~= "string" then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
             return function(settings)
-                local ret, err          = validateValue(EncodingDefinition, settings, true)
+                local ret, err          = validateValue(EncodingDefinition, settings)
                 if not ret or err then error("Usage: System.Text.Encoding \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
 
                 local coder             = newEncoding(name, ret)
@@ -435,7 +435,7 @@ PLoop(function(_ENV)
         __call                          = function(self, name)
             if type(name) ~= "string" then error("Usage: System.Text.Encoder \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
             return function(settings)
-                local ret, err          = validateValue(EncodingDefinition, settings, true)
+                local ret, err          = validateValue(EncodingDefinition, settings)
                 if not ret or err then error("Usage: System.Text.Encoder \"name\" { decode = Function, encode = Function[, strategy = TextReaderStrategy] }", 2) end
 
                 local coder             = newEncoder(name, ret)
