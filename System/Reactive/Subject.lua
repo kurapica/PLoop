@@ -195,6 +195,10 @@ PLoop(function(_ENV)
             onNext(self, ...)
         end
 
+        function GetValue(self)
+            return unpack(self, 1, self[0])
+        end
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
