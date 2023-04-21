@@ -27,13 +27,13 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             isObjectType                = Class.IsObjectType,
 
-            IObservable
+            IObservable, Reactive
         }
 
         -----------------------------------------------------------------------
         --                            inner type                             --
         -----------------------------------------------------------------------
-        class "BehaviorSubject"         {}
+        class "BehaviorSubject"         {} -- declare only
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -42,15 +42,12 @@ PLoop(function(_ENV)
         function __ctor(self, init)
             local fields                = {}
             rawset(self, Reactive, fields)
+
+            -- Init
             if init then
                 for k, v in pairs(init) do
-                    if type(k) == "string" then
-                        if isObjectType(v, IObservable) then
-                            fields[k]   = BehaviorSubject()
-                            v:Subscribe(fields[k])
-                        else
-                            fields[k]   = BehaviorSubject(v)
-                        end
+                    if type(k) == "string" and k ~= "" and type(value) ~= "function" then
+                        fields[k]       = BehaviorSubject(v)
                     end
                 end
             end
@@ -71,12 +68,12 @@ PLoop(function(_ENV)
             local subject               = fields[key]
             if subject then return subject:OnNext(value) end
 
-            if isObjectType(value, IObservable) then
-                fields[key]             = BehaviorSubject()
-                value:Subscribe(fields[k])
-            else
+            if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
                 fields[key]             = BehaviorSubject(value)
+                return
             end
+
+            error("The reactive field " .. tostring(key) .. " can't be defined", 2)
         end
 
         --- Gets the subject
@@ -84,4 +81,9 @@ PLoop(function(_ENV)
             return rawget(self, Reactive)[key]
         end
     end)
+
+    --- Register as keyword
+    Environment.RegisterRuntimeKeyword {
+        reactive                        = Reactive
+    }
 end)

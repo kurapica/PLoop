@@ -1848,15 +1848,18 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                        Publish and Connect                        --
         -----------------------------------------------------------------------
+        --- Convert an ordinary Observable into a connectable Observable
         function Publish(self)
             return PublishSubject(self)
         end
 
+        --- Ensure that all observers see the same sequence of emitted items, even if they subscribe after the Observable has begun emitting items
         __Arguments__{ NaturalNumber/nil }
         function Replay(self, size)
             return ReplaySubject(self, size)
         end
 
+        --- Convert to a subject
         __Arguments__{ -Subject/Subject, System.Any * 0 }
         function ToSubject(self, subject, ...)
             return subject(self, ...)

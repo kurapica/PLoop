@@ -20,75 +20,130 @@ PLoop(function(_ENV)
     class "Watch"                       (function(_ENV)
         extend "IEnvironment"
 
-        export {
+        export                          {
             getValue                    = Environment.GetValue,
             saveValue                   = Environment.SaveValue,
             isObjectType                = Class.IsObjectType,
-            getObjectClass              = Class.GetObjectClass
+            getObjectClass              = Class.GetObjectClass,
+            setParent                   = Environment.SetParent,
+            rawset                      = rawset,
+            rawget                      = rawget,
+            pcall                       = pcall,
+            setfenv                     = _G.setfenv or Toolset.fakefunc,
+
+            Watch, Reactive, BehaviorSubject, Observer, Exception
         }
 
-        local proxyes                   = Toolset.newtable(true, true)
-
-        local function getValueProxy(object)
-            local objcls                = getObjectClass(object)
-            if not objcls or objcls == WatchProxy then return object end
-            return proxyes[object] or WatchProxy(object)
+        local function onNext(subject, res, ...)
+            if res then return subject:OnNext(...) end
+            return res, ...
         end
 
         -----------------------------------------------------------------------
-        --                            inner Type                             --
+        --                            inner type                             --
         -----------------------------------------------------------------------
-        --- The proxy used to wrap the object access
-        class "WatchProxy"              (function(_ENV)
-            local proxyMap              = Toolset.newtable(true)
+        __Sealed__()
+        class "ReactiveProxy"           (function(_ENV)
+            export                      {
+                rawset                  = rawset,
+                rawget                  = rawget,
+
+                Observer, Reactive, ReactiveProxy
+            }
 
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            __Arguments__{ Table }
-            function __ctor(self, object)
-                proxyes[object]         = self
-                proxyMap[self]          = object
-
-                local objcls            = Class.GetObjectClass(object)
-                if objcls and not classInfo[objcls] then
-                    local oprops        = {}
-
-                    for name, prop in Class.GetFeatures(objcls, true) do
-                        if Propety.Validate(prop) and __Observable__.IsObservableProperty(prop) then
-                            oprops[name]= prop
-                        end
-                    end
-                end
+            function __ctor(self, observer, reactive)
+                rawset(self, Observer, observer)
+                rawset(self, Reactive, reactive)
+                rawset(self, ReactiveProxy, {})
             end
 
             -------------------------------------------------------------------
             --                          meta method                          --
             -------------------------------------------------------------------
             function __index(self, key)
-                local object            = proxyMap[self]
-                local objcls            = getObjectClass(object)
-                if not objcls then
+                local reactive          = rawget(self, Reactive)
+                local proxy             = rawget(self, ReactiveProxy)
 
+                if not proxy[key] then
+                    local observable    = reactive(key)
+                    if observable then
+                        proxy[key]      = true
+
+                        local observer  = rawget(self, Observer)
+                        observable:Subscribe(observer)
+                    end
                 end
+                return reactive[key]
             end
 
             function __newindex(self, key, value)
-
+                error("The reactive data is readonly", 2)
             end
         end)
 
+        -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        __Arguments__{ Function, Table/nil }
+        function __ctor(self, func, env)
+            -- parent
+            setParent(self, env)
+
+            -- subject chain
+            local subject               = BehaviorSubject()
+            local processing            = false
+            rawset(self, Observer, Observer(function()
+                if processing then return end
+                processing              = true
+                local ok, err           = onNext(subject, pcall(func, self))
+                processing              = false
+                if ok == false then subject:OnError(Exception(err)) end
+            end))
+            rawset(self, BehaviorSubject, subject)
+
+            -- apply and call
+            setfenv(func, self)
+            return func(self)
+        end
 
         -----------------------------------------------------------------------
         --                            meta method                            --
         -----------------------------------------------------------------------
         function __index(self, key)
             local value                 = getValue(self, key)
-            if type(value) == "table" then
-                value                   = getValueProxy(value)
+            if value and isObjectType(value, Reactive) then
+                value                   = ReactiveProxy(rawget(self, Observer), value)
                 rawset(self, key, value)
             end
             return value
         end
+
+        -- Call the function and return the observable result
+        function __call(self)
+            return rawget(self, BehaviorSubject)
+        end
     end)
+
+    --- The watch keyword
+    do
+        export {
+            type                        = type,
+            error                       = error,
+
+            getKeywordVisitor           = Environment.GetKeywordVisitor,
+            apply                       = Environment.Apply,
+        }
+
+        function watch(func)
+            if type(func) ~= "function" then error("Usage: watch(func) - The func must be provided as a function") end
+            return Watch(func, getKeywordVisitor(watch))()
+        end
+
+        Environment.RegisterGlobalKeyword{
+            watch                       = watch
+        }
+    end
 end)
