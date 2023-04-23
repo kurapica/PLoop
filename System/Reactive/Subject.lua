@@ -230,7 +230,7 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The current value
-        property "Value"                { get = GetValue }
+        property "Value"                { get = GetValue, set = OnNext }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
