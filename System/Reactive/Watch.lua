@@ -95,18 +95,19 @@ PLoop(function(_ENV)
             -- subject chain
             local subject               = BehaviorSubject()
             local processing            = false
-            rawset(self, Observer, Observer(function()
+            local observer              = Observer(function()
                 if processing then return end
                 processing              = true
                 local ok, err           = onNext(subject, pcall(func, self))
                 processing              = false
                 if ok == false then subject:OnError(Exception(err)) end
-            end))
+            end)
+            rawset(self, Observer, observer)
             rawset(self, BehaviorSubject, subject)
 
             -- apply and call
             setfenv(func, self)
-            return func(self)
+            return observer:OnNext()
         end
 
         -----------------------------------------------------------------------

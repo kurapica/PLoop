@@ -47,7 +47,11 @@ PLoop(function(_ENV)
             if init then
                 for k, v in pairs(init) do
                     if type(k) == "string" and k ~= "" and type(value) ~= "function" then
-                        fields[k]       = BehaviorSubject(v)
+                        if isObjectType(v, BehaviorSubject) then
+                            fields[k]   = v
+                        else
+                            fields[k]   = BehaviorSubject(v)
+                        end
                     end
                 end
             end
