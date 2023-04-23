@@ -47,6 +47,7 @@ PLoop(function(_ENV)
             export                      {
                 rawset                  = rawset,
                 rawget                  = rawget,
+                isObjectType            = Class.IsObjectType,
 
                 Observer, Reactive, ReactiveProxy
             }
@@ -70,9 +71,16 @@ PLoop(function(_ENV)
                 if not proxy[key] then
                     local observable    = reactive(key)
                     if observable then
+                        local observer  = rawget(self, Observer)
+
+                        if isObjectType(observable, Reactive) then
+                            local proxy = ReactiveProxy(observer, observable)
+                            rawset(self, key, proxy)
+                            return proxy
+                        end
+
                         proxy[key]      = true
 
-                        local observer  = rawget(self, Observer)
                         observable:Subscribe(observer)
                     end
                 end

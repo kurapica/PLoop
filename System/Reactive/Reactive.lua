@@ -25,6 +25,7 @@ PLoop(function(_ENV)
             tostring                    = tostring,
             rawget                      = rawget,
             rawset                      = rawset,
+            getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
 
             IObservable, Reactive
@@ -46,12 +47,8 @@ PLoop(function(_ENV)
             -- Init
             if init then
                 for k, v in pairs(init) do
-                    if type(k) == "string" and k ~= "" and type(value) ~= "function" then
-                        if isObjectType(v, BehaviorSubject) then
-                            fields[k]   = v
-                        else
-                            fields[k]   = BehaviorSubject(v)
-                        end
+                    if type(k) == "string" and k ~= "" and type(v) ~= "function" then
+                        fields[k]       = reactive(v)
                     end
                 end
             end
@@ -63,17 +60,45 @@ PLoop(function(_ENV)
         --- Gets the current value
         function __index(self, key)
             local subject               =  rawget(self, Reactive)[key]
-            if subject then return subject:GetValue() end
+            if subject then
+                if isObjectType(subject, BehaviorSubject) then
+                    return subject:GetValue()
+                else
+                    -- inner reactive
+                    return subject
+                end
+            end
         end
 
         --- Send the new value
         function __newindex(self, key, value)
             local fields                = rawget(self, Reactive)
             local subject               = fields[key]
-            if subject then return subject:OnNext(value) end
+            if subject then
+                if isObjectType(subject, BehaviorSubject) then
+                    return subject:OnNext(value)
+                else
+                    if type(value) == "table" and getmetatable(value) == nil then
+                        local sfields   = rawget(subject, Reactive)
+                        for sname in pairs(sfields) do
+                            subject[sname] = value[sname]
+                        end
+
+                        for k, v in pairs(value) do
+                            if not sfields[k] and type(k) == "string" and k ~= "" and v ~= nil and type(v) ~= "function" then
+                                sfields[k] = reactive(v)
+                            end
+                        end
+
+                        return
+                    else
+                        error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
+                    end
+                end
+            end
 
             if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
-                fields[key]             = BehaviorSubject(value)
+                fields[key]             = reactive(value)
                 return
             end
 
@@ -87,7 +112,34 @@ PLoop(function(_ENV)
     end)
 
     --- Register as keyword
-    Environment.RegisterRuntimeKeyword {
-        reactive                        = Reactive
+    export                              {
+        type                            = type,
+        getmetatable                    = getmetatable,
+        isObjectType                    = Class.IsObjectType,
+        getObjectClass                  = Class.GetObjectClass,
+
+        Reactive, BehaviorSubject
+    }
+
+    Environment.RegisterRuntimeKeyword  {
+        reactive                        = function(value)
+            if value == nil then return Reactive() end
+
+            -- Check the value
+            local tval                  = type(value)
+            if tval == "table" then
+                if isObjectType(value, Reactive) or isObjectType(value, BehaviorSubject) then
+                    return value
+                elseif getObjectClass(value) then
+                    -- pass
+                else
+                    return Reactive(value)
+                end
+            elseif tval == "number" or tval == "string" or tval == "boolean" then
+                return BehaviorSubject(value)
+            end
+
+            error("Usage: reactive(data) - The data must be a table or scalar value", 2)
+        end
     }
 end)
