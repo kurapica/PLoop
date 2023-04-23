@@ -84,6 +84,29 @@ PLoop(function(_ENV)
             end
         end)
 
+        __Sealed__()
+        class "WatchSubject"            (function(_ENV)
+            inherit "BehaviorSubject"
+
+            export                      {
+                rawset                  = rawset,
+                rawget                  = rawget,
+                WatchSubject, Watch, Observer
+            }
+
+            -------------------------------------------------------------------
+            --                          constructor                          --
+            -------------------------------------------------------------------
+            function __ctor(self, watch)
+                super(self)
+                rawset(self, Watch, watch)
+            end
+
+            function __dtor(self)
+                rawget(rawget(self, Watch), Observer):Unsubscribe()
+            end
+        end)
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
@@ -93,7 +116,7 @@ PLoop(function(_ENV)
             setParent(self, env)
 
             -- subject chain
-            local subject               = BehaviorSubject()
+            local subject               = WatchSubject(self)
             local processing            = false
             local observer              = Observer(function()
                 if processing then return end
@@ -103,7 +126,7 @@ PLoop(function(_ENV)
                 if ok == false then subject:OnError(Exception(err)) end
             end)
             rawset(self, Observer, observer)
-            rawset(self, BehaviorSubject, subject)
+            rawset(self, WatchSubject, subject)
 
             -- apply and call
             setfenv(func, self)
@@ -114,17 +137,31 @@ PLoop(function(_ENV)
         --                            meta method                            --
         -----------------------------------------------------------------------
         function __index(self, key)
+            local watches               = rawget(self, Watch)
+            if watches and watches[key] then return watches[key]:GetValue() end
+
             local value                 = getValue(self, key)
-            if value and isObjectType(value, Reactive) then
-                value                   = ReactiveProxy(rawget(self, Observer), value)
-                rawset(self, key, value)
+            if value then
+                if isObjectType(value, Reactive) then
+                    value               = ReactiveProxy(rawget(self, Observer), value)
+                    rawset(self, key, value)
+                elseif isObjectType(value, BehaviorSubject) then
+                    if not watches then
+                        watches         = {}
+                        rawset(self, Watch, watches)
+                    end
+                    watches[key]        = value
+                    value:Subscribe(rawget(self, Observer))
+                    rawset(self, key, nil)
+                    return value:GetValue()
+                end
             end
             return value
         end
 
         -- Call the function and return the observable result
         function __call(self)
-            return rawget(self, BehaviorSubject)
+            return rawget(self, WatchSubject)
         end
     end)
 
@@ -139,8 +176,14 @@ PLoop(function(_ENV)
         }
 
         function watch(func)
-            if type(func) ~= "function" then error("Usage: watch(func) - The func must be provided as a function") end
-            return Watch(func, getKeywordVisitor(watch))()
+            local tfunc                 = type(func)
+            if tfunc == "function" then
+                return Watch(func, getKeywordVisitor(watch))()
+            elseif tfunc == "number" or tfunc == "string" or tfunc == "boolean" then
+                return BehaviorSubject(func)
+            end
+
+            error("Usage: watch(func) - The func must be a function or scalar value", 2)
         end
 
         Environment.RegisterGlobalKeyword{
