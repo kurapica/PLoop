@@ -18,7 +18,6 @@ PLoop(function(_ENV)
     --- Provide automatically subscription based on the function
     __Sealed__()
     class "Watch"                       (function(_ENV)
-        extend "IEnvironment"
 
         export                          {
             getValue                    = Environment.GetValue,
@@ -115,11 +114,60 @@ PLoop(function(_ENV)
             end
         end)
 
+        __Sealed__()
+        class "WatchEnvironment"        (function(_ENV)
+            extend "IEnvironment"
+
+            export                      {
+                getValue                = Environment.GetValue,
+                saveValue               = Environment.SaveValue,
+                isObjectType            = Class.IsObjectType,
+                getObjectClass          = Class.GetObjectClass,
+                rawset                  = rawset,
+                rawget                  = rawget,
+                pcall                   = pcall,
+                setfenv                 = _G.setfenv or Toolset.fakefunc,
+            }
+
+            -------------------------------------------------------------------
+            --                          constructor                          --
+            -------------------------------------------------------------------
+            __ctor                      = Environment.SetParent
+
+            -------------------------------------------------------------------
+            --                          meta method                          --
+            -------------------------------------------------------------------
+            function __index(self, key)
+                local watches               = rawget(self, Watch)
+                if watches and watches[key] then return watches[key]:GetValue() end
+
+                local value                 = getValue(self, key)
+                if value then
+                    if isObjectType(value, Reactive) then
+                        value               = ReactiveProxy(rawget(self, Observer), value)
+                        rawset(self, key, value)
+                    elseif isObjectType(value, BehaviorSubject) then
+                        if not watches then
+                            watches         = {}
+                            rawset(self, Watch, watches)
+                        end
+                        watches[key]        = value
+                        value:Subscribe(rawget(self, Observer))
+                        rawset(self, key, nil)
+                        return value:GetValue()
+                    end
+                end
+                return value
+            end
+        end)
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ Function, Table/nil }
-        function __ctor(self, func, env)
+        __Arguments__{ Function, Table/nil, Table/nil }
+        function __ctor(self, func, env, reactives)
+            local watchEnv              = WatchEN
+
             -- parent
             setParent(self, env)
 
@@ -140,37 +188,6 @@ PLoop(function(_ENV)
             setfenv(func, self)
             return observer:OnNext()
         end
-
-        -----------------------------------------------------------------------
-        --                            meta method                            --
-        -----------------------------------------------------------------------
-        function __index(self, key)
-            local watches               = rawget(self, Watch)
-            if watches and watches[key] then return watches[key]:GetValue() end
-
-            local value                 = getValue(self, key)
-            if value then
-                if isObjectType(value, Reactive) then
-                    value               = ReactiveProxy(rawget(self, Observer), value)
-                    rawset(self, key, value)
-                elseif isObjectType(value, BehaviorSubject) then
-                    if not watches then
-                        watches         = {}
-                        rawset(self, Watch, watches)
-                    end
-                    watches[key]        = value
-                    value:Subscribe(rawget(self, Observer))
-                    rawset(self, key, nil)
-                    return value:GetValue()
-                end
-            end
-            return value
-        end
-
-        -- Call the function and return the observable result
-        function __call(self)
-            return rawget(self, WatchSubject)
-        end
     end)
 
     --- The watch keyword
@@ -178,24 +195,27 @@ PLoop(function(_ENV)
         export {
             type                        = type,
             error                       = error,
-
             getKeywordVisitor           = Environment.GetKeywordVisitor,
-            apply                       = Environment.Apply,
+
+            BehaviorSubject
         }
 
-        function watch(func)
-            local tfunc                 = type(func)
-            if tfunc == "function" then
-                return Watch(func, getKeywordVisitor(watch))()
-            elseif tfunc == "number" or tfunc == "string" or tfunc == "boolean" then
-                return BehaviorSubject(func)
+        function watch(reactives, func)
+            if type(reactives) == "function" then
+                func, reactives         = reactives
             end
 
-            error("Usage: watch(func) - The func must be a function or scalar value", 2)
+            if type(func) ~= "function" then
+                error("Usage: watch([reactives, ]func) - The func must be a function", 2)
+            end
+
+            if reactives and type(reactives) ~= "table" then
+                error("Usage: watch([reactives, ]func) - The reactives must be a table", 2)
+            end
+
+            return Watch(func, getKeywordVisitor(watch), reactives)
         end
 
-        Environment.RegisterGlobalKeyword{
-            watch                       = watch
-        }
+        Environment.RegisterGlobalKeyword { watch = watch }
     end
 end)
