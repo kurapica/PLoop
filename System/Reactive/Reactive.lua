@@ -60,7 +60,7 @@ PLoop(function(_ENV)
                     local getPropertyOb     = __Observable__.GetPropertyObservable
 
                     -- wrap all observable properties
-                    for name, prop in Class.GetFeatures(type, true) do
+                    for name, prop in Class.GetFeatures(cls, true) do
                         if validProp(prop) and isObservable(prop) then
                             local subject   = getPropertyOb(prop, init)
                             if isObjectType(subject, BehaviorSubject) then
@@ -176,7 +176,7 @@ PLoop(function(_ENV)
     }
 
     Environment.RegisterRuntimeKeyword  {
-        reactive                        = function(value)
+        reactive                        = function(value, silent)
             if value == nil then return Reactive() end
 
             -- Check the value
@@ -193,7 +193,7 @@ PLoop(function(_ENV)
                 -- wrap the value no matter class or object
                 else
                     local ok, res       = pcall(Reactive, value)
-                    if not ok then error(tostring(res), 2) end
+                    if not ok and not silent then error(tostring(res), 2) end
                     return res
                 end
 
@@ -202,7 +202,9 @@ PLoop(function(_ENV)
                 return BehaviorSubject(value)
             end
 
-            error("Usage: reactive(data) - The data must be a table or scalar value", 2)
+            if not silent then
+                error("Usage: reactive(data) - The data must be a table or scalar value", 2)
+            end
         end
     }
 end)
