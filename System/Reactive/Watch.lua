@@ -101,6 +101,7 @@ PLoop(function(_ENV)
                 error                   = error,
                 type                    = type,
                 pcall                   = pcall,
+                getmetatable            = getmetatable,
 
                 Environment, ReactiveProxy, Observer
             }
@@ -108,7 +109,7 @@ PLoop(function(_ENV)
             local function parseValue(self, key, value)
                 if not value then return value end
 
-                if type(value) == "table" then
+                if type(value) == "table" and getmetatable(value) ~= nil then
                     -- use reactive to wrap the value for simple
                     local react         = reactive(value, true)
 

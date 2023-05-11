@@ -120,7 +120,7 @@ PLoop(function(_ENV)
 
             -- Set the object is exist
             if object then
-                local ok, err           = pcall(object, key, value)
+                local ok, err           = pcall(setObjectProp, object, key, value)
                 if not ok then error(err, 2) end
                 return
             end
@@ -168,9 +168,10 @@ PLoop(function(_ENV)
     --- Register as keyword
     export                              {
         type                            = type,
-        getmetatable                    = getmetatable,
+        pcall                           = pcall,
+        error                           = error,
+        tostring                        = tostring,
         isObjectType                    = Class.IsObjectType,
-        getObjectClass                  = Class.GetObjectClass,
 
         IObservable, Reactive, BehaviorSubject
     }
