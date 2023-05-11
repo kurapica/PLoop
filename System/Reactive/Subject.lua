@@ -175,25 +175,62 @@ PLoop(function(_ENV)
     class "BehaviorSubject"             (function(_ENV)
         inherit "Subject"
 
-        export { select = select, max = math.max, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext }
+        export { select = select, max = math.max, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext, subscribe = Subject.Subscribe, onError = Subject.OnError }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local observer              = super.Subscribe(self, ...)
-            return self[0] > 0 and observer:OnNext(unpack(self, 1, self[0]))
+            local observer              = subscribe(self, ...)
+            local length                = self[0]
+            return length > 0 and observer:OnNext(unpack(self, 1, length)) or
+                length < 0 and observer:OnError(unpack(self, 1, -length))
         end
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self[0]                     = max(1, select("#", ...))
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+
+            if length == 1 then
+                self[1]                 = ...
+            elseif length <= 3 then
+                self[1],self[2],self[3] = ...
+            else
+                for i = 1, length do
+                    self[i]             = select(i, ...)
+                end
             end
 
-            onNext(self, ...)
+            return onNext(self, ...)
         end
+
+        function OnError(self, ...)
+            local length                = max(1, select("#", ...))
+            self[0]                     = - length
+
+            if length == 1 then
+                self[1]                 = ...
+            elseif length <= 3 then
+                self[1],self[2],self[3] = ...
+            else
+                for i = 1, length do
+                    self[i]             = select(i, ...)
+                end
+            end
+            return onError(self, ...)
+        end
+
+        --- Gets the current value
+        function GetValue(self)
+            return unpack(self, 1, self[0])
+        end
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- The current value
+        property "Value"                { get = GetValue, set = OnNext }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -239,6 +276,7 @@ PLoop(function(_ENV)
             return self
         end
 
+        --- Make a Connectable Observable behave like an ordinary Observable
         function RefCount(self)
             return Subject(self.PublishObservable)
         end

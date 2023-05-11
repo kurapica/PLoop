@@ -16762,14 +16762,14 @@ do
     -----------------------------------------------------------------------
     --                            _G keyword                             --
     -----------------------------------------------------------------------
-    _G.prototype                        = _G.prototype  or prototype
-    _G.namespace                        = _G.namespace  or namespace
-    _G.import                           = _G.import     or import
-    _G.enum                             = _G.enum       or enum
-    _G.struct                           = _G.struct     or struct
-    _G.class                            = _G.class      or class
-    _G.interface                        = _G.interface  or interface
-    _G.Module                           = _G.Module     or Module
+    if not rawget(_G, "prototype") then _G.prototype = prototype end
+    if not rawget(_G, "namespace") then _G.namespace = namespace end
+    if not rawget(_G, "import")    then _G.import    = import end
+    if not rawget(_G, "enum")      then _G.enum      = enum end
+    if not rawget(_G, "struct")    then _G.struct    = struct end
+    if not rawget(_G, "class")     then _G.class     = class end
+    if not rawget(_G, "interface") then _G.interface = interface end
+    if not rawget(_G, "Module")    then _G.Module    = Module end
 
     -----------------------------------------------------------------------
     --                             Must Have                             --
