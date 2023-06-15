@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2023/04/20                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2023/06/15                                               --
+-- Version      :   1.0.1                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -33,7 +33,6 @@ PLoop(function(_ENV)
             Class, Reactive, Property
         }
 
-        local reactiveMap               = Toolset.newtable(true)
         local setObjectProp             = function(self, key, value) self[key] = value end
 
         -----------------------------------------------------------------------
@@ -49,40 +48,37 @@ PLoop(function(_ENV)
         function __ctor(self, init)
             local fields                = {}
             rawset(self, Reactive, fields)
+            if not init then return end
 
             -- Init
-            if init then
-                local cls                   = Class.GetObjectClass(init)
-                if cls then
-                    -- as a proxy
-                    local validProp         = Property.Validate
-                    local isObservable      = __Observable__.IsObservableProperty
-                    local getPropertyOb     = __Observable__.GetPropertyObservable
+            local cls                   = Class.GetObjectClass(init)
+            if cls then
+                -- As proxy
+                local validProp         = Property.Validate
+                local isObservable      = __Observable__.IsObservableProperty
+                local getPropertyOb     = __Observable__.GetPropertyObservable
 
-                    -- wrap all observable properties
-                    for name, prop in Class.GetFeatures(cls, true) do
-                        if validProp(prop) and isObservable(prop) then
-                            local subject   = getPropertyOb(prop, init)
-                            if isObjectType(subject, BehaviorSubject) then
-                                fields[name]= subject
-                            else
-                                fields[name]= BehaviorSubject(subject)
-                            end
+                -- Wrap all observable properties
+                for name, prop in Class.GetFeatures(cls, true) do
+                    if validProp(prop) and isObservable(prop) then
+                        local subject   = getPropertyOb(prop, init)
+                        if isObjectType(subject, BehaviorSubject) then
+                            fields[name]= subject
+                        else
+                            fields[name]= BehaviorSubject(subject)
                         end
                     end
+                end
 
-                    if not next(fields) then
-                        throw("The " .. tostring(cls) .. " class doesn't provide observable properties")
-                    end
+                if not next(fields) then throw("The " .. tostring(cls) .. " class doesn't provide observable properties") end
 
-                    rawset(self, Class, init)
-                    reactiveMap[init]       = self
-                else
-                    -- as init table
-                    for k, v in pairs(init) do
-                        if type(k) == "string" and k ~= "" and type(v) ~= "function" then
-                            fields[k]   = reactive(v)
-                        end
+                rawset(self, Class, init)
+                rawset(init, Reactive, self)
+            else
+                -- As init table
+                for k, v in pairs(init) do
+                    if type(k) == "string" and k ~= "" and type(v) ~= "function" then
+                        fields[k]   = reactive(v)
                     end
                 end
             end
@@ -90,7 +86,7 @@ PLoop(function(_ENV)
 
         -- use the wrap for objects
         function __exist(_, init)
-            return init and reactiveMap[init]
+            return init and rawget(init, Reactive)
         end
 
         -----------------------------------------------------------------------
@@ -173,7 +169,7 @@ PLoop(function(_ENV)
         tostring                        = tostring,
         isObjectType                    = Class.IsObjectType,
 
-        IObservable, Reactive, BehaviorSubject
+        IObservable, Reactive, BehaviorSubject, Date, TimeSpan
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -189,6 +185,10 @@ PLoop(function(_ENV)
 
                 -- wrap the observable as behavior subject
                 elseif isObjectType(value, IObservable) then
+                    return BehaviorSubject(value)
+
+                -- wrap Date or TimeSpan to behavior subject, @TODO more generic check later
+                elseif isObjectType(value, Date) or isObjectType(value, TimeSpan) then
                     return BehaviorSubject(value)
 
                 -- wrap the value no matter class or object
