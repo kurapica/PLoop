@@ -77,6 +77,11 @@ PLoop(function(_ENV)
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
         function OnCompleted(self) end
+
+        -----------------------------------------------------------------------
+        --                              dispose                              --
+        -----------------------------------------------------------------------
+        __dtor                          = Unsubscribe
     end)
 
     --- Provide the Connect mechanism for observable queues
