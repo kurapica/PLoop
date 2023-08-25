@@ -26,7 +26,7 @@ PLoop(function(_ENV)
             data[fld]                   = nil
             for k, v in pairs(data) do
                 if type(v) == "table" then
-                    removeObjType(data, fld)
+                    removeObjType(v, fld)
                 end
             end
         end
