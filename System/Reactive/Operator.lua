@@ -34,6 +34,7 @@ PLoop(function(_ENV)
             __refoperator               = false, -- The operator that controls the refer observable sequence
             __subscription              = false, -- The subscription to the observable
             __refsubscription           = false, -- The subscription to the refoperator
+            __observersub               = false,
             __onNext                    = onNextDefault,
             __onError                   = onErrorDefault,
             __onComp                    = onCompletedDefault,
@@ -59,6 +60,7 @@ PLoop(function(_ENV)
                 OnUnsubscribe(self)
             end)
 
+            self.__observersub          = subscription
             self.__subscription         = self.__observable:Subscribe(self)
             if self.__refoperator then
                 self.__refsubscription  = self.__refoperator:Subscribe(observer)
@@ -80,10 +82,20 @@ PLoop(function(_ENV)
         function OnNext(self, ...)      return self.__onNext(self.__observer, ...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self,exception)return self.__onError(self.__observer, exception) end
+        function OnError(self,exception)
+            self.__onError(self.__observer, exception)
+            if self.__observersub then
+                self.__observersub:Dispose()
+            end
+        end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)      return self.__onComp(self.__observer) end
+        function OnCompleted(self)
+            self.__onComp(self.__observer)
+            if self.__observersub then
+                self.__observersub:Dispose()
+            end
+        end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
