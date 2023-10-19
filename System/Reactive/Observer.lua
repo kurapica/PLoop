@@ -21,14 +21,34 @@ PLoop(function(_ENV)
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
 
+        export {
+            fakefunc                    = Toolset.fakefunc
+        }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        --- Provides the observer with new data
+        function OnNext(self, ...)
+            return self.__onNext(...)
+        end
+        --- Notifies the observer that the provider has experienced an error condition
+        function OnError(self, exception)
+            return self.__onError(exception)
+        end
+        --- Notifies the observer that the provider has finished sending push-based notifications
+        function OnCompleted(self)
+            return self.__onComp()
+        end
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, onNext, onError, onCompleted)
-            self.OnNext                 = onNext
-            self.OnError                = onError
-            self.OnCompleted            = onCompleted
+            self.__onNext               = onNext or fakefunc
+            self.__onError              = onError or fakefunc
+            self.__onComp               = onCompleted or fakefunc
         end
     end)
 
