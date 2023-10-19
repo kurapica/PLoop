@@ -8,61 +8,49 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2023/10/19                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
+    --- The subscription that should be returned by Observable's Subscribe
+    __Sealed__() __AnonymousClass__()
+    interface "System.ISubscription"    (function(_ENV)
+        export { rawget }
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- Whether is unsubscribed
+        property "IsUnsubscribed"       { get = function(self) rawget(self, "Disposed") end }
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
+        --- The method used for unsubscribe
+        __Abstract__() function Unsubscribe(self) end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            return self:Unsubscribe()
+        end
+    end)
+
     --- Defines a provider for push-based notification
     __Sealed__() __AnonymousClass__()
     interface "System.IObservable"      (function(_ENV)
-        export {
-            pcall                       = pcall,
-            tostring                    = tostring,
-            Error                       = Logger.Default[Logger.LogLevel.Error],
-        }
-
-        local function safeCall(func)
-            return function(...)
-                local ok, ret           = pcall(func, ...)
-                if not ok then Error(tostring(ret)) end
-            end
-        end
+        export { ISubscription }
 
         --- Notifies the provider that an observer is to receive notifications.
-        __Abstract__() function Subscribe(self, onNext, onError, onCompleted) end
-
-        -- Safe subscribe the handlers
-        __Arguments__{ Callable, Callable/nil, Callable/nil }
-        function SafeSubscribe(self, onNext, onError, onCompleted)
-            return self:Subscribe(safeCall(onNext), onError, onCompleted)
-        end
+        -- should return ISubscription object for unsubscribe.
+        __Abstract__() function Subscribe(self, onNext, onError, onCompleted) return ISubscription() end
     end)
 
     --- Provides a mechanism for receiving push-based notifications
     __Sealed__() __AnonymousClass__()
     interface "System.IObserver"        (function(_ENV)
-        -----------------------------------------------------------------------
-        --                               event                               --
-        -----------------------------------------------------------------------
-        event "OnUnsubscribe"
-
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- Whether the Subscriber is unsubscribed
-        property "IsUnsubscribed"       { type = Boolean, default = false, handler = function(self, val) if val then return OnUnsubscribe(self) end end }
-
-        -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- Indicate that the subscriber is no longer interested in any of the Observables it is currently subscribed to
-        function Unsubscribe(self) self.IsUnsubscribed = true end
-
-        --- Indicate the subscriber should restart the subscribe, this is a dangerous action since the previous observable
-        -- may haven't check the IsUnsubscribed flag to stop the subscription, the observable should check the OnUnsubscribe
-        function Resubscribe(self) self.IsUnsubscribed = false end
-
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
@@ -77,11 +65,6 @@ PLoop(function(_ENV)
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
         function OnCompleted(self) end
-
-        -----------------------------------------------------------------------
-        --                              dispose                              --
-        -----------------------------------------------------------------------
-        __dtor                          = Unsubscribe
     end)
 
     --- Provide the Connect mechanism for observable queues

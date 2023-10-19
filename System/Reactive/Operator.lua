@@ -20,40 +20,51 @@ PLoop(function(_ENV)
     class "Operator"                    (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observable, Observer, Operator }
+        export { Observable, Observer, Operator, ISubscription }
 
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- The observable that provides the items
-        property "Observable"           { type = IObservable }
+        event "OnUnsubscribe"
 
-        --- The observer that will consume the items
-        property "Observer"             { type = IObserver }
+        local function onNextDefault(self, ...) return self:OnNext(...) end
+        local function onErrorDefault(self, e)  return self:OnError(e) end
+        local function onCompletedDefault(self) return self:OnCompleted() end
 
-        --- The operator that controls the refer observable sequence
-        property "RefOperator"          { type = Operator }
+        field {
+            __observable                = false, -- The data source
+            __observer                  = false, -- The observer
+            __refoperator               = false, -- The operator that controls the refer observable sequence
+            __subscription              = false, -- The subscription to the observable
+            __refsubscription           = false, -- The subscription to the refoperator
+            __onNext                    = onNextDefault,
+            __onError                   = onErrorDefault,
+            __onComp                    = onCompletedDefault,
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
-            -- Normally the Operator can't be re-used
-            if self.IsUnsubscribed then return end
+            -- The operator can't be re-used
+            if self.__subscription and self.__subscription.IsUnsubscribed then return end
 
-            self.Observer               = observer
+            self.__observer             = observer
+            local subscription          = ISubscription(function()
+                if self.__subscription then
+                    self.__subscription:Dispose()
+                end
+                if self.__refsubscription then
+                    self.__refsubscription:Dispose()
+                end
 
-            local onUnsubscribe
-            onUnsubscribe               = function()
-                observer.OnUnsubscribe  = observer.OnUnsubscribe - onUnsubscribe
-                self:Unsubscribe()
+                -- Fire the event
+                OnUnsubscribe(self)
+            end)
+
+            self.__subscription         = self.__observable:Subscribe(self)
+            if self.__refoperator then
+                self.__refsubscription  = self.__refoperator:Subscribe(observer)
             end
-            observer.OnUnsubscribe      = observer.OnUnsubscribe + onUnsubscribe
 
-            self.Observable:Subscribe(self)
-            if self.RefOperator then self.RefOperator:Subscribe(observer) end
-
-            return observer
+            return subscription, observer
         end
 
         --- Notifies the provider that an observer is to receive notifications.
@@ -65,29 +76,25 @@ PLoop(function(_ENV)
             return subscribe(self, Observer(onNext, onError, onCompleted))
         end
 
-        function OnNextCore(self, ...)  return self:OnNext(...) end
-        function OnErrorCore(self, e)   return self:OnError(e) end
-        function OnCompletedCore(self)  return self:OnCompleted() end
-
         --- Provides the observer with new data
-        function OnNext(self, ...)      return not self.IsUnsubscribed and self.OnNextCore(self.Observer, ...) end
+        function OnNext(self, ...)      return self.__onNext(self.__observer, ...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self,exception)return not self.IsUnsubscribed and self.OnErrorCore(self.Observer, exception) end
+        function OnError(self,exception)return self.__onError(self.__observer, exception) end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)      return not self.IsUnsubscribed and self.OnCompletedCore(self.Observer) end
+        function OnCompleted(self)      return self.__onComp(self.__observer) end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, Operator/nil }
         function __ctor(self, observable, onNext, onError, onCompleted, refOperator)
-            self.Observable             = observable
-            self.OnNextCore             = onNext
-            self.OnErrorCore            = onError
-            self.OnCompletedCore        = onCompleted
-            self.RefOperator            = refOperator
+            self.__observable           = observable
+            self.__refoperator          = refOperator or false
+            self.__onNext               = onNext or onNextDefault
+            self.__onError              = onError or onErrorDefault
+            self.__onComp               = onCompleted or onCompletedDefault
         end
     end)
 
@@ -123,7 +130,8 @@ PLoop(function(_ENV)
 
             LOCK_KEY                    = "PLOOP_RX_%s",
 
-            Operator, IObservable, Observer, Observable, Threading, Guid, Exception, Dictionary, Queue, List,
+            Operator, IObservable, Observer, Observable, ISubscription,
+            Threading, Guid, Exception, Dictionary, Queue, List,
             PublishSubject, ReplaySubject, Subject
         }
 
@@ -141,7 +149,7 @@ PLoop(function(_ENV)
         --- Dump the sequence
         __Arguments__{ NEString/"Dump" }
         function Dump(self, name)
-            self:Subscribe(function(...)
+            return self:Subscribe(function(...)
                 Info("%s-->%s", name, List{ tostringall(...) }:Join(", "))
             end, function(ex)
                 Info("%s failed-->%s", name, tostring(ex))
@@ -154,19 +162,25 @@ PLoop(function(_ENV)
         __Arguments__{ Callable, Callable/nil, Callable/nil }
         function ForEach(self, onNext, onError, onCompleted)
             local curr, main            = running()
-            if not curr or main then return self:Subscribe(onNext, onError, onCompleted) end
+            if not curr or main then
+                self:Subscribe(onNext, onError, onCompleted)
+                return
+            end
 
             local finished
 
-            self:Subscribe(onNext, function(ex)
-                finished                = true
-                if onError then onError(ex) end
-                return resume(curr)
-            end, function()
-                finished                = true
-                if onCompleted then onCompleted() end
-                return resume(curr)
-            end)
+            self:Subscribe(
+                onNext,
+                function(ex)
+                    finished            = true
+                    if onError then onError(ex) end
+                    return resume(curr)
+                end,
+                function()
+                    finished            = true
+                    if onCompleted then onCompleted() end
+                    return resume(curr)
+                end)
 
             if not finished then return yield() end
         end
@@ -262,7 +276,7 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ IObservable }
         function OnErrorResumeNext(self, observable)
-            local resume                = function(observer) observable:Subscribe(observer) end
+            local resume                = function(observer) return observable:Subscribe(observer) end
             return Operator(self, nil, resume, resume)
         end
 
@@ -998,8 +1012,8 @@ PLoop(function(_ENV)
                     local ok,ret        = pcall(selector, ...)
                     if not (ok and isObjectType(ret, IObservable)) then
                         local ex        = Exception(ret or "The key selector doesn't return an observable sequence")
-                        for key in pairs(childobs) do
-                            key:Unsubscribe()
+                        for key, sub in pairs(childobs) do
+                            sub:Dispose()
                         end
                         return observer:OnError(ex)
                     end
@@ -1008,8 +1022,8 @@ PLoop(function(_ENV)
                     obs                 = Observer(function(...)
                         observer:OnNext(...)
                     end, function(ex)
-                        for key in pairs(childobs) do
-                            key:Unsubscribe()
+                        for key, sub in pairs(childobs) do
+                            sub:Dispose()
                         end
                         observer:OnError(ex)
                     end, function()
@@ -1018,12 +1032,11 @@ PLoop(function(_ENV)
                             observer:OnCompleted()
                         end
                     end)
-                    childobs[obs]       = true
-                    ret:Subscribe(obs)
+                    childobs[obs]       = ret:Subscribe(obs)
                 end,
                 function(observer, ex)
-                    for key in pairs(childobs) do
-                        key:Unsubscribe()
+                    for key, sub in pairs(childobs) do
+                        sub:Dispose()
                     end
                     observer:OnError(ex)
                 end,
@@ -1135,12 +1148,12 @@ PLoop(function(_ENV)
                                 nobserver:OnNext(...)
                             elseif not choosed then
                                 choosed = subject
-                                for o in pairs(subjects) do
-                                    if o ~= subject then o:Unsubscribe() end
+                                for o, sub in pairs(subjects) do
+                                    if o ~= subject then sub:Dispose() end
                                 end
                                 nobserver:OnNext(...)
                             else
-                                subject:Unsubscribe()
+                                subjects[subject]:Dispose()
                             end
                         end, function(nobserver, ex)
                             if choosed == subject then
@@ -1163,8 +1176,7 @@ PLoop(function(_ENV)
                         end
                     )
 
-                    subjects[subject]   = true
-                    subject:Subscribe(observer)
+                    subjects[subject]   = subject:Subscribe(observer)
                 end,
                 function(observer, ex)
                     rcompleted          = true
@@ -1228,6 +1240,7 @@ PLoop(function(_ENV)
             local observables           = { ... }
             local choosed               = 0
             local subjects              = {}
+            local subscripts            = {}
             local rcompleted
 
             return Operator(Observable.Range(1, #observables),
@@ -1238,19 +1251,21 @@ PLoop(function(_ENV)
                                 nobserver:OnNext(...)
                             elseif choosed < index then
                                 if choosed > 0 then
-                                    subjects[choosed]:Unsubscribe()
+                                    subscripts[choosed]:Dispose()
                                     subjects[choosed] = nil
+                                    subscripts[choosed] = nil
                                 end
                                 choosed = index
                                 nobserver:OnNext(...)
                             else
+                                subscripts[index]:Dispose()
                                 subjects[index] = nil
-                                subject:Unsubscribe()
+                                subscripts[index] = nil
                             end
                         end, function(nobserver, ex)
                             if index >= choosed then
                                 for k, v in pairs(subjects) do
-                                    v:Unsubscribe()
+                                    subscripts[k]:Dispose()
                                 end
                                 nobserver:OnError(ex)
                             end
@@ -1434,6 +1449,10 @@ PLoop(function(_ENV)
             local leftwindows           = List()
             local rightwindows          = List()
 
+            local unsubscribe           = function(self)
+                return self._subscription and self._subscription:Dispose()
+            end
+
             return Operator(self, function(observer, ...)
                     local count         = select("#", ...)
 
@@ -1486,7 +1505,7 @@ PLoop(function(_ENV)
                     local window
 
                     local close         = function()
-                        window:Unsubscribe()
+                        window._subscription:Dispose()
                         leftwindows:Remove(window)
                     end
 
@@ -1497,14 +1516,14 @@ PLoop(function(_ENV)
                     end
 
                     leftwindows:Insert(window)
-                    selector:Subscribe(window)
+                    window._subscription= selector:Subscribe(window)
                 end, function(observer, ex)
-                    leftwindows:Each("Unsubscribe")
-                    rightwindows:Each("Unsubscribe")
+                    leftwindows:Each(unsubscribe)
+                    rightwindows:Each(unsubscribe)
                     observer:OnError(ex)
                 end, function(observer)
-                    leftwindows:Each("Unsubscribe")
-                    rightwindows:Each("Unsubscribe")
+                    leftwindows:Each(unsubscribe)
+                    rightwindows:Each(unsubscribe)
                     observer:OnCompleted()
                 end, Operator(right, function(observer, ...)
                     local count         = select("#", ...)
@@ -1564,14 +1583,14 @@ PLoop(function(_ENV)
                     end
 
                     rightwindows:Insert(window)
-                    selector:Subscribe(window)
+                    window._subscription= selector:Subscribe(window)
                 end, function(observer, ex)
-                    leftwindows:Each("Unsubscribe")
-                    rightwindows:Each("Unsubscribe")
+                    leftwindows:Each(unsubscribe)
+                    rightwindows:Each(unsubscribe)
                     observer:OnError(ex)
                 end, function(observer)
-                    leftwindows:Each("Unsubscribe")
-                    rightwindows:Each("Unsubscribe")
+                    leftwindows:Each(unsubscribe)
+                    rightwindows:Each(unsubscribe)
                     observer:OnCompleted()
                 end)
             )

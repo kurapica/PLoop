@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2023-10-19 WangXH <kurapica125@outlook.com>
+### Added
+- `System.ISubscription` is added, used for observer's unsubscription.
+
+### Changed
+- `System.IObserver` removed the `OnUnsubscribe`, `IsUnsubscribed` and `Unsubscribe`, moved to the `System.ISubscription`.
+
+
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
 ### Changed
 - `System.Web.JsonFormatProvider` is moved to `System.Serialization.JsonFormatProvider`

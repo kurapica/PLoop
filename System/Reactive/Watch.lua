@@ -26,7 +26,7 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             setfenv                     = _G.setfenv or _G.debug and _G.debug.setfenv or Toolset.fakefunc,
 
-            Observer, Exception
+            Observer, Exception, ISubscription, List
         }
 
         local function onNext(subject, res, ...)
@@ -44,7 +44,7 @@ PLoop(function(_ENV)
                 rawget                  = rawget,
                 isObjectType            = Class.IsObjectType,
 
-                Observer, Reactive, ReactiveProxy
+                Observer, Reactive, ReactiveProxy, ISubscription
             }
 
             -------------------------------------------------------------------
@@ -68,7 +68,7 @@ PLoop(function(_ENV)
                     local observable    = reactive(key)
                     if observable then
                         proxy[key]      = true
-                        observable:Subscribe(observer)
+                        rawget(observer, ISubscription):Insert((observable:Subscribe(observer)))
                     else
                         observable      = reactive[key]
                         if observable and isObjectType(observable, Reactive) then
@@ -103,7 +103,7 @@ PLoop(function(_ENV)
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
 
-                Environment, ReactiveProxy, Observer
+                Environment, ReactiveProxy, Observer, ISubscription
             }
 
             local function parseValue(self, key, value)
@@ -123,7 +123,8 @@ PLoop(function(_ENV)
                             rawset(self, Watch, watches)
                         end
                         watches[key]    = react
-                        react:Subscribe(rawget(self, Observer))
+                        local observer  = rawget(self, Observer)
+                        rawget(observer, ISubscription):Insert((react:Subscribe(observer)))
                         rawset(self, key, nil)
                         return react:GetValue()
                     end
@@ -184,6 +185,7 @@ PLoop(function(_ENV)
             end)
             rawset(self, Observer, observer)
             rawset(watchEnv, Observer, observer)
+            rawset(observer, ISubscription, List())
 
             -- install the reactives
             if reactives then
@@ -197,7 +199,9 @@ PLoop(function(_ENV)
 
         -- dispose
         function __dtor(self)
-            rawget(self, Observer):Unsubscribe()
+            for _, sub in rawget(rawget(self, Observer), ISubscription):GetIterator() do
+                sub:Dispose()
+            end
         end
     end)
 

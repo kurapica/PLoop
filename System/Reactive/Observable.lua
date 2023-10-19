@@ -220,18 +220,18 @@ PLoop(function(_ENV)
         --- Creates a new objservable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 local value             = init
                 if resultselector then
                     while value ~= nil and condition(value) do
                         observer:OnNext(resultselector(value))
-                        if token:IsCancelled() then return end
+                        if subscription.IsUnsubscribed then return end
                         value           = iterate(value)
                     end
                 else
                     while value ~= nil and condition(value) do
                         observer:OnNext(value)
-                        if token:IsCancelled() then return end
+                        if subscription.IsUnsubscribed then return end
                         value           = iterate(value)
                     end
                 end
@@ -327,8 +327,9 @@ PLoop(function(_ENV)
         --- Converts list objects into Observables
         __Static__() __Arguments__{ IList }
         function From(list)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in list:GetIterator() do
+                    if subscription.IsUnsubscribed then return end
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
@@ -339,8 +340,9 @@ PLoop(function(_ENV)
         --- Converts dictionary objects into Observables
         __Static__() __Arguments__{ IDictionary }
         function From(dict)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in dict:GetIterator() do
+                    if subscription.IsUnsubscribed then return end
                     observer:OnNext(key, value)
                 end
                 observer:OnCompleted()
@@ -350,11 +352,11 @@ PLoop(function(_ENV)
         --- Converts collection objects into Observables
         __Static__() __Arguments__{ Iterable }
         function From(iter)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 local f, t, k           = iter:GetIterator()
                 repeat
                     k                   = onNextIterKey(observer, f(t, k))
-                until k == nil or token:IsCancelled()
+                until k == nil or subscription.IsUnsubscribed
                 observer:OnCompleted()
             end)
         end
@@ -374,10 +376,10 @@ PLoop(function(_ENV)
         --- Creates an Observable that emits the return value of a function-like directive
         __Static__() __Arguments__{ Callable, Any/nil, Any/nil }
         function From(func, t, k)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 repeat
                     k                   = onNextIterKey(observer, func(t, k))
-                until k == nil or token:IsCancelled()
+                until k == nil or subscription.IsUnsubscribed
                 observer:OnCompleted()
             end)
         end
@@ -385,9 +387,9 @@ PLoop(function(_ENV)
         --- Converts tables into Observables
         __Static__() __Arguments__{ Table, Callable/nil }
         function From(table, iter)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in (iter or pairs)(table) do
-                    if token:IsCancelled() then return end
+                    if subscription.IsUnsubscribed then return end
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
@@ -418,9 +420,9 @@ PLoop(function(_ENV)
         --- Creates an Observable that emits a particular range of sequential integers
         __Static__() __Arguments__{ Number, Number, Number/nil }
         function Range(start, stop, step)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for i = start, stop, step or 1 do
-                    if token:IsCancelled() then return end
+                    if subscription.IsUnsubscribed then return end
                     observer:OnNext(i)
                 end
                 observer:OnCompleted()
@@ -433,11 +435,11 @@ PLoop(function(_ENV)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(count, ]] .. args .. [[)
-                        return Observable(function(observer, token)
+                        return Observable(function(observer, subscription)
                             local i     = 0
 
                             while i < count do
-                                if token:IsCancelled() then return end
+                                if subscription.IsUnsubscribed then return end
                                 observer:OnNext(]] .. args .. [[)
                                 i       = i + 1
                             end

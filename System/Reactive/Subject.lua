@@ -17,54 +17,70 @@ PLoop(function(_ENV)
 
     --- A bridge or proxy that acts both as an observer and as an Observable
     __Sealed__()
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observer, Dictionary, next = next, type = type, pairs = pairs }
+        export { Observer, Dictionary, ISubscription, next = next, type = type, pairs = pairs }
 
-        FIELD_NEW_SUBSCRIBE             = "__Subject_New"
+        local function onNextDefault(self, ...) return self:OnNext(...) end
+        local function onErrorDefault(self, e)  return self:OnError(e) end
+        local function onCompletedDefault(self) return self:OnCompleted() end
 
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- The obervable that provides the items
-        property "Observable"           { type = IObservable }
-
-        --- The observer that will consume the items
-        property "Observers"            { set = false, default = function() return Dictionary() end }
+        field {
+            __newsubject                = false, -- The new subject cache
+            __observable                = false, -- The data source
+            __subscription              = false, -- The subscription to the __observable
+            __observers                 = {},    -- The observers
+            __onNext                    = onNextDefault,
+            __onError                   = onErrorDefault,
+            __onComp                    = onCompletedDefault,
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer)
-            local obs                   = self.Observers
-            if obs[observer] then return observer end
-            local hasobs                = next(obs)
-
-            -- Bind the Unsubscribe event
-            local onUnsubscribe
-            onUnsubscribe               = function()
-                observer.OnUnsubscribe  = observer.OnUnsubscribe - onUnsubscribe
-
-                obs[observer]           = nil
-                if self.Observable and not next(obs) then self:Unsubscribe() end
+            -- Check existed subscription
+            local obs                   = self.__observers
+            if obs[observer] and not obs[observer].IsUnsubscribed then
+                return obs[observer], observer
             end
-            observer.OnUnsubscribe      = observer.OnUnsubscribe + onUnsubscribe
+
+            -- Create the subscription
+            local subscription          = ISubscription(function()
+                -- un-subscribe
+                obs[observer]           = nil
+
+                -- Remove the register
+                if self.__newsubject and self.__newsubject ~= true and self.__newsubject[observer] then
+                    self.__newsubject[observer] = nil
+
+                -- With no observers, there is no need to keep subscription
+                elseif self.__subscription and not next(obs) then
+                    self.__subscription:Dispose()
+                    self.__subscription = false
+                end
+            end)
 
             -- Subscribe the subject
-            self:Resubscribe()
-            if self[FIELD_NEW_SUBSCRIBE] then
-                if self[FIELD_NEW_SUBSCRIBE] == true then
-                    self[FIELD_NEW_SUBSCRIBE] = {}
+            if self.__newsubject then
+                if self.__newsubject == true then
+                    self.__newsubject   = {}
                 end
 
-                self[FIELD_NEW_SUBSCRIBE][observer] = true
+                self.__newsubject[observer] = subscription
             else
-                obs[observer]           = true
+                obs[observer]           = subscription
             end
-            if self.Observable and not hasobs then self.Observable:Subscribe(self) end
 
-            return observer
+            -- Start the subscription if needed
+            if not self.__subscription and self.__observable then
+                self.__subscription     = self.__observable:Subscribe(self)
+            end
+
+            return subscription, observer
         end
 
         --- Notifies the provider that an observer is to receive notifications.
@@ -76,46 +92,47 @@ PLoop(function(_ENV)
             return subscribe(self, Observer(onNext, onError, onCompleted))
         end
 
-        function OnNextCore(self, ...) return self:OnNext(...) end
-        function OnErrorCore(self, e)  return self:OnError(e) end
-        function OnCompletedCore(self) return self:OnCompleted() end
-
         --- Provides the observer with new data
         function OnNext(self, ...)
-            if not self.IsUnsubscribed then
-                self[FIELD_NEW_SUBSCRIBE] = self[FIELD_NEW_SUBSCRIBE] or true
+            self.__newsubject           = self.__newsubject or true
 
-                local onNext            = self.OnNextCore
-                for k in self.Observers:GetIterator() do
-                    onNext(k, ...)
+            local onNext                = self.__onNext
+            for ob, sub in pairs(self.__observers) do
+                if not sub.IsUnsubscribed then
+                    onNext(ob, ...)
                 end
-
-                local newSubs           = self[FIELD_NEW_SUBSCRIBE]
-                if newSubs and type(newSubs) == "table" then
-                    for observer in pairs(newSubs) do
-                        self.Observers[observer] = true
-                    end
-                end
-                self[FIELD_NEW_SUBSCRIBE] = false
             end
+
+            -- Register the new observers
+            local newSubs               = self.__newsubject
+            if newSubs and type(newSubs)== "table" then
+                for ob, sub in pairs(newSubs) do
+                    self.__observers[ob]= sub
+                end
+            end
+            self.__newsubject           = false
         end
 
         --- Notifies the observer that the provider has experienced an error condition
         function OnError(self, exception)
-            if self.IsUnsubscribed then return end
-
-            local onError               = self.OnErrorCore
-            for k in self.Observers:GetIterator() do
-                onError(k, exception)
+            local onError               = self.__onError
+            for ob, sub in pairs(self.__observers) do
+                if not sub.IsUnsubscribed then
+                    onError(ob, exception)
+                    sub:Dispose()
+                end
             end
         end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            if self.IsUnsubscribed then return end
-
-            local onComp                = self.OnCompletedCore
-            for k in self.Observers:GetIterator() do onComp(k) end
+            local onComp                = self.__onComp
+            for ob, sub in pairs(self.__observers) do
+                if not sub.IsUnsubscribed then
+                    onComp(ob, exception)
+                    sub:Dispose()
+                end
+            end
         end
 
         -----------------------------------------------------------------------
@@ -123,21 +140,17 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, observable, onNext, onError, onCompleted)
-            self[FIELD_NEW_SUBSCRIBE]   = false
-
-            self.Observable             = observable
-            self.OnNextCore             = onNext
-            self.OnErrorCore            = onError
-            self.OnCompletedCore        = onCompleted
+            self.__observable           = observable
+            self.__onNext               = onNext or onNextDefault
+            self.__onError              = onError or onErrorDefault
+            self.__onComp               = onCompleted or onCompletedDefault
         end
 
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, onNext, onError, onCompleted)
-            self[FIELD_NEW_SUBSCRIBE]   = false
-
-            self.OnNextCore             = onNext
-            self.OnErrorCore            = onError
-            self.OnCompletedCore        = onCompleted
+            self.__onNext               = onNext or onNextDefault
+            self.__onError              = onError or onErrorDefault
+            self.__onComp               = onCompleted or onCompletedDefault
         end
     end)
 
@@ -154,11 +167,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Provides the observer with new data
         function OnNext(self, ...)
-            if not self.IsUnsubscribed then
-                self[0]                 = select("#", ...)
-                for i = 1, self[0] do
-                    self[i]             = select(i, ...)
-                end
+            self[0]                     = select("#", ...)
+            for i = 1, self[0] do
+                self[i]                 = select(i, ...)
             end
         end
 
@@ -181,10 +192,14 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local observer              = subscribe(self, ...)
+            local subscription, observer= subscribe(self, ...)
             local length                = self[0]
-            return length > 0 and observer:OnNext(unpack(self, 1, length)) or
-                length < 0 and observer:OnError(unpack(self, 1, -length))
+            if length > 0 then
+                observer:OnNext(unpack(self, 1, length))
+            elseif length < 0 then
+                observer:OnError(unpack(self, 1, -length))
+            end
+            return subscription, observer
         end
 
         --- Provides the observer with new data
@@ -259,7 +274,8 @@ PLoop(function(_ENV)
     --- Emits to an observers only when connect to the observable source
     __Sealed__()
     class "PublishSubject"              (function(_ENV)
-        inherit "Subject" extend "IConnectableObservable"
+        inherit "Subject"
+        extend "IConnectableObservable"
 
         export { Observable, Subject }
 
@@ -287,6 +303,7 @@ PLoop(function(_ENV)
         __Arguments__{ IObservable }
         function __ctor(self, observable)
             self.PublishObservable      = observable
+            super(self)
         end
     end)
 
@@ -295,7 +312,7 @@ PLoop(function(_ENV)
     class "ReplaySubject"               (function(_ENV)
         inherit "Subject"
 
-        export { Queue, select = select }
+        export { Queue, select = select, onNext = Subject.OnNext }
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -313,7 +330,7 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local observer              = super.Subscribe(self, ...)
+            local subscription, observer= super.Subscribe(self, ...)
             if self.Queue:Peek() then
                 local queue             = self.Queue
                 local index             = 1
@@ -325,6 +342,7 @@ PLoop(function(_ENV)
                     count               = queue:Peek(index, 1)
                 end
             end
+            return subscription, observer
         end
 
         --- Provides the observer with new data
@@ -335,7 +353,7 @@ PLoop(function(_ENV)
             else
                 self.QueueCount         = self.QueueCount + 1
             end
-            super.OnNext(self, ...)
+            return onNext(self, ...)
         end
 
         -----------------------------------------------------------------------
