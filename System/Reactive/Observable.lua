@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2022/12/07                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2023/10/20                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -188,10 +188,11 @@ PLoop(function(_ENV)
         end
     end)
 
+    -- Extend the Observable
     __Sealed__()
     class "Observable"                  (function(_ENV)
         export {
-            Observer, Observable, IObservable, Subject, List, __Observable__,
+            Observer, Observable, IObservable, ISubscription, Subject, List, __Observable__,
 
             tostring                    = tostring,
             select                      = select,
@@ -224,14 +225,14 @@ PLoop(function(_ENV)
                 local value             = init
                 if resultselector then
                     while value ~= nil and condition(value) do
-                        observer:OnNext(resultselector(value))
                         if subscription.IsUnsubscribed then return end
+                        observer:OnNext(resultselector(value))
                         value           = iterate(value)
                     end
                 else
                     while value ~= nil and condition(value) do
-                        observer:OnNext(value)
                         if subscription.IsUnsubscribed then return end
+                        observer:OnNext(value)
                         value           = iterate(value)
                     end
                 end
@@ -267,9 +268,7 @@ PLoop(function(_ENV)
         --- Returns and Observable that immediately completes without producing a value
         __Static__()
         function Empty()
-            return Observable(function(observer)
-                observer:OnCompleted()
-            end)
+            return Observable(function(observer) return observer:OnCompleted() end)
         end
 
         --- Returns an Observable that never produces values and never completes
@@ -378,8 +377,9 @@ PLoop(function(_ENV)
         function From(func, t, k)
             return Observable(function(observer, subscription)
                 repeat
+                    if subscription.IsUnsubscribed then return end
                     k                   = onNextIterKey(observer, func(t, k))
-                until k == nil or subscription.IsUnsubscribed
+                until k == nil
                 observer:OnCompleted()
             end)
         end

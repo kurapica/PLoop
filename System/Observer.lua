@@ -18,11 +18,13 @@ PLoop(function(_ENV)
     interface "System.ISubscription"    (function(_ENV)
         export { rawget }
 
+        event "OnUnsubscribe"
+
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
         --- Whether is unsubscribed
-        property "IsUnsubscribed"       { get = function(self) rawget(self, "Disposed") end }
+        property "IsUnsubscribed"       { get = function(self) return rawget(self, "Disposed") or false end }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -34,7 +36,9 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            return self:Unsubscribe()
+            if self.IsUnsubscribed then return end
+            self:Unsubscribe()
+            OnUnsubscribe(self)
         end
     end)
 
@@ -45,7 +49,7 @@ PLoop(function(_ENV)
 
         --- Notifies the provider that an observer is to receive notifications.
         -- should return ISubscription object for unsubscribe.
-        __Abstract__() function Subscribe(self, onNext, onError, onCompleted) return ISubscription() end
+        __Abstract__() function Subscribe(self, observer, subscription) return subscription, observer end
     end)
 
     --- Provides a mechanism for receiving push-based notifications

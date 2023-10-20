@@ -8,8 +8,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2023/10/20                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
@@ -24,32 +24,28 @@ PLoop(function(_ENV)
 
         export { Observer, Dictionary, ISubscription, next = next, type = type, pairs = pairs }
 
-        local function onNextDefault(self, ...) return self:OnNext(...) end
-        local function onErrorDefault(self, e)  return self:OnError(e) end
-        local function onCompletedDefault(self) return self:OnCompleted() end
-
         field {
             __newsubject                = false, -- The new subject cache
             __observable                = false, -- The data source
             __subscription              = false, -- The subscription to the __observable
             __observers                 = {},    -- The observers
-            __onNext                    = onNextDefault,
-            __onError                   = onErrorDefault,
-            __onComp                    = onCompletedDefault,
         }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer)
+        local function subscribe(self, observer, subscription)
             -- Check existed subscription
             local obs                   = self.__observers
             if obs[observer] and not obs[observer].IsUnsubscribed then
                 return obs[observer], observer
             end
 
-            -- Create the subscription
-            local subscription          = ISubscription(function()
+            local orginal               = subscription and subscription.Unsubscribe
+            local unsubscribe           = function()
+                -- call the origin
+                if orginal then orginal(observer) end
+
                 -- un-subscribe
                 obs[observer]           = nil
 
@@ -62,11 +58,18 @@ PLoop(function(_ENV)
                     self.__subscription:Dispose()
                     self.__subscription = false
                 end
-            end)
+            end
+
+            -- Create or hook the subscription
+            if subscription then
+                subscription.Unsubscribe= unsubscribe
+            else
+                subscription            = ISubscription(unsubscribe)
+            end
 
             -- Subscribe the subject
             if self.__newsubject then
-                if self.__newsubject == true then
+                if self.__newsubject   == true then
                     self.__newsubject   = {}
                 end
 
@@ -77,29 +80,29 @@ PLoop(function(_ENV)
 
             -- Start the subscription if needed
             if not self.__subscription and self.__observable then
-                self.__subscription     = self.__observable:Subscribe(self)
+                self.__subscription     = ISubscription()
+                self.__subscription     = self.__observable:Subscribe(self, self.__subscription)
             end
 
             return subscription, observer
         end
 
         --- Notifies the provider that an observer is to receive notifications.
-        __Arguments__{ IObserver }
+        __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function Subscribe(self, onNext, onError, onCompleted)
-            return subscribe(self, Observer(onNext, onError, onCompleted))
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            return subscribe(self, Observer(onNext, onError, onCompleted), subscription)
         end
 
         --- Provides the observer with new data
         function OnNext(self, ...)
             self.__newsubject           = self.__newsubject or true
 
-            local onNext                = self.__onNext
             for ob, sub in pairs(self.__observers) do
                 if not sub.IsUnsubscribed then
-                    onNext(ob, ...)
+                    ob:OnNext(...)
                 end
             end
 
@@ -118,8 +121,8 @@ PLoop(function(_ENV)
             local onError               = self.__onError
             for ob, sub in pairs(self.__observers) do
                 if not sub.IsUnsubscribed then
-                    onError(ob, exception)
                     sub:Dispose()
+                    ob:OnError(Exception)
                 end
             end
         end
@@ -129,8 +132,8 @@ PLoop(function(_ENV)
             local onComp                = self.__onComp
             for ob, sub in pairs(self.__observers) do
                 if not sub.IsUnsubscribed then
-                    onComp(ob, exception)
                     sub:Dispose()
+                    ob:OnCompleted()
                 end
             end
         end
@@ -138,19 +141,24 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, observable, onNext, onError, onCompleted)
-            self.__observable           = observable
-            self.__onNext               = onNext or onNextDefault
-            self.__onError              = onError or onErrorDefault
-            self.__onComp               = onCompleted or onCompletedDefault
+        __Arguments__{ IObservable/nil }
+        function __ctor(self, observable)
+            self.__observable           = observable or false
         end
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, onNext, onError, onCompleted)
-            self.__onNext               = onNext or onNextDefault
-            self.__onError              = onError or onErrorDefault
-            self.__onComp               = onCompleted or onCompletedDefault
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            for ob, sub in pairs(self.__observers) do
+                if not sub.IsUnsubscribed then
+                    sub:Dispose()
+                end
+            end
+
+            if self.__subscription then
+                self.__subscription:Dispose()
+            end
         end
     end)
 
@@ -197,6 +205,7 @@ PLoop(function(_ENV)
             if length > 0 then
                 observer:OnNext(unpack(self, 1, length))
             elseif length < 0 then
+                subscription:Dispose()
                 observer:OnError(unpack(self, 1, -length))
             end
             return subscription, observer
@@ -277,7 +286,11 @@ PLoop(function(_ENV)
         inherit "Subject"
         extend "IConnectableObservable"
 
-        export { Observable, Subject }
+        export { Observable, Subject, ISubscription }
+
+        field {
+            __publicsubscription        = false
+        }
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -288,7 +301,9 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Connect(self)
-            self.PublishObservable:Subscribe(self)
+            if self.__publicsubscription then return end
+            self.__publicsubscription   = ISubscription()
+            self.__publicsubscription   = self.PublishObservable:Subscribe(self, self.__publicsubscription)
             return self
         end
 
@@ -304,6 +319,13 @@ PLoop(function(_ENV)
         function __ctor(self, observable)
             self.PublishObservable      = observable
             super(self)
+        end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            return self.__publicsubscription and self.__publicsubscription:Dispose()
         end
     end)
 

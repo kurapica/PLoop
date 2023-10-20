@@ -29,17 +29,13 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
-        function OnNext(self, ...)
-            return self.__onNext(...)
-        end
+        function OnNext(self, ...)      return self.__onNext(...) end
+
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, exception)
-            return self.__onError(exception)
-        end
+        function OnError(self, ...)     return self.__onError(...) end
+
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)
-            return self.__onComp()
-        end
+        function OnCompleted(self)      return self.__onComp() end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -61,18 +57,18 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer)
-            local subscription          = ISubscription()
+        local function subscribe(self, observer, subscription)
+            subscription                = subscription or ISubscription()
             self.__subscribe(observer, subscription)
             return subscription, observer
         end
 
-        __Arguments__{ IObserver }
+        __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function Subscribe(self, onNext, onError, onCompleted)
-            return subscribe(self, Observer(onNext, onError, onCompleted))
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            return subscribe(self, Observer(onNext, onError, onCompleted), subscription)
         end
 
         -----------------------------------------------------------------------

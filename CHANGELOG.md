@@ -2,11 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [1.9.1] - 2023-10-19 WangXH <kurapica125@outlook.com>
-### Added
-- `System.ISubscription` is added, used for observer's unsubscription.
-
 ### Changed
-- `System.IObserver` removed the `OnUnsubscribe`, `IsUnsubscribed` and `Unsubscribe`, moved to the `System.ISubscription`.
+- The reactive system is re-designed, `System.ISubscription` is added to provide features like `OnUnsubscribe` event, `IsUnsubscribed` property and `Unsubscribe` method, all removed form the `System.IObserver`.
 
 
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
