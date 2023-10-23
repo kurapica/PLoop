@@ -20,9 +20,7 @@ PLoop(function(_ENV)
     class "Operator"                    (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observable, Observer, Operator, ISubscription }
-
-        event "OnUnsubscribe"
+        export { Observable, Observer, Operator, Subscription }
 
         local function onNextDefault(observer, ...) return observer:OnNext(...) end
         local function onErrorDefault(observer, e)  return observer:OnError(e) end
@@ -32,7 +30,6 @@ PLoop(function(_ENV)
             __observable                = false, -- The data source
             __observer                  = false, -- The observer
             __refoperator               = false, -- The operator that controls the refer observable sequence
-            __subscription              = false, -- The subscription to the observable
             __onNext                    = onNextDefault,
             __onError                   = onErrorDefault,
             __onComp                    = onCompletedDefault,
@@ -43,33 +40,21 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         local function subscribe(self, observer, subscription)
             -- The operator can't be re-used
-            if self.__subscription then
+            if self.__observer then
                 if self.__observer == observer then
-                    return self.__subscription, observer
+                    return subscription, observer
                 else
                     throw "The operator can't be subscribed by multi observers"
                 end
             end
 
-            local orginal               = subscription and subscription.Unsubscribe
-            local unsubscribe           = function()
-                -- call the origin
-                if orginal then orginal(observer) end
-
-                -- Fire the event
-                return OnUnsubscribe(self)
+            subscription                = subscription or Subscription()
+            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
+                if self.__observer == observer then
+                    self.__observer     = false
+                end
             end
-
-            -- Create or hook the subscription, can use OnUnsubscribe event
-            if subscription then
-                orginal                 = subscription.Unsubscribe
-                subscription.Unsubscribe= unsubscribe
-            else
-                subscription            = ISubscription(unsubscribe)
-            end
-
             self.__observer             = observer
-            self.__subscription         = subscription
 
             -- Keep using the same subscription
             self.__observable:Subscribe(self, subscription)
@@ -81,33 +66,28 @@ PLoop(function(_ENV)
         end
 
         --- Notifies the provider that an observer is to receive notifications.
-        __Arguments__{ IObserver, ISubscription/nil }
+        __Arguments__{ IObserver, ISubscription/nil }:Throwable()
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
-        function Subscribe(self, onNext, onError, onCompleted, subscription)
-            return subscribe(self, Observer(onNext, onError, onCompleted), subscription)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }:Throwable()
+        function Subscribe(self, onNext, onError, onCompleted)
+            local observer              = Observer(onNext, onError, onCompleted)
+            return subscribe(self, observer, observer.Subscription)
         end
 
         --- Provides the observer with new data
-        function OnNext(self, ...) return self.__onNext(self.__observer, ...) end
+        function OnNext(self, ...) return self.__observer and self.__onNext(self.__observer, ...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)
-            self.__subscription:Dispose()
-            return self.__onError(self.__observer, ...)
-        end
+        function OnError(self, ...)return self.__observer and self.__onError(self.__observer, ...) end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)
-            self.__subscription:Dispose()
-            return self.__onComp(self.__observer)
-        end
+        function OnCompleted(self) return self.__observer and self.__onComp(self.__observer) end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, Operator/nil }
+        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, IObservable/nil }
         function __ctor(self, observable, onNext, onError, onCompleted, refOperator)
             self.__observable           = observable
             self.__refoperator          = refOperator or false
@@ -149,7 +129,7 @@ PLoop(function(_ENV)
 
             LOCK_KEY                    = "PLOOP_RX_%s",
 
-            Operator, IObservable, Observer, Observable, ISubscription,
+            Operator, IObservable, Observer, Observable, ISubscription, Subscription,
             Threading, Guid, Exception, Dictionary, Queue, List,
             PublishSubject, ReplaySubject, Subject
         }
@@ -168,22 +148,24 @@ PLoop(function(_ENV)
         --- Dump the sequence
         __Arguments__{ NEString/"Dump" }
         function Dump(self, name)
-            return self:Subscribe(function(...)
-                Info("%s-->%s", name, List{ tostringall(...) }:Join(", "))
-            end, function(ex)
-                Info("%s failed-->%s", name, tostring(ex))
-            end, function()
-                Info("%s completed", name)
-            end)
-        end
+            return self:Subscribe(
+                function(...)
+                    Info("%s-->%s", name, List{ tostringall(...) }:Join(", "))
+                end,
+                function(ex)
+                    Info("%s failed-->%s", name, tostring(ex))
+                end,
+                function()
+                    Info("%s completed", name)
+                end)
+            end
 
         --- Process all elements as they arrived, works like the Subscribe, but will block the current coroutine
         __Arguments__{ Callable, Callable/nil, Callable/nil }
         function ForEach(self, onNext, onError, onCompleted)
             local curr, main            = running()
             if not curr or main then
-                self:Subscribe(onNext, onError, onCompleted)
-                return
+                return self:Subscribe(onNext, onError, onCompleted)
             end
 
             local finished
@@ -215,22 +197,25 @@ PLoop(function(_ENV)
                 if not inited then
                     inited              = true
 
-                    self:Subscribe(function(...)
-                        queue(select("#", ...), ...)
-                        if status(curr) == "suspended" then
-                            resume(curr, queue:Dequeue(queue:Dequeue()))
-                        end
-                    end, function(ex)
-                        finished        = ex
-                        if status(curr) == "suspended" then
-                            resume(curr, nil, ex)
-                        end
-                    end, function()
-                        finished        = true
-                        if status(curr) == "suspended" then
-                            resume(curr)
-                        end
-                    end)
+                    self:Subscribe(
+                        function(...)
+                            queue(select("#", ...), ...)
+                            if status(curr) == "suspended" then
+                                resume(curr, queue:Dequeue(queue:Dequeue()))
+                            end
+                        end,
+                        function(ex)
+                            finished    = ex
+                            if status(curr) == "suspended" then
+                                resume(curr, nil, ex)
+                            end
+                        end,
+                        function()
+                            finished    = true
+                            if status(curr) == "suspended" then
+                                resume(curr)
+                            end
+                        end)
                 end
 
                 local count             = queue:Dequeue()
@@ -246,40 +231,58 @@ PLoop(function(_ENV)
 
         --- Encapsulate the sequence as a new observable sequence, so the outside can't
         -- access the real sequece directly
-        function AsObservable(self)
-            return Observable(function(...) return self:Subscribe(...) end)
-        end
+        function AsObservable(self) return Observable(function(...) return self:Subscribe(...) end) end
 
         --- Invokes actions with side effecting behavior for each element in the observable sequence
         __Observable__()
         __Arguments__{ Callable, Callable/nil, Callable/nil }
         function Do(self, onNext, onError, onCompleted)
-            return Operator(self, function(observer, ...)
-                onNext(...)
-                return observer:OnNext(...)
-            end,
-            onError and function(observer, ex)
-                onError(ex)
-                return observer:OnError(ex)
-            end,
-            onCompleted and function(observer)
-                onCompleted()
-                return observer:OnCompleted()
-            end)
+            return Operator(self,
+                function(observer, ...)
+                    onNext(...)
+                    return observer:OnNext(...)
+                end,
+                onError and function(observer, ex)
+                    onError(ex)
+                    return observer:OnError(ex)
+                end,
+                onCompleted and function(observer)
+                    onCompleted()
+                    return observer:OnCompleted()
+                end)
         end
 
         --- Catch the exception and replace with another sequence if provided
         __Observable__()
         __Arguments__{ Callable }
         function Catch(self, onError)
-            return Operator(self, nil, function(observer, ex)
+            local subscription, replace
+            local oper                  = Operator(self, nil, function(observer, ex)
                 local ok, ret           = pcall(onError, ex)
                 if not (ok and isObjectType(ret, IObservable)) then
-                    observer:OnError(ex)
+                    return observer:OnError(ex)
                 else
-                    return ret:Subscribe(observer)
+                    if replace then replace:Dispose() replace = nil end
+                    return ret:Subscribe(observer, subscription)
                 end
             end)
+
+            -- Hack the subscribe replace the subscription
+            oper.Subscribe              = function(self, onNext, onError, onCompleted)
+                local observer
+                if type(onNext) == "function" then
+                    observer            = Observer(onNext, onError, onCompleted)
+                    subscription        = observer.Subscription
+                elseif isObjectType(onNext, IObserver) then
+                    observer            = onNext
+                    subscription        = isObjectType(onError, ISubscription) and onError or nil
+                end
+                if observer then
+                    replace             = Subscription(subscription)
+                    return Operator.Subscribe(self, observer, replace)
+                end
+            end
+            return oper
         end
 
         --- Process operations when the sequence is completed, error or unsubscribed
@@ -287,7 +290,28 @@ PLoop(function(_ENV)
         __Arguments__{ Callable }
         function Finally(self, finally)
             local oper                  = Operator(self)
-            oper.OnUnsubscribe          = oper.OnUnsubscribe + finally
+            local callFinally           = function()
+                if finally then
+                    local _finally      = finally
+                    finally             = nil
+                    return _finally()
+                end
+            end
+
+            -- Hack the operator
+            oper.Subscribe              = function(self, ...)
+                local sub, ob           = Operator.Subscribe(self, ...)
+                sub.OnUnsubscribe       = sub.OnUnsubscribe + callFinally
+                return sub, ob
+            end
+            oper.OnError                 = function(self, ...)
+                Operator.OnError(self, ...)
+                return callFinally()
+            end
+            oper.OnCompleted            = function()
+                Operator.OnCompleted(self)
+                return callFinally()
+            end
             return oper
         end
 
@@ -295,8 +319,29 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ IObservable }
         function OnErrorResumeNext(self, observable)
-            local resume                = function(observer) return observable:Subscribe(observer) end
-            return Operator(self, nil, resume, resume)
+            local subscription, replace
+            local resume                = function(observer)
+                if replace then replace:Dispose() end
+                return observable:Subscribe(observer, subscription)
+            end
+            local oper                  = Operator(self, nil, resume, resume)
+
+            -- Hack the subscribe replace the subscription
+            oper.Subscribe              = function(self, onNext, onError, onCompleted)
+                local observer
+                if type(onNext) == "function" then
+                    observer            = Observer(onNext, onError, onCompleted)
+                    subscription        = observer.Subscription
+                elseif isObjectType(onNext, IObserver) then
+                    observer            = onNext
+                    subscription        = isObjectType(onError, ISubscription) and onError or nil
+                end
+                if observer then
+                    replace             = Subscription(subscription)
+                    return Operator.Subscribe(self, observer, replace)
+                end
+            end
+            return oper
         end
 
         --- Retry the sequence if failed
@@ -307,10 +352,7 @@ PLoop(function(_ENV)
             local times                 = 0
             return Operator(self, nil, function(observer, ex)
                 times                   = times + 1
-
-                if times > count then
-                    observer:OnError(ex)
-                end
+                return times > count and observer:OnError(ex)
             end)
         end
 
@@ -328,9 +370,7 @@ PLoop(function(_ENV)
                     if ret then return observer:OnNext(...) end
                 end)
             else
-                return Operator(self, function(observer, ...)
-                    if condition(...) then return observer:OnNext(...) end
-                end)
+                return Operator(self, function(observer, ...) return condition(...) and observer:OnNext(...) end)
             end
         end
         Filter                          = Where -- Alias
@@ -424,21 +464,18 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ Number }
         function Take(self, count)
-            local oper
-            oper                        = Operator(self, function(observer, ...)
+            return Operator(self, function(observer, ...)
                 if count > 0 then
                     count               = count - 1
                     observer:OnNext(...)
 
                     if count <= 0 then
-                        oper:OnCompleted()
+                        observer:OnCompleted()
                     end
                 else
-                    oper:OnCompleted()
+                    observer:OnCompleted()
                 end
             end)
-
-            return oper
         end
 
         --- filter out all values until a value fails the predicate, then the remaining sequence can be returned
@@ -453,28 +490,26 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function TakeWhile(self, condition, safe)
-            local oper
             if safe then
-                oper                    = Operator(self, function(observer, ...)
+                return Operator(self, function(observer, ...)
                     local ok, ret       = pcall(condition, ...)
                     if not ok then return observer:OnError(Exception(ret)) end
 
                     if ret then
                         observer:OnNext(...)
                     else
-                        oper:OnCompleted()
+                        observer:OnCompleted()
                     end
                 end)
             else
-                oper                    = Operator(self, function(observer, ...)
+                return Operator(self, function(observer, ...)
                     if condition(...) then
                         observer:OnNext(...)
                     else
-                        oper:OnCompleted()
+                        observer:OnCompleted()
                     end
                 end)
             end
-            return oper
         end
 
         --- Skip the last elements of the given count
@@ -524,7 +559,6 @@ PLoop(function(_ENV)
         function SkipUntil(self, other)
             local flag                  = false
             other:Take(1):Subscribe(function() flag = true end)
-
             return self:Where(function() return flag end)
         end
 
@@ -534,16 +568,13 @@ PLoop(function(_ENV)
         function TakeUntil(self, other)
             local flag                  = true
             other:Take(1):Subscribe(function() flag = false end)
-
-            local oper
-            oper                        = Operator(self, function(observer, ...)
+            return Operator(self, function(observer, ...)
                 if flag then
-                    observer:OnNext(...)
+                    return observer:OnNext(...)
                 else
-                    oper:OnCompleted()
+                    return observer:OnCompleted()
                 end
             end)
-            return oper
         end
 
         --- Take all values that match the prefix elements
@@ -577,56 +608,57 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ Callable/nil, Boolean/nil }
         function Any(self, predicate, safe)
-            local oper
-            oper                        = Operator(self, predicate and (
-                safe and function(observer, ...)
-                    local ok, ret       = pcall(predicate, ...)
-                    if not ok then return observer:OnError(Exception(ret)) end
+            return Operator(self,
+                predicate and (safe and
+                    function(observer, ...)
+                        local ok, ret       = pcall(predicate, ...)
+                        if not ok then return observer:OnError(Exception(ret)) end
 
-                    if ret then
-                        observer:OnNext(true)
-                        oper:OnCompleted()
+                        if ret then
+                            observer:OnNext(true)
+                            observer:OnCompleted()
+                        end
+                    end or
+                    function(observer, ...)
+                        if predicate(...) then
+                            observer:OnNext(true)
+                            observer:OnCompleted()
+                        end
                     end
-                end or function(observer, ...)
-                    if predicate(...) then
-                        observer:OnNext(true)
-                        oper:OnCompleted()
-                    end
-                end) or function(observer, ...)
+                ) or
+                function(observer, ...)
                     observer:OnNext(true)
-                    oper:OnCompleted()
+                    observer:OnCompleted()
                 end,
-                nil, function(observer)
+                nil,
+                function(observer)
                     observer:OnNext(false)
                     observer:OnCompleted()
                 end
             )
-            return oper
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence's all values meet the predicate
         __Observable__()
         __Arguments__{ Callable, Boolean/nil }
         function All(self, predicate, safe)
-            local oper
-            oper                        = Operator(self, safe and function(observer, ...)
+            return Operator(self, safe and function(observer, ...)
                 local ok, ret           = pcall(predicate, ...)
                 if not ok then return observer:OnError(Exception(ret)) end
 
                 if not ret then
                     observer:OnNext(false)
-                    oper:OnCompleted()
+                    observer:OnCompleted()
                 end
             end or function(observer, ...)
                 if not predicate(...) then
                     observer:OnNext(false)
-                    oper:OnCompleted()
+                    observer:OnCompleted()
                 end
             end, nil, function(observer)
                 observer:OnNext(true)
                 observer:OnCompleted()
             end)
-            return oper
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence contains a specific value
@@ -682,16 +714,14 @@ PLoop(function(_ENV)
         __Observable__()
         function NotEmpty(self)
             local hasElements           = false
-
             return Operator(self, function(observer, ...)
                 hasElements             = true
                 return observer:OnNext(...)
             end, nil, function(observer)
                 if not hasElements then
-                    return observer:OnError(Exception("The sequence doesn't provide any elements"))
-                else
-                    return observer:OnCompleted()
+                    observer:OnError(Exception("The sequence doesn't provide any elements"))
                 end
+                return observer:OnCompleted()
             end)
         end
 
@@ -700,16 +730,14 @@ PLoop(function(_ENV)
         __Arguments__{ NaturalNumber }
         function ElementAt(self, index)
             index                       = floor(index)
-            local oper
-            oper                        = Operator(self, function(observer, ...)
+            return Operator(self, function(observer, ...)
                 if index == 0 then
                     observer:OnNext(...)
-                    oper:OnCompleted()
+                    observer:OnCompleted()
                 else
                     index               = index - 1
                 end
             end)
-            return oper
         end
 
         --- Compares two observable sequences whether those sequences has the same values in the same order and that the sequences are the same length
@@ -726,24 +754,26 @@ PLoop(function(_ENV)
 
                 if fcount ~= scount then
                     observer:OnNext(false)
-                    return observer:OnCompleted()
+                    return observer:OnCompleted() and false
                 end
 
                 for i = 1, fcount do
                     if not compare(fqueue:Dequeue(), squeue:Dequeue()) then
                         observer:OnNext(false)
-                        return observer:OnCompleted()
+                        return observer:OnCompleted() and false
                     end
                 end
+                return true
             end
 
             local complete              = function(observer)
                 if iscomp then
-                    while not observer.IsUnsubscribed and squeue:Peek() and fqueue:Peek() do
-                        compareQueue(observer)
+                    local flag          = true
+                    while flag and squeue:Peek() and fqueue:Peek() do
+                        flag            = compareQueue(observer)
                     end
 
-                    if not observer.IsUnsubscribed then
+                    if flag then
                         if squeue:Peek() or fqueue:Peek() then
                             observer:OnNext(false)
                         else
@@ -1038,45 +1068,53 @@ PLoop(function(_ENV)
         function SelectMany(self, selector)
             local childobs              = {}
             local iscompleted
+            local subscription
 
-            return Operator(self,
+            local oper                  = Operator(self,
                 function(observer, ...)
-                    local ok,ret        = pcall(selector, ...)
+                    local ok, ret       = pcall(selector, ...)
                     if not (ok and isObjectType(ret, IObservable)) then
-                        local ex        = Exception(ret or "The key selector doesn't return an observable sequence")
-                        for key, sub in pairs(childobs) do
-                            sub:Dispose()
-                        end
-                        return observer:OnError(ex)
+                        return observer:OnError(Exception(ret or "The key selector doesn't return an observable sequence"))
                     end
 
                     local obs
-                    obs                 = Observer(function(...)
+                    obs           =  Observer(function(...)
                         observer:OnNext(...)
                     end, function(ex)
-                        for key, sub in pairs(childobs) do
-                            sub:Dispose()
-                        end
                         observer:OnError(ex)
                     end, function()
-                        childobs[obs]   = nil
+                        childobs[obs] = nil
                         if not next(childobs) and iscompleted then
                             observer:OnCompleted()
                         end
                     end)
-                    childobs[obs]       = ret:Subscribe(obs)
+                    childobs[obs]       = true
+                    ret:Subscribe(obs, subscription)
                 end,
-                function(observer, ex)
-                    for key, sub in pairs(childobs) do
-                        sub:Dispose()
-                    end
-                    observer:OnError(ex)
-                end,
+                nil,
                 function(observer)
                     iscompleted         = true
-                    if not next(childobs) then observer:OnCompleted() end
+                    if not next(childobs) then
+                        observer:OnCompleted()
+                    end
                 end
             )
+
+            -- Hack the subscribe replace the subscription
+            oper.Subscribe              = function(self, onNext, onError, onCompleted)
+                local observer
+                if type(onNext) == "function" then
+                    observer            = Observer(onNext, onError, onCompleted)
+                    subscription        = observer.Subscription
+                elseif isObjectType(onNext, IObserver) then
+                    observer            = onNext
+                    subscription        = isObjectType(onError, ISubscription) and onError or nil
+                end
+                if observer then
+                    return Operator.Subscribe(self, observer, subscription)
+                end
+            end
+            return oper
         end
         FlatMap                         = SelectMany
 

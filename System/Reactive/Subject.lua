@@ -22,7 +22,7 @@ PLoop(function(_ENV)
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observer, Dictionary, ISubscription, next = next, type = type, pairs = pairs }
+        export { Observer, Dictionary, Subscription, next = next, type = type, pairs = pairs }
 
         field {
             __newsubject                = false, -- The new subject cache
@@ -41,10 +41,10 @@ PLoop(function(_ENV)
                 return obs[observer], observer
             end
 
-            local orginal               = subscription and subscription.Unsubscribe
-            local unsubscribe           = function()
-                -- call the origin
-                if orginal then orginal(observer) end
+            subscription                = subscription or Subscription()
+            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
+                -- Safe check
+                if obs[observer] ~= subscription then return end
 
                 -- un-subscribe
                 obs[observer]           = nil
@@ -60,13 +60,6 @@ PLoop(function(_ENV)
                 end
             end
 
-            -- Create or hook the subscription
-            if subscription then
-                subscription.Unsubscribe= unsubscribe
-            else
-                subscription            = ISubscription(unsubscribe)
-            end
-
             -- Subscribe the subject
             if self.__newsubject then
                 if self.__newsubject   == true then
@@ -80,8 +73,8 @@ PLoop(function(_ENV)
 
             -- Start the subscription if needed
             if not self.__subscription and self.__observable then
-                self.__subscription     = ISubscription()
-                self.__subscription     = self.__observable:Subscribe(self, self.__subscription)
+                self.__subscription     = Subscription()
+                self.__observable:Subscribe(self, self.__subscription)
             end
 
             return subscription, observer
@@ -91,9 +84,10 @@ PLoop(function(_ENV)
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
-        function Subscribe(self, onNext, onError, onCompleted, subscription)
-            return subscribe(self, Observer(onNext, onError, onCompleted), subscription)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
+        function Subscribe(self, onNext, onError, onCompleted)
+            local observer              = Observer(onNext, onError, onCompleted)
+            return subscribe(self, observer, observer.Subscription)
         end
 
         --- Provides the observer with new data
@@ -118,10 +112,8 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has experienced an error condition
         function OnError(self, exception)
-            local onError               = self.__onError
             for ob, sub in pairs(self.__observers) do
                 if not sub.IsUnsubscribed then
-                    sub:Dispose()
                     ob:OnError(Exception)
                 end
             end
@@ -129,10 +121,10 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            local onComp                = self.__onComp
-            for ob, sub in pairs(self.__observers) do
+            local __observers           = self.__observers
+            self.__observers            = {}
+            for ob, sub in pairs(__observers) do
                 if not sub.IsUnsubscribed then
-                    sub:Dispose()
                     ob:OnCompleted()
                 end
             end
@@ -150,12 +142,6 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            for ob, sub in pairs(self.__observers) do
-                if not sub.IsUnsubscribed then
-                    sub:Dispose()
-                end
-            end
-
             if self.__subscription then
                 self.__subscription:Dispose()
             end
@@ -168,16 +154,21 @@ PLoop(function(_ENV)
     class "AsyncSubject"                (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = _G.unpack or table.unpack }
+        export { max = math.max, select = select, unpack = _G.unpack or table.unpack }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self[0]                     = select("#", ...)
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+            if length <= 2 then
+                self[1], self[2]        = ...
+            else
+                for i = 1, length, 2 do
+                    self[i], self[i+1]  = select(i, ...)
+                end
             end
         end
 
@@ -199,13 +190,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
+        --- Subscribe the observer
         function Subscribe(self, ...)
             local subscription, observer= subscribe(self, ...)
             local length                = self[0]
             if length > 0 then
                 observer:OnNext(unpack(self, 1, length))
             elseif length < 0 then
-                subscription:Dispose()
                 observer:OnError(unpack(self, 1, -length))
             end
             return subscription, observer
@@ -216,30 +207,27 @@ PLoop(function(_ENV)
             local length                = max(1, select("#", ...))
             self[0]                     = length
 
-            if length == 1 then
-                self[1]                 = ...
-            elseif length <= 3 then
-                self[1],self[2],self[3] = ...
+            if length <= 2 then
+                self[1], self[2]        = ...
             else
-                for i = 1, length do
-                    self[i]             = select(i, ...)
+                for i = 1, length, 2 do
+                    self[i], self[i+1]  = select(i, ...)
                 end
             end
 
             return onNext(self, ...)
         end
 
+        -- Send the error message
         function OnError(self, ...)
             local length                = max(1, select("#", ...))
             self[0]                     = - length
 
-            if length == 1 then
-                self[1]                 = ...
-            elseif length <= 3 then
-                self[1],self[2],self[3] = ...
+            if length <= 2 then
+                self[1], self[2]        = ...
             else
-                for i = 1, length do
-                    self[i]             = select(i, ...)
+                for i = 1, length, 2 do
+                    self[i], self[i+1]  = select(i, ...)
                 end
             end
             return onError(self, ...)
@@ -262,8 +250,8 @@ PLoop(function(_ENV)
         __Arguments__{ IObservable, Any * 0 }
         function __ctor(self, observable, ...)
             self[0]                     = select("#", ...)
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
+            for i = 1, self[0], 2 do
+                self[i], self[i + 1]    = select(i, ...)
             end
 
             super(self, observable)
@@ -272,8 +260,8 @@ PLoop(function(_ENV)
         __Arguments__{ Any * 0 }
         function __ctor(self, ...)
             self[0]                     = select("#", ...)
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
+            for i = 1, self[0], 2 do
+                self[i], self[i + 1]    = select(i, ...)
             end
 
             super(self)
@@ -286,7 +274,7 @@ PLoop(function(_ENV)
         inherit "Subject"
         extend "IConnectableObservable"
 
-        export { Observable, Subject, ISubscription }
+        export { Observable, Subject, Subscription }
 
         field {
             __publicsubscription        = false
@@ -302,8 +290,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function Connect(self)
             if self.__publicsubscription then return end
-            self.__publicsubscription   = ISubscription()
-            self.__publicsubscription   = self.PublishObservable:Subscribe(self, self.__publicsubscription)
+            self.__publicsubscription   = Subscription()
+            self.PublishObservable:Subscribe(self, self.__publicsubscription)
             return self
         end
 
@@ -358,7 +346,7 @@ PLoop(function(_ENV)
                 local index             = 1
 
                 local count             = queue:Peek(index, 1)
-                while count do
+                while count and not subscription.IsUnsubscribed do
                     observer:OnNext(queue:Peek(index + 1, count))
                     index               = index + 1 + count
                     count               = queue:Peek(index, 1)

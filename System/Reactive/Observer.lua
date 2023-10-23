@@ -18,6 +18,21 @@ PLoop(function(_ENV)
     Environment.RegisterGlobalNamespace("System.Reactive")
 
     __Sealed__()
+    class "Subscription"                (function(_ENV)
+        extend "System.ISubscription"
+
+        -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        -- As sub subscription that will be disposed when the root is disposed
+        __Arguments__{ ISubscription/nil }
+        function __ctor(self, subscription)
+            if not subscription then return end
+            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function() return self:Dispose() end
+        end
+    end)
+
+    __Sealed__()
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
 
@@ -26,16 +41,29 @@ PLoop(function(_ENV)
         }
 
         -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        -- The subscription will be used by the observer
+        property "Subscription"         { type = ISubscription, default = function() return Subscription() end }
+
+        -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
-        function OnNext(self, ...)      return self.__onNext(...) end
+        function OnNext(self, ...)
+            return self.__onNext(...)
+        end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)     return self.__onError(...) end
+        function OnError(self, ...)
+            return self.__onError(...)
+        end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)      return self.__onComp() end
+        function OnCompleted(self)
+            self.Subscription:Dispose()
+            return self.__onComp()
+        end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -46,19 +74,26 @@ PLoop(function(_ENV)
             self.__onError              = onError or fakefunc
             self.__onComp               = onCompleted or fakefunc
         end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            self.Subscription:Dispose()
+        end
     end)
 
     -- Declare first
     class "Observable"                  (function(_ENV)
         extend "System.IObservable"
 
-        export { Observer, ISubscription }
+        export { Observer, Subscription }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer, subscription)
-            subscription                = subscription or ISubscription()
+            subscription                = subscription or Subscription()
             self.__subscribe(observer, subscription)
             return subscription, observer
         end
@@ -66,9 +101,10 @@ PLoop(function(_ENV)
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
-        function Subscribe(self, onNext, onError, onCompleted, subscription)
-            return subscribe(self, Observer(onNext, onError, onCompleted), subscription)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
+        function Subscribe(self, onNext, onError, onCompleted)
+            local observer              = Observer(onNext, onError, onCompleted)
+            return subscribe(self, observer, observer.Subscription)
         end
 
         -----------------------------------------------------------------------

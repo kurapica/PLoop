@@ -27,17 +27,10 @@ PLoop(function(_ENV)
         property "IsUnsubscribed"       { get = function(self) return rawget(self, "Disposed") or false end }
 
         -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- The method used for unsubscribe
-        __Abstract__() function Unsubscribe(self) end
-
-        -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
             if self.IsUnsubscribed then return end
-            self:Unsubscribe()
             OnUnsubscribe(self)
         end
     end)

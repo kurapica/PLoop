@@ -192,7 +192,7 @@ PLoop(function(_ENV)
     __Sealed__()
     class "Observable"                  (function(_ENV)
         export {
-            Observer, Observable, IObservable, ISubscription, Subject, List, __Observable__,
+            Observer, Observable, IObservable, Subscription, Subject, List, __Observable__,
 
             tostring                    = tostring,
             select                      = select,
@@ -214,9 +214,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Creates a new Observable
         __Static__() __Arguments__{ Callable }
-        function Create(subscribe)
-            return Observable(subscribe)
-        end
+        function Create(subscribe)      return Observable(subscribe) end
 
         --- Creates a new objservable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
@@ -242,13 +240,17 @@ PLoop(function(_ENV)
 
         --- Returns an Observable that just provide one value
         local _JustAutoGen              = setmetatable({
-            [0]                         = function() return Observable(function(observer) observer:OnCompleted() end) end
-        }, {
+            [0]                         = function()
+                return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end)
+            end
+        },
+        {
             __index                     = function(self, count)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(]] .. args .. [[)
-                        return Observable(function(observer)
+                        return Observable(function(observer, subscription)
+                            if subscription.IsUnsubscribed then return end
                             observer:OnNext(]] .. args .. [[)
                             observer:OnCompleted()
                         end)
@@ -257,8 +259,7 @@ PLoop(function(_ENV)
                 rawset(self, count, func)
                 return func
             end
-            }
-        )
+        })
         __Static__()
         function Just(...)
             return _JustAutoGen[select("#", ...)](...)
@@ -268,7 +269,7 @@ PLoop(function(_ENV)
         --- Returns and Observable that immediately completes without producing a value
         __Static__()
         function Empty()
-            return Observable(function(observer) return observer:OnCompleted() end)
+            return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end)
         end
 
         --- Returns an Observable that never produces values and never completes
@@ -283,18 +284,18 @@ PLoop(function(_ENV)
             if not (exception and IsObjectType(exception, Exception)) then
                 exception               = Exception(exception and tostring(exception) or "Unknown error")
             end
-            return Observable(function(observer) return observer:OnError(exception) end)
+            return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnError(exception) end)
         end
 
         --- Creates the Observable only when the observer subscribes
         local _DeferAutoGen             = setmetatable({
             [0]                         = function(ctor)
-                return Observable(function(observer)
+                return Observable(function(observer, subscription)
                     local obs           = ctor()
                     if not IsObjectType(obs, IObservable) then
                         observer:OnError(Exception("The defer function doesn't provide valid observable"))
                     else
-                        return obs:Subscribe(observer)
+                        return obs:Subscribe(observer, subscription)
                     end
                 end)
             end,
@@ -303,12 +304,12 @@ PLoop(function(_ENV)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(ctor, ]] .. args .. [[)
-                        return Observable(function(observer)
+                        return Observable(function(observer, subscription)
                             local obs   = ctor(]] .. args .. [[)
                             if not IsObjectType(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
                             else
-                                return obs:Subscribe(observer)
+                                return obs:Subscribe(observer, subscription)
                             end
                         end)
                     end
@@ -354,8 +355,9 @@ PLoop(function(_ENV)
             return Observable(function(observer, subscription)
                 local f, t, k           = iter:GetIterator()
                 repeat
+                    if subscription.IsUnsubscribed then return end
                     k                   = onNextIterKey(observer, f(t, k))
-                until k == nil or subscription.IsUnsubscribed
+                until k == nil
                 observer:OnCompleted()
             end)
         end
@@ -399,9 +401,7 @@ PLoop(function(_ENV)
 
         --- Create a subject based on observable property
         __Static__() __Arguments__{ PropertyType }
-        function From(prop)
-            return __Observable__.GetPropertyObservable(prop, nil, true)
-        end
+        function From(prop)             return __Observable__.GetPropertyObservable(prop, nil, true) end
 
         __Arguments__{ InterfaceType + ClassType, String }
         __Static__() function From(class, name)
