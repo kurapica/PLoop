@@ -28,11 +28,24 @@ PLoop(function(_ENV)
         __Arguments__{ ISubscription/nil }
         function __ctor(self, subscription)
             if not subscription then return end
-            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function() return self:Dispose() end
+            self.__root                 = subscription
+            self.__handler              = function() return self:Dispose() end
+            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + self.__handler
+        end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            if self.__root and self.__handler then
+                self.__root.OnUnsubscribe = self.__root.OnUnsubscribe - self.__handler
+            end
         end
     end)
 
     __Sealed__()
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
 
@@ -44,7 +57,7 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         -- The subscription will be used by the observer
-        property "Subscription"         { type = ISubscription, default = function() return Subscription() end }
+        property "Subscription"         { type = ISubscription, field = "__subscription", default = function() return Subscription() end }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -61,25 +74,29 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            self.Subscription:Dispose()
-            return self.__onComp()
+            local subscription          = self.__subscription
+            return subscription and subscription:Dispose() or self.__onComp()
         end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, onNext, onError, onCompleted)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        function __ctor(self, onNext, onError, onCompleted, subscription)
             self.__onNext               = onNext or fakefunc
             self.__onError              = onError or fakefunc
             self.__onComp               = onCompleted or fakefunc
+            if subscription then
+                self.Subscription       = Subscription(subscription)
+            end
         end
 
         -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            self.Subscription:Dispose()
+            local subscription          = self.__subscription
+            return subscription and subscription:Dispose()
         end
     end)
 
@@ -87,13 +104,13 @@ PLoop(function(_ENV)
     class "Observable"                  (function(_ENV)
         extend "System.IObservable"
 
-        export { Observer, Subscription }
+        export { Observer, Subscription, isObjectType = Class.IsObjectType }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer, subscription)
-            subscription                = subscription or Subscription()
+            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
             self.__subscribe(observer, subscription)
             return subscription, observer
         end
@@ -101,9 +118,9 @@ PLoop(function(_ENV)
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function Subscribe(self, onNext, onError, onCompleted)
-            local observer              = Observer(onNext, onError, onCompleted)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            local observer              = Observer(onNext, onError, onCompleted, subscription)
             return subscribe(self, observer, observer.Subscription)
         end
 

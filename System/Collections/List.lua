@@ -18,7 +18,7 @@ PLoop(function(_ENV)
     import "System.Serialization"
 
     -- Helpers
-    export { yield = coroutine.yield }
+    export { yield = coroutine.yield, unpack = _G.unpack or table.unpack }
 
     __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
     __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
@@ -919,5 +919,33 @@ PLoop(function(_ENV)
         end
 
         return true
+    end
+
+    -----------------------------------------------------------------------
+    --                          Toolset Extend                           --
+    -----------------------------------------------------------------------
+    local combineTableParams            = setmetatable(
+        {
+            [0]                         = function(_, ...) return ... end
+        },
+        {
+            __index = function(self, count)
+                local args              = XList(count):Map("i=>'arg'..i"):Join(",")
+                local func              = Toolset.loadsnippet([[
+                    return function(tbl, ...)
+                        local ]] .. args .. [[ = unpack(tbl)
+                        return ]] .. args .. [[, ...
+                    end
+                ]], "Combine_Array_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+        }
+    )
+
+    --- Combine two index table without cache
+    __Static__() function Toolset.combinearray(tbl1, tbl2)
+        local count                     = #tbl1
+        return combineTableParams[count](tbl1, unpack(tbl2))
     end
 end)

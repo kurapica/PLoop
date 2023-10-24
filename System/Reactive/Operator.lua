@@ -20,7 +20,7 @@ PLoop(function(_ENV)
     class "Operator"                    (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observable, Observer, Operator, Subscription }
+        export { Observable, Observer, Operator, Subscription, isObjectType = Class.IsObjectType }
 
         local function onNextDefault(observer, ...) return observer:OnNext(...) end
         local function onErrorDefault(observer, e)  return observer:OnError(e) end
@@ -29,7 +29,6 @@ PLoop(function(_ENV)
         field {
             __observable                = false, -- The data source
             __observer                  = false, -- The observer
-            __refoperator               = false, -- The operator that controls the refer observable sequence
             __onNext                    = onNextDefault,
             __onError                   = onErrorDefault,
             __onComp                    = onCompletedDefault,
@@ -39,6 +38,9 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         local function subscribe(self, observer, subscription)
+            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
+            subscription                = self:HandleSubscription(subscription, observer) or subscription
+
             -- The operator can't be re-used
             if self.__observer then
                 if self.__observer == observer then
@@ -48,7 +50,6 @@ PLoop(function(_ENV)
                 end
             end
 
-            subscription                = subscription or Subscription()
             subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
                 if self.__observer == observer then
                     self.__observer     = false
@@ -58,20 +59,20 @@ PLoop(function(_ENV)
 
             -- Keep using the same subscription
             self.__observable:Subscribe(self, subscription)
-            if self.__refoperator then
-                self.__refoperator:Subscribe(observer, subscription)
-            end
-
             return subscription, observer
         end
+
+        --- Used to handle the subscription, can be used to replace the original one
+        __Abstract__()
+        function HandleSubscription(self, subscription, observer) return subscription end
 
         --- Notifies the provider that an observer is to receive notifications.
         __Arguments__{ IObserver, ISubscription/nil }:Throwable()
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }:Throwable()
-        function Subscribe(self, onNext, onError, onCompleted)
-            local observer              = Observer(onNext, onError, onCompleted)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }:Throwable()
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            local observer              = Observer(onNext, onError, onCompleted, subscription)
             return subscribe(self, observer, observer.Subscription)
         end
 
@@ -87,10 +88,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil, IObservable/nil }
-        function __ctor(self, observable, onNext, onError, onCompleted, refOperator)
+        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
+        function __ctor(self, observable, onNext, onError, onCompleted)
             self.__observable           = observable
-            self.__refoperator          = refOperator or false
             self.__onNext               = onNext or onNextDefault
             self.__onError              = onError or onErrorDefault
             self.__onComp               = onCompleted or onCompletedDefault
@@ -112,9 +112,11 @@ PLoop(function(_ENV)
             next                        = next,
             select                      = select,
             pairs                       = pairs,
+            ipairs                      = ipairs,
             strformat                   = string.format,
             loadsnippet                 = Toolset.loadsnippet,
             tostringall                 = Toolset.tostringall,
+            combinearray                = Toolset.combinearray,
             otime                       = _G.os and (os.clock or os.time) or false,
             unpack                      = _G.unpack or table.unpack,
             isObjectType                = Class.IsObjectType,
@@ -268,19 +270,10 @@ PLoop(function(_ENV)
             end)
 
             -- Hack the subscribe replace the subscription
-            oper.Subscribe              = function(self, onNext, onError, onCompleted)
-                local observer
-                if type(onNext) == "function" then
-                    observer            = Observer(onNext, onError, onCompleted)
-                    subscription        = observer.Subscription
-                elseif isObjectType(onNext, IObserver) then
-                    observer            = onNext
-                    subscription        = isObjectType(onError, ISubscription) and onError or nil
-                end
-                if observer then
-                    replace             = Subscription(subscription)
-                    return Operator.Subscribe(self, observer, replace)
-                end
+            oper.HandleSubscription     = function(self, ...)
+                subscription            = ...
+                replace                 = Subscription(subscription)
+                return replace
             end
             return oper
         end
@@ -327,19 +320,10 @@ PLoop(function(_ENV)
             local oper                  = Operator(self, nil, resume, resume)
 
             -- Hack the subscribe replace the subscription
-            oper.Subscribe              = function(self, onNext, onError, onCompleted)
-                local observer
-                if type(onNext) == "function" then
-                    observer            = Observer(onNext, onError, onCompleted)
-                    subscription        = observer.Subscription
-                elseif isObjectType(onNext, IObserver) then
-                    observer            = onNext
-                    subscription        = isObjectType(onError, ISubscription) and onError or nil
-                end
-                if observer then
-                    replace             = Subscription(subscription)
-                    return Operator.Subscribe(self, observer, replace)
-                end
+            oper.HandleSubscription     = function(self, ...)
+                subscription            = ...
+                replace                 = Subscription(subscription)
+                return replace
             end
             return oper
         end
@@ -580,7 +564,6 @@ PLoop(function(_ENV)
         --- Take all values that match the prefix elements
         local _MatchPrefixGen           = setmetatable({}, {
             __index                     = function(self, count)
-
                 local func              = loadsnippet([[
                     return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
                         return Operator(self, function(observer, ]] .. List(count):Map("i=>'brg' .. i"):Join(",") .. [[, ...)
@@ -786,19 +769,26 @@ PLoop(function(_ENV)
                 end
             end
 
-            return Operator(self,
+            local otherOper             = Operator(other,
+                function(observer, ...)
+                    squeue(select("#", ...), ...)
+                    return fqueue:Peek() and compareQueue(observer)
+                end, nil, complete
+            )
+
+            local oper                  = Operator(self,
                 function(observer, ...)
                     fqueue(select("#", ...), ...)
                     return squeue:Peek() and compareQueue(observer)
-                end, nil, complete,
-                -- The other sequence
-                Operator(other,
-                    function(observer, ...)
-                        squeue(select("#", ...), ...)
-                        return fqueue:Peek() and compareQueue(observer)
-                    end, nil, complete
-                )
+                end, nil, complete
             )
+
+            -- Subscribe the other observable
+            oper.HandleSubscription     = function(self, subscription, observer)
+                otherOper:Subscribe(observer, subscription)
+            end
+
+            return oper
         end
 
         -----------------------------------------------------------------------
@@ -1101,18 +1091,8 @@ PLoop(function(_ENV)
             )
 
             -- Hack the subscribe replace the subscription
-            oper.Subscribe              = function(self, onNext, onError, onCompleted)
-                local observer
-                if type(onNext) == "function" then
-                    observer            = Observer(onNext, onError, onCompleted)
-                    subscription        = observer.Subscription
-                elseif isObjectType(onNext, IObserver) then
-                    observer            = onNext
-                    subscription        = isObjectType(onError, ISubscription) and onError or nil
-                end
-                if observer then
-                    return Operator.Subscribe(self, observer, subscription)
-                end
+            oper.HandleSubscription     = function(self, ...)
+                subscription            = ...
             end
             return oper
         end
@@ -1138,23 +1118,24 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ IObservable * 1 }
         function Concat(self, ...)
+            local oper, subscription
             if select("#", ...) == 1 then
                 local observable        = ...
-                return Operator(self, nil, nil, function(observer) observable:Subscribe(observer) end)
+                oper                    = Operator(self, nil, nil, function(observer) observable:Subscribe(observer, subscription) end)
             else
                 local queue             = Queue{ ... }
-
-                local oper
                 oper                    = Operator(self, nil, nil, function(observer)
                     local nxt           = queue:Dequeue()
                     if nxt then
-                        return nxt:Subscribe(oper)
+                        return nxt:Subscribe(oper, subscription)
                     else
                         observer:OnCompleted()
                     end
                 end)
-                return oper
             end
+
+            oper.HandleSubscription     = function(self, ...) subscription = ... end
+            return oper
         end
 
         --- Repeats the observable sequence indefinitely and sequentially
@@ -1163,15 +1144,16 @@ PLoop(function(_ENV)
         function Repeat(self, count)
             count                       = count or huge
             local times                 = 0
-            local oper
+            local oper, subscription
             oper                        = Operator(self, nil, nil, function(observer)
                 times                   = times + 1
                 if times < count then
-                    return self:Subscribe(oper)
+                    return self:Subscribe(oper, subscription)
                 else
                     observer:OnCompleted()
                 end
             end)
+            oper.HandleSubscription     = function(self, ...) subscription = ... end
             return oper
         end
 
@@ -1179,25 +1161,28 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ IObservable }
         function StartWith(self, observable)
-            return Operator(observable, nil, nil, function(observer)
-                return self:Subscribe(observer)
-            end)
-        end
-
-        __Observable__()
-        __Arguments__{ System.Any * 2 }
-        function StartWith(self, ...)
-            return Operator(Observable.From(List{ ... }), nil, nil, function(observer)
-                return self:Subscribe(observer)
-            end)
+            local oper, subscription
+            oper                        = Operator(observable, nil, nil, function(observer) return self:Subscribe(observer, subscription) end)
+            oper.HandleSubscription     = function(self, ...) subscription = ... end
+            return oper
         end
 
         __Observable__()
         __Arguments__{ System.Any }
         function StartWith(self, val)
-            return Operator(Observable.Just(val), nil, nil, function(observer)
-                return self:Subscribe(observer)
-            end)
+            local oper, subscription
+            oper                        = Operator(Observable.Just(val), nil, nil, function(observer) return self:Subscribe(observer, subscription) end)
+            oper.HandleSubscription     = function(self, ...) subscription = ... end
+            return oper
+        end
+
+        __Observable__()
+        __Arguments__{ System.Any * 2 }
+        function StartWith(self, ...)
+            local oper, subscription
+            oper                        = Operator(Observable.From(List{ ... }), nil, nil, function(observer) return self:Subscribe(observer, subscription) end)
+            oper.HandleSubscription     = function(self, ...) subscription = ... end
+            return oper
         end
 
         --- Return values from the sequence that is first to produce values, and ignore the other sequences
@@ -1205,100 +1190,54 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Amb(...)
             local observables           = { ... }
-            local choosed
-            local subjects              = {}
-            local rcompleted
+            return Observable(function(observer, subscription)
+                local choosed
+                local obslist           = {}
+                local completed         = 0
+                for i, observable in ipairs(observables) do
+                    if choosed then break end
 
-            return Operator(Observable.Range(1, #observables),
-                function(observer, index)
-                    if choosed then return end
-                    local subject
-                    subject             = Subject(observables[index], function(nobserver, ...)
-                            if choosed == subject then
-                                nobserver:OnNext(...)
-                            elseif not choosed then
-                                choosed = subject
-                                for o, sub in pairs(subjects) do
-                                    if o ~= subject then sub:Dispose() end
-                                end
-                                nobserver:OnNext(...)
-                            else
-                                subjects[subject]:Dispose()
-                            end
-                        end, function(nobserver, ex)
-                            if choosed == subject then
-                                nobserver:OnError(ex)
-                            elseif not choosed then
-                                subjects[subject] = nil
-                                if rcompleted and not next(subjects) then
-                                    nobserver:OnError(ex)
-                                end
-                            end
-                        end, function(nobserver)
-                            if choosed == subject then
-                                nobserver:OnCompleted()
-                            elseif not choosed then
-                                subjects[subject] = nil
-                                if rcompleted and not next(subjects) then
-                                    nobserver:OnCompleted()
+                    local subobs        = Observer(function(...)
+                        if not choosed then
+                            choosed     = i
+                            for j = 1, #obslist do
+                                if j ~= i then
+                                    obslist[j].Subscription:Dispose()
                                 end
                             end
                         end
-                    )
-
-                    subjects[subject]   = subject:Subscribe(observer)
-                end,
-                function(observer, ex)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnError(ex)
-                    end
-                end,
-                function(observer)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnCompleted()
-                    end
+                        return choosed == i and observer:OnNext(...)
+                    end, function(ex)
+                        return choosed == i and observer:OnError(ex)
+                    end, function()
+                        completed       = completed + 1
+                        return (choosed == i or completed == #obslist) and observer:OnCompleted()
+                    end, subscription)
+                    obslist[#obslist+1] = subobs
+                    observable:Subscribe(subobs, subobs.Subscription)
                 end
-            )
+            end)
         end
-        Amb                             = Observable.Amb
 
         --- Merge multi sequence, their results will be merged as the result sequence
         __Observable__()
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Merge(...)
             local observables           = { ... }
-            local subjects              = {}
-            local rcompleted
-
-            return Operator(Observable.Range(1, #observables),
-                function(observer, index)
-                    local subject
-                    subject             = Subject(observables[index], nil, nil, function(nobserver)
-                            subjects[subject] = nil
-                            if rcompleted and not next(subjects) then
-                                nobserver:OnCompleted()
-                            end
-                        end
-                    )
-
-                    subjects[subject]   = true
-                    subject:Subscribe(observer)
-                end,
-                function(observer, ex)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnError(ex)
-                    end
-                end,
-                function(observer)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnCompleted()
-                    end
+            return Observable(function(observer, subscription)
+                local completed         = 0
+                for i, observable in ipairs(observables) do
+                    local subobs        = Observer(function(...)
+                        return observer:OnNext(...)
+                    end, function(ex)
+                        return observer:OnError(ex)
+                    end, function()
+                        completed       = completed + 1
+                        return completed == #observables and observer:OnCompleted()
+                    end, subscription)
+                    observable:Subscribe(subobs, subobs.Subscription)
                 end
-            )
+            end)
         end
         Merge                           = Observable.Merge
 
@@ -1308,92 +1247,50 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ IObservable * 2 }
         function Observable.Switch(...)
             local observables           = { ... }
-            local choosed               = 0
-            local subjects              = {}
-            local subscripts            = {}
-            local rcompleted
-
-            return Operator(Observable.Range(1, #observables),
-                function(observer, index)
-                    local subject
-                    subject             = Subject(observables[index], function(nobserver, ...)
-                            if choosed == index then
-                                nobserver:OnNext(...)
-                            elseif choosed < index then
-                                if choosed > 0 then
-                                    subscripts[choosed]:Dispose()
-                                    subjects[choosed] = nil
-                                    subscripts[choosed] = nil
-                                end
-                                choosed = index
-                                nobserver:OnNext(...)
-                            else
-                                subscripts[index]:Dispose()
-                                subjects[index] = nil
-                                subscripts[index] = nil
-                            end
-                        end, function(nobserver, ex)
-                            if index >= choosed then
-                                for k, v in pairs(subjects) do
-                                    subscripts[k]:Dispose()
-                                end
-                                nobserver:OnError(ex)
-                            end
-                        end, function(nobserver)
-                            subjects[index] = nil
-                            if rcompleted and not next(subjects) then
-                                nobserver:OnCompleted()
+            return Observable(function(observer, subscription)
+                local removed           = 0
+                local current           = 0
+                local obslist           = {}
+                local completed         = 0
+                for i, observable in ipairs(observables) do
+                    local subobs        = Observer(function(...)
+                        if i > current then
+                            current     = i
+                            while removed + 1 < current do
+                                removed = removed + 1
+                                obslist[removed].Subscription:Dispose()
                             end
                         end
-                    )
-
-                    subjects[index]     = subject
-                    subject:Subscribe(observer)
-                end,
-                function(observer, ex)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnError(ex)
-                    end
-                end,
-                function(observer)
-                    rcompleted          = true
-                    if not next(subjects) then
-                        observer:OnCompleted()
-                    end
+                        return current == i and observer:OnNext(...)
+                    end, function(ex)
+                        return current == i and observer:OnError(ex)
+                    end, function()
+                        completed       = completed + 1
+                        return (current == i or completed == #obslist) and observer:OnCompleted()
+                    end, subscription)
+                    obslist[#obslist+1] = subobs
+                    observable:Subscribe(subobs, subobs.Subscription)
                 end
-            )
+            end)
         end
         Switch                          = Observable.Switch
 
         --- The CombineLatest extension method allows you to take the most recent value from two sequences, and with a given
         --- function transform those into a value for the result sequence
         __Arguments__{ IObservable, Callable/nil }
-        function CombineLatest(self, secseq, resultSelector)
-            return Observable(function(observer)
+        function CombineLatest(self, other, resultSelector)
+            return Observable(function(observer, subscription)
                 local cache             = {}
                 local start, stop
-                local completed
 
-                local complete          = function(observer)
-                    if completed then
-                        observer:OnCompleted()
-                    else
-                        completed       = true
-                    end
-                end
+                local complete          = function() return observer:OnCompleted() end
 
-                local process           = resultSelector and function(observer)
-                    if start and stop then
-                        safeNext(observer, pcall(resultSelector, unpack(cache, start, stop)))
-                    end
-                end or function(observer)
-                    if start and stop then
-                        observer:OnNext(unpack(cache, start, stop))
-                    end
-                end
+                local process           = resultSelector
+                    and function() return start and stop and safeNext(observer, pcall(resultSelector, unpack(cache, start, stop))) end
+                    or  function() return start and stop and observer:OnNext(unpack(cache, start, stop)) end
 
-                Subject(self, function(observer, ...)
+                -- Observer to self
+                local left              = Observer(function(...)
                     local count         = select("#", ...)
                     start               = 1
 
@@ -1402,111 +1299,107 @@ PLoop(function(_ENV)
                         cache[start]    = select(count - i, ...)
                     end
 
-                    return process(observer)
-                end, nil, complete):Subscribe(observer)
+                    return process()
+                end, nil, complete)
+                left.Subscription       = subscription
 
-                Subject(secseq, function(observer, ...)
+                -- Observer to other
+                local right             = Observer(function(...)
                     local count         = select("#", ...)
                     stop                = count
                     for i = 1, count do
                         cache[i]        = select(i, ...)
                     end
-                    return process(observer)
-                end, nil, complete):Subscribe(observer)
+                    return process()
+                end, nil, complete)
+                right.Subscription       = subscription
+
+                self:Subscribe(left, subscription)
+                other:Subscribe(right, subscription)
             end)
         end
 
+        --- Combine the parameters
+        local combineRightQueueParams   = setmetatable(
+            {
+                [0]                     = function(queue, count) return queue:Dequeue(count) end
+            },
+            {
+                __index = function(self, count)
+                    local args          = XList(count):Map("i=>'arg'..i"):Join(",")
+                    local func          = loadsnippet([[
+                        return function(queue, count, ]] .. args .. [[)
+                            return ]] .. args .. [[, queue:Dequeue(count)
+                        end
+                    ]], "Combine_RightQueue_" .. count, _ENV)()
+                    rawset(self, count, func)
+                    return func
+                end
+            }
+        )
+        local combineLeftQueueParams    = setmetatable(
+            {
+                [0]                     = function(queue, count) return queue:Dequeue(count) end
+            },
+            {
+                __index = function(self, count)
+                    local args          = XList(count):Map("i=>'arg'..i"):Join(",")
+                    local func          = loadsnippet([[
+                        return function(queue, ...)
+                            local ]] .. args .. [[ = queue:Dequeue(]] .. count ..[[)
+                            return ]] .. args .. [[, ...
+                        end
+                    ]], "Combine_LeftQueue_" .. count, _ENV)()
+                    rawset(self, count, func)
+                    return func
+                end
+            }
+        )
+
         --- the Zip method brings together two sequences of values as pairs
         __Arguments__{ IObservable, Callable/nil }
-        function Zip(self, secseq, resultSelector)
-            return Observable(function(observer)
+        function Zip(self, other, resultSelector)
+            return Observable(function(observer, subscription)
                 local queuea            = Queue()
                 local queueb            = Queue()
-                local completed
+                local complete          = function() return observer:OnCompleted() end
 
-                local complete          = function(observer)
-                    if completed then
-                        observer:OnCompleted()
-                    else
-                        completed       = true
-                    end
-                end
-
-                Subject(self, function(observer, ...)
+                -- Observer to self
+                local left              = Observer(function(...)
                     local count         = select("#", ...)
                     local second        = queueb:Dequeue()
                     if second == nil then
                         queuea:Enqueue(count, ...)
                     else
-                        if count == 1 then
-                            local a1    = ...
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, queueb:Dequeue(second)))
-                            else
-                                observer:OnNext(a1, queueb:Dequeue(second))
-                            end
-                        elseif count == 2 then
-                            local a1, a2= ...
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, a2, queueb:Dequeue(second)))
-                            else
-                                observer:OnNext(a1, a2, queueb:Dequeue(second))
-                            end
-                        elseif count == 3 then
-                            local a1, a2, a3 = ...
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, a2, a3, queueb:Dequeue(second)))
-                            else
-                                observer:OnNext(a1, a2, a3, queueb:Dequeue(second))
-                            end
+                        local func      = combineRightQueueParams[count]
+                        if resultSelector then
+                            safeNext(observer, pcall(resultSelector, func(queueb, second, ...)))
                         else
-                            local q     = Queue():Enqueue(...):Enqueue(queueb:Dequeue(second))
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
-                            else
-                                observer:OnNext(q:Dequeue(q.Count))
-                            end
+                            observer:OnNext(func(queueb, second, ...))
                         end
                     end
-                end, nil, complete):Subscribe(observer)
+                end, nil, complete)
+                left.Subscription       = subscription
 
-                Subject(secseq, function(observer, ...)
+                -- Observer to other
+                local right             = Observer(function(...)
                     local count         = select("#", ...)
                     local first         = queuea:Dequeue()
                     if first == nil then
                         queueb:Enqueue(count, ...)
                     else
-                        if first == 1 then
-                            local a1    = queuea:Dequeue(first)
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, ...))
-                            else
-                                observer:OnNext(a1, ...)
-                            end
-                        elseif first == 2 then
-                            local a1, a2= queuea:Dequeue(first)
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, a2, ...))
-                            else
-                                observer:OnNext(a1, a2, ...)
-                            end
-                        elseif first == 3 then
-                            local a1, a2, a3 = queuea:Dequeue(first)
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, a1, a2, a3, ...))
-                            else
-                                observer:OnNext(a1, a2, a3, ...)
-                            end
+                        local func      = combineLeftQueueParams[first]
+                        if resultSelector then
+                            safeNext(observer, pcall(resultSelector, func(queuea, ...)))
                         else
-                            local q     = Queue():Enqueue(queuea:Dequeue(first)):Enqueue(...)
-                            if resultSelector then
-                                safeNext(observer, pcall(resultSelector, q:Dequeue(q.Count)))
-                            else
-                                observer:OnNext(q:Dequeue(q.Count))
-                            end
+                            observer:OnNext(func(queuea, ...))
                         end
                     end
-                end, nil, complete):Subscribe(observer)
+                end, nil, complete)
+                right.Subscription       = subscription
+
+                self:Subscribe(left, subscription)
+                other:Subscribe(right, subscription)
             end)
         end
 
@@ -1516,154 +1409,143 @@ PLoop(function(_ENV)
         __Observable__()
         __Arguments__{ IObservable, Callable, Callable, Callable/nil }
         function Join(self, right, leftDurationSelector, rightDurationSelector, resultSelector)
-            local leftwindows           = List()
-            local rightwindows          = List()
-
-            local unsubscribe           = function(self)
-                return self._subscription and self._subscription:Dispose()
-            end
-
-            return Operator(self, function(observer, ...)
-                    local count         = select("#", ...)
-
-                    -- join the right window
-                    if #rightwindows > 0 then
-                        if count == 1 then
-                            local a1    = ...
-                            for _, rwin in rightwindows:GetIterator() do
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, unpack(rwin)))
-                                else
-                                    observer:OnNext(a1, unpack(rwin))
-                                end
-                            end
-                        elseif count == 2 then
-                            local a1, a2= ...
-                            for _, rwin in rightwindows:GetIterator() do
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, a2, unpack(rwin)))
-                                else
-                                    observer:OnNext(a1, a2, unpack(rwin))
-                                end
-                            end
-                        elseif count == 3 then
-                            local a1, a2, a3 = ...
-                            for _, rwin in rightwindows:GetIterator() do
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, a2, a3, unpack(rwin)))
-                                else
-                                    observer:OnNext(a1, a2, a3, unpack(rwin))
-                                end
-                            end
-                        else
-                            for _, rwin in rightwindows:GetIterator() do
-                                local queue = Queue{ ... }:Enqueue(unpack(rwin))
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
-                                else
-                                    observer:OnNext(queue:Dequeue(queue.Count))
-                                end
-                            end
-                        end
+            return Observable(function(observer, subscription)
+                local lefthead, lefttail
+                local righthead, righttail
+                local canComplete       = false
+                local onError           = function(ex) return observer:OnError(ex) end
+                local onCompleted       = function()
+                    if canComplete then
+                        return observer:OnCompleted()
+                    else
+                        canComplete     = true
                     end
+                end
 
-                    -- Open window
-                    local ok, selector  = pcall(leftDurationSelector, ...)
-                    if not ok then return observer:OnError(Exception(selector)) end
-                    if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
+                local join              = function(newLeft, newRight)
+                    newLeft             = newLeft or lefthead
 
-                    local window
+                    while newLeft do
+                        local right     = newRight or righthead
 
-                    local close         = function()
-                        window._subscription:Dispose()
-                        leftwindows:Remove(window)
-                    end
-
-                    window              = Observer(close, close, close)
-
-                    for i = 1, count do
-                        window[i]       = select(i, ...)
-                    end
-
-                    leftwindows:Insert(window)
-                    window._subscription= selector:Subscribe(window)
-                end, function(observer, ex)
-                    leftwindows:Each(unsubscribe)
-                    rightwindows:Each(unsubscribe)
-                    observer:OnError(ex)
-                end, function(observer)
-                    leftwindows:Each(unsubscribe)
-                    rightwindows:Each(unsubscribe)
-                    observer:OnCompleted()
-                end, Operator(right, function(observer, ...)
-                    local count         = select("#", ...)
-
-                    -- join the right window
-                    if #leftwindows > 0 then
-                        for _, lwin in leftwindows:GetIterator() do
-                            local lcnt  = #lwin
-                            if lcnt == 1 then
-                                local a1= lwin[1]
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, ...))
-                                else
-                                    observer:OnNext(a1, ...)
-                                end
-                            elseif lcnt == 2 then
-                                local a1, a2 = lwin[1], lwin[2]
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, a2, ...))
-                                else
-                                    observer:OnNext(a1, a2, ...)
-                                end
-                            elseif lcnt == 3 then
-                                local a1, a2, a3 = lwin[1], lwin[2], lwin[3]
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(a1, a2, a3, ...))
-                                else
-                                    observer:OnNext(a1, a2, a3, ...)
-                                end
+                        while right do
+                            if resultSelector then
+                                observer:OnNext(resultSelector(combinearray(newLeft, right)))
                             else
-                                local queue = Queue{ unpack(lwin) }:Enqueue(...)
-                                if resultSelector then
-                                    observer:OnNext(resultSelector(queue:Dequeue(queue.Count)))
-                                else
-                                    observer:OnNext(queue:Dequeue(queue.Count))
-                                end
+                                observer:OnNext(combinearray(newLeft, right))
+                            end
+
+                            right       = right.NextWin
+                        end
+
+                        newLeft         = newLeft.NextWin
+                    end
+                end
+
+                local leftObs           = Observer(function(...)
+                        -- Open window
+                        local ok, selector = pcall(leftDurationSelector, ...)
+                        if not ok then  return onError(Exception(selector)) end
+                        if not isObjectType(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
+
+                        local window
+                        local closeWin  = function()
+                            if window.PrevWin then
+                                window.PrevWin.NextWin = window.NextWin
+                            else
+                                lefthead = window.NextWin
+                            end
+                            if lefttail == window then
+                                lefttail = window.PrevWin
+                            end
+                            window.PrevWin = nil
+                            window.NextWin = nil
+                            return window.Subscription:Dispose()
+                        end
+                        window          = Observer(closeWin, onError, closeWin, subscription)
+
+                        -- Keep the data
+                        local count     = select("#", ...)
+                        if count <= 2 then
+                            window[1], window[2] = ...
+                        else
+                            for i = 1, count do
+                                window[i] = select(i, ...)
                             end
                         end
-                    end
 
-                    -- Open window
-                    local ok, selector  = pcall(rightDurationSelector, ...)
-                    if not ok then return observer:OnError(Exception(selector)) end
-                    if not isObjectType(selector, IObservable) then return observer:OnError(Exception("The selector doesn't return a valid value")) end
+                        -- Link the window
+                        if lefttail then
+                            window.PrevWin  = lefttail
+                            lefttail.NextWin= window
+                            lefttail    = window
+                        else
+                            lefthead    = window
+                            lefttail    = window
+                        end
 
-                    local window
+                        -- Subscribe the duration observable
+                        selector:Subscribe(window, window.Subscription)
+                        return join(window)
+                    end,
+                    onError,
+                    onCompleted)
+                leftObs.Subscription    = subscription
 
-                    local close         = function()
-                        window:Unsubscribe()
-                        rightwindows:Remove(window)
-                    end
+                local rightObs          = Observer(function(...)
+                        -- Open window
+                        local ok, selector = pcall(rightDurationSelector, ...)
+                        if not ok then  return onError(Exception(selector)) end
+                        if not isObjectType(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
 
-                    window              = Observer(close, close, close)
+                        local window
+                        local closeWin  = function()
+                            if window.PrevWin then
+                                window.PrevWin.NextWin = window.NextWin
+                            else
+                                righthead = window.NextWin
+                            end
+                            if righttail == window then
+                                righttail = window.PrevWin
+                            end
+                            window.PrevWin = nil
+                            window.NextWin = nil
+                            return window.Subscription:Dispose()
+                        end
+                        window          = Observer(closeWin, onError, closeWin, subscription)
 
-                    for i = 1, count do
-                        window[i]       = select(i, ...)
-                    end
+                        -- Keep the data
+                        local count     = select("#", ...)
+                        if count <= 2 then
+                            window[1], window[2] = ...
+                        else
+                            for i = 1, count do
+                                window[i] = select(i, ...)
+                            end
+                        end
 
-                    rightwindows:Insert(window)
-                    window._subscription= selector:Subscribe(window)
-                end, function(observer, ex)
-                    leftwindows:Each(unsubscribe)
-                    rightwindows:Each(unsubscribe)
-                    observer:OnError(ex)
-                end, function(observer)
-                    leftwindows:Each(unsubscribe)
-                    rightwindows:Each(unsubscribe)
-                    observer:OnCompleted()
-                end)
-            )
+                        -- Link the window
+                        if righttail then
+                            window.PrevWin   = righttail
+                            righttail.NextWin= window
+                            righttail   = window
+                        else
+                            righthead   = window
+                            righttail   = window
+                        end
+
+                        -- Subscribe the duration observable
+                        selector:Subscribe(window, window.Subscription)
+                        return join(nil, window)
+                    end,
+                    onError,
+                    onCompleted)
+                rightObs.Subscription   = subscription
+
+                -- Start
+                self:Subscribe(leftObs, subscription)
+                right:Subscribe(rightObs, subscription)
+            end)
         end
 
         -----------------------------------------------------------------------
@@ -1693,15 +1575,16 @@ PLoop(function(_ENV)
         -- @todo: Multi-os thread support
         __Static__() __Arguments__{ Plan }
         function Observable.When(plan)
-            return Observable(function(observer)
+            return Observable(function(observer, subscription)
                 local sequences         = plan[1]
                 local selector          = plan[2]
                 local total             = #sequences
                 local queues            = List(total, function() return Queue() end)
+                local onError           = function(ex) return observer:OnError(ex) end
                 local count             = 0
                 local completed         = 0
 
-                local process           = selector and function(index)
+                local process           = function(index)
                     count               = count + 1
 
                     if count == total then
@@ -1712,35 +1595,28 @@ PLoop(function(_ENV)
                             if queue:Peek() == nil then count = count - 1 end
                         end)
 
-                        safeNext(observer, pcall(selector, rs:Dequeue(rs.Count)))
-                    end
-                end or function(index)
-                    count               = count + 1
-
-                    if count == total then
-                        local rs        = Queue()
-
-                        queues:Each(function(queue)
-                            rs:Enqueue(queue:Dequeue(queue:Dequeue()))
-                            if queue:Peek() == nil then count = count - 1 end
-                        end)
-
-                        observer:OnNext(rs:Dequeue(rs.Count))
+                        if selector then
+                            safeNext(observer, pcall(selector, rs:Dequeue(rs.Count)))
+                        else
+                            observer:OnNext(rs:Dequeue(rs.Count))
+                        end
                     end
                 end
 
+                -- Subscribe the sequences
                 for i = 1, total do
-                    local j             = i
-                    Subject(sequences[i], function(_, ...)
-                        local isnew     = queues[j]:Peek() == nil
-                        queues[j]:Enqueue(select("#", ...), ...)
-                        if isnew then return process(j) end
-                    end, nil, function()
-                        completed       = completed + 1
-                        if completed == total then
-                            observer:OnCompleted()
+                    sequences[i]:Subscribe(Observer(
+                        function(...)
+                            local isnew = queues[i]:Peek() == nil
+                            queues[i]:Enqueue(select("#", ...), ...)
+                            if isnew then return process(j) end
+                        end,
+                        onError,
+                        function()
+                            completed   = completed + 1
+                            return (completed == total or queues[i]:Peek() == nil) and observer:OnCompleted()
                         end
-                    end):Subscribe(observer)
+                    ), subscription)
                 end
             end)
         end
@@ -1857,32 +1733,41 @@ PLoop(function(_ENV)
         function Window(self, sampler)
             local currsub
 
-            local onError               = function(observer, ex)
-                if currsub then currsub:OnError(ex) end
-                observer:OnError(ex)
-            end
-
-            return Operator(self, function(observer, ...)
+            local oper                  = Operator(self,
+                function(observer, ...)
                     if not currsub then
                         currsub         = Subject()
                         observer:OnNext(currsub)
                     end
 
                     currsub:OnNext(...)
-                end, onError, function(observer)
+                end,
+                function(observer, ex)
+                    return currsub and currsub:OnError(ex) or observer:OnError(ex)
+                end,
+                function(observer)
                     if currsub then currsub:OnCompleted() end
                     observer:OnCompleted()
-                end, Operator(sampler,
-                    function(observer, ...)
-                        if currsub then currsub:OnCompleted() end
-
-                        currsub         = Subject()
-                        observer:OnNext(currsub)
-                    end,
-                    onError,
-                    function(observer) end
-                )
+                end
             )
+
+            local operSampler           = Operator(sampler,
+                function(observer, ...)
+                    if currsub then currsub:OnCompleted() end
+
+                    currsub             = Subject()
+                    observer:OnNext(currsub)
+                end,
+                onError,
+                function(observer) end
+            )
+
+            -- Start other sampler observable
+            oper.HandleSubscription     = function(self, subscription, observer)
+                operSampler:Subscribe(observer, subscription)
+            end
+
+            return oper
         end
 
         --- Returns a new Observable that produces its most recent value every time
@@ -1893,27 +1778,35 @@ PLoop(function(_ENV)
             local queue                 = Queue()
             local completed
 
-            return Operator(self, function(observer, ...)
+            local oper                  = Operator(self, function(observer, ...)
                     queue:Clear()
                     queue:Enqueue(...)
                 end, nil, function(observer)
                     if completed then observer:OnCompleted() end
                     completed           = true
-                end,
-                Operator(sampler, function(observer, ...)
-                    local count         = queue.Count
-                    if count > 0 then
-                        observer:OnNext(queue:Dequeue(count))
-                    end
-                end, nil, function(observer)
-                    local count         = queue.Count
-                    if count > 0 then
-                        observer:OnNext(queue:Dequeue(count))
-                    end
-                    if completed then observer:OnCompleted() end
-                    completed           = true
-                end)
+                end
             )
+
+            local operSampler           = Operator(sampler, function(observer, ...)
+                local count             = queue.Count
+                if count > 0 then
+                    observer:OnNext(queue:Dequeue(count))
+                end
+            end, nil, function(observer)
+                local count             = queue.Count
+                if count > 0 then
+                    observer:OnNext(queue:Dequeue(count))
+                end
+                if completed then observer:OnCompleted() end
+                completed               = true
+            end)
+
+            -- Start other sampler observable
+            oper.HandleSubscription     = function(self, subscription, observer)
+                operSampler:Subscribe(observer, subscription)
+            end
+
+            return oper
         end
 
         --- Ignores values from an observable sequence which are followed by another value before dueTime

@@ -22,7 +22,7 @@ PLoop(function(_ENV)
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observer, Dictionary, Subscription, next = next, type = type, pairs = pairs }
+        export { Observer, Dictionary, Subscription, next = next, type = type, pairs = pairs, isObjectType = Class.IsObjectType }
 
         field {
             __newsubject                = false, -- The new subject cache
@@ -41,7 +41,7 @@ PLoop(function(_ENV)
                 return obs[observer], observer
             end
 
-            subscription                = subscription or Subscription()
+            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
             subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
                 -- Safe check
                 if obs[observer] ~= subscription then return end
@@ -84,9 +84,9 @@ PLoop(function(_ENV)
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function Subscribe(self, onNext, onError, onCompleted)
-            local observer              = Observer(onNext, onError, onCompleted)
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            local observer              = Observer(onNext, onError, onCompleted, subscription)
             return subscribe(self, observer, observer.Subscription)
         end
 
