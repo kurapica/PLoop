@@ -29,6 +29,8 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
+            validProp                   = Property.Validate,
+            getFeatures                 = Class.GetFeatures,
 
             Class, Reactive, Property
         }
@@ -36,9 +38,10 @@ PLoop(function(_ENV)
         local setObjectProp             = function(self, key, value) self[key] = value end
 
         -----------------------------------------------------------------------
-        --                            inner type                             --
+        --                     inner type - declare only                     --
         -----------------------------------------------------------------------
-        class "BehaviorSubject"         {} -- declare only
+        class "BehaviorSubject"         {}
+        class "ReactiveList"            {}
         class "__Observable__"          {}
 
         -----------------------------------------------------------------------
@@ -54,19 +57,14 @@ PLoop(function(_ENV)
             local cls                   = Class.GetObjectClass(init)
             if cls then
                 -- As proxy
-                local validProp         = Property.Validate
                 local isObservable      = __Observable__.IsObservableProperty
                 local getPropertyOb     = __Observable__.GetPropertyObservable
 
                 -- Wrap all observable properties
-                for name, prop in Class.GetFeatures(cls, true) do
+                for name, prop in getFeatures(cls, true) do
                     if validProp(prop) and isObservable(prop) then
                         local subject   = getPropertyOb(prop, init)
-                        if isObjectType(subject, BehaviorSubject) then
-                            fields[name]= subject
-                        else
-                            fields[name]= BehaviorSubject(subject)
-                        end
+                        fields[name]    = isObjectType(subject, BehaviorSubject) and subject or BehaviorSubject(subject)
                     end
                 end
 
@@ -75,10 +73,10 @@ PLoop(function(_ENV)
                 rawset(self, Class, init)
                 rawset(init, Reactive, self)
             else
-                -- As init table
+                -- As init table, hash table only
                 for k, v in pairs(init) do
                     if type(k) == "string" and k ~= "" and type(v) ~= "function" then
-                        fields[k]   = reactive(v)
+                        fields[k]       = reactive(v)
                     end
                 end
             end
@@ -124,28 +122,32 @@ PLoop(function(_ENV)
             -- Send the value
             local subject               = fields[key]
             if subject then
+                -- BehaviorSubject
                 if isObjectType(subject, BehaviorSubject) then
                     return subject:OnNext(value)
-                else
-                    if type(value) == "table" and getmetatable(value) == nil then
-                        local sfields   = rawget(subject, Reactive)
-                        for sname in pairs(sfields) do
-                            subject[sname] = value[sname]
-                        end
 
-                        for k, v in pairs(value) do
-                            if not sfields[k] and type(k) == "string" and k ~= "" and v ~= nil and type(v) ~= "function" then
-                                sfields[k] = reactive(v)
-                            end
-                        end
-
-                        return
-                    else
-                        error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
+                -- Reactive
+                elseif type(value) == "table" and getmetatable(value) == nil then
+                    local sfields   = rawget(subject, Reactive)
+                    for sname in pairs(sfields) do
+                        subject[sname] = value[sname]
                     end
+
+                    for k, v in pairs(value) do
+                        if not sfields[k] and type(k) == "string" and k ~= "" and v ~= nil and type(v) ~= "function" then
+                            sfields[k] = reactive(v)
+                        end
+                    end
+
+                    return
+
+                -- Not valid
+                else
+                    error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
                 end
             end
 
+            -- New reactive - hash key only
             if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
                 fields[key]             = reactive(value)
                 return
@@ -157,7 +159,15 @@ PLoop(function(_ENV)
         --- Gets the subject
         function __call(self, key)
             local subject               =  rawget(self, Reactive)[key]
-            return isObjectType(subject, BehaviorSubject) and subject or nil
+            if subject ~= nil then
+                return isObjectType(subject, BehaviorSubject) and subject or nil
+            else
+                -- New reactive used for subscribe
+                if type(key) == "string" and key ~= ""  then
+                    fields[key]         = reactive(nil)
+                    return fields[key]
+                end
+            end
         end
     end)
 
@@ -168,6 +178,7 @@ PLoop(function(_ENV)
         error                           = error,
         tostring                        = tostring,
         isObjectType                    = Class.IsObjectType,
+        isarray                         = Toolset.isarray,
 
         IObservable, Reactive, BehaviorSubject, Date, TimeSpan
     }
@@ -191,6 +202,10 @@ PLoop(function(_ENV)
                 elseif isObjectType(value, Date) or isObjectType(value, TimeSpan) then
                     return BehaviorSubject(value)
 
+                -- wrap List or Array to reactive list
+                elseif isObjectType(value, List) or getmetatable(value) == nil and isarray(value) then
+                    return ReactiveList(value)
+
                 -- wrap the value no matter class or object
                 else
                     local ok, res       = pcall(Reactive, value)
@@ -204,7 +219,7 @@ PLoop(function(_ENV)
             end
 
             if not silent then
-                error("Usage: reactive(data) - The data must be a table or scalar value", 2)
+                error("Usage: reactive(data[, silent]) - The data must be a table or scalar value", 2)
             end
         end
     }

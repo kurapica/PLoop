@@ -899,13 +899,7 @@ PLoop(function(_ENV)
         Serialization
     }
 
-    --- Whether the data is a list object
-    __Static__() function Serialization.IsArrayData(data)
-        -- Check the data type
-        local objField                  = data[Serialization.ObjectTypeField]
-        if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
-
-        -- Check the data
+    local function isarray(data)
         local count                     = #data
 
         for k in pairs(data) do
@@ -919,6 +913,16 @@ PLoop(function(_ENV)
         end
 
         return true
+    end
+
+    --- Whether the data is a list object
+    __Static__() function Serialization.IsArrayData(data)
+        -- Check the data type
+        local objField                  = data[Serialization.ObjectTypeField]
+        if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
+
+        -- Check the data
+        return isarray(data)
     end
 
     -----------------------------------------------------------------------
@@ -948,4 +952,7 @@ PLoop(function(_ENV)
         local count                     = #tbl1
         return combineTableParams[count](tbl1, unpack(tbl2))
     end
+
+    --- Provide to the Toolset
+    __Static__() Toolset.isarray        = isarray
 end)

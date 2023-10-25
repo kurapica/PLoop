@@ -26,7 +26,7 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             setfenv                     = _G.setfenv or _G.debug and _G.debug.setfenv or Toolset.fakefunc,
 
-            Observer, Exception, ISubscription, List
+            Observer, Exception, List
         }
 
         local function onNext(subject, res, ...)
@@ -37,6 +37,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            inner type                             --
         -----------------------------------------------------------------------
+        --- The proxy used in watch environment for reactives
         __Sealed__()
         class "ReactiveProxy"           (function(_ENV)
             export                      {
@@ -44,7 +45,7 @@ PLoop(function(_ENV)
                 rawget                  = rawget,
                 isObjectType            = Class.IsObjectType,
 
-                Observer, Reactive, ReactiveProxy, ISubscription
+                Observer, Reactive, ReactiveProxy
             }
 
             -------------------------------------------------------------------
@@ -68,7 +69,7 @@ PLoop(function(_ENV)
                     local observable    = reactive(key)
                     if observable then
                         proxy[key]      = true
-                        rawget(observer, ISubscription):Insert((observable:Subscribe(observer)))
+                        observable:Subscribe(observer, observer.Subscription)
                     else
                         observable      = reactive[key]
                         if observable and isObjectType(observable, Reactive) then
@@ -103,7 +104,7 @@ PLoop(function(_ENV)
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
 
-                Environment, ReactiveProxy, Observer, ISubscription
+                Environment, ReactiveProxy, Observer
             }
 
             local function parseValue(self, key, value)
@@ -112,9 +113,10 @@ PLoop(function(_ENV)
                 if type(value) == "table" and getmetatable(value) ~= nil then
                     -- use reactive to wrap the value for simple
                     local react         = reactive(value, true)
+                    local observer      = rawget(self, Observer)
 
                     if isObjectType(react, Reactive) then
-                        value           = ReactiveProxy(rawget(self, Observer), react)
+                        value           = ReactiveProxy(observer, react)
                         rawset(self, key, value)
                     elseif isObjectType(react, BehaviorSubject) then
                         local watches   = rawget(self, Watch)
@@ -123,8 +125,7 @@ PLoop(function(_ENV)
                             rawset(self, Watch, watches)
                         end
                         watches[key]    = react
-                        local observer  = rawget(self, Observer)
-                        rawget(observer, ISubscription):Insert((react:Subscribe(observer)))
+                        react:Subscribe(observer, observer.Subscription)
                         rawset(self, key, nil)
                         return react:GetValue()
                     end
@@ -136,6 +137,7 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --                         static method                         --
             -------------------------------------------------------------------
+            --- Install global variables can't be fetched from environment
             __Static__()
             function Install(self, reactives)
                 for k, v in pairs(reactives) do
@@ -185,7 +187,6 @@ PLoop(function(_ENV)
             end)
             rawset(self, Observer, observer)
             rawset(watchEnv, Observer, observer)
-            rawset(observer, ISubscription, List())
 
             -- install the reactives
             if reactives then
@@ -197,11 +198,12 @@ PLoop(function(_ENV)
             return observer:OnNext()
         end
 
-        -- dispose
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
         function __dtor(self)
-            for _, sub in rawget(rawget(self, Observer), ISubscription):GetIterator() do
-                sub:Dispose()
-            end
+            local observer              = rawget(self, Observer)
+            return observer and observer:OnCompleted()
         end
     end)
 
@@ -217,7 +219,7 @@ PLoop(function(_ENV)
 
         function watch(reactives, func)
             if type(reactives) == "function" then
-                func, reactives         = reactives
+                func, reactives         = reactives, nil
             end
 
             if type(func) ~= "function" then
