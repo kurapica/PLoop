@@ -128,14 +128,14 @@ PLoop(function(_ENV)
 
                 -- Reactive
                 elseif type(value) == "table" and getmetatable(value) == nil then
-                    local sfields   = rawget(subject, Reactive)
+                    local sfields       = rawget(subject, Reactive)
                     for sname in pairs(sfields) do
-                        subject[sname] = value[sname]
+                        subject[sname]  = value[sname]
                     end
 
                     for k, v in pairs(value) do
                         if not sfields[k] and type(k) == "string" and k ~= "" and v ~= nil and type(v) ~= "function" then
-                            sfields[k] = reactive(v)
+                            sfields[k]  = reactive(v)
                         end
                     end
 

@@ -26,7 +26,7 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             setfenv                     = _G.setfenv or _G.debug and _G.debug.setfenv or Toolset.fakefunc,
 
-            Observer, Exception, List
+            Observer, Exception, List, Boolean
         }
 
         local function onNext(subject, res, ...)
@@ -169,8 +169,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ Function, Table/nil, Table/nil }
-        function __ctor(self, func, env, reactives)
+        __Arguments__{ Function, Table/nil, Table/nil, Boolean/nil }
+        function __ctor(self, func, env, reactives, deep)
             super(self)
 
             -- gets the func environment
@@ -179,7 +179,7 @@ PLoop(function(_ENV)
             -- subject chain
             local processing            = false
             local observer              = Observer(function()
-                if processing then return end
+                if processing  then return end
                 processing              = true
                 local ok, err           = onNext(self, pcall(func, watchEnv))
                 processing              = false
@@ -187,13 +187,14 @@ PLoop(function(_ENV)
             end)
             rawset(self, Observer, observer)
             rawset(watchEnv, Observer, observer)
+            observer.DeepWatch          = deep or false
 
             -- install the reactives
             if reactives then
                 WatchEnvironment.Install(watchEnv, reactives)
             end
 
-            -- apply and call
+            -- apply and call for subscription
             setfenv(func, watchEnv)
             return observer:OnNext()
         end
@@ -201,10 +202,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
-        function __dtor(self)
-            local observer              = rawget(self, Observer)
-            return observer and observer:OnCompleted()
-        end
+        function __dtor(self) return self:OnCompleted() or rawget(self, Observer):Dispose() end
     end)
 
     --- The watch keyword
@@ -217,9 +215,9 @@ PLoop(function(_ENV)
             BehaviorSubject
         }
 
-        function watch(reactives, func)
+        function watch(reactives, func, deep)
             if type(reactives) == "function" then
-                func, reactives         = reactives, nil
+                func, deep, reactives         = reactives, func, nil
             end
 
             if type(func) ~= "function" then
@@ -230,7 +228,7 @@ PLoop(function(_ENV)
                 error("Usage: watch([reactives, ]func) - The reactives must be a table", 2)
             end
 
-            return Watch(func, getKeywordVisitor(watch), reactives)
+            return Watch(func, getKeywordVisitor(watch), reactives, deep and true or false)
         end
 
         Environment.RegisterGlobalKeyword { watch = watch }
