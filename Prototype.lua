@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2023/10/19                                               --
--- Version      :   1.9.1                                                    --
+-- Update Date  :   2023/10/27                                               --
+-- Version      :   1.9.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -327,6 +327,9 @@ do
 
         --- Whether save the return definitions as attachment for __Return__
         ENABLE_RETURN_ATTACHMENT            = false,
+
+        --- Whether record the debug info for type definitions
+        ENABLE_DEBUG_INFO                   = false,
     }
 
     -- Special constraint
@@ -383,6 +386,14 @@ do
         if info then
             return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
         end
+    end
+    getdebugcallinfo                    = not (debuginfo and PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO) and fakefunc or function(stack)
+        local info                      = debuginfo((stack or 2) + 1, "lS")
+        return info and { source = info.short_src, line = info.currentline }
+    end
+    getdebugfuncinfo                    =  not (debuginfo and PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO) and fakefunc or function(func)
+        local info                      = debuginfo(func, "lS")
+        return info and { source = info.short_src, line = info.linedefined, last = info.lastlinedefined }
     end
     parsestack                          = function (stack) return tonumber(stack) or 1 end
 
@@ -3006,6 +3017,7 @@ do
     FLD_STRUCT_MAINTYPE                 = -newindex()       -- FIELD MAIN TYPE
     FLD_STRUCT_COMBTYPE1                = -newindex()       -- FIELD COMBO TYPE
     FLD_STRUCT_COMBTYPE2                = -newindex()       -- FIELD COMBO TYPE
+    FLD_STRUCT_DEBUG                    = -newindex()       -- FIELD DEBUG INFO
 
     FLD_STRUCT_ARRAY                    =  0                -- FIELD ARRAY ELEMENT
     FLD_STRUCT_MEMBERSTART              =  1                -- FIELD START INDEX OF MEMBER
@@ -3021,6 +3033,7 @@ do
     FLD_MEMBER_VALID                    =  newindex()       -- MEMBER FIELD TYPE VALIDATOR
     FLD_MEMBER_DEFAULT                  =  newindex()       -- MEMBER FIELD DEFAULT
     FLD_MEMBER_DEFTFACTORY              =  newindex()       -- MEMBER FIELD AS DEFAULT FACTORY
+    FLD_MEMBER_DEBUG                    =  newindex()       -- MEMBER DEBUG INFO
 
     -- TYPE FLAGS
     FLG_CUSTOM_STRUCT                   = newflags(true)    -- CUSTOM STRUCT FLAG
@@ -4126,6 +4139,7 @@ do
                     saveMemberMeta(mobj, minfo)
                     minfo[FLD_MEMBER_OBJ]   = mobj
                     minfo[FLD_MEMBER_NAME]  = name
+                    minfo[FLD_MEMBER_DEBUG] = getdebugcallinfo(stack)
 
                     -- Save attributes
                     attribute.SaveAttributes(mobj, ATTRTAR_MEMBER, stack)
@@ -4478,6 +4492,17 @@ do
             ["GetComboTypes"]           = function(target)
                 local info              = getStructTargetInfo(target)
                 if info and info[FLD_STRUCT_COMBTYPE1] then return info[FLD_STRUCT_COMBTYPE1], info[FLD_STRUCT_COMBTYPE2] end
+            end;
+
+            --- Gets the debug info of the target
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  ...                         the debug info
+            ["GetDebugInfo"]            = function(target)
+                local info              = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_DEBUG]
             end;
 
             --- Get the dictionary key type of the target
@@ -5094,6 +5119,7 @@ do
             struct.BeginDefinition(target, stack)
 
             Debug("[struct] %s created", stack, tostring(target))
+            _StructBuilderInfo[target][FLD_STRUCT_DEBUG] = getdebugcallinfo()
 
             local builder               = prototype.NewObject(structbuilder)
             environment.Initialize  (builder)
@@ -5388,6 +5414,14 @@ do
             -- @param   target                      the member
             -- @return  default                     the member's default value
             ["GetDefault"]              = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEFAULT] end;
+
+            -- Get the debug info of the member
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   member
+            -- @param   target                      the member
+            -- @return  info                        the debug info
+            ["GetDebugInfo"]            = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEBUG] end;
         },
         __newindex                      = readonly,
         __call                          = function(self, ...)
@@ -5527,6 +5561,7 @@ do
     FLD_ENUM_ERRMSG                     = newindex()        -- FIELD ERROR MESSAGE
     FLD_ENUM_MAXVAL                     = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
     FLD_ENUM_DEFAULT                    = newindex()        -- FIELD DEFAULT
+    FLD_ENUM_DEBUG                      = newindex()        -- FEILD DEBUG INFO
 
     -- Flags
     FLG_FLAGS_ENUM                      = newflags(true)
@@ -5674,6 +5709,17 @@ do
                 enumdefined(target)
 
                 return target
+            end;
+
+            --- Get the debug info from the enumeration
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = function(target)
+                local info              = getEnumTargetInfo(target)
+                return info and info[FLD_ENUM_DEBUG]
             end;
 
             --- Get the default value from the enumeration
@@ -5946,6 +5992,7 @@ do
             stack                       = stack + 1
 
             enum.BeginDefinition(target, stack)
+            _EnumBuilderInfo[target][FLD_ENUM_DEBUG] = getdebugcallinfo()
 
             Debug("[enum] %s created", stack, tostring(target))
 
@@ -6429,6 +6476,7 @@ do
     FLD_IC_TEMPDEF                      = -newindex()               -- FIELD TEMPlATE DEFINITION
     FLD_IC_TEMPIMP                      = -newindex()               -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
     FLD_IC_TEMPENV                      = -newindex()               -- FIELD TEMPLATE ENVIRONMENT
+    FLD_IC_DEBUG                        = -newindex()               -- FIELD DEBUG INFO
 
     -- CACHE FIELDS
     FLD_IC_STAFTR                       = -newindex()               -- FIELD STATIC TYPE FEATURES
@@ -6796,6 +6844,7 @@ do
             [FLD_IC_TEMPDEF]            = info and info[FLD_IC_TEMPDEF],
             [FLD_IC_TEMPIMP]            = info and info[FLD_IC_TEMPIMP],
             [FLD_IC_TEMPENV]            = info and info[FLD_IC_TEMPENV],
+            [FLD_IC_DEBUG]              = info and info[FLD_IC_DEBUG],
             -- CACHE FIELDS
             [FLD_IC_STAFTR]             = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
             [FLD_IC_OBJFTR]             = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
@@ -7730,6 +7779,11 @@ do
         attribute.ApplyAttributes (func, ATTRTAR_METHOD, nil, target, name, stack)
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
 
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack)
+        end
+
         typmtd                          = info[FLD_IC_TYPMTD]    -- Maybe generated after attribtues applied
 
         if def then
@@ -7778,6 +7832,11 @@ do
             attribute.AttachAttributes(data, ATTRTAR_METHOD, target, name, stack)
         end
 
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack)
+        end
+
         -- Save
         local metaFld                   = META_KEYS[name]
 
@@ -7808,6 +7867,11 @@ do
             info[FLD_IC_STAFTR][name]   = nil
         elseif info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][name] then
             info[FLD_IC_OBJFTR][name]   = nil
+        end
+
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack + 2)
         end
     end
 
@@ -8189,6 +8253,18 @@ do
                 interfacedefined(target)
 
                 return target
+            end;
+
+            --- Get the debug info of the interface
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   feature                     the target feature name, optional
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = function(target, feature)
+                local info              = getICTargetInfo(target)
+                return info and info[FLD_IC_DEBUG] and info[FLD_IC_DEBUG][feature or 0]
             end;
 
             --- Get the definition context of the interface
@@ -8747,6 +8823,10 @@ do
                 interface.BeginDefinition(target, stack)
 
                 Debug("[interface] %s created", stack, tostring(target))
+                if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+                    _ICBuilderInfo[target][FLD_IC_DEBUG] = _ICBuilderInfo[target][FLD_IC_DEBUG] or {}
+                    _ICBuilderInfo[target][FLD_IC_DEBUG][0] = getdebugcallinfo()
+                end
 
                 local builder           = prototype.NewObject(interfacebuilder)
                 environment.Initialize  (builder)
@@ -8916,6 +8996,14 @@ do
 
                 return target
             end;
+
+            --- Get the debug info of the class
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = interface.GetDebugInfo;
 
             --- Get the definition context of the class
             -- @static
@@ -9686,6 +9774,10 @@ do
                 class.BeginDefinition(target, stack)
 
                 Debug("[class] %s created", stack, tostring(target))
+                if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+                    _ICBuilderInfo[target][FLD_IC_DEBUG] = _ICBuilderInfo[target][FLD_IC_DEBUG] or {}
+                    _ICBuilderInfo[target][FLD_IC_DEBUG][0] = getdebugcallinfo()
+                end
 
                 local builder           = prototype.NewObject(classbuilder)
                 environment.Initialize  (builder)

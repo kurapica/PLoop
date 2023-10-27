@@ -88,6 +88,58 @@ PLoop(function(_ENV)
             end
         end)
 
+        --- The proxy used in watch environment for reactive list
+        __Sealed__()
+        class "ReactiveListProxy"       (function(_ENV)
+            export                      {
+                rawset                  = rawset,
+                rawget                  = rawget,
+                isObjectType            = Class.IsObjectType,
+
+                Observer, Reactive, ReactiveList, ReactiveListProxy
+            }
+
+            -------------------------------------------------------------------
+            --                          constructor                          --
+            -------------------------------------------------------------------
+            function __ctor(self, observer, reactive)
+                rawset(self, Observer, observer)
+                rawset(self, ReactiveList, reactive)
+                rawset(self, ReactiveProxy, {})
+                reactive:Subscribe(observer, observer.Subscription)
+            end
+
+            -------------------------------------------------------------------
+            --                          meta method                          --
+            -------------------------------------------------------------------
+            function __index(self, key)
+                local reactive          = rawget(self, Reactive)
+                local proxy             = rawget(self, ReactiveProxy)
+
+                if not proxy[key] then
+                    local observer      = rawget(self, Observer)
+                    local observable    = reactive(key)
+                    if observable then
+                        proxy[key]      = true
+                        observable:Subscribe(observer, observer.Subscription)
+                    else
+                        observable      = reactive[key]
+                        if observable and isObjectType(observable, Reactive) then
+                            local proxy = ReactiveProxy(observer, observable)
+                            rawset(self, key, proxy)
+                            return proxy
+                        end
+                    end
+                end
+
+                return reactive[key]
+            end
+
+            function __newindex(self, key, value)
+                error("The reactive data is readonly", 2)
+            end
+        end)
+
         __Sealed__()
         class "WatchEnvironment"        (function(_ENV)
             extend "IEnvironment"
@@ -104,7 +156,7 @@ PLoop(function(_ENV)
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
 
-                Environment, ReactiveProxy, Observer
+                Environment, ReactiveProxy, Observer, Reactive, ReactiveList
             }
 
             local function parseValue(self, key, value)
@@ -115,9 +167,17 @@ PLoop(function(_ENV)
                     local react         = reactive(value, true)
                     local observer      = rawget(self, Observer)
 
+                    -- Subscribe for reactive field
                     if isObjectType(react, Reactive) then
                         value           = ReactiveProxy(observer, react)
                         rawset(self, key, value)
+
+                    -- Subscribe the list
+                    elseif isObjectType(react, ReactiveList) then
+                        value           = ReactiveListProxy(observer, react)
+                        rawset(self, key, value)
+
+                    -- Add proxy to acess the real value
                     elseif isObjectType(react, BehaviorSubject) then
                         local watches   = rawget(self, Watch)
                         if not watches then

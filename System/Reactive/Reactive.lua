@@ -180,7 +180,7 @@ PLoop(function(_ENV)
         isObjectType                    = Class.IsObjectType,
         isarray                         = Toolset.isarray,
 
-        IObservable, Reactive, BehaviorSubject, Date, TimeSpan
+        IObservable, Reactive, ReactiveList, BehaviorSubject, Date, TimeSpan
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -191,7 +191,7 @@ PLoop(function(_ENV)
             local tval                  = type(value)
             if tval == "table" then
                 -- don't wrap the reactive object or non behavior subject
-                if isObjectType(value, Reactive) or isObjectType(value, BehaviorSubject) then
+                if isObjectType(value, Reactive) or isObjectType(value, ReactiveList) or isObjectType(value, BehaviorSubject) then
                     return value
 
                 -- wrap the observable as behavior subject

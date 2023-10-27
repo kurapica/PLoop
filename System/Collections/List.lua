@@ -44,7 +44,7 @@ PLoop(function(_ENV)
     class "List" (function              (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
-        export { type = type, ipairs = ipairs }
+        export { type = type, ipairs = ipairs, tremove = table.remove }
 
         lsttype                         = lsttype ~= Any and lsttype or nil
 
@@ -101,10 +101,17 @@ PLoop(function(_ENV)
         function IndexOf(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
 
         --- Remove an item
-        function Remove(self, item) local i = self:IndexOf(item) if i then return self:RemoveByIndex(i) end end
+        function Remove(self, item)
+            if item == nil then
+                return tremove(self)
+            else
+                local i = self:IndexOf(item)
+                return i and self:RemoveByIndex(i)
+            end
+        end
 
         --- Remove an item from the tail or the given index
-        RemoveByIndex                   = table.remove
+        RemoveByIndex                   = tremove
 
         --- Clear the list
         function Clear(self)

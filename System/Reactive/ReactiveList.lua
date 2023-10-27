@@ -27,14 +27,14 @@ PLoop(function(_ENV)
             ipairs                      = ipairs,
             yield                       = coroutine.yield,
             tinsert                     = table.insert,
-            tremove                     = table.removed,
+            tremove                     = table.remove,
 
             ReactiveList, Observable, Observer, Reactive, Watch
         }
 
-        -----------------------------------------------------------
-        --                        method                         --
-        -----------------------------------------------------------
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
         --- Gets the iterator
         __Iterator__()
         function GetIterator(self)
@@ -50,7 +50,7 @@ PLoop(function(_ENV)
             local list                  = rawget(self, ReactiveList)
             local ins                   = list.Insert or tinsert
             ins(list, item)
-            return self:OnNext(#self, item)
+            return self:OnNext(#list, item)
         end
 
         __Arguments__{ NaturalNumber, Any }
@@ -68,7 +68,17 @@ PLoop(function(_ENV)
         function IndexOf(self, item)    for i, chk in self:GetIterator() do if chk == item then return i end end end
 
         --- Remove an item
-        function Remove(self, item)     local i = self:IndexOf(item) if i then return self:RemoveByIndex(i) end end
+        function Remove(self, item)
+            if item == nil then
+                local list              = rawget(self, ReactiveList)
+                item                    = tremove(list)
+                self:OnNext(#list + 1)
+                return item
+            else
+                local i = self:IndexOf(item)
+                return i and self:RemoveByIndex(i)
+            end
+        end
 
         --- Remove an item from the tail or the given index
         function RemoveByIndex(self, index)
@@ -114,6 +124,15 @@ PLoop(function(_ENV)
             end
             self:OnNext(#list, list[#list])
             return self
+        end
+
+        -----------------------------------------------------------------------
+        --                           extend method                           --
+        -----------------------------------------------------------------------
+        for key, method, isstatic in Class.GetMethods(IList) do
+            if not isstatic then
+                _ENV[key]               = method
+            end
         end
 
         -----------------------------------------------------------------------
