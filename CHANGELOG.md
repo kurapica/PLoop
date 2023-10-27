@@ -1,9 +1,36 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [1.9.1] - 2023-10-19 WangXH <kurapica125@outlook.com>
+## [1.9.1] - 2023-10-27 WangXH <kurapica125@outlook.com>
 ### Changed
 - The reactive system is re-designed, `System.ISubscription` is added for disposing the subscription, it provide features like `OnUnsubscribe` event, `IsUnsubscribed` property, those features all removed form the `System.IObserver`.
+
+- `ENABLE_DEBUG_INFO` is added to `PLOOP_PLATFORM_SETTINGS`, if enabled, the struct, struct member, enum, interface, class and interface(class) features like method, property, event can record the debug info of its definition, like
+
+	```lua
+	PLOOP_PLATFORM_SETTINGS = { ENABLE_DEBUG_INFO = true }
+
+	require "PLoop" (function(_ENV)
+		class "A" (function(_ENV)
+			event "OnNameChanged"
+
+			property "Name" { type = Name, event = OnNameChanged }
+
+			__Arguments__{ String }
+			function Hello()
+			end
+
+			__Arguments__{ String }
+			function __ctor(self)
+			end
+		end)
+
+		print(Toolset.tostring(Class.GetDebugInfo(A))) -- {["source"]="path",["line"]=4}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "Name"))) -- {["source"]="path",["line"]=7}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "OnNameChanged"))) -- {["source"]="path",["line"]=5}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "__ctor"))) --{["source"]="path",["line"]=14}
+	end)
+	```
 
 
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>

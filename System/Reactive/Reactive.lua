@@ -162,6 +162,8 @@ PLoop(function(_ENV)
             if subject ~= nil then
                 return isObjectType(subject, BehaviorSubject) and subject or nil
             else
+                local fields            = rawget(self, Reactive)
+
                 -- New reactive used for subscribe
                 if type(key) == "string" and key ~= ""  then
                     fields[key]         = reactive(nil)

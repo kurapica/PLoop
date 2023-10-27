@@ -51,9 +51,9 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            function __ctor(self, observer, reactive)
+            function __ctor(self, observer, react)
                 rawset(self, Observer, observer)
-                rawset(self, Reactive, reactive)
+                rawset(self, Reactive, react)
                 rawset(self, ReactiveProxy, {})
             end
 
@@ -61,17 +61,17 @@ PLoop(function(_ENV)
             --                          meta method                          --
             -------------------------------------------------------------------
             function __index(self, key)
-                local reactive          = rawget(self, Reactive)
+                local react             = rawget(self, Reactive)
                 local proxy             = rawget(self, ReactiveProxy)
 
                 if not proxy[key] then
                     local observer      = rawget(self, Observer)
-                    local observable    = reactive(key)
+                    local observable    = react(key)
                     if observable then
                         proxy[key]      = true
                         observable:Subscribe(observer, observer.Subscription)
                     else
-                        observable      = reactive[key]
+                        observable      = react[key]
                         if observable and isObjectType(observable, Reactive) then
                             local proxy = ReactiveProxy(observer, observable)
                             rawset(self, key, proxy)
@@ -80,7 +80,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                return reactive[key]
+                return react[key]
             end
 
             function __newindex(self, key, value)
@@ -91,48 +91,92 @@ PLoop(function(_ENV)
         --- The proxy used in watch environment for reactive list
         __Sealed__()
         class "ReactiveListProxy"       (function(_ENV)
+            extend "IIndexedList"
+
             export                      {
                 rawset                  = rawset,
                 rawget                  = rawget,
+                type                    = type,
                 isObjectType            = Class.IsObjectType,
+                yield                   = coroutine.yield,
 
-                Observer, Reactive, ReactiveList, ReactiveListProxy
+                Observer, Reactive, ReactiveList, ReactiveListProxy, Toolset, Watch
             }
+
+            local function parseValue(self, value)
+                if type(value) == "table" then
+                    local proxy         = rawget(self, ReactiveProxy)
+                    local react         = proxy[value]
+                    if react ~= nil then return react or value end
+
+                    react               = reactive(value, false)
+                    local observer      = rawget(self, Observer)
+
+                    -- Subscribe for reactive field
+                    if isObjectType(react, Reactive) then
+                        react           = ReactiveProxy(observer, react)
+                        rawset(proxy, value, react)
+                        return react
+
+                    -- Subscribe the list
+                    elseif isObjectType(react, ReactiveList) then
+                        react           = ReactiveListProxy(observer, react)
+                        rawset(proxy, value, react)
+                        react:Subscribe(observer, observer.Subscription)
+                        return react
+
+                    -- Add proxy to acess the real value
+                    elseif isObjectType(react, BehaviorSubject) then
+                        rawset(proxy, value, false)
+                        return react
+                    end
+                else
+                    return value
+                end
+            end
+
+            -----------------------------------------------------------------------
+            --                              method                               --
+            -----------------------------------------------------------------------
+            --- Gets the iterator
+            __Iterator__()
+            function GetIterator(self)
+                local list                  = rawget(self, ReactiveList)
+                for i, v in (list.GetIterator or ipairs)(list) do
+                    yield(i, parseValue(self, v))
+                end
+            end
+
+            --- Whether an item existed in the list
+            function Contains(self, item)   for i, chk in self:GetIterator() do if chk == item then return true end end return false end
+
+            --- Get the index of the item if it existed in the list
+            function IndexOf(self, item)    for i, chk in self:GetIterator() do if chk == item then return i end end end
+
+            -----------------------------------------------------------------------
+            --                           extend method                           --
+            -----------------------------------------------------------------------
+            for key, method, isstatic in Class.GetMethods(IList) do
+                if not isstatic then
+                    _ENV[key]           = method
+                end
+            end
 
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            function __ctor(self, observer, reactive)
+            function __ctor(self, observer, react)
                 rawset(self, Observer, observer)
-                rawset(self, ReactiveList, reactive)
-                rawset(self, ReactiveProxy, {})
-                reactive:Subscribe(observer, observer.Subscription)
+                rawset(self, ReactiveList, react)
+                rawset(self, ReactiveProxy, Toolset.newtable(true))
+                react:Subscribe(observer, observer.Subscription)
             end
 
             -------------------------------------------------------------------
             --                          meta method                          --
             -------------------------------------------------------------------
             function __index(self, key)
-                local reactive          = rawget(self, Reactive)
-                local proxy             = rawget(self, ReactiveProxy)
-
-                if not proxy[key] then
-                    local observer      = rawget(self, Observer)
-                    local observable    = reactive(key)
-                    if observable then
-                        proxy[key]      = true
-                        observable:Subscribe(observer, observer.Subscription)
-                    else
-                        observable      = reactive[key]
-                        if observable and isObjectType(observable, Reactive) then
-                            local proxy = ReactiveProxy(observer, observable)
-                            rawset(self, key, proxy)
-                            return proxy
-                        end
-                    end
-                end
-
-                return reactive[key]
+                return parseValue(self, rawget(self, ReactiveList)[key])
             end
 
             function __newindex(self, key, value)
@@ -174,8 +218,14 @@ PLoop(function(_ENV)
 
                     -- Subscribe the list
                     elseif isObjectType(react, ReactiveList) then
-                        value           = ReactiveListProxy(observer, react)
-                        rawset(self, key, value)
+                        if observer.DeepWatch then
+                            value       = ReactiveListProxy(observer, react)
+                            rawset(self, key, value)
+                        else
+                            rawset(self, key, react)
+                            react:Subscribe(observer, observer.Subscription)
+                            return react
+                        end
 
                     -- Add proxy to acess the real value
                     elseif isObjectType(react, BehaviorSubject) then
