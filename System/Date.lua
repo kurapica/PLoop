@@ -68,7 +68,7 @@ PLoop(function(_ENV)
     class "Date"                {}
 
     --- Represents a time interval
-    __Final__() __Sealed__() __Serializable__() __SerializeFormat__(TargetFormat.NUMBER)
+    __Final__() __Sealed__() __ValueType__() __Serializable__() __SerializeFormat__(TargetFormat.NUMBER)
     class "TimeSpan"                    (function(_ENV)
         extend "ICloneable" "ISerializable"
 
@@ -258,7 +258,7 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the date object
-    __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
+    __Final__() __Sealed__() __ValueType__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
     class "Date"                        (function (_ENV)
         extend "ICloneable" "ISerializable"
 

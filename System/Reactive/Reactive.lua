@@ -29,6 +29,7 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
+            getObjectClass              = Class.GetObjectClass,
             validProp                   = Property.Validate,
             getFeatures                 = Class.GetFeatures,
 
@@ -54,7 +55,7 @@ PLoop(function(_ENV)
             if not init then return end
 
             -- Init
-            local cls                   = Class.GetObjectClass(init)
+            local cls                   = getObjectClass(init)
             if cls then
                 -- As proxy
                 local isObservable      = __Observable__.IsObservableProperty
@@ -70,6 +71,7 @@ PLoop(function(_ENV)
 
                 if not next(fields) then throw("The " .. tostring(cls) .. " class doesn't provide observable properties") end
 
+                -- Bind the reactive with object
                 rawset(self, Class, init)
                 rawset(init, Reactive, self)
             else
@@ -179,33 +181,41 @@ PLoop(function(_ENV)
         pcall                           = pcall,
         error                           = error,
         tostring                        = tostring,
+        getmetatable                    = getmetatable,
+        isSubType                       = Class.IsSubType,
         isObjectType                    = Class.IsObjectType,
         isarray                         = Toolset.isarray,
+        isValueType                     = Class.IsValueType,
 
         IObservable, Reactive, ReactiveList, BehaviorSubject, Date, TimeSpan
     }
 
     Environment.RegisterRuntimeKeyword  {
+        --- Wrap the target value to a Reactive(for table or object), ReactiveList(for list) or BehaviorSubjcet(for value)
         reactive                        = function(value, silent)
-            if value == nil then return Reactive() end
+            if value == nil then        return Reactive() end
 
             -- Check the value
             local tval                  = type(value)
             if tval == "table" then
-                -- don't wrap the reactive object or non behavior subject
-                if isObjectType(value, Reactive) or isObjectType(value, ReactiveList) or isObjectType(value, BehaviorSubject) then
-                    return value
+                local cls               = getmetatable(value)
 
-                -- wrap the observable as behavior subject
-                elseif isObjectType(value, IObservable) then
-                    return BehaviorSubject(value)
+                if cls then
+                    -- Already wrap
+                    if isSubType(cls, Reactive) or isSubType(cls, ReactiveList) or isSubType(cls, BehaviorSubject) then
+                        return value
 
-                -- wrap Date or TimeSpan to behavior subject, @TODO more generic check later
-                elseif isObjectType(value, Date) or isObjectType(value, TimeSpan) then
-                    return BehaviorSubject(value)
+                    -- wrap the observable or value type as behavior subject
+                    elseif isSubType(cls, IObservable) or isValueType(cls) then
+                        return BehaviorSubject(value)
 
-                -- wrap List or Array to reactive list
-                elseif isObjectType(value, List) or getmetatable(value) == nil and isarray(value) then
+                    -- wrap List or Array to reactive list
+                    elseif isSubType(cls, List) then
+                        return ReactiveList(value)
+                    end
+
+                -- wrap array to reactive list
+                elseif isarray(value) then
                     return ReactiveList(value)
 
                 -- wrap the value no matter class or object

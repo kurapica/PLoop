@@ -6447,6 +6447,7 @@ do
     MOD_TEMPLATE_IC                     = newflags()                -- AS TEMPLATE INTERFACE/CLASS
     MOD_AUTOCACHE_OBJ                   = newflags()                -- OBJECT METHOD AUTO-CACHE
     MOD_RECYCLABLE_OBJ                  = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
+    MOD_VALUETYPE_OBJ                   = newflags()                -- OBJECT AS VALUE
 
     MOD_INITVAL_CLS                     = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -9412,6 +9413,17 @@ do
                 return false
             end;
 
+            --- Whether the object of the type should be treated as value
+            -- @static
+            -- @method  IsValueType
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the object of the type should be treated as value
+            ["IsValueType"]             = function(target)
+                local info              = getICTargetInfo(target)
+                return info and validateflags(MOD_VALUETYPE_OBJ, info[FLD_IC_MOD]) or false
+            end;
+
             --- Refresh the class's definition
             -- @static
             -- @method  EndDefinition
@@ -9715,6 +9727,25 @@ do
                     info[FLD_IC_TEMPIMP]= saveTemplateImplement({}, info[FLD_IC_TEMPPRM], target)
                 else
                     error("Usage: class.SetAsTemplate(target, params[, stack]) - The target is not valid", stack)
+                end
+            end;
+
+            --- Mark the class as value type
+            -- @static
+            -- @method  SetAsValueType
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack
+            ["SetAsValueType"]          = function(target, stack)
+                local info, def         = getICTargetInfo(target)
+                stack                   = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: class.SetAsValueType(target[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    info[FLD_IC_MOD]    = turnonflags(MOD_VALUETYPE_OBJ, info[FLD_IC_MOD])
+                else
+                    error("Usage: class.SetAsValueType(target[, stack]) - The target is not valid", stack)
                 end
             end;
 
@@ -13907,6 +13938,27 @@ do
             __call                      = attribute.Register,
             __newindex                  = readonly,
             __tostring                  = namespace.GetNamespaceName
+        }
+    )
+
+    -----------------------------------------------------------------------
+    -- Set the class as value type
+    --
+    -- @attribute   System.__ValueType__
+    -----------------------------------------------------------------------
+    namespace.SaveNamespace("System.__ValueType__",
+        prototype {
+            __index                     = {
+                ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
+                    if targettype == ATTRTAR_CLASS then
+                        class.SetAsValueType(target, parsestack(stack) + 1)
+                    end
+                end,
+                ["AttributeTarget"]     = ATTRTAR_CLASS,
+            },
+            __call                      = regSelfOrObject,
+            __newindex                  = readonly,
+            __tostring                  = getAttributeName
         }
     )
 
