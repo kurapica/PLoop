@@ -658,6 +658,7 @@ do
         end
     end
     safesetfenv                         = fakefunc
+    safegetfenv                         = function() return _ENV end
 
     -----------------------------------------------------------------------
     --                            main cache                             --
@@ -741,7 +742,7 @@ do
 
         -- Default
         stack                           = stack or 1
-        env                             = env or visitor or getfenv(stack + 3) or _G
+        env                             = env or visitor or safegetfenv(stack + 3) or _G
 
         return visitor, env, target, definition, flag, stack
     end
@@ -16902,6 +16903,7 @@ end
 -------------------------------------------------------------------------------
 do
     safesetfenv                         = PLOOP_PLATFORM_SETTINGS.TYPE_DEFINITION_WITH_OLD_STYLE and setfenv or fakefunc
+    safegetfenv                         = getfenv
 
     -----------------------------------------------------------------------
     --                            _G keyword                             --
