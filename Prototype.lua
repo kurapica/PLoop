@@ -658,7 +658,7 @@ do
         end
     end
     safesetfenv                         = fakefunc
-    safegetfenv                         = function() return _ENV end
+    safegetfenv                         = function() return _PLoopEnv end
 
     -----------------------------------------------------------------------
     --                            main cache                             --
