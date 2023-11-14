@@ -699,6 +699,8 @@ do
     -----------------------------------------------------------------------
     local NIL_HOLDER                    = fakefunc     -- no means
     local IMP_HOLDER                    = parsestack
+    local rebuildFunc                   = {}
+    local rebuildTree                   = {}
 
     local parseParams                   = function (keyword, ptype, ...)
         local visitor                   = keyword and environment.GetKeywordVisitor(keyword)
@@ -811,14 +813,16 @@ do
         return name and namespace.Validate(name)
     end
 
-    saveTemplateImplement               = function (implement, params, target, i)
+    saveTemplateImplement               = function (implement, params, target, rebuild, genfunc, i)
         i                               = i or 1
         if i > #params then
+            if rebuild then rebuildFunc = savestorage(rebuildFunc, getmetatable(target), genfunc) end
             return savestorage(implement, IMP_HOLDER, target)
         else
             local param                 = params[i]
+            if rebuild and Namespace.Validate(param) then rebuildTree = savestorage(rebuildTree, param, savestorage(rebuildTree[param] or {}, target, true)) end
             if param == nil then param  = NIL_HOLDER end
-            return savestorage(implement, param, saveTemplateImplement(implement[param] or {}, params, target, i + 1))
+            return savestorage(implement, param, saveTemplateImplement(implement[param] or {}, params, target, rebuild, genfunc, i + 1))
         end
     end
 
@@ -831,6 +835,15 @@ do
         end
 
         return implement and implement[IMP_HOLDER]
+    end
+
+    rebuildTemplateTypes                = function (type)
+        local genTypes                  = rebuildTree[type]
+        if genTypes then
+            for genType in pairs, genTypes do
+                attribute.IndependentCall(rebuildFunc[getmetatable(genType)], genType)
+            end
+        end
     end
 end
 
@@ -2996,6 +3009,7 @@ do
     MOD_IMMUTABLE_STRUCT                = newflags()        -- IMMUTABLE
     MOD_TEMPLATE_STRUCT                 = newflags()        -- AS TEMPLATE
     MOD_ALLOWOBJ_STRUCT                 = newflags()        -- ALLOW OBJECT PASS VALIDATION
+    MOD_TEMPLATE_REBUILD_STRUCT         = newflags()        -- ALLOW TEMPLATE GEN TYPE REBUILD
 
     -- FIELD INDEX
     FLD_STRUCT_MOD                      = -newindex(1)      -- FIELD MODIFIER
@@ -4050,6 +4064,26 @@ do
     local saveStructMeta                = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end or function (s, meta) _StructInfo = savestorage(_StructInfo, s, meta) end
     local saveMemberMeta                = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and function (m, meta) rawset(m, FLD_MEMBER_META, meta) end or function (m, meta) _MemberInfo = savestorage(_MemberInfo, m, meta) end
 
+    -- Generate the template type
+    local genStructImplement            = function(implement)
+        local origin                    = getStructTargetInfo(implement)
+        local params                    = origin[FLD_STRUCT_TEMPPRM]
+        local template                  = origin[FLD_STRUCT_TEMPIMP]
+        local info                      = _StructInfo[template]
+
+        -- enable re-define
+        origin[FLD_STRUCT_MOD]          = turnoffflags(MOD_SEALED_STRUCT, origin[FLD_STRUCT_MOD])
+        origin                          = nil
+
+        local bder                      = struct (info[FLD_STRUCT_TEMPENV], implement, true)
+        struct.SetSealed(implement)
+        local tmp                       = getStructTargetInfo(implement)
+        tmp[FLD_STRUCT_TEMPPRM]         = params
+        tmp[FLD_STRUCT_TEMPIMP]         = template
+        attribute.InheritAttributes(implement, ATTRTAR_STRUCT, template)
+        bder(info[FLD_STRUCT_TEMPDEF])
+    end
+
     -- Get template implementation
     local getStructImplement            = function(self, key, stack)
         local info                      = _StructInfo[self]
@@ -4060,17 +4094,17 @@ do
             end
 
             local implement             = getTemplateImplement(implements, key)
-            if implement then return implement end
+            if implement then           return implement end
 
             local ok, err               = attribute.IndependentCall(function()
                 implement               = struct {}
-                local bder              = struct (info[FLD_STRUCT_TEMPENV], implement, true)
-                struct.SetSealed(implement)
+
+                -- Record the template and parameter
                 local tmp               = getStructTargetInfo(implement)
                 tmp[FLD_STRUCT_TEMPPRM] = key
                 tmp[FLD_STRUCT_TEMPIMP] = self
-                attribute.InheritAttributes(implement, ATTRTAR_STRUCT, self)
-                bder(info[FLD_STRUCT_TEMPDEF])
+
+                genStructImplement(implement)
             end)
 
             if not ok then
@@ -4081,7 +4115,7 @@ do
                 end
             end
 
-            info[FLD_STRUCT_TEMPIMP]    = saveTemplateImplement(implements, key, implement)
+            info[FLD_STRUCT_TEMPIMP]    = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD]), genStructImplement)
 
             return implement
         end
@@ -5015,8 +5049,9 @@ do
             -- @format  (structure, params[, stack])
             -- @param   target                      the structure
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getStructTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -5024,6 +5059,9 @@ do
                     if not def then error(strformat("Usage: struct.SetAsTemplate(structure, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_STRUCT_MOD]    = turnonflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD])
                     info[FLD_STRUCT_MOD]    = turnonflags(MOD_SEALED_STRUCT,   info[FLD_STRUCT_MOD])
+                    if rebuildable then
+                        info[FLD_STRUCT_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD])
+                    end
 
                     info[FLD_STRUCT_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_STRUCT_TEMPIMP]= saveTemplateImplement({}, info[FLD_STRUCT_TEMPPRM], target)
@@ -6449,6 +6487,7 @@ do
     MOD_AUTOCACHE_OBJ                   = newflags()                -- OBJECT METHOD AUTO-CACHE
     MOD_RECYCLABLE_OBJ                  = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
     MOD_VALUETYPE_OBJ                   = newflags()                -- OBJECT AS VALUE
+    MOD_TEMPLATE_REBUILD_IC             = newflags()                -- TEMPLATE TYPE REBUILD
 
     MOD_INITVAL_CLS                     = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -8064,6 +8103,27 @@ do
     end
 
     -- Get template implementation
+    local genICImplement                = function (implement)
+        local ninfo                     = getICTargetInfo(implement)
+        local template                  = ninfo[FLD_IC_TEMPIMP]
+        local params                    = ninfo[FLD_IC_TEMPPRM]
+        local info                      = getICTargetInfo(template)
+
+        -- turn off for rebuild
+        ninfo[FLD_IC_MOD]               = turnoffflags(MOD_SEALED_IC, ninfo[FLD_IC_MOD])
+
+        -- build
+        local ptype                     = getmetatable(implement)
+        local bder                      = ptype (info[FLD_IC_TEMPENV], implement, true)
+        ptype.SetSealed(implement)
+        ninfo                           = getICTargetInfo(implement)
+        ninfo[FLD_IC_TEMPPRM]           = params
+        ninfo[FLD_IC_TEMPIMP]           = template
+
+        attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, template)
+        bder(info[FLD_IC_TEMPDEF])
+    end
+
     local getICImplement                = function(self, key, stack)
         local info                      = _ICInfo[self]
         if info[FLD_IC_TEMPDEF] then
@@ -8078,13 +8138,13 @@ do
             local ok, err               = attribute.IndependentCall(function()
                 local ptype             = getmetatable(self)
                 implement               = ptype {}
-                local bder              = ptype (info[FLD_IC_TEMPENV], implement, true)
-                ptype.SetSealed(implement)
+
+                -- Record template & params
                 local ninfo             = getICTargetInfo(implement)
                 ninfo[FLD_IC_TEMPPRM]   = key
                 ninfo[FLD_IC_TEMPIMP]   = self
-                attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, self)
-                bder(info[FLD_IC_TEMPDEF])
+
+                genICImplement(implement)
             end)
 
             if not ok then
@@ -8095,7 +8155,7 @@ do
                 end
             end
 
-            info[FLD_IC_TEMPIMP]        = saveTemplateImplement(implements, key, implement)
+            info[FLD_IC_TEMPIMP]        = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD]), genICImplement)
 
             return implement
         end
@@ -8752,8 +8812,9 @@ do
             -- @format  (target, params[, stack])
             -- @param   target                      the target interface
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getICTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -8761,6 +8822,9 @@ do
                     if not def then error(strformat("Usage: interface.SetAsTemplate(target, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_IC_MOD]    = turnonflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD])
                     info[FLD_IC_MOD]    = turnonflags(MOD_SEALED_IC,   info[FLD_IC_MOD])
+                    if rebuildable then
+                        info[FLD_IC_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD])
+                    end
 
                     info[FLD_IC_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_IC_TEMPIMP]= saveTemplateImplement({}, info[FLD_IC_TEMPPRM], target)
@@ -9714,8 +9778,9 @@ do
             -- @format  (target[, stack])
             -- @param   target                      the target class
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getICTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -9723,6 +9788,9 @@ do
                     if not def then error(strformat("Usage: class.SetAsTemplate(target, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_IC_MOD]    = turnonflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD])
                     info[FLD_IC_MOD]    = turnonflags(MOD_SEALED_IC,   info[FLD_IC_MOD])
+                    if rebuildable then
+                        info[FLD_IC_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD])
+                    end
 
                     info[FLD_IC_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_IC_TEMPIMP]= saveTemplateImplement({}, info[FLD_IC_TEMPPRM], target)
@@ -15376,6 +15444,11 @@ do
             self.IsThisUsable           = true
         end
 
+        --- Mark the type generatd by the template will be rebuilt when parameter type re-defined
+        function WithRebuild(self)
+            self.IsRebuildable          = true
+        end
+
         --- modify the target's definition
         -- @param   target                      the target
         -- @param   targettype                  the target type
@@ -15546,11 +15619,11 @@ do
                 genArgumentValid(vars, false, owner, name, isbuilder, isbuilder)
 
                 if targettype == AttributeTargets.Class then
-                    Class.SetAsTemplate(target, self.Template, stack)
+                    Class.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 elseif targettype == AttributeTargets.Interface then
-                    Interface.SetAsTemplate(target, self.Template, stack)
+                    Interface.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 elseif targettype == AttributeTargets.Struct then
-                    Struct.SetAsTemplate(target, self.Template, stack)
+                    Struct.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 end
 
                 return vars[FLD_VAR_VARVLD] or nil
@@ -15641,8 +15714,11 @@ do
         --- whether must use the this keyword
         property "IsThisUsable"         { type = Boolean }
 
-        --- The template parameter
+        --- the template parameter
         property "Template"             { type = Any }
+
+        --- whether the generated type need be rebuild when type in parameters redefined
+        property "IsRebuildable"        { type = Boolean }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -16886,15 +16962,15 @@ do
     --- Represents the informations of the runtime
     __Final__() __Sealed__() __Abstract__()
     class "System.Runtime"              (function(_ENV)
-        export{ Enum, Struct, Class, Interface, __Arguments__ }
+        export{ Enum, Struct, Class, Interface, __Arguments__, rebuildTemplateTypes }
 
         --- Fired when a new type is generated
         __Static__() event "OnTypeDefined"
 
-        _PLoopEnv.enumdefined           = function(target) OnTypeDefined(Enum, target) end
-        _PLoopEnv.structdefined         = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Struct, target) end
-        _PLoopEnv.interfacedefined      = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Interface, target) end
-        _PLoopEnv.classdefined          = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Class, target) end
+        _PLoopEnv.enumdefined           = function(target) rebuildTemplateTypes(target) return OnTypeDefined(Enum, target) end
+        _PLoopEnv.structdefined         = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Struct, target) end
+        _PLoopEnv.interfacedefined      = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Interface, target) end
+        _PLoopEnv.classdefined          = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Class, target) end
     end)
 end
 

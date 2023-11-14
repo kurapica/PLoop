@@ -8,17 +8,28 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2023/10/20                                               --
+-- Update Date  :   2023/11/14                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
 
-    --- Object used to gain simple access to observable values
-    __Sealed__()
-    class "System.Reactive"             (function(_ENV)
+    -----------------------------------------------------------------------
+    --                            Declaration                            --
+    -----------------------------------------------------------------------
+    class "System.Reactive"                 {}
+    class "System.Reactive__Observable__"   {}
+    class "System.Reactive.BehaviorSubject" {}
+    class "System.Reactive.ReactiveList"    {}
 
-        export {
+    -----------------------------------------------------------------------
+    --                          Implementation                           --
+    -----------------------------------------------------------------------
+    --- The proxy used to access reactive table field datas
+    __Sealed__() __Arguments__{ ClassType/nil }
+    class "System.Reactive"             (function(_ENV, targetclass)
+
+        export                          {
             type                        = type,
             pairs                       = pairs,
             error                       = error,
@@ -31,6 +42,8 @@ PLoop(function(_ENV)
             isObjectType                = Class.IsObjectType,
             getObjectClass              = Class.GetObjectClass,
             validProp                   = Property.Validate,
+            isWritableProp              = Property.IsWritable,
+            isIndexerProp               = Property.IsIndexer,
             getFeatures                 = Class.GetFeatures,
 
             Class, Reactive, Property
@@ -39,11 +52,16 @@ PLoop(function(_ENV)
         local setObjectProp             = function(self, key, value) self[key] = value end
 
         -----------------------------------------------------------------------
-        --                     inner type - declare only                     --
+        --                               event                               --
         -----------------------------------------------------------------------
-        class "BehaviorSubject"         {}
-        class "ReactiveList"            {}
-        class "__Observable__"          {}
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -63,13 +81,24 @@ PLoop(function(_ENV)
 
                 -- Wrap all observable properties
                 for name, prop in getFeatures(cls, true) do
-                    if validProp(prop) and isObservable(prop) then
-                        local subject   = getPropertyOb(prop, init)
-                        fields[name]    = isObjectType(subject, BehaviorSubject) and subject or BehaviorSubject(subject)
+                    if validProp(prop) and isWritableProp(prop) then
+                        -- Subscribe the observable property
+                        if isObservable(prop) then
+                            local subject   = getPropertyOb(prop, init)
+                            fields[name]    = isObjectType(subject, BehaviorSubject) and subject or BehaviorSubject(subject)
+
+                        -- Wrap the write to the indexer property
+                        elseif isIndexerProp(prop) then
+
+
+                        -- Wrap the write to the property
+                        else
+
+                        end
                     end
                 end
 
-                if not next(fields) then throw("The " .. tostring(cls) .. " class doesn't provide observable properties") end
+                if not next(fields) then throw("The " .. tostring(cls) .. " class has no observable property") end
 
                 -- Bind the reactive with object
                 rawset(self, Class, init)
@@ -175,7 +204,9 @@ PLoop(function(_ENV)
         end
     end)
 
-    --- Register as keyword
+    -----------------------------------------------------------------------
+    --                              Keyword                              --
+    -----------------------------------------------------------------------
     export                              {
         type                            = type,
         pcall                           = pcall,
@@ -187,7 +218,7 @@ PLoop(function(_ENV)
         isarray                         = Toolset.isarray,
         isValueType                     = Class.IsValueType,
 
-        IObservable, Reactive, ReactiveList, BehaviorSubject, Date, TimeSpan
+        IObservable, Reactive, ReactiveList, BehaviorSubject, List
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -201,37 +232,43 @@ PLoop(function(_ENV)
                 local cls               = getmetatable(value)
 
                 if cls then
-                    -- Already wrap
+                    -- already wrap
                     if isSubType(cls, Reactive) or isSubType(cls, ReactiveList) or isSubType(cls, BehaviorSubject) then
                         return value
 
-                    -- wrap the observable or value type as behavior subject
+                    -- wrap the observable or value as behavior subject
                     elseif isSubType(cls, IObservable) or isValueType(cls) then
                         return BehaviorSubject(value)
 
-                    -- wrap List or Array to reactive list
+                    -- wrap list or array to reactive list
                     elseif isSubType(cls, List) then
                         return ReactiveList(value)
                     end
+                end
 
                 -- wrap array to reactive list
-                elseif isarray(value) then
+                if isarray(value) then
                     return ReactiveList(value)
 
-                -- wrap the value no matter class or object
+                -- try wrap the value to Reactive
                 else
                     local ok, res       = pcall(Reactive, value)
-                    if not ok and not silent then error(tostring(res), 2) end
-                    return res
+                    if not (ok or silent) then error(tostring(res), 2) end
+                    return ok and res or nil
                 end
 
             -- wrap scalar value to behavior subject
             elseif tval == "number" or tval == "string" or tval == "boolean" then
                 return BehaviorSubject(value)
+
+            -- wrap function to a behavior subject that subscribe an observable generated from the function
+            elseif tval == "function" then
+                return BehaviorSubject(Observable(value))
             end
 
+            -- throw error if not silent
             if not silent then
-                error("Usage: reactive(data[, silent]) - The data must be a table or scalar value", 2)
+                error("Usage: reactive(data[, silent]) - the data can't be converted to a reactive object", 2)
             end
         end
     }

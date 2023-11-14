@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [1.9.2] - 2023-11-14 WangXH <kurapica125@outlook.com>
+### Changed
+- Can use `__Arguments__{...}:WithRebuild()` for template struct/interface/class types, so when types used in parameters re-defined, the generate types will be rebuilt.
+
+
 ## [1.9.1] - 2023-10-27 WangXH <kurapica125@outlook.com>
 ### Changed
 - The reactive system is re-designed, `System.ISubscription` is added for disposing the subscription, it provide features like `OnUnsubscribe` event, `IsUnsubscribed` property, those features all removed form the `System.IObserver`.
