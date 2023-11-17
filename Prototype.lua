@@ -8482,7 +8482,7 @@ do
                     if typm then
                         return function(self, n)
                             local m     = next(typm, n)
-                            while m and not META_KEYS[m] do m = next(typm, m) end
+                            while m and not (META_KEYS[m] and typm[META_KEYS[m]]) do m = next(typm, m) end
                             if m then return m, typm[META_KEYS[m]] end
                         end, target
                     end

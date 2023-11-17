@@ -13,7 +13,6 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-
     -----------------------------------------------------------------------
     --                            Declaration                            --
     -----------------------------------------------------------------------
@@ -46,15 +45,14 @@ PLoop(function(_ENV)
 
         local setObjectProp             = function(self, key, value) self[key] = value end
 
+        -- As object proxy and make all property observabl
         if targetclass then
             local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
-            and function(ok, ...)
-                if not ok then error(..., 2) end
-                return ...
-            end or function(ok, ...)
-                if not ok then error(..., 3) end
-                return ...
-            end
+            and function(ok, ...)       if not ok then error(..., 2) end return ... end
+            or  function(ok, ...)       if not ok then error(..., 3) end return ... end
+
+            local getObject             = function(value) return value and type(value) == "table" and rawget(value, Class) or value end
+
             -------------------------------------------------------------------
             --                             event                             --
             -------------------------------------------------------------------
@@ -62,8 +60,10 @@ PLoop(function(_ENV)
                 if Event.Validate(ev) then
                     __EventChangeHandler__(function(delegate, owner, name)
                         local obj       = rawget(owner, Class)
-                        delegate[Reactive] = delegate[Reactive] or function(self, ...) return delegate(owner, ...) end
-                        if not delegate:IsEmpty() then
+                        if not rawget(delegate, Reactive) then
+                            rawset(delegate, Reactive, function(self, ...) return delegate(owner, ...) end)
+                        end
+                        if delegate:IsEmpty() then
                             obj[name]   = obj[name] - delegate[Reactive]
                         else
                             obj[name]   = obj[name] + delegate[Reactive]
@@ -101,7 +101,7 @@ PLoop(function(_ENV)
             --                            method                             --
             -------------------------------------------------------------------
             for name, method in Class.GetMethods(targetclass, true) do
-                _ENV[name]              = function(self, ...) return checkRet(pcall(method, rawget(self, Class), ...) end
+                _ENV[name]              = function(self, ...) return checkRet(pcall(method, rawget(self, Class), ...)) end
             end
 
             -------------------------------------------------------------------
@@ -118,11 +118,24 @@ PLoop(function(_ENV)
             function __exist(_, init)
                 return init and rawget(init, Reactive)
             end
+
+            -------------------------------------------------------------------
+            --                          meta-method                          --
+            -------------------------------------------------------------------
+            for name, method in Class.GetMetaMethods(targetclass, true) do
+                if name == "__gc" then
+                    function Dispose(self) return rawget(self, Class):Dispose() end
+                else
+                    _ENV[name]          = function(self, other, ...) return method(getObject(self), getObject(other), ...) end
+                end
+            end
+
+        -- As container for reactive fields
         else
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            __Arguments__{ Table/nil }
+            __Arguments__{ RawTable/nil }
             function __ctor(self, init)
                 local fields            = {}
                 rawset(self, Reactive, fields)
@@ -143,7 +156,7 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local subject           =  rawget(self, Reactive)[key]
+                local subject           = rawget(self, Reactive)[key]
                 if subject then
                     if isObjectType(subject, BehaviorSubject) then
                         return subject:GetValue()
@@ -154,24 +167,24 @@ PLoop(function(_ENV)
                 end
 
                 -- Check the proxy class
-                local object                = rawget(self, Class)
+                local object            = rawget(self, Class)
                 if object then return object[key] end
             end
 
             --- Send the new value
             function __newindex(self, key, value)
-                local fields                = rawget(self, Reactive)
-                local object                = rawget(self, Class)
+                local fields            = rawget(self, Reactive)
+                local object            = rawget(self, Class)
 
                 -- Set the object is exist
                 if object then
-                    local ok, err           = pcall(setObjectProp, object, key, value)
+                    local ok, err       = pcall(setObjectProp, object, key, value)
                     if not ok then error(err, 2) end
                     return
                 end
 
                 -- Send the value
-                local subject               = fields[key]
+                local subject           = fields[key]
                 if subject then
                     -- BehaviorSubject
                     if isObjectType(subject, BehaviorSubject) then
@@ -179,7 +192,7 @@ PLoop(function(_ENV)
 
                     -- Reactive
                     elseif type(value) == "table" and getmetatable(value) == nil then
-                        local sfields       = rawget(subject, Reactive)
+                        local sfields   = rawget(subject, Reactive)
                         for sname in pairs(sfields) do
                             subject[sname]  = value[sname]
                         end
@@ -200,7 +213,7 @@ PLoop(function(_ENV)
 
                 -- New reactive - hash key only
                 if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
-                    fields[key]             = reactive(value)
+                    fields[key]         = reactive(value)
                     return
                 end
 
@@ -209,11 +222,11 @@ PLoop(function(_ENV)
 
             --- Gets the subject
             function __call(self, key)
-                local subject               =  rawget(self, Reactive)[key]
+                local subject           =  rawget(self, Reactive)[key]
                 if subject ~= nil then
                     return isObjectType(subject, BehaviorSubject) and subject or nil
                 else
-                    local fields            = rawget(self, Reactive)
+                    local fields        = rawget(self, Reactive)
 
                     -- New reactive used for subscribe
                     if type(key) == "string" and key ~= ""  then

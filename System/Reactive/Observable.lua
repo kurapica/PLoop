@@ -199,6 +199,7 @@ PLoop(function(_ENV)
             unpack                      = _G.unpack or table.unpack,
             pcall                       = pcall,
             rawset                      = rawset,
+            rawget                      = rawget,
             loadsnippet                 = Toolset.loadsnippet,
             IsObjectType                = Class.IsObjectType,
             Exception                   = System.Exception,
@@ -365,11 +366,11 @@ PLoop(function(_ENV)
         --- Converts event delegate objects into Observables
         __Static__() __Arguments__{ Delegate }
         function From(delegate)
-            local subject               = delegate[Observable]
+            local subject               =  rawget(delegate, Observable)
             if not subject then
                 subject                 = Subject()
                 delegate                = delegate + function(...) return subject:OnNext(...) end
-                delegate[Observable]    = subject
+                rawset(delegate, Observable, subject)
             end
             return subject
         end
