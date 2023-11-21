@@ -15,7 +15,7 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    --- The attribute used to wrap a function or property that return operator to be an Observable, so could be re-used
+    --- The attribute used to wrap a function or property that return operator to be an Observable
     __Sealed__()
     class "__Observable__"              (function(_ENV)
         extend "IInitAttribute"
@@ -82,11 +82,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                    static  method                     --
         -----------------------------------------------------------
+        --- Whether the property is observable
         __Static__()
         function IsObservableProperty(prop)
             return _PropertyMap[prop] ~= nil
         end
 
+        --- Gets the observable from the property
         __Static__()
         function GetPropertyObservable(prop, obj)
             return _PropertyMap[prop] ~= nil and getSubject(prop, obj, true) or nil
@@ -208,6 +210,7 @@ PLoop(function(_ENV)
             getProperty                 = Class.GetFeature,
             getObjectClass              = Class.GetObjectClass,
             onNextIterKey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
+            onAsyncNext                 = function(observer, subscription, ...) return not subscription.IsUnsubscribed and observer:OnNext(...) end,
         }
 
         -----------------------------------------------------------------------
@@ -220,7 +223,7 @@ PLoop(function(_ENV)
         --- Creates a new objservable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
-            return Observable(function(observer, subscription)
+            return Observable(function(g, subscription)
                 local value             = init
                 if resultselector then
                     while value ~= nil and condition(value) do
@@ -235,7 +238,7 @@ PLoop(function(_ENV)
                         value           = iterate(value)
                     end
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -253,7 +256,7 @@ PLoop(function(_ENV)
                         return Observable(function(observer, subscription)
                             if subscription.IsUnsubscribed then return end
                             observer:OnNext(]] .. args .. [[)
-                            observer:OnCompleted()
+                            return not subscription.IsUnsubscribed and observer:OnCompleted()
                         end)
                     end
                 ]], "Just_Gen_" .. count, _ENV)()
@@ -295,7 +298,7 @@ PLoop(function(_ENV)
                     local obs           = ctor()
                     if not IsObjectType(obs, IObservable) then
                         observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                    else
+                    elseif not subscription.IsUnsubscribed then
                         return obs:Subscribe(observer, subscription)
                     end
                 end)
@@ -309,7 +312,7 @@ PLoop(function(_ENV)
                             local obs   = ctor(]] .. args .. [[)
                             if not IsObjectType(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                            else
+                            elseif not subscription.IsUnsubscribed then
                                 return obs:Subscribe(observer, subscription)
                             end
                         end)
@@ -334,7 +337,7 @@ PLoop(function(_ENV)
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -346,7 +349,7 @@ PLoop(function(_ENV)
                     if subscription.IsUnsubscribed then return end
                     observer:OnNext(key, value)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -359,7 +362,7 @@ PLoop(function(_ENV)
                     if subscription.IsUnsubscribed then return end
                     k                   = onNextIterKey(observer, f(t, k))
                 until k == nil
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -383,7 +386,7 @@ PLoop(function(_ENV)
                     if subscription.IsUnsubscribed then return end
                     k                   = onNextIterKey(observer, func(t, k))
                 until k == nil
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -396,7 +399,7 @@ PLoop(function(_ENV)
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -414,7 +417,6 @@ PLoop(function(_ENV)
         function From(self, name)
             local cls                   = getObjectClass(self)
             local prop                  = cls and getProperty(cls, name, true)
-
             return prop and __Observable__.GetPropertyObservable(prop, self, true)
         end
 
@@ -426,7 +428,7 @@ PLoop(function(_ENV)
                     if subscription.IsUnsubscribed then return end
                     observer:OnNext(i)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
@@ -438,13 +440,12 @@ PLoop(function(_ENV)
                     return function(count, ]] .. args .. [[)
                         return Observable(function(observer, subscription)
                             local i     = 0
-
                             while i < count do
                                 if subscription.IsUnsubscribed then return end
                                 observer:OnNext(]] .. args .. [[)
                                 i       = i + 1
                             end
-                            observer:OnCompleted()
+                            return not subscription.IsUnsubscribed and observer:OnCompleted()
                         end)
                     end
                 ]], "Repeat_Gen_" .. count, _ENV)()
@@ -473,10 +474,10 @@ PLoop(function(_ENV)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(func, ]] .. args .. [[)
-                        return Observable(function(observer)
+                        return Observable(function(observer, subscription)
                             RunAsync(function()
-                                observer:OnNext(func(]] .. args .. [[))
-                                observer:OnCompleted()
+                                onAsyncNext(observer, subscription, func(]] .. args .. [[))
+                                return not subscription.IsUnsubscribed and observer:OnCompleted()
                             end)
                         end)
                     end

@@ -21,6 +21,8 @@ PLoop(function(_ENV)
     class "Subscription"                (function(_ENV)
         extend "System.ISubscription"
 
+        export                          { rawset = rawset, rawget = rawget }
+
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
@@ -28,8 +30,8 @@ PLoop(function(_ENV)
         __Arguments__{ ISubscription/nil }
         function __ctor(self, subscription)
             if not subscription then return end
-            self.__root                 = subscription
-            self.__handler              = function() return self:Dispose() end
+            rawset(self, "__root",      subscription)
+            rawset(self, "__handler",   function() return self:Dispose() end)
             subscription.OnUnsubscribe  = subscription.OnUnsubscribe + self.__handler
         end
 
@@ -37,20 +39,22 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            if self.__root and self.__handler then
-                self.__root.OnUnsubscribe = self.__root.OnUnsubscribe - self.__handler
+            local root                  = rawget(self, "__root")
+            local handler               = rawget(self, "__handler")
+            if root and handler then
+                root.OnUnsubscribe      = root.OnUnsubscribe - handler
             end
         end
     end)
 
     __Sealed__()
-    __NoNilValue__(false):AsInheritable()
-    __NoRawSet__(false):AsInheritable()
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
 
-        export {
-            fakefunc                    = Toolset.fakefunc
+        export                          {
+            rawset                      = rawset,
+            rawget                      = rawget,
+            fakefunc                    = Toolset.fakefunc,
         }
 
         -----------------------------------------------------------------------
@@ -74,7 +78,7 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            local subscription          = self.__subscription
+            local subscription          = rawget(self, "__subscription")
             return subscription and subscription:Dispose() or self.__onComp()
         end
 
@@ -83,9 +87,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
         function __ctor(self, onNext, onError, onCompleted, subscription)
-            self.__onNext               = onNext or fakefunc
-            self.__onError              = onError or fakefunc
-            self.__onComp               = onCompleted or fakefunc
+            rawset(self, "__onNext",    onNext or fakefunc)
+            rawset(self, "__onError",   onError or fakefunc)
+            rawset(self, "__onComp",    onCompleted or fakefunc)
             if subscription then
                 self.Subscription       = Subscription(subscription)
             end
@@ -95,7 +99,7 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            local subscription          = self.__subscription
+            local subscription          = rawget(self, "__subscription")
             return subscription and subscription:Dispose()
         end
     end)
@@ -104,7 +108,11 @@ PLoop(function(_ENV)
     class "Observable"                  (function(_ENV)
         extend "System.IObservable"
 
-        export { Observer, Subscription, isObjectType = Class.IsObjectType }
+        export                          {
+            rawset                      = rawset,
+            isObjectType                = Class.IsObjectType,
+            Observer, Subscription
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -129,7 +137,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ Callable }
         function __ctor(self, subscribe)
-            self.__subscribe            = subscribe
+            rawset(self, "__subscribe", subscribe)
         end
     end)
 end)

@@ -133,6 +133,15 @@ PLoop(function(_ENV)
         -- As container for reactive fields
         else
             -------------------------------------------------------------------
+            --                         static method                         --
+            -------------------------------------------------------------------
+            --- Gets the raw value of the reactive object
+            __Static__()
+            function ToRaw(self)
+                return type(self) == "table" and rawget(self, Class) or nil
+            end
+
+            -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
             __Arguments__{ RawTable/nil }

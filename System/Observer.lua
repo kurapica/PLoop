@@ -38,8 +38,6 @@ PLoop(function(_ENV)
     --- Defines a provider for push-based notification
     __Sealed__() __AnonymousClass__()
     interface "System.IObservable"      (function(_ENV)
-        export { ISubscription }
-
         --- Notifies the provider that an observer is to receive notifications.
         -- should return ISubscription object for unsubscribe.
         __Abstract__() function Subscribe(self, observer, subscription) return subscription, observer end

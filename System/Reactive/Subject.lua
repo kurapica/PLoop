@@ -37,9 +37,7 @@ PLoop(function(_ENV)
         local function subscribe(self, observer, subscription)
             -- Check existed subscription
             local obs                   = self.__observers
-            if obs[observer] and not obs[observer].IsUnsubscribed then
-                return obs[observer], observer
-            end
+            if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
 
             subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
             subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
@@ -54,7 +52,7 @@ PLoop(function(_ENV)
                     self.__newsubject[observer] = nil
 
                 -- With no observers, there is no need to keep subscription
-                elseif self.__subscription and not next(obs) then
+                elseif not next(obs) and self.__subscription then
                     self.__subscription:Dispose()
                     self.__subscription = false
                 end
@@ -102,12 +100,12 @@ PLoop(function(_ENV)
 
             -- Register the new observers
             local newSubs               = self.__newsubject
+            self.__newsubject           = false
             if newSubs and type(newSubs)== "table" then
                 for ob, sub in pairs(newSubs) do
                     self.__observers[ob]= sub
                 end
             end
-            self.__newsubject           = false
         end
 
         --- Notifies the observer that the provider has experienced an error condition
@@ -121,9 +119,9 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            local __observers           = self.__observers
+            local observers             = self.__observers
             self.__observers            = {}
-            for ob, sub in pairs(__observers) do
+            for ob, sub in pairs(observers) do
                 if not sub.IsUnsubscribed then
                     ob:OnCompleted()
                 end
@@ -142,9 +140,7 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            if self.__subscription then
-                self.__subscription:Dispose()
-            end
+            return self.__subscription and self.__subscription:Dispose()
         end
     end)
 
@@ -195,9 +191,9 @@ PLoop(function(_ENV)
             local subscription, observer= subscribe(self, ...)
             local length                = self[0]
             if length > 0 then
-                observer:OnNext(unpack(self, 1, length))
+                observer:OnNext (unpack(self, 1, length))
             elseif length < 0 then
-                observer:OnError(unpack(self, 1, -length))
+                observer:OnError(unpack(self, 1,-length))
             end
             return subscription, observer
         end
@@ -221,7 +217,7 @@ PLoop(function(_ENV)
         -- Send the error message
         function OnError(self, ...)
             local length                = max(1, select("#", ...))
-            self[0]                     = - length
+            self[0]                     =-length
 
             if length <= 2 then
                 self[1], self[2]        = ...
@@ -249,8 +245,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Any * 0 }
         function __ctor(self, observable, ...)
-            self[0]                     = select("#", ...)
-            for i = 1, self[0], 2 do
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+            for i = 1, length, 2 do
                 self[i], self[i + 1]    = select(i, ...)
             end
 
@@ -259,8 +256,9 @@ PLoop(function(_ENV)
 
         __Arguments__{ Any * 0 }
         function __ctor(self, ...)
-            self[0]                     = select("#", ...)
-            for i = 1, self[0], 2 do
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+            for i = 1, length, 2 do
                 self[i], self[i + 1]    = select(i, ...)
             end
 

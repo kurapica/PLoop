@@ -39,7 +39,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         local function subscribe(self, observer, subscription)
             subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-            subscription                = self:HandleSubscription(subscription, observer) or subscription
+            subscription                = self:HandleSubscription(subscription,  observer) or  subscription
 
             -- The operator can't be re-used
             if self.__observer then
@@ -151,29 +151,20 @@ PLoop(function(_ENV)
         __Arguments__{ NEString/"Dump" }
         function Dump(self, name)
             return self:Subscribe(
-                function(...)
-                    Info("%s-->%s", name, List{ tostringall(...) }:Join(", "))
-                end,
-                function(ex)
-                    Info("%s failed-->%s", name, tostring(ex))
-                end,
-                function()
-                    Info("%s completed", name)
-                end)
-            end
+                function(...) return Info("%s-->%s",        name, List{ tostringall(...) }:Join(", ")) end,
+                function(ex)  return Info("%s failed-->%s", name, tostring(ex)) end,
+                function()    return Info("%s completed",   name) end)
+        end
 
         --- Process all elements as they arrived, works like the Subscribe, but will block the current coroutine
         __Arguments__{ Callable, Callable/nil, Callable/nil }
         function ForEach(self, onNext, onError, onCompleted)
             local curr, main            = running()
-            if not curr or main then
-                return self:Subscribe(onNext, onError, onCompleted)
-            end
+            if not curr or main then    return self:Subscribe(onNext, onError, onCompleted) end
 
             local finished
 
-            self:Subscribe(
-                onNext,
+            self:Subscribe(onNext,
                 function(ex)
                     finished            = true
                     if onError then onError(ex) end
