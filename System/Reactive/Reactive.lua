@@ -43,9 +43,7 @@ PLoop(function(_ENV)
             Class, Property, Event, Reactive, Property
         }
 
-        local setObjectProp             = function(self, key, value) self[key] = value end
-
-        -- As object proxy and make all property observabl
+        -- As object proxy and make all property observable
         if targetclass then
             local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
             and function(ok, ...)       if not ok then error(..., 2) end return ... end
@@ -124,21 +122,116 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             for name, method in Class.GetMetaMethods(targetclass, true) do
                 if name == "__gc" then
-                    function Dispose(self) return rawget(self, Class):Dispose() end
+                    __dtor              = function(self) return rawget(self, Class):Dispose() end
                 else
                     _ENV[name]          = function(self, other, ...) return method(getObject(self), getObject(other), ...) end
                 end
             end
 
-        -- As container for reactive fields
+        -- As container for reactive fields, common usages
         else
+            export                      {
+                isSubType               = Class.IsSubType,
+                Reactive, ReactiveList, BehaviorSubject
+            }
+
             -------------------------------------------------------------------
             --                         static method                         --
             -------------------------------------------------------------------
-            --- Gets the raw value of the reactive object
+            --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
-                return type(self) == "table" and rawget(self, Class) or nil
+                -- For values
+                if type(self)~= "table" then return self end
+
+                -- For raw table
+                local cls               = getmetatable(self)
+                if cls == nil then return self end
+
+                -- For BehaviorSubject
+                if isSubType(cls, BehaviorSubject) then return self.Value end
+
+                -- For ReactiveList
+                if isSubType(cls, ReactiveList) then return ReactiveList.ToRaw(self) end
+
+                -- Don't support other types
+                if not isSubType(cls, Reactive) then return nil end
+
+                -- As object proxy
+                local object            = rawget(self, Class)
+                if object then return object end
+
+                -- Gather from fields
+                local raw               = {}
+
+                -- For non-reactive fields
+                for k, v in pairs(self) do
+                    if k ~= Reactive then
+                        raw[k]          = v
+                    end
+                end
+
+                -- For reactive fields
+                local fields            = rawget(self, Reactive)
+                if fields then
+                    for name, react in pairs(fields) do
+                        raw[name]       = ToRaw(react)
+                    end
+                end
+
+                return raw
+            end
+
+            --- Sets a raw table value to the reactive object
+            __Static__()
+            function SetRaw(self, value)
+                local cls               = getmetatable(self)
+                if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value) - the reactive is not valid", 2) end
+
+                -- Behavior Subject
+                if isSubType(cls, BehaviorSubject) then
+                    return self:OnNext(value)
+
+                -- Reactive List
+                elseif isSubType(cls, ReactiveList) then
+                    return ReactiveList.SetRaw(self, value)
+
+                -- Reactive
+                elseif isSubType(cls, Reactive) then
+                    if value ~= nil and type(value) ~= "table" then
+                        error("Usage: Reactive.SetRaw(reactive, value) - the value is not valid", 2)
+                    end
+
+                    local fields        = rawget(subject, Reactive)
+                    for name in pairs(fields) do
+                        subject[name]   = value[name]
+                    end
+
+                    -- Update
+                    for k, v in pairs(value) do
+                        if not fields[k] then
+                            if type(k) == "string" and k ~= "" and type(v) ~= "function" then
+                                local r = reactive(v, true)
+                                if r then
+                                    sfields[k]  = r
+                                else
+                                    rawset(self, k, v)
+                                end
+                            else
+                                rawset(self, k, v)
+                            end
+                        end
+                    end
+
+                    -- Clear
+                    for k in pairs(self) do
+                        if k ~= Reactive and value[k] == nil then
+                            rawset(self, k, nil)
+                        end
+                    end
+                end
+
+                error("Usage: Reactive.SetRaw(reactive, value) - the reactive is not valid", 2)
             end
 
             -------------------------------------------------------------------
@@ -153,7 +246,12 @@ PLoop(function(_ENV)
                 -- As init table, hash table only
                 for k, v in pairs(init) do
                     if type(k) == "string" and k ~= "" and type(v) ~= "function" then
-                        fields[k]       = reactive(v)
+                        local r         = reactive(v, true)
+                        if r then
+                            fields[k]   = r
+                        else
+                            rawset(self, k, v)
+                        end
                     else
                         rawset(self, k, v)
                     end
@@ -168,29 +266,18 @@ PLoop(function(_ENV)
                 local subject           = rawget(self, Reactive)[key]
                 if subject then
                     if isObjectType(subject, BehaviorSubject) then
+                        -- the current value
                         return subject:GetValue()
                     else
                         -- inner reactive
                         return subject
                     end
                 end
-
-                -- Check the proxy class
-                local object            = rawget(self, Class)
-                if object then return object[key] end
             end
 
             --- Send the new value
             function __newindex(self, key, value)
                 local fields            = rawget(self, Reactive)
-                local object            = rawget(self, Class)
-
-                -- Set the object is exist
-                if object then
-                    local ok, err       = pcall(setObjectProp, object, key, value)
-                    if not ok then error(err, 2) end
-                    return
-                end
 
                 -- Send the value
                 local subject           = fields[key]
@@ -199,20 +286,19 @@ PLoop(function(_ENV)
                     if isObjectType(subject, BehaviorSubject) then
                         return subject:OnNext(value)
 
-                    -- Reactive
+                    -- Only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
-                        local sfields   = rawget(subject, Reactive)
-                        for sname in pairs(sfields) do
-                            subject[sname]  = value[sname]
-                        end
+                        if isObjectType(subject, ReactiveList) then
+                            -- Reactive List
+                            ReactiveList.SetRaw(subject, value)
+                        else
+                            -- Reactive
+                            local ok,err= pcall(setObjectValue, subject, value)
+                            if not ok then error(err, 2) end
 
-                        for k, v in pairs(value) do
-                            if not sfields[k] and type(k) == "string" and k ~= "" and v ~= nil and type(v) ~= "function" then
-                                sfields[k]  = reactive(v)
-                            end
-                        end
 
-                        return
+                            return
+                        end
 
                     -- Not valid
                     else
