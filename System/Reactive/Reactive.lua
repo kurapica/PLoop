@@ -332,7 +332,7 @@ PLoop(function(_ENV)
         isarray                         = Toolset.isarray,
         isValueType                     = Class.IsValueType,
 
-        IObservable, Reactive, ReactiveList, BehaviorSubject, List
+        IObservable, Reactive, ReactiveList, BehaviorSubject, IIndexedList
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -355,7 +355,7 @@ PLoop(function(_ENV)
                         return BehaviorSubject(value)
 
                     -- wrap list or array to reactive list
-                    elseif isSubType(cls, List) then
+                    elseif isSubType(cls, IIndexedList) then
                         return ReactiveList(value)
 
                     -- common wrap

@@ -35,6 +35,18 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                         static method                         --
         -------------------------------------------------------------------
+        --- Gets the current raw value of the reactive object
+        __Static__()
+        function ToRaw(self)
+
+        end
+
+        --- Sets a raw table value to the reactive object
+        __Static__()
+        function SetRaw(self, value, stack)
+
+        end
+
 
         -------------------------------------------------------------------
         --                            method                             --
@@ -131,18 +143,9 @@ PLoop(function(_ENV)
         end
 
         -------------------------------------------------------------------
-        --                         extend method                         --
-        -------------------------------------------------------------------
-        for key, method, isstatic in Class.GetMethods(IList) do
-            if not isstatic then
-                _ENV[key]               = method
-            end
-        end
-
-        -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ List + RawTable }
+        __Arguments__{ IIndexedList + RawTable }
         function __ctor(self, list)
             rawset(self, ReactiveList, list)
         end
