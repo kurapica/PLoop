@@ -1922,7 +1922,7 @@ do
                         end
                     end
 
-                    if value == nil then value = rawget(_G, name) end
+                    if value == nil then value = _G[name] end
                 ]])
 
                 if not PLOOP_PLATFORM_SETTINGS.ENV_ALLOW_GLOBAL_VAR_BE_NIL then
