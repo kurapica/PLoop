@@ -131,9 +131,20 @@ PLoop(function(_ENV)
         -- As container for reactive fields, common usages
         else
             export                      {
+                pcall                   = pcall,
+                getmetatable            = getmetatable,
                 isSubType               = Class.IsSubType,
+                getFeatures             = Class.GetFeatures,
+                isProperty              = Property.Validate,
+                isWritable              = Property.IsWritable,
+                isIndexer               = Property.IsIndexer,
+
                 Reactive, ReactiveList, BehaviorSubject
             }
+
+            local function setObjectProp(self, name, value)
+                self[name]              = value
+            end
 
             -------------------------------------------------------------------
             --                         static method                         --
@@ -159,21 +170,18 @@ PLoop(function(_ENV)
                 local object            = rawget(self, Class)
                 if object then return object end
 
-                -- Gather from fields
+                -- To raw
                 local raw               = {}
 
-                -- For non-reactive fields
                 for k, v in pairs(self) do
                     if k ~= Reactive    then
+                        -- For non-reactive fields
                         raw[k]          = v
-                    end
-                end
-
-                -- For reactive fields
-                local fields            = rawget(self, Reactive)
-                if fields then
-                    for name, react in pairs(fields) do
-                        raw[name]       = ToRaw(react)
+                    else
+                        -- For reactive fields
+                        for name, react in pairs(v) do
+                            raw[name]   = ToRaw(react)
+                        end
                     end
                 end
 
@@ -184,7 +192,7 @@ PLoop(function(_ENV)
             __Static__()
             function SetRaw(self, value, stack)
                 local cls               = getmetatable(self)
-                if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value) - the reactive is not valid", (stack or 1) + 1) end
+                if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1) end
 
                 -- Behavior Subject
                 if isSubType(cls, BehaviorSubject) then
@@ -198,12 +206,27 @@ PLoop(function(_ENV)
                 -- Reactive
                 elseif isSubType(cls, Reactive) then
                     if value ~= nil and type(value) ~= "table" then
-                        error("Usage: Reactive.SetRaw(reactive, value) - the value is not valid", (stack or 1) + 1)
+                        error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value is not valid", (stack or 1) + 1)
                     end
 
-                    local fields        = rawget(subject, Reactive)
-                    for name in pairs(fields) do
-                        subject[name]   = value[name]
+                    -- As object proxy
+                    local object            = rawget(self, Class)
+                    if object then
+                        for name, prop in getFeatures(getmetatable(self), true) do
+                            if isProperty(prop) and isWritable(prop) and not isIndexer(prop) then
+                                local ok, er= pcall(setObjectProp, self, name, value[name])
+                                if not ok then
+                                    error("Usage: Reactive.SetRaw(reactive, value) - " .. er, (stack or 1) + 1)
+                                end
+                            end
+                        end
+                        return
+                    end
+
+                    -- As reactive table
+                    local fields        = rawget(self, Reactive)
+                    for k in pairs(fields) do
+                        self[k]         = value[k]
                     end
 
                     -- Clear
@@ -216,7 +239,7 @@ PLoop(function(_ENV)
                     -- Update
                     for k, v in pairs(value) do
                         if not fields[k] then
-                            subject[k]  = v
+                            self[k]     = v
                         end
                     end
                     return
