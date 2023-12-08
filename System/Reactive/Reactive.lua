@@ -75,7 +75,7 @@ PLoop(function(_ENV)
             --                           property                            --
             -------------------------------------------------------------------
             for name, prop in Class.GetFeatures(targetclass, true) do
-                if Property.Validate(prop) and Property.IsWritable(prop) then
+                if Property.Validate(prop) then
                     if Property.IsIndexer(prop) then
                         if Property.IsWritable(prop) then __Observable__() end
                         __Indexer__(Property.GetIndexType(prop))
@@ -379,7 +379,7 @@ PLoop(function(_ENV)
 
                     -- wrap list or array to reactive list
                     elseif isSubType(cls, IIndexedList) then
-                        return ReactiveList(value)
+                        return ReactiveList[cls](value)
 
                     -- common wrap
                     else
