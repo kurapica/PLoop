@@ -37,19 +37,113 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             next                        = next,
             pcall                       = pcall,
+            yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
 
-            Class, Property, Event, Reactive, Property
+            Class, Property, Event, Reactive
         }
 
-        -- As object proxy and make all property observable
-        if targetclass then
-            local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
-            and function(ok, ...)       if not ok then error(..., 2) end return ... end
-            or  function(ok, ...)       if not ok then error(..., 3) end return ... end
+        -- For dictionary
+        if targetclass and Class.IsSubType(targetclass, Dictionary) then
+            extend "IDictionary"
 
-            local getObject             = function(value) return value and type(value) == "table" and rawget(value, Class) or value end
+            -----------------------------------------------------------
+            --                        method                         --
+            -----------------------------------------------------------
+            --- Gets the iterator
+            __Iterator__()
+            function GetIterator(self)
+                for k, v in self[Class]:GetIterator() do
+                    yield(k, v)
+                end
+            end
+
+            --- Update the dictionary
+            function Update(self, ...)
+                -- For simple
+                local ok, err           = pcall(self[Class].Update, self, ...)
+                if not ok then error(err, 2) end
+            end
+
+            -------------------------------------------------------------------
+            --                          constructor                          --
+            -------------------------------------------------------------------
+            -- bind the reactive and object
+            __Arguments__{ IDictionary }
+            function __ctor(self, init)
+                rawset(self, Class, init)
+                rawset(self, Reactive, {})  -- Subjects
+                rawset(init, Reactive, self)
+            end
+
+            -- use the wrap for objects
+            function __exist(_, init)
+                return init and rawget(init, Reactive)
+            end
+
+            -------------------------------------------------------------------
+            --                          meta-method                          --
+            -------------------------------------------------------------------
+            --- Gets the current value
+            function __index(self, key)
+                local subject           = rawget(self, Reactive)[key]
+                if subject then
+                    if isObjectType(subject, BehaviorSubject) then
+                        -- the current value
+                        return subject:GetValue()
+                    else
+                        -- inner reactive
+                        return subject
+                    end
+                end
+            end
+
+            --- Send the new value
+            function __newindex(self, key, value)
+                local fields            = rawget(self, Reactive)
+
+                -- Send the value
+                local subject           = fields[key]
+                if subject then
+                    -- BehaviorSubject
+                    if isObjectType(subject, BehaviorSubject) then
+                        return subject:OnNext(value)
+
+                    -- Only accept raw table value
+                    elseif type(value) == "table" and getmetatable(value) == nil then
+                        if isObjectType(subject, ReactiveList) then
+                            -- Reactive List
+                            ReactiveList.SetRaw(subject, value, 2)
+                        else
+                            -- Reactive
+                            SetRaw(subject, value, 2)
+                        end
+                        return
+
+                    -- Not valid
+                    else
+                        error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
+                    end
+                end
+
+                -- New reactive - hash key only
+                if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
+                    local r             = reactive(value, true)
+                    if r then
+                        fields[key]     = r
+                        return
+                    end
+                end
+                rawset(self, key, value)
+            end
+
+        -- As object proxy and make all property observable
+        elseif targetclass then
+            local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
+                                        and function(ok, ...) if not ok then error(..., 2) end return ... end
+                                        or  function(ok, ...) if not ok then error(..., 3) end return ... end
+            local getObject             = function(value) return type(value) == "table" and rawget(value, Class) or value end
 
             -------------------------------------------------------------------
             --                             event                             --
@@ -139,7 +233,7 @@ PLoop(function(_ENV)
                 isWritable              = Property.IsWritable,
                 isIndexer               = Property.IsIndexer,
 
-                Reactive, ReactiveList, BehaviorSubject
+                Reactive, ReactiveList, BehaviorSubject, RawTable
             }
 
             local function setObjectProp(self, name, value)
@@ -264,23 +358,32 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             __Arguments__{ RawTable/nil }
             function __ctor(self, init)
-                local fields            = {}
-                rawset(self, Reactive, fields)
-                if not init then return end
+                local reactives         = {}
+                local raw               = {}
 
-                -- As init table, hash table only
-                for k, v in pairs(init) do
-                    if type(k) == "string" and k ~= "" and type(v) ~= "function" then
-                        local r         = reactive(v, true)
-                        if r then
-                            fields[k]   = r
+                if init then
+                    for k, v in pairs(init) do
+                        local vtype     = type(v)
+                        if type(k) == "string" and k ~= "" and vtype ~= "function" and vtype ~= "userdata" then
+                            if vtype == "table" then
+                                local r = reactive(v, true)
+                                if r then
+                                    reactives[k] = r
+                                else
+                                    rawset(self, k, v) -- not reactivable
+                                end
+                            else
+                                -- only make value reactive when require
+                                raw[k]  = v
+                            end
                         else
                             rawset(self, k, v)
                         end
-                    else
-                        rawset(self, k, v)
                     end
                 end
+
+                rawset(self, Reactive, reactives)
+                rawset(self, RawTable, raw)
             end
 
             -------------------------------------------------------------------
@@ -288,20 +391,63 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local subject           = rawget(self, Reactive)[key]
-                if subject then
-                    if isObjectType(subject, BehaviorSubject) then
-                        -- the current value
-                        return subject:GetValue()
+                -- Gets the raw value directly
+                local value             = self[RawTable][key]
+                if value ~= nil then return value end
+
+                -- Gets the reactives
+                value                   = self[Reactive][key]
+                if value then
+                    if isObjectType(value, BehaviorSubject) then
+                        -- Gets the current value
+                        return value:GetValue()
                     else
-                        -- inner reactive
-                        return subject
+                        -- The sub-reactive
+                        return value
                     end
                 end
             end
 
             --- Send the new value
             function __newindex(self, key, value)
+                local r                 = self[Reactive][key]
+
+                if r then
+                    -- BehaviorSubject
+                    if isObjectType(r, BehaviorSubject) then
+                        r:OnNext(value)
+                        self[RawTable][key] = value
+                        return
+
+                    -- Only accept raw table value
+                    elseif type(value) == "table" and getmetatable(value) == nil then
+                        SetRaw(r, value, 2)
+                        return
+
+                    -- Not valid
+                    else
+                        error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
+                    end
+                end
+
+                -- Raw directly
+                local raw               = self[RawTable]
+                if raw[key] ~=  nil then
+                    raw[key]            = value
+
+                -- Check by type
+                elseif type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
+                    local r             = reactive(value, true)
+                    if r then
+                        fields[key]     = r
+                        return
+                    end
+                end
+                rawset(self, key, value)
+
+
+
+
                 local fields            = rawget(self, Reactive)
 
                 -- Send the value
@@ -355,7 +501,8 @@ PLoop(function(_ENV)
         isarray                         = Toolset.isarray,
         isValueType                     = Class.IsValueType,
 
-        IObservable, Reactive, ReactiveList, BehaviorSubject, IIndexedList
+        IObservable, Reactive, ReactiveList, BehaviorSubject,
+        IList, List, IDictionary, Dictionary
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -378,8 +525,23 @@ PLoop(function(_ENV)
                         return BehaviorSubject(value)
 
                     -- wrap list or array to reactive list
-                    elseif isSubType(cls, IIndexedList) then
-                        return ReactiveList[cls](value)
+                    elseif isSubType(cls, IList) then
+                        if isSubType(cls, List) then
+                            return ReactiveList[List](value)
+                        elseif not silent then
+                            error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
+                        end
+                        return
+                    end
+
+                    -- wrap dictionary
+                    elseif isSubType(cls, IDictionary) then
+                        if isSubType(cls, Dictionary) then
+                            return Reactive[Dictionary](value)
+                        elseif not silent then
+                            error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
+                        end
+                        return
 
                     -- common wrap
                     else

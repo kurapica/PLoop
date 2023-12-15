@@ -85,7 +85,7 @@ PLoop(function(_ENV)
 
         --- Insert an item to the list
         if lsttype then
-            __Arguments__{ Integer, lsttype }
+            __Arguments__{ NaturalNumber, lsttype }
             Insert                      = table.insert
 
             __Arguments__{ lsttype }
