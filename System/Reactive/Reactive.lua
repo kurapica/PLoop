@@ -432,6 +432,8 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                              Keyword                              --
     -----------------------------------------------------------------------
+    Environment.RegisterGlobalNamespace("System.Reactive")
+
     export                              {
         type                            = type,
         pcall                           = pcall,

@@ -15,8 +15,6 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    Environment.RegisterGlobalNamespace("System.Reactive")
-
     __Sealed__()
     class "Subscription"                (function(_ENV)
         extend "System.ISubscription"
