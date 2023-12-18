@@ -169,7 +169,7 @@ PLoop(function(_ENV)
         tostring                        = tostring,
         isObjectType                    = Class.IsObjectType,
 
-        IObservable, Reactive, BehaviorSubject, Date, TimeSpan
+        IObservable, Reactive, Reactive.BehaviorSubject, Date, TimeSpan
     }
 
     Environment.RegisterRuntimeKeyword  {
