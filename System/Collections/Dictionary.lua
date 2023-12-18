@@ -32,13 +32,16 @@ PLoop(function(_ENV)
     --- Represents the key-value pairs collections
     interface "IDictionary"             { Iterable }
 
+    --- Represents the dictionary can set/get value by keys
+    interface "IKeyValueDict"           { IDictionary }
+
     --- The un-safe dictionary, it'll use the table as the object directly to gain
     -- the best performance, it's safe when no method name, property name will be
     -- used as keys.
     __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
     __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
     class "Dictionary"                  (function (_ENV, keytype, valtype)
-        extend "IDictionary" "ISerializable"
+        extend "IKeyValueDict" "ISerializable"
 
         export                          {
             ipairs                      = ipairs,

@@ -19,7 +19,7 @@ PLoop(function(_ENV)
     __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
     __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
     class "System.Collections.Proxy"    (function (_ENV, keytype, valtype)
-        extend "IDictionary" "ISerializable"
+        extend "IKeyValueDict" "ISerializable"
 
         local RAW_HOLDER                = {}
 
