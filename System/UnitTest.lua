@@ -149,7 +149,7 @@ PLoop(function(_ENV)
             __Static__()
             function Error(func, ...)
                 local ok, msg           = pcall(func, ...)
-                if not ok then return msg end
+                if not ok then return tostring(msg) end
                 throw(TestFailureException("Should raise an error"))
             end
 
