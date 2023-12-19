@@ -78,8 +78,8 @@ PLoop(function(_ENV)
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
                 rawset(init, Reactive, self)
+                rawset(self, Reactive, {})  -- Reactives
                 rawset(self, Class, init)
-                rawset(self, Reactive, {})  -- Subjects
             end
 
             --- use the wrap for objects
@@ -92,38 +92,24 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local subject           = rawget(self, Reactive)[key]
-                if subject then
-                    if isObjectType(subject, BehaviorSubject) then
-                        -- the current value
-                        return subject:GetValue()
-                    else
-                        -- inner reactive
-                        return subject
-                    end
-                end
+                local r                 = self[Reactive][key]
+                return (r and isObjectType(r, BehaviorSubject) and r:GetValue() or r) or self[Class][key]
             end
 
             --- Send the new value
             function __newindex(self, key, value)
-                local fields            = rawget(self, Reactive)
+                local r                 = self[Reactive][key]
 
-                -- Send the value
-                local subject           = fields[key]
-                if subject then
+                if r then
                     -- BehaviorSubject
-                    if isObjectType(subject, BehaviorSubject) then
-                        return subject:OnNext(value)
+                    if isObjectType(r, BehaviorSubject) then
+                        self[RawTable][key] = value
+                        r:OnNext(value)
+                        return
 
                     -- Only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
-                        if isObjectType(subject, ReactiveList) then
-                            -- Reactive List
-                            ReactiveList.SetRaw(subject, value, 2)
-                        else
-                            -- Reactive
-                            SetRaw(subject, value, 2)
-                        end
+                        SetRaw(r, value, 2)
                         return
 
                     -- Not valid
@@ -132,15 +118,13 @@ PLoop(function(_ENV)
                     end
                 end
 
-                -- New reactive - hash key only
-                if type(key) == "string" and key ~= "" and value ~= nil and type(value) ~= "function" then
-                    local r             = reactive(value, true)
-                    if r then
-                        fields[key]     = r
-                        return
-                    end
+                -- Raw directly
+                local raw               = self[RawTable]
+                if type(key) == "string" and key ~= "" and value ~= nil and type(value) == "table" then
+                    r                   = reactive(value, true)
+                    if r then self[Reactive][key] = r end
                 end
-                rawset(self, key, value)
+                raw[key]                = value
             end
 
         -- As object proxy and make all property observable
@@ -381,10 +365,17 @@ PLoop(function(_ENV)
                             rawset(self, k, v)
                         end
                     end
+
+                    rawset(init, Reactive, self)
                 end
 
                 rawset(self, Reactive, reactives)
                 rawset(self, RawTable, init or {})
+            end
+
+            __Arguments__{ RawTable/nil }
+            function __exist(_, init)
+                return init and init[Reactive]
             end
 
             -------------------------------------------------------------------
