@@ -51,7 +51,7 @@ PLoop(function(_ENV)
             export                      {
                 updateDict              = Dictionary.Update,
                 getValue                = function(r)
-                    if isObjectType(r, BehaviorSubject)
+                    if isObjectType(r, BehaviorSubject) then
                         return r:GetValue()
                     else
                         return r
