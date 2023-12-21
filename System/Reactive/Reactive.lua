@@ -45,11 +45,18 @@ PLoop(function(_ENV)
         }
 
         -- For dictionary
-        if targetclass and Class.IsSubType(targetclass, Dictionary) then
+        if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
             extend "IKeyValueDict"
 
             export                      {
-                updateDict              = Dictionary.Update
+                updateDict              = Dictionary.Update,
+                getValue                = function(r)
+                    if isObjectType(r, BehaviorSubject)
+                        return r:GetValue()
+                    else
+                        return r
+                    end
+                end
             }
 
             -----------------------------------------------------------
@@ -84,7 +91,7 @@ PLoop(function(_ENV)
 
             --- use the wrap for objects
             function __exist(_, init)
-                return init and rawget(init, Reactive)
+                return isObjectType(init, Reactive) and init or rawget(init, Reactive)
             end
 
             -------------------------------------------------------------------
@@ -93,38 +100,52 @@ PLoop(function(_ENV)
             --- Gets the current value
             function __index(self, key)
                 local r                 = self[Reactive][key]
-                return (r and isObjectType(r, BehaviorSubject) and r:GetValue() or r) or self[Class][key]
+                if r then
+                    return getValue(r)
+                else
+                    local value         = self[Class][key]
+                    -- wrap if the value is table
+                    if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
+                        r               = reactive(value, true)
+                        if r then
+                            return getValue(r)
+                        else
+                            -- don't try wrap again
+                            self[Reactive][key] = false
+                        end
+                    end
+                    return value
+                end
             end
 
             --- Send the new value
             function __newindex(self, key, value)
                 local r                 = self[Reactive][key]
-
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
-                        self[RawTable][key] = value
+                        self[Class][key] = value
                         r:OnNext(value)
                         return
 
-                    -- Only accept raw table value
+                    -- only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
                         SetRaw(r, value, 2)
                         return
 
-                    -- Not valid
+                    -- not valid
                     else
                         error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
                     end
+
+                --- non reactivable
+                elseif r == false then
+                    -- allow override
+                    self[Reactive][key] = nil
                 end
 
-                -- Raw directly
-                local raw               = self[RawTable]
-                if type(key) == "string" and key ~= "" and value ~= nil and type(value) == "table" then
-                    r                   = reactive(value, true)
-                    if r then self[Reactive][key] = r end
-                end
-                raw[key]                = value
+                -- raw directly
+                self[Class][key]        = value
             end
 
         -- As object proxy and make all property observable
@@ -384,7 +405,15 @@ PLoop(function(_ENV)
             --- Gets the current value
             function __index(self, key)
                 local r                 = self[Reactive][key]
-                return (r and isObjectType(r, BehaviorSubject) and r:GetValue() or r) or self[RawTable][key]
+                if r then
+                    if isObjectType(r, BehaviorSubject) then
+                        return r:GetValue()
+                    else
+                        return r
+                    end
+                else
+                    return self[RawTable][key]
+                end
             end
 
             --- Send the new value
