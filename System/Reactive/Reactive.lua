@@ -40,6 +40,13 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
+            getValue                    = function(r)
+                if isObjectType(r, BehaviorSubject) then
+                    return r:GetValue()
+                else
+                    return r
+                end
+            end,
 
             Class, Property, Event, Reactive
         }
@@ -50,13 +57,6 @@ PLoop(function(_ENV)
 
             export                      {
                 updateDict              = Dictionary.Update,
-                getValue                = function(r)
-                    if isObjectType(r, BehaviorSubject) then
-                        return r:GetValue()
-                    else
-                        return r
-                    end
-                end
             }
 
             -----------------------------------------------------------
@@ -108,6 +108,7 @@ PLoop(function(_ENV)
                     if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
                         r               = reactive(value, true)
                         if r then
+                            self[Reactive][key] = r
                             return getValue(r)
                         else
                             -- don't try wrap again
@@ -124,7 +125,7 @@ PLoop(function(_ENV)
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
-                        self[Class][key] = value
+                        self[Class][key]= value
                         r:OnNext(value)
                         return
 
@@ -239,6 +240,45 @@ PLoop(function(_ENV)
                 isProperty              = Property.Validate,
                 isWritable              = Property.IsWritable,
                 isIndexer               = Property.IsIndexer,
+                fromObservable          = Observable.From,
+
+                updateByClass           = function(self, value)
+                    for name, prop in getFeatures(getmetatable(self), true) do
+                        if isProperty(prop) and isWritable(prop) and not isIndexer(prop) then
+                            self[name]  = value[name]
+                        end
+                    end
+                end,
+
+                updateTable             = function(self, value)
+                    local raw           = rawget(self, Class) or rawget(self, RawTable)
+                    if not raw then return end
+
+                    -- update
+                    local temp          = {}
+                    for name in (raw.GetIterator or pairs)(raw) do
+                        temp[name]      = true
+                        self[name]      = value[name]
+                    end
+
+                    -- clear
+                    local reactives     = rawget(self, Reactive)
+                    if reactives then
+                        for name in pairs(reactives) do
+                            if not temp[name] then
+                                temp[name]  = true
+                                self[name]  = nil
+                            end
+                        end
+                    end
+
+                    -- add
+                    for name in pairs(value) do
+                        if not temp[name] then
+                            self[name]  = value[name]
+                        end
+                    end
+                end,
 
                 Reactive, ReactiveList, BehaviorSubject, RawTable
             }
@@ -249,40 +289,21 @@ PLoop(function(_ENV)
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
-                -- For values
+                -- for values
                 if type(self)~= "table" then return self end
 
-                -- For raw table
+                -- for raw table
                 local cls               = getmetatable(self)
                 if cls == nil then return self end
 
-                -- For other types
+                -- for other types
                 if not isSubType(cls, Reactive)         then
                     if isSubType(cls, BehaviorSubject)  then return self.Value end
                     if isSubType(cls, ReactiveList)     then return ReactiveList.ToRaw(self) end
                     return self
                 end
 
-                -- As object proxy
-                local object            = rawget(self, Class)
-                if object then return object end
-
-                -- To raw
-                local raw               = {}
-
-                for k, v in pairs(self) do
-                    if k ~= Reactive    then
-                        -- For non-reactive fields
-                        raw[k]          = v
-                    else
-                        -- For reactive fields
-                        for name, react in pairs(v) do
-                            raw[name]   = ToRaw(react)
-                        end
-                    end
-                end
-
-                return raw
+                return rawget(self, Class) or rawget(self, RawTable)
             end
 
             --- Sets a raw table value to the reactive object
@@ -306,60 +327,33 @@ PLoop(function(_ENV)
                         error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value is not valid", (stack or 1) + 1)
                     end
 
-                    -- As object proxy
-                    local object        = rawget(self, Class)
-                    if object then
-                        for name, prop in getFeatures(getmetatable(self), true) do
-                            if isProperty(prop) and isWritable(prop) and not isIndexer(prop) then
-                                local ok, er= pcall(function(s, k, v) s[k] = v end, self, name, value[name])
-                                if not ok then
-                                    error("Usage: Reactive.SetRaw(reactive, value) - " .. er, (stack or 1) + 1)
-                                end
-                            end
-                        end
-                        return
-                    end
-
-                    -- As reactive table
-                    local fields        = rawget(self, Reactive)
-                    for k in pairs(fields) do
-                        self[k]         = value[k]
-                    end
-
-                    -- Clear
-                    for k in pairs(self) do
-                        if k ~= Reactive and value[k] == nil then
-                            rawset(self, k, nil)
-                        end
-                    end
-
-                    -- Update
-                    for k, v in pairs(value) do
-                        if not fields[k] then
-                            self[k]     = v
-                        end
+                    -- as object proxy
+                    local ok, err       = pcall(rawget(self, Class) and not rawget(self, Reactive) and updateByClass or updateTable, self, value)
+                    if not ok then
+                        error("Usage: Reactive.SetRaw(reactive, value) - " .. er, (stack or 1) + 1)
                     end
                     return
                 end
 
-                error("Usage: Reactive.SetRaw(reactive, value) - the reactive is not valid", (stack or 1) + 1)
+                error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1)
             end
 
             --- Gets the observable for the field
             __Static__()
             function From(self, key, create)
-                -- For class
-                if rawget(self, Class) then return Observable.From(self, key) end
-
-                -- For reactive fields
                 local reactives         = rawget(self, Reactive)
-                local subject           = reactives and reactives[key]
-                if subject or not reactives then return subject end
 
-                -- For raw table fields
-                local raw               = rawget(self, RawTable)
+                -- for class
+                if not reactives then return fromObservable(self, key) end
+
+                -- already wrap
+                local r                 = reactives[key]
+                if r then return r end
+
+                -- for raw table or dictionary
+                local raw               = rawget(self, RawTable) or rawget(self, Class)
                 if raw then
-                    local r             = raw[key] ~= nil and reactive(raw[key], true) or create and BehaviorSubject() or nil
+                    r                   = raw[key] ~= nil and reactive(raw[key], true) or create and BehaviorSubject() or nil
                     if r then
                         reactives[key]  = r
                     end
@@ -372,25 +366,10 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             __Arguments__{ RawTable/nil }
             function __ctor(self, init)
-                local reactives         = {}
-
                 if init then
-                    for k, v in pairs(init) do
-                        if type(k) == "string" and k ~= "" and type(v) == "table" then
-                            local r     = reactive(v, true)
-                            if r then
-                                reactives[k] = r
-                            end
-                        else
-                            -- access directly
-                            rawset(self, k, v)
-                        end
-                    end
-
                     rawset(init, Reactive, self)
                 end
-
-                rawset(self, Reactive, reactives)
+                rawset(self, Reactive, {})
                 rawset(self, RawTable, init or {})
             end
 
@@ -406,20 +385,27 @@ PLoop(function(_ENV)
             function __index(self, key)
                 local r                 = self[Reactive][key]
                 if r then
-                    if isObjectType(r, BehaviorSubject) then
-                        return r:GetValue()
-                    else
-                        return r
-                    end
+                    return getValue(r)
                 else
-                    return self[RawTable][key]
+                    local value         = self[RawTable][key]
+                    -- wrap if the value is table
+                    if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
+                        r               = reactive(value, true)
+                        if r then
+                            self[Reactive][key] = r
+                            return getValue(r)
+                        else
+                            -- don't try wrap again
+                            self[Reactive][key] = false
+                        end
+                    end
+                    return value
                 end
             end
 
             --- Send the new value
             function __newindex(self, key, value)
                 local r                 = self[Reactive][key]
-
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
@@ -427,24 +413,24 @@ PLoop(function(_ENV)
                         r:OnNext(value)
                         return
 
-                    -- Only accept raw table value
+                    -- only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
                         SetRaw(r, value, 2)
                         return
 
-                    -- Not valid
+                    -- not valid
                     else
                         error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
                     end
+
+                --- non reactivable
+                elseif r == false then
+                    -- allow override
+                    self[Reactive][key] = nil
                 end
 
-                -- Raw directly
-                local raw               = self[RawTable]
-                if type(key) == "string" and key ~= "" and value ~= nil and type(value) == "table" then
-                    r                   = reactive(value, true)
-                    if r then self[Reactive][key] = r end
-                end
-                raw[key]                = value
+                -- raw directly
+                self[RawTable][key]     = value
             end
         end
     end)
