@@ -39,8 +39,10 @@ PLoop(function(_ENV)
     interface "IIndexedList"            { ICountable }
 
     --- The default indexed list
-    __Sealed__() __Serializable__() __Arguments__{ AnyType }( Any )
-    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
+    __Sealed__() __Serializable__()
+    __Arguments__{ AnyType }( Any )
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "List" (function              (_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
@@ -267,7 +269,8 @@ PLoop(function(_ENV)
     end)
 
     --- The dynamic list
-    __Sealed__() __NoRawSet__(true)
+    __Sealed__()
+    __NoRawSet__(true)
     class "XList"                       (function(_ENV)
         extend "IList"
         export { ipairs = ipairs, type = type, iterforstep = iterforstep, iterforlist = iterforlist }
@@ -318,8 +321,10 @@ PLoop(function(_ENV)
 
     --- the list stream worker, used to provide stream filter, map and etc
     -- operations on a list without creating any temp caches
-    __Final__() __Sealed__() __SuperObject__(false)
-    __NoRawSet__(false) __NoNilValue__(false)
+    __Final__() __Sealed__()
+    __SuperObject__(false)
+    __NoRawSet__(false)
+    __NoNilValue__(false)
     class "ListStreamWorker"            (function (_ENV)
         extend "IList"
 

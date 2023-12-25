@@ -25,7 +25,10 @@ PLoop(function(_ENV)
     --                          Implementation                           --
     -----------------------------------------------------------------------
     --- The proxy used to access reactive table field datas
-    __Sealed__() __Arguments__{ ClassType/nil }:WithRebuild()
+    __Sealed__()
+    __Arguments__{ ClassType/nil }:WithRebuild()
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targetclass)
 
         export                          {
@@ -40,15 +43,9 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
-            getValue                    = function(r)
-                if isObjectType(r, BehaviorSubject) then
-                    return r:GetValue()
-                else
-                    return r
-                end
-            end,
+            getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
-            Class, Property, Event, Reactive
+            Class, Property, Event, Reactive, BehaviorSubject
         }
 
         -- For dictionary
@@ -65,6 +62,7 @@ PLoop(function(_ENV)
             --- Gets the iterator
             __Iterator__()
             function GetIterator(self)
+                local yield             = yield
                 for k, v in self[Class]:GetIterator() do
                     yield(k, v)
                 end
@@ -85,7 +83,7 @@ PLoop(function(_ENV)
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
                 rawset(init, Reactive, self)
-                rawset(self, Reactive, {})  -- Reactives
+                rawset(self, Reactive, {})  -- reactives
                 rawset(self, Class, init)
             end
 
@@ -99,20 +97,21 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local r                 = self[Reactive][key]
+                local reactives         = rawget(self, Reactive)
+                local r                 = reactives[key]
                 if r then
                     return getValue(r)
                 else
-                    local value         = self[Class][key]
+                    local value         = rawget(self, Class)[key]
                     -- wrap if the value is table
                     if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
                         r               = reactive(value, true)
                         if r then
-                            self[Reactive][key] = r
+                            reactives[key] = r
                             return getValue(r)
                         else
                             -- don't try wrap again
-                            self[Reactive][key] = false
+                            reactives[key] = false
                         end
                     end
                     return value
@@ -121,7 +120,8 @@ PLoop(function(_ENV)
 
             --- Send the new value
             function __newindex(self, key, value)
-                local r                 = self[Reactive][key]
+                local reactives         = rawget(self, Reactive)
+                local r                 = reactives[key]
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
@@ -142,7 +142,7 @@ PLoop(function(_ENV)
                 --- non reactivable
                 elseif r == false then
                     -- allow override
-                    self[Reactive][key] = nil
+                    reactives[key]      = nil
                 end
 
                 -- raw directly
@@ -156,11 +156,11 @@ PLoop(function(_ENV)
                                         or  function(ok, ...) if not ok then error(..., 3) end return ... end
             local getObject             = function(value) return type(value) == "table" and rawget(value, Class) or value end
 
-            for name, ev in Class.GetFeatures(targetclass, true) do
+            for name, ftr in Class.GetFeatures(targetclass, true) do
                 -------------------------------------------------------------------
                 --                             event                             --
                 -------------------------------------------------------------------
-                if Event.Validate(ev) then
+                if Event.Validate(ftr) then
                     __EventChangeHandler__(function(delegate, owner, name)
                         local obj       = rawget(owner, Class)
                         if not rawget(delegate, Reactive) then
@@ -177,21 +177,21 @@ PLoop(function(_ENV)
                 -------------------------------------------------------------------
                 --                           property                            --
                 -------------------------------------------------------------------
-                elseif Property.Validate(prop) then
-                    if Property.IsIndexer(prop) then
-                        if Property.IsWritable(prop) then __Observable__() end
-                        __Indexer__(Property.GetIndexType(prop))
+                elseif Property.Validate(ftr) then
+                    if Property.IsIndexer(ftr) then
+                        if Property.IsWritable(ftr) then __Observable__() end
+                        __Indexer__(Property.GetIndexType(ftr))
                         property (name) {
-                            type        = Property.GetType(prop),
-                            get         = Property.IsReadable(prop) and function(self, idx) return rawget(self, Class)[name][idx] end,
-                            set         = Property.IsWritable(prop) and function(self, idx, value) rawget(self, Class)[name][idx] = value end,
+                            type        = Property.GetType(ftr),
+                            get         = Property.IsReadable(ftr) and function(self, idx) return rawget(self, Class)[name][idx] end,
+                            set         = Property.IsWritable(ftr) and function(self, idx, value) rawget(self, Class)[name][idx] = value end,
                         }
                     else
-                        if Property.IsWritable(prop) then __Observable__() end
+                        if Property.IsWritable(ftr) then __Observable__() end
                         property (name) {
-                            type        = Property.GetType(prop),
-                            get         = Property.IsReadable(prop) and function(self) return rawget(self, Class)[name] end,
-                            set         = Property.IsWritable(prop) and function(self, value) rawget(self, Class)[name] = value end,
+                            type        = Property.GetType(ftr),
+                            get         = Property.IsReadable(ftr) and function(self) return rawget(self, Class)[name] end,
+                            set         = Property.IsWritable(ftr) and function(self, value) rawget(self, Class)[name] = value end,
                         }
                     end
                 end
@@ -240,7 +240,6 @@ PLoop(function(_ENV)
                 isProperty              = Property.Validate,
                 isWritable              = Property.IsWritable,
                 isIndexer               = Property.IsIndexer,
-                fromObservable          = Observable.From,
 
                 updateByClass           = function(self, value)
                     for name, prop in getFeatures(getmetatable(self), true) do
@@ -280,7 +279,7 @@ PLoop(function(_ENV)
                     end
                 end,
 
-                Reactive, ReactiveList, BehaviorSubject, RawTable
+                Reactive, ReactiveList, BehaviorSubject, RawTable, Observable
             }
 
             -------------------------------------------------------------------
@@ -344,7 +343,7 @@ PLoop(function(_ENV)
                 local reactives         = rawget(self, Reactive)
 
                 -- for class
-                if not reactives then return fromObservable(self, key) end
+                if not reactives then   return Observable.From(self, key) end
 
                 -- already wrap
                 local r                 = reactives[key]
@@ -383,20 +382,21 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local r                 = self[Reactive][key]
+                local reactives         = rawget(self, Reactive)
+                local r                 = reactives[key]
                 if r then
                     return getValue(r)
                 else
-                    local value         = self[RawTable][key]
+                    local value         = rawget(self, RawTable)[key]
                     -- wrap if the value is table
                     if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
                         r               = reactive(value, true)
                         if r then
-                            self[Reactive][key] = r
+                            reactives[key] = r
                             return getValue(r)
                         else
                             -- don't try wrap again
-                            self[Reactive][key] = false
+                            reactives[key] = false
                         end
                     end
                     return value
@@ -405,7 +405,8 @@ PLoop(function(_ENV)
 
             --- Send the new value
             function __newindex(self, key, value)
-                local r                 = self[Reactive][key]
+                local reactives         = rawget(self, Reactive)
+                local r                 = reactives[key]
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
@@ -426,7 +427,7 @@ PLoop(function(_ENV)
                 --- non reactivable
                 elseif r == false then
                     -- allow override
-                    self[Reactive][key] = nil
+                    reactives[key]      = nil
                 end
 
                 -- raw directly

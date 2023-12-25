@@ -38,8 +38,10 @@ PLoop(function(_ENV)
     --- The un-safe dictionary, it'll use the table as the object directly to gain
     -- the best performance, it's safe when no method name, property name will be
     -- used as keys.
-    __Sealed__() __Serializable__() __Arguments__{ AnyType, AnyType }( Any, Any )
-    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
+    __Sealed__() __Serializable__()
+    __Arguments__{ AnyType, AnyType }( Any, Any )
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "Dictionary"                  (function (_ENV, keytype, valtype)
         extend "IKeyValueDict" "ISerializable"
 
@@ -306,7 +308,8 @@ PLoop(function(_ENV)
     end)
 
     --- The dynamic dictionary
-    __Sealed__() __NoRawSet__(true)
+    __Sealed__()
+    __NoRawSet__(true)
     class "XDictionary"                 (function(_ENV)
         extend "IDictionary"
         export { iterforpair = iterforpair, pairs = pairs }
@@ -348,8 +351,10 @@ PLoop(function(_ENV)
 
     --- the dictionary stream worker, used to provide stream filter, map and
     -- etc operations on a dictionary without creating any temp caches
-    __Final__() __Sealed__() __SuperObject__(false)
-    __NoRawSet__(false) __NoNilValue__(false)
+    __Final__() __Sealed__()
+    __SuperObject__(false)
+    __NoRawSet__(false)
+    __NoNilValue__(false)
     class "DictionaryStreamWorker"      (function (_ENV)
         extend "IDictionary"
 
