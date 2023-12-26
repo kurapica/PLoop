@@ -16,7 +16,8 @@ PLoop(function(_ENV)
     namespace "System.Reactive"
 
     --- Provide reactive feature for list or array
-    __Sealed__() __Arguments__{ -IIndexedList/nil }:WithRebuild()
+    __Sealed__()
+    __Arguments__{ -IIndexedList/nil }:WithRebuild()
     class "ReactiveList"                (function(_ENV, targetclass)
         extend "IIndexedList"
 
@@ -36,7 +37,14 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                             event                             --
         -------------------------------------------------------------------
+        --- Fired when an element added/removed
         event "OnElementChanged"
+
+        --- Fired when any element data changed
+        __EventChangeHandler__(function(delegate, owner, name)
+
+        end)
+        event "OnDataChanged"
 
         -- For all list
         if targetclass == List then
