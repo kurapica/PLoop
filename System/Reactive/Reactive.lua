@@ -45,31 +45,26 @@ PLoop(function(_ENV)
             isObjectType                = Class.IsObjectType,
             getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
-            Class, Property, Event, Reactive, BehaviorSubject
+            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject
         }
 
         local function bindDataChange(self, key, r)
-            if isObjectType(r, Reactive) or isObjectType(r, ReactiveList) then
-                r.OnDataChanged         = r.OnDataChanged + function(_, ...) return OnDataChanged(self, key, ...) end
+            if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                r.OnDataChange          = r.OnDataChange + function(_, ...) return OnDataChange(self, key, ...) end
             end
+            return r
         end
 
-        ---------------------------------------------------------------
-        --                           event                           --
-        ---------------------------------------------------------------
-        --- Fired when the data changed
-        __EventChangeHandler__(function(delegate, owner, name)
-            if not rawget(owner, OnDataChanged) then
-                rawset(owner, OnDataChanged, true)
+        local function handleDataChangeEvent(_, owner, name)
+            if not rawget(owner, OnDataChange) then
+                rawset(owner, OnDataChange, true)
 
-                local reactives     = owner[Reactive]
-                if not reactives then return end
+                local reactives         = owner[Reactive]
                 for k, r in pairs(reactives) do
                     bindDataChange(owner, k, r)
                 end
             end
-        end)
-        event "OnDataChanged"
+        end
 
         -- For dictionary
         if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
@@ -79,9 +74,16 @@ PLoop(function(_ENV)
                 updateDict              = Dictionary.Update,
             }
 
-            -----------------------------------------------------------
-            --                        method                         --
-            -----------------------------------------------------------
+            ---------------------------------------------------------------
+            --                           event                           --
+            ---------------------------------------------------------------
+            --- Fired when the data changed
+            __EventChangeHandler__(handleDataChangeEvent)
+            event "OnDataChange"
+
+            ---------------------------------------------------------------
+            --                          method                           --
+            ---------------------------------------------------------------
             --- Gets the iterator
             __Iterator__()
             function GetIterator(self)
@@ -99,9 +101,9 @@ PLoop(function(_ENV)
                 if not ok then error(err, 2) end
             end
 
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        constructor                        --
+            ---------------------------------------------------------------
             --- bind the reactive and object
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
@@ -115,9 +117,9 @@ PLoop(function(_ENV)
                 return isObjectType(init, Reactive) and init or rawget(init, Reactive)
             end
 
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        meta-method                        --
+            ---------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
                 local reactives         = rawget(self, Reactive)
@@ -130,11 +132,7 @@ PLoop(function(_ENV)
                     if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
                         r               = reactive(value, true)
                         if r then
-                            if rawget(self, OnDataChanged) then
-                                bindDataChange(self, key, r)
-                            end
-
-                            reactives[key] = r
+                            reactives[key] = bindDataChange(self, key, r)
                             return getValue(r)
                         else
                             -- don't try wrap again
@@ -154,7 +152,7 @@ PLoop(function(_ENV)
                     if isObjectType(r, BehaviorSubject) then
                         self[Class][key]= value
                         r:OnNext(value)
-                        return OnDataChanged(self, key, value)
+                        return OnDataChange(self, key, value)
 
                     -- only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
@@ -174,7 +172,7 @@ PLoop(function(_ENV)
 
                 -- raw directly
                 self[Class][key]        = value
-                return OnDataChanged(self, key, value)
+                return OnDataChange(self, key, value)
             end
 
         -- As object proxy and make all property observable
@@ -184,16 +182,16 @@ PLoop(function(_ENV)
                                         or  function(ok, ...) if not ok then error(..., 3) end return ... end
             local getObject             = function(value) return type(value) == "table" and rawget(value, Class) or value end
 
-            -----------------------------------------------------------
-            --                         event                         --
-            -----------------------------------------------------------
+            ---------------------------------------------------------------
+            --                           event                           --
+            ---------------------------------------------------------------
             --- Fired when the data changed
-            event "OnDataChanged"
+            event "OnDataChange"
 
             for name, ftr in Class.GetFeatures(targetclass, true) do
-                -------------------------------------------------------------------
-                --                             event                             --
-                -------------------------------------------------------------------
+                -----------------------------------------------------------
+                --                         event                         --
+                -----------------------------------------------------------
                 if Event.Validate(ftr) then
                     __EventChangeHandler__(function(delegate, owner, name)
                         local obj       = rawget(owner, Class)
@@ -208,9 +206,9 @@ PLoop(function(_ENV)
                     end)
                     event(name)
 
-                -------------------------------------------------------------------
-                --                           property                            --
-                -------------------------------------------------------------------
+                -----------------------------------------------------------
+                --                       property                        --
+                -----------------------------------------------------------
                 elseif Property.Validate(ftr) then
                     if Property.IsIndexer(ftr) then
                         if Property.IsWritable(ftr) then __Observable__() end
@@ -218,29 +216,29 @@ PLoop(function(_ENV)
                         property (name) {
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self, idx) return rawget(self, Class)[name][idx] end,
-                            set         = Property.IsWritable(ftr) and function(self, idx, value) rawget(self, Class)[name][idx] = value return OnDataChanged(self, name, idx, value) end,
+                            set         = Property.IsWritable(ftr) and function(self, idx, value) rawget(self, Class)[name][idx] = value return OnDataChange(self, name, idx, value) end,
                         }
                     else
                         if Property.IsWritable(ftr) then __Observable__() end
                         property (name) {
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self) return rawget(self, Class)[name] end,
-                            set         = Property.IsWritable(ftr) and function(self, value) rawget(self, Class)[name] = value return OnDataChanged(self, name, value) end,
+                            set         = Property.IsWritable(ftr) and function(self, value) rawget(self, Class)[name] = value return OnDataChange(self, name, value) end,
                         }
                     end
                 end
             end
 
-            -------------------------------------------------------------------
-            --                            method                             --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                          method                           --
+            ---------------------------------------------------------------
             for name, method in Class.GetMethods(targetclass, true) do
                 _ENV[name]              = function(self, ...) return checkRet(pcall(method, rawget(self, Class), ...)) end
             end
 
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        constructor                        --
+            ---------------------------------------------------------------
             -- bind the reactive and object
             __Arguments__{ targetclass }
             function __ctor(self, init)
@@ -253,9 +251,9 @@ PLoop(function(_ENV)
                 return init and rawget(init, Reactive)
             end
 
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        meta-method                        --
+            ---------------------------------------------------------------
             for name, method in Class.GetMetaMethods(targetclass, true) do
                 if name == "__gc" then
                     __dtor              = function(self) return rawget(self, Class):Dispose() end
@@ -316,9 +314,16 @@ PLoop(function(_ENV)
                 Reactive, ReactiveList, BehaviorSubject, RawTable, Observable
             }
 
-            -------------------------------------------------------------------
-            --                         static method                         --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                           event                           --
+            ---------------------------------------------------------------
+            --- Fired when the data changed
+            __EventChangeHandler__(handleDataChangeEvent)
+            event "OnDataChange"
+
+            ---------------------------------------------------------------
+            --                       static method                       --
+            ---------------------------------------------------------------
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
@@ -376,7 +381,7 @@ PLoop(function(_ENV)
             function From(self, key, create)
                 -- for the whole object
                 if not key and (isObjectType(self, Reactive) or isObjectType(self, ReactiveList)) then
-                    return Observable.From(self.OnDataChanged)
+                    return Observable.From(self.OnDataChange)
                 end
 
                 local reactives         = rawget(self, Reactive)
@@ -393,15 +398,15 @@ PLoop(function(_ENV)
                 if raw then
                     r                   = raw[key] ~= nil and reactive(raw[key], true) or create and BehaviorSubject() or nil
                     if r then
-                        reactives[key]  = r
+                        reactives[key]  = bindDataChange(self, key, r)
                     end
                     return r
                 end
             end
 
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        constructor                        --
+            ---------------------------------------------------------------
             __Arguments__{ RawTable/nil }
             function __ctor(self, init)
                 if init then
@@ -416,9 +421,9 @@ PLoop(function(_ENV)
                 return init and init[Reactive]
             end
 
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
+            ---------------------------------------------------------------
+            --                        meta-method                        --
+            ---------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
                 local reactives         = rawget(self, Reactive)
@@ -431,10 +436,7 @@ PLoop(function(_ENV)
                     if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
                         r               = reactive(value, true)
                         if r then
-                            if rawget(self, OnDataChanged) then
-                                bindDataChange(self, key, r)
-                            end
-                            reactives[key] = r
+                            reactives[key] = bindDataChange(self, key, r)
                             return getValue(r)
                         else
                             -- don't try wrap again
@@ -454,7 +456,7 @@ PLoop(function(_ENV)
                     if isObjectType(r, BehaviorSubject) then
                         self[RawTable][key] = value
                         r:OnNext(value)
-                        return OnDataChanged(self, key, value)
+                        return OnDataChange(self, key, value)
 
                     -- only accept raw table value
                     elseif type(value) == "table" and getmetatable(value) == nil then
@@ -474,7 +476,7 @@ PLoop(function(_ENV)
 
                 -- raw directly
                 self[RawTable][key]     = value
-                return OnDataChanged(self, key, value)
+                return OnDataChange(self, key, value)
             end
         end
     end)
@@ -520,8 +522,10 @@ PLoop(function(_ENV)
 
                     -- wrap list or array to reactive list
                     elseif isSubType(cls, IList) then
-                        if isSubType(cls, IIndexedList) then
+                        if isSubType(cls, List) then
                             return ReactiveList[List](value)
+                        elseif isSubType(cls, IIndexedList) then
+                            return ReactiveList[cls](value)
                         elseif not silent then
                             error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
                         end

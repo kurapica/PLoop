@@ -26,6 +26,7 @@ PLoop(function(_ENV)
             rawget                      = rawget,
             ipairs                      = ipairs,
             error                       = error,
+            pcall                       = pcall,
             yield                       = coroutine.yield,
             tinsert                     = table.insert,
             tremove                     = table.remove,
@@ -34,25 +35,36 @@ PLoop(function(_ENV)
             ReactiveList, Observable, Observer, Reactive, Watch, ICountable, Subject
         }
 
+        local function bindDataChange(self, key, r)
+            if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                r.OnDataChange          = r.OnDataChange + function(_, ...) return OnDataChange(self, key, ...) end
+            end
+            return r
+        end
+
+        local function handleDataChangeEvent(_, owner, name)
+            if not rawget(owner, OnDataChange) then
+                rawset(owner, OnDataChange, true)
+
+                local reactives         = owner[Reactive]
+                for k, r in pairs(reactives) do
+                    bindDataChange(owner, k, r)
+                end
+            end
+        end
+
         -------------------------------------------------------------------
         --                             event                             --
         -------------------------------------------------------------------
         --- Fired when an element added/removed
-        event "OnElementChanged"
+        event "OnElementChange"
 
         --- Fired when any element data changed
-        __EventChangeHandler__(function(delegate, owner, name)
+        __EventChangeHandler__(handleDataChangeEvent)
+        event "OnDataChange"
 
-        end)
-        event "OnDataChanged"
-
-        -- For all list
-        if targetclass == List then
-            export                      {
-                getmetatable            = getmetatable,
-                getTemplateParameters   = Class.GetTemplateParameters,
-                getErrorMessage         = Struct.GetErrorMessage,
-            }
+        -- For all list classes
+        if Class.IsSubType(targetclass, List) then
 
             ---------------------------------------------------------------
             --                         property                          --
@@ -65,21 +77,22 @@ PLoop(function(_ENV)
             ---------------------------------------------------------------
             --- Gets the iterator
             function GetIterator(self)
-                local list              = self[ReactiveList]
-                local count             = list.Count
                 return function (self,  index)
                     index               = (index or 0) + 1
-                    if index > count then return end
-                    return index, list[index]
+                    local value         = self[ReactiveList][index]
+                    if value ~= nil then
+                        return index, list[index]
+                    end
                 end, self, 0
             end
 
             --- Insert the item
             function Insert(self, ...)
                 local list              = self[ReactiveList]
+                local count             = list.Count
                 local ok, err           = pcall(list.Insert, list, ...)
                 if not ok then error(err, 2) end
-                return OnElementChanged(self)
+                return OnElementChange(self)
             end
 
             --- Whether an item existed in the list
@@ -92,7 +105,7 @@ PLoop(function(_ENV)
             function Remove(self, item)
                 local item              = self[ReactiveList]:Remove(item)
                 if item ~= nil then
-                    OnElementChanged(self)
+                    OnElementChange(self)
                     return item
                 end
             end
@@ -101,7 +114,7 @@ PLoop(function(_ENV)
             function RemoveByIndex(self, index)
                 local item              = self[ReactiveList]:RemoveByIndex(item)
                 if item ~= nil then
-                    OnElementChanged(self)
+                    OnElementChange(self)
                     return item
                 end
             end
@@ -112,7 +125,7 @@ PLoop(function(_ENV)
                 local count             = list.Count
                 if count > 0 then
                     list:Clear()
-                    return OnElementChanged(self)
+                    return OnElementChange(self)
                 end
             end
 
@@ -122,7 +135,7 @@ PLoop(function(_ENV)
                 local count             = list.Count
                 local ok, err           = pcall(list.Extend, list, ...)
                 if not ok then error(err, 2) end
-                return list.Count > count and OnElementChanged(self)
+                return list.Count > count and OnElementChange(self)
             end
 
             -------------------------------------------------------------------
@@ -131,6 +144,11 @@ PLoop(function(_ENV)
             __Arguments__{ List }
             function __ctor(self, list)
                 rawset(self, ReactiveList, list)
+                rawset(list, ReactiveList, self)
+            end
+
+            function __exist(_, list)
+                return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
             end
 
             -------------------------------------------------------------------
@@ -154,95 +172,17 @@ PLoop(function(_ENV)
                     end
                 end
                 list[index]             = value
-                OnElementChanged(self)
+                OnElementChange(self)
             end
 
             function __len(self)
                 return self.Count
             end
 
-        -- Other IIndexedList classes
-        elseif targetclass then
-            local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
-                                        and function(ok, ...) if not ok then error(..., 2) end return ... end
-                                        or  function(ok, ...) if not ok then error(..., 3) end return ... end
-            local getObject             = function(value) return value and type(value) == "table" and rawget(value, ReactiveList) or value end
+        -- For IIndexedList
+        elseif Class.IsSubType(targetclass, IIndexedList) then
 
-            -------------------------------------------------------------------
-            --                             event                             --
-            -------------------------------------------------------------------
-            for name, ev in Class.GetFeatures(targetclass, true) do
-                if Event.Validate(ev) then
-                    __EventChangeHandler__(function(delegate, owner, name)
-                        local obj       = rawget(owner, Class)
-                        if not rawget(delegate, Reactive) then
-                            rawset(delegate, Reactive, function(self, ...) return delegate(owner, ...) end)
-                        end
-                        if delegate:IsEmpty() then
-                            obj[name]   = obj[name] - delegate[Reactive]
-                        else
-                            obj[name]   = obj[name] + delegate[Reactive]
-                        end
-                    end)
-                    event(name)
-                end
-            end
-
-            -------------------------------------------------------------------
-            --                           property                            --
-            -------------------------------------------------------------------
-            for name, prop in Class.GetFeatures(targetclass, true) do
-                if Property.Validate(prop) then
-                    if Property.IsIndexer(prop) then
-                        __Indexer__(Property.GetIndexType(prop))
-                        property (name) {
-                            type        = Property.GetType(prop),
-                            get         = Property.IsReadable(prop) and function(self, idx) return rawget(self, Class)[name][idx] end,
-                            set         = Property.IsWritable(prop) and function(self, idx, value) rawget(self, Class)[name][idx] = value end,
-                        }
-                    else
-                        property (name) {
-                            type        = Property.GetType(prop),
-                            get         = Property.IsReadable(prop) and function(self) return rawget(self, Class)[name] end,
-                            set         = Property.IsWritable(prop) and function(self, value) rawget(self, Class)[name] = value end,
-                        }
-                    end
-                end
-            end
-
-            -------------------------------------------------------------------
-            --                            method                             --
-            -------------------------------------------------------------------
-            for name, method in Class.GetMethods(targetclass, true) do
-                _ENV[name]              = function(self, ...) return checkRet(pcall(method, rawget(self, Class), ...)) end
-            end
-
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
-            -- bind the reactive and object
-            __Arguments__{ targetclass }
-            function __ctor(self, init)
-                rawset(self, Class, init)
-                rawset(init, Reactive, self)
-            end
-
-            -- use the wrap for objects
-            function __exist(_, init)
-                return init and rawget(init, Reactive)
-            end
-
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
-            for name, method in Class.GetMetaMethods(targetclass, true) do
-                if name == "__gc" then
-                    __dtor              = function(self) return rawget(self, Class):Dispose() end
-                else
-                    _ENV[name]          = function(self, other, ...) return method(getObject(self), getObject(other), ...) end
-                end
-            end
-
+        -- For raw array
         else
             -------------------------------------------------------------------
             --                         static method                         --

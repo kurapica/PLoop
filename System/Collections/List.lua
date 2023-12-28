@@ -20,8 +20,8 @@ PLoop(function(_ENV)
     -- Helpers
     export { yield = coroutine.yield, unpack = _G.unpack or table.unpack }
 
-    __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
-    __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
+    __Iterator__() iterforstep          = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
+    __Iterator__() iterforlist          = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
 
     --- Represents the list collections that only elements has meanings
     interface "IList"                   { Iterable }
@@ -31,7 +31,7 @@ PLoop(function(_ENV)
     interface "ICountable"              { IList,
         --- Get the count of items in the object
         __Abstract__(),
-        Count = { set = false, get = function (self) return #self end },
+        Count                           = { set = false, get = function (self) return #self end },
     }
 
     --- Represents the indexed list collections that can use obj[idx] to access the its elements
@@ -43,7 +43,7 @@ PLoop(function(_ENV)
     __Arguments__{ AnyType }( Any )
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
-    class "List" (function              (_ENV, lsttype)
+    class "List"                        (function(_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
         export { type = type, ipairs = ipairs, tremove = table.remove }
@@ -928,7 +928,8 @@ PLoop(function(_ENV)
     end
 
     --- Whether the data is a list object
-    __Static__() function Serialization.IsArrayData(data)
+    __Static__()
+    function Serialization.IsArrayData(data)
         -- Check the data type
         local objField                  = data[Serialization.ObjectTypeField]
         if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
@@ -960,7 +961,8 @@ PLoop(function(_ENV)
     )
 
     --- Combine two index table without cache
-    __Static__() function Toolset.combinearray(tbl1, tbl2)
+    __Static__()
+    function Toolset.combinearray(tbl1, tbl2)
         local count                     = #tbl1
         return combineTableParams[count](tbl1, unpack(tbl2))
     end
