@@ -43,28 +43,33 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
+
+            -- Return value if r is behavior subject
             getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
+
+            -- Bind data change event handler
+            bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
+                if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                    r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
+                end
+                return r
+            end or nil,
+
+            -- Handle data change event
+            handleDataChangeEvent       = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(_, owner, name)
+                if not rawget(owner, OnDataChange) then
+                    -- mark the data change handler is already built
+                    rawset(owner, OnDataChange, true)
+
+                    local reactives     = owner[Reactive]
+                    for k, r in pairs(reactives) do
+                        bindDataChange(owner, k, r)
+                    end
+                end
+            end or nil,
 
             Class, Property, Event, Reactive, ReactiveList, BehaviorSubject
         }
-
-        local function bindDataChange(self, key, r)
-            if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
-                r.OnDataChange          = r.OnDataChange + function(_, ...) return OnDataChange(self, key, ...) end
-            end
-            return r
-        end
-
-        local function handleDataChangeEvent(_, owner, name)
-            if not rawget(owner, OnDataChange) then
-                rawset(owner, OnDataChange, true)
-
-                local reactives         = owner[Reactive]
-                for k, r in pairs(reactives) do
-                    bindDataChange(owner, k, r)
-                end
-            end
-        end
 
         -- For dictionary
         if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
@@ -177,10 +182,12 @@ PLoop(function(_ENV)
 
         -- As object proxy and make all property observable
         elseif targetclass then
-            local checkRet              = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
+            export                      {
+                checkRet                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
                                         and function(ok, ...) if not ok then error(..., 2) end return ... end
-                                        or  function(ok, ...) if not ok then error(..., 3) end return ... end
-            local getObject             = function(value) return type(value) == "table" and rawget(value, Class) or value end
+                                        or  function(ok, ...) if not ok then error(..., 3) end return ... end,
+                getObject               = function(value) return type(value) == "table" and rawget(value, Class) or value end,
+            }
 
             ---------------------------------------------------------------
             --                           event                           --
@@ -409,11 +416,9 @@ PLoop(function(_ENV)
             ---------------------------------------------------------------
             __Arguments__{ RawTable/nil }
             function __ctor(self, init)
-                if init then
-                    rawset(init, Reactive, self)
-                end
                 rawset(self, Reactive, {})
                 rawset(self, RawTable, init or {})
+                return init and rawset(init, Reactive, self)
             end
 
             __Arguments__{ RawTable/nil }
@@ -492,6 +497,7 @@ PLoop(function(_ENV)
         error                           = error,
         tostring                        = tostring,
         getmetatable                    = getmetatable,
+        getObjectClass                  = Class.GetObjectClass,
         isSubType                       = Class.IsSubType,
         isObjectType                    = Class.IsObjectType,
         isarray                         = Toolset.isarray,
@@ -509,7 +515,7 @@ PLoop(function(_ENV)
             -- Check the value
             local tval                  = type(value)
             if tval == "table" then
-                local cls               = Class.GetObjectClass(value)
+                local cls               = getObjectClass(value)
 
                 if cls then
                     -- already wrap
