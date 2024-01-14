@@ -223,7 +223,7 @@ PLoop(function(_ENV)
         --- Creates a new observable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
-            return Observable(function(g, subscription)
+            return Observable(function(observer, subscription)
                 local value             = init
                 if resultselector then
                     while value ~= nil and condition(value) do
