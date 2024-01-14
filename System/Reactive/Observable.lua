@@ -20,7 +20,7 @@ PLoop(function(_ENV)
     class "__Observable__"              (function(_ENV)
         extend "IInitAttribute"
 
-        export {
+        export                          {
             _PropertyMap                = Toolset.newtable(true),
 
             pairs                       = pairs,
@@ -193,7 +193,7 @@ PLoop(function(_ENV)
     -- Extend the Observable
     __Sealed__()
     class "Observable"                  (function(_ENV)
-        export {
+        export                          {
             Observer, Observable, IObservable, Subscription, Subject, List, __Observable__,
 
             tostring                    = tostring,
@@ -220,7 +220,7 @@ PLoop(function(_ENV)
         __Static__() __Arguments__{ Callable }
         function Create(subscribe)      return Observable(subscribe) end
 
-        --- Creates a new objservable with initstate, condition checker, iterate and a result selector
+        --- Creates a new observable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
             return Observable(function(g, subscription)
