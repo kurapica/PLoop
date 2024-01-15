@@ -22,7 +22,59 @@ PLoop(function(_ENV)
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observer, Dictionary, Subscription, next = next, type = type, pairs = pairs, isObjectType = Class.IsObjectType }
+        export {
+            next                        = next,
+            type                        = type,
+            pairs                       = pairs,
+            isObjectType                = Class.IsObjectType,
+
+            -- the core subscribe
+            subscribe                   = function (self, observer, subscription)
+                -- Check existed subscription
+                local obs               = self.__observers
+                if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
+
+                subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
+                subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
+                    -- Safe check
+                    if obs[observer] ~= subscription then return end
+
+                    -- un-subscribe
+                    obs[observer]       = nil
+
+                    -- Remove the register
+                    if self.__newsubject and self.__newsubject ~= true and self.__newsubject[observer] then
+                        self.__newsubject[observer] = nil
+
+                    -- With no observers, there is no need to keep subscription
+                    elseif not next(obs) and self.__subscription then
+                        self.__subscription:Dispose()
+                        self.__subscription = false
+                    end
+                end
+
+                -- Subscribe the subject
+                if self.__newsubject then
+                    if self.__newsubject == true then
+                        self.__newsubject = {}
+                    end
+
+                    self.__newsubject[observer] = subscription
+                else
+                    obs[observer]       = subscription
+                end
+
+                -- Start the subscription if needed
+                if not self.__subscription and self.__observable then
+                    self.__subscription = Subscription()
+                    self.__observable:Subscribe(self, self.__subscription)
+                end
+
+                return subscription, observer
+            end,
+
+            Observer, Dictionary, Subscription
+        }
 
         field {
             __newsubject                = false, -- The new subject cache
@@ -34,50 +86,6 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer, subscription)
-            -- Check existed subscription
-            local obs                   = self.__observers
-            if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
-
-            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
-                -- Safe check
-                if obs[observer] ~= subscription then return end
-
-                -- un-subscribe
-                obs[observer]           = nil
-
-                -- Remove the register
-                if self.__newsubject and self.__newsubject ~= true and self.__newsubject[observer] then
-                    self.__newsubject[observer] = nil
-
-                -- With no observers, there is no need to keep subscription
-                elseif not next(obs) and self.__subscription then
-                    self.__subscription:Dispose()
-                    self.__subscription = false
-                end
-            end
-
-            -- Subscribe the subject
-            if self.__newsubject then
-                if self.__newsubject   == true then
-                    self.__newsubject   = {}
-                end
-
-                self.__newsubject[observer] = subscription
-            else
-                obs[observer]           = subscription
-            end
-
-            -- Start the subscription if needed
-            if not self.__subscription and self.__observable then
-                self.__subscription     = Subscription()
-                self.__observable:Subscribe(self, self.__subscription)
-            end
-
-            return subscription, observer
-        end
-
         --- Notifies the provider that an observer is to receive notifications.
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe

@@ -32,31 +32,33 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             isObjectType                = Class.IsObjectType,
 
+            -- bind data change
+            bindDataChange              = function (self, k, r)
+                if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                    r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
+                end
+                return r
+            end,
+
+            -- handle data change event handler
+            handleDataChangeEvent       = function (_, owner, name)
+                if not rawget(owner, OnDataChange) then
+                    rawset(owner, OnDataChange, true)
+
+                    local reactives     = owner[Reactive]
+                    for k, r in pairs(reactives) do
+                        bindDataChange(owner, k, r)
+                    end
+                end
+            end,
+
             ReactiveList, Observable, Observer, Reactive, Watch, ICountable, Subject
         }
-
-        local function bindDataChange(self, key, r)
-            if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
-                r.OnDataChange          = r.OnDataChange + function(_, ...) return OnDataChange(self, key, ...) end
-            end
-            return r
-        end
-
-        local function handleDataChangeEvent(_, owner, name)
-            if not rawget(owner, OnDataChange) then
-                rawset(owner, OnDataChange, true)
-
-                local reactives         = owner[Reactive]
-                for k, r in pairs(reactives) do
-                    bindDataChange(owner, k, r)
-                end
-            end
-        end
 
         -------------------------------------------------------------------
         --                             event                             --
         -------------------------------------------------------------------
-        --- Fired when an element added/removed
+        --- Fired when an element added/removed/replaced
         event "OnElementChange"
 
         --- Fired when any element data changed
@@ -80,9 +82,7 @@ PLoop(function(_ENV)
                 return function (self,  index)
                     index               = (index or 0) + 1
                     local value         = self[ReactiveList][index]
-                    if value ~= nil then
-                        return index, list[index]
-                    end
+                    if value ~= nil then return index, list[index] end
                 end, self, 0
             end
 
@@ -176,7 +176,7 @@ PLoop(function(_ENV)
             end
 
             function __len(self)
-                return self.Count
+                return self[ReactiveList].Count
             end
 
         -- For IIndexedList
@@ -203,12 +203,7 @@ PLoop(function(_ENV)
             --                           property                            --
             -------------------------------------------------------------------
             --- The item count
-            property "Count"                {
-                get                         = function(self)
-                    local list              = self[ReactiveList]
-                    return isObjectType(list, ICountable) and list.Count or #list
-                end
-            }
+            property "Count"                { get = function(self) return #self[ReactiveList] end }
 
             --- The list item change subject
             property "Subject"              { set = false, default = function() return Subject() end }

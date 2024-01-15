@@ -44,10 +44,10 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
 
-            -- Return value if r is behavior subject
+            -- return value if r is behavior subject
             getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
-            -- Bind data change event handler
+            -- bind data change event handler
             bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
                 if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
@@ -55,7 +55,7 @@ PLoop(function(_ENV)
                 return r
             end or nil,
 
-            -- Handle data change event
+            -- handle data change event
             handleDataChangeEvent       = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(_, owner, name)
                 if not rawget(owner, OnDataChange) then
                     -- mark the data change handler is already built
@@ -335,20 +335,27 @@ PLoop(function(_ENV)
             __Static__()
             function ToRaw(self)
                 -- for values
-                if type(self)~= "table" then return self end
+                if type(self) ~= "table" then return self end
 
                 -- for raw table
                 local cls               = getmetatable(self)
                 if cls == nil then return self end
 
-                -- for other types
-                if not isSubType(cls, Reactive)         then
-                    if isSubType(cls, BehaviorSubject)  then return self.Value end
-                    if isSubType(cls, ReactiveList)     then return ReactiveList.ToRaw(self) end
-                    return self
+                -- behavior subject
+                if isSubType(cls, BehaviorSubject) then
+                    return self.Value
+
+                -- reactive list
+                elseif isSubType(cls, ReactiveList) then
+                    return ReactiveList.ToRaw(self)
+
+                -- reactive
+                elseif isSubType(cls, Reactive) then
+                    return rawget(self, Class) or rawget(self, RawTable)
                 end
 
-                return rawget(self, Class) or rawget(self, RawTable)
+                -- other
+                return self
             end
 
             --- Sets a raw table value to the reactive object
@@ -357,16 +364,16 @@ PLoop(function(_ENV)
                 local cls               = getmetatable(self)
                 if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1) end
 
-                -- Behavior Subject
+                -- behavior subject
                 if isSubType(cls, BehaviorSubject) then
                     return self:OnNext(value)
 
-                -- Reactive List
+                -- reactive list
                 elseif isSubType(cls, ReactiveList) then
                     ReactiveList.SetRaw(self, value, (stack or 1) + 1)
                     return
 
-                -- Reactive
+                -- reactive
                 elseif isSubType(cls, Reactive) then
                     if value ~= nil and type(value) ~= "table" then
                         error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value is not valid", (stack or 1) + 1)
@@ -374,12 +381,11 @@ PLoop(function(_ENV)
 
                     -- as object proxy
                     local ok, err       = pcall(rawget(self, Class) and not rawget(self, Reactive) and updateByClass or updateTable, self, value)
-                    if not ok then
-                        error("Usage: Reactive.SetRaw(reactive, value) - " .. er, (stack or 1) + 1)
-                    end
+                    if not ok then error("Usage: Reactive.SetRaw(reactive, value) - " .. err, (stack or 1) + 1) end
                     return
                 end
 
+                -- other
                 error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1)
             end
 

@@ -243,7 +243,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns an Observable that just provide one value
-        local _JustAutoGen              = setmetatable({
+        _JustAutoGen                    = setmetatable({
             [0]                         = function()
                 return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end)
             end
@@ -292,7 +292,7 @@ PLoop(function(_ENV)
         end
 
         --- Creates the Observable only when the observer subscribes
-        local _DeferAutoGen             = setmetatable({
+        _DeferAutoGen                   = setmetatable({
             [0]                         = function(ctor)
                 return Observable(function(observer, subscription)
                     local obs           = ctor()
@@ -433,7 +433,7 @@ PLoop(function(_ENV)
         end
 
         --- Creates an Observable that emits a particular item multiple times
-        local _RepeatGen                = setmetatable({}, {
+        _RepeatGen                      = setmetatable({}, {
             __index                     = function(self, count)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
@@ -460,7 +460,7 @@ PLoop(function(_ENV)
         end
 
         --- Creates an Observable that emits the return value of a function-like directive
-        local _StartGen                 = setmetatable({
+        _StartGen                       = setmetatable({
             [0]                         = function(func)
                 return Observable(function(observer)
                     RunAsync(function()

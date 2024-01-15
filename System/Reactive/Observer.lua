@@ -15,6 +15,7 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
+    --- The default subscription can be created based on root subscription
     __Sealed__()
     class "Subscription"                (function(_ENV)
         extend "System.ISubscription"
@@ -39,12 +40,13 @@ PLoop(function(_ENV)
         function __dtor(self)
             local root                  = rawget(self, "__root")
             local handler               = rawget(self, "__handler")
-            if root and handler then
+            if root and handler and not root.IsUnsubscribed then
                 root.OnUnsubscribe      = root.OnUnsubscribe - handler
             end
         end
     end)
 
+    --- The default observer
     __Sealed__()
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
@@ -53,6 +55,8 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             rawget                      = rawget,
             fakefunc                    = Toolset.fakefunc,
+
+            Subscription
         }
 
         -----------------------------------------------------------------------
@@ -102,25 +106,28 @@ PLoop(function(_ENV)
         end
     end)
 
-    -- Declare first
+    -- The observable implementation
     class "Observable"                  (function(_ENV)
         extend "System.IObservable"
 
         export                          {
             rawset                      = rawset,
             isObjectType                = Class.IsObjectType,
+
+            -- the core subscribe
+            subscribe                   = function (self, observer, subscription)
+                subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
+                self.__subscribe(observer, subscription)
+                return subscription, observer
+            end,
+
             Observer, Subscription
         }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer, subscription)
-            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-            self.__subscribe(observer, subscription)
-            return subscription, observer
-        end
-
+        --- Subscribe the observer with subscription
         __Arguments__{ IObserver, ISubscription/nil }
         Subscribe                       = subscribe
 

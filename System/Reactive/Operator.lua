@@ -20,13 +20,42 @@ PLoop(function(_ENV)
     class "Operator"                    (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observable, Observer, Operator, Subscription, isObjectType = Class.IsObjectType }
+        export                          {
+            isObjectType                = Class.IsObjectType,
+            onNextDefault               = function(observer,...)return observer:OnNext(...)  end,
+            onErrorDefault              = function(observer, e) return observer:OnError(e)   end,
+            onCompletedDefault          = function(observer)    return observer:OnCompleted()end,
 
-        local function onNextDefault(observer, ...) return observer:OnNext(...) end
-        local function onErrorDefault(observer, e)  return observer:OnError(e) end
-        local function onCompletedDefault(observer) return observer:OnCompleted() end
+            -- the core subscribe
+            subscribe                   = function (self, observer, subscription)
+                subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
+                subscription            = self:HandleSubscription(subscription,  observer) or  subscription
 
-        field {
+                -- The operator can't be re-used
+                if self.__observer then
+                    if self.__observer == observer then
+                        return subscription, observer
+                    else
+                        throw "The operator can't be subscribed by multi observers"
+                    end
+                end
+
+                subscription.OnUnsubscribe = subscription.OnUnsubscribe + function()
+                    if self.__observer == observer then
+                        self.__observer = false
+                    end
+                end
+                self.__observer         = observer
+
+                -- Keep using the same subscription
+                self.__observable:Subscribe(self, subscription)
+                return subscription, observer
+            end,
+
+            Observable, Observer, Operator, Subscription
+        }
+
+        field                           {
             __observable                = false, -- The data source
             __observer                  = false, -- The observer
             __onNext                    = onNextDefault,
@@ -35,37 +64,15 @@ PLoop(function(_ENV)
         }
 
         -----------------------------------------------------------------------
-        --                              method                               --
+        --                         abstract method                           --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer, subscription)
-            subscription                = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-            subscription                = self:HandleSubscription(subscription,  observer) or  subscription
-
-            -- The operator can't be re-used
-            if self.__observer then
-                if self.__observer == observer then
-                    return subscription, observer
-                else
-                    throw "The operator can't be subscribed by multi observers"
-                end
-            end
-
-            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
-                if self.__observer == observer then
-                    self.__observer     = false
-                end
-            end
-            self.__observer             = observer
-
-            -- Keep using the same subscription
-            self.__observable:Subscribe(self, subscription)
-            return subscription, observer
-        end
-
         --- Used to handle the subscription, can be used to replace the original one
         __Abstract__()
         function HandleSubscription(self, subscription, observer) return subscription end
 
+        -----------------------------------------------------------------------
+        --                              method                               --
+        -----------------------------------------------------------------------
         --- Notifies the provider that an observer is to receive notifications.
         __Arguments__{ IObserver, ISubscription/nil }:Throwable()
         Subscribe                       = subscribe
@@ -77,13 +84,13 @@ PLoop(function(_ENV)
         end
 
         --- Provides the observer with new data
-        function OnNext(self, ...) return self.__observer and self.__onNext(self.__observer, ...) end
+        function OnNext(self, ...)      return self.__observer and self.__onNext(self.__observer, ...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)return self.__observer and self.__onError(self.__observer, ...) end
+        function OnError(self, ...)     return self.__observer and self.__onError(self.__observer, ...) end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self) return self.__observer and self.__onComp(self.__observer) end
+        function OnCompleted(self)      return self.__observer and self.__onComp(self.__observer) end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -98,8 +105,8 @@ PLoop(function(_ENV)
     end)
 
     -- Method Extension
-    interface (IObservable) (function(_ENV)
-        export {
+    interface (IObservable)             (function(_ENV)
+        export                          {
             max                         = math.max,
             min                         = math.min,
             huge                        = math.huge,
@@ -124,25 +131,20 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             resume                      = coroutine.resume,
             status                      = coroutine.status,
+            safeNext                    = function (observer, flag, item, ...)
+                if flag and item ~= nil then
+                    return observer:OnNext(item, ...)
+                else
+                    return observer:OnError(Exception(item or "No value returned"))
+                end
+            end,
 
             Info                        = Logger.Default[Logger.LogLevel.Info],
-
-            RunWithLock                 = ILockManager.RunWithLock,
-
-            LOCK_KEY                    = "PLOOP_RX_%s",
 
             Operator, IObservable, Observer, Observable, ISubscription, Subscription,
             Threading, Guid, Exception, Dictionary, Queue, List,
             PublishSubject, ReplaySubject, Subject
         }
-
-        local function safeNext(observer, flag, item, ...)
-            if flag and item ~= nil then
-                return observer:OnNext(item, ...)
-            else
-                return observer:OnError(Exception(item or "No value returned"))
-            end
-        end
 
         -----------------------------------------------------------------------
         --                               Tool                                --
@@ -553,7 +555,7 @@ PLoop(function(_ENV)
         end
 
         --- Take all values that match the prefix elements
-        local _MatchPrefixGen           = setmetatable({}, {
+        _MatchPrefixGen                 = setmetatable({}, {
             __index                     = function(self, count)
                 local func              = loadsnippet([[
                     return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
@@ -567,8 +569,7 @@ PLoop(function(_ENV)
                 rawset(self, count, func)
                 return func
             end
-            }
-        )
+        })
         __Observable__()
         __Arguments__{ System.Any * 1 }
         function MatchPrefix(self, ...)
@@ -636,7 +637,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns a single value sequence indicate whether the target observable sequence contains a specific value
-        local _ContainsGen              = setmetatable({}, {
+        _ContainsGen                    = setmetatable({}, {
             __index                     = function(self, count)
                 local func              = loadsnippet([[
                     return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
@@ -648,8 +649,7 @@ PLoop(function(_ENV)
                 rawset(self, count, func)
                 return func
             end
-            }
-        )
+        })
         __Observable__()
         __Arguments__{ System.Any * 1 }
         function Contains(self, ...)
@@ -657,7 +657,7 @@ PLoop(function(_ENV)
         end
 
         --- Returns a sequence with single default value if the target observable sequence doesn't contains any item
-        local _DefaultGen               = setmetatable({}, {
+        _DefaultGen                     = setmetatable({}, {
             __index                     = function(self, count)
                 local func              = loadsnippet([[
                     return function(self, ]] .. List(count):Map("i=>'arg' .. i"):Join(",") .. [[)
@@ -676,8 +676,7 @@ PLoop(function(_ENV)
                 rawset(self, count, func)
                 return func
             end
-            }
-        )
+        })
         __Observable__()
         __Arguments__{ System.Any * 1 }
         function Default(self, ...)
@@ -1311,7 +1310,7 @@ PLoop(function(_ENV)
         end
 
         --- Combine the parameters
-        local combineRightQueueParams   = setmetatable(
+        combineRightQueueParams         = setmetatable(
             {
                 [0]                     = function(queue, count) return queue:Dequeue(count) end
             },
@@ -1328,7 +1327,7 @@ PLoop(function(_ENV)
                 end
             }
         )
-        local combineLeftQueueParams    = setmetatable(
+        combineLeftQueueParams          = setmetatable(
             {
                 [0]                     = function(queue, count) return queue:Dequeue(count) end
             },
@@ -1542,8 +1541,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                               Plan                                --
         -----------------------------------------------------------------------
-        local Pattern                   = class {}
-        local Plan                      = class {}
+        Pattern                         = class "Pattern" {}
+        Plan                            = class "Plan" {}
 
         __Arguments__{ IObservable * 1 }
         function And(self, ...)
