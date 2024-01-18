@@ -271,8 +271,12 @@ PLoop(function(_ENV)
 
         -- As container for reactive fields, common usages
         else
+            -- Provide the dictionary features
+            extend "IKeyValueDict"
+
             export                      {
                 pcall                   = pcall,
+                pairs                   = pairs,
                 getmetatable            = getmetatable,
                 isSubType               = Class.IsSubType,
                 getFeatures             = Class.GetFeatures,
@@ -414,6 +418,30 @@ PLoop(function(_ENV)
                         reactives[key]  = bindDataChange(self, key, r)
                     end
                     return r
+                end
+            end
+
+            ---------------------------------------------------------------
+            --                          method                           --
+            ---------------------------------------------------------------
+            --- Gets the iterator
+            __Iterator__()
+            function GetIterator(self)
+                local yield             = yield
+                local raw               = self[RawTable]
+
+                -- raw first
+                for k in pairs(raw) do
+                    if type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+
+                -- rest reactives
+                for k, v in pairs(self[Reactive]) do
+                    if raw[k] == nil then
+                        yield(k, getValue(v))
+                    end
                 end
             end
 

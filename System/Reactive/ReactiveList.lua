@@ -30,7 +30,11 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             tinsert                     = table.insert,
             tremove                     = table.remove,
+            newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
+
+            -- return value if r is behavior subject
+            getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
             -- bind data change
             bindDataChange              = function (self, k, r)
@@ -52,13 +56,13 @@ PLoop(function(_ENV)
                 end
             end,
 
-            ReactiveList, Observable, Observer, Reactive, Watch, ICountable, Subject
+            ReactiveList, Observable, Observer, Reactive, Watch, Subject
         }
 
         -------------------------------------------------------------------
         --                             event                             --
         -------------------------------------------------------------------
-        --- Fired when an element added/removed/replaced
+        --- Fired when an element added/removed
         event "OnElementChange"
 
         --- Fired when any element data changed
@@ -82,7 +86,7 @@ PLoop(function(_ENV)
                 return function (self,  index)
                     index               = (index or 0) + 1
                     local value         = self[ReactiveList][index]
-                    if value ~= nil then return index, list[index] end
+                    if value ~= nil then return index, value end
                 end, self, 0
             end
 
@@ -96,10 +100,10 @@ PLoop(function(_ENV)
             end
 
             --- Whether an item existed in the list
-            function Contains(self, item)return self[ReactiveList]:Contains(item) end
+            function Contains(self,item)return self[ReactiveList]:Contains(item) end
 
             --- Get the index of the item if it existed in the list
-            function IndexOf(self, item) return self[ReactiveList]:IndexOf(item)  end
+            function IndexOf(self, item)return self[ReactiveList]:IndexOf(item)  end
 
             --- Remove an item
             function Remove(self, item)
@@ -144,6 +148,7 @@ PLoop(function(_ENV)
             __Arguments__{ List }
             function __ctor(self, list)
                 rawset(self, ReactiveList, list)
+                rawset(self, Reactive, newtable(true, true)) -- reactive map
                 rawset(list, ReactiveList, self)
             end
 
