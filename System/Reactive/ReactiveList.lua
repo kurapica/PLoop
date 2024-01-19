@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/10/25                                               --
--- Update Date  :   2023/10/25                                               --
+-- Update Date  :   2024/01/19                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -22,6 +22,9 @@ PLoop(function(_ENV)
         extend "IIndexedList"
 
         export                          {
+            ARRARY_INDEX                = "__rlarrindex",
+
+            type                        = type,
             rawset                      = rawset,
             rawget                      = rawget,
             ipairs                      = ipairs,
@@ -32,6 +35,7 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
+            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
             -- return value if r is behavior subject
             getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
@@ -39,7 +43,7 @@ PLoop(function(_ENV)
             -- bind data change
             bindDataChange              = function (self, k, r)
                 if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
-                    r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
+                    r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, r[ARRARY_INDEX], ...) end
                 end
                 return r
             end,
@@ -56,6 +60,29 @@ PLoop(function(_ENV)
                 end
             end,
 
+            -- gets the index value or wrapper
+            getIndexValue               = function(self, index)
+                local raw               = self[ReactiveList]
+                local value             = raw[index]
+                if value == nil then    return end
+
+                local reactives         = self[Reactive]
+                local r                 = reactives[value]
+                if r then return getValue(r) end
+
+                if r == nil and type(value) == "table" then
+                    r                   = reactive(value, true)
+                    if r then
+                        r[ARRARY_INDEX] = index -- init the array index
+                        reactives[value]= bindDataChange(self, r)
+                        return getValue(r)
+                    else
+                        reactives[value]= false
+                    end
+                end
+                return value
+            end,
+
             ReactiveList, Observable, Observer, Reactive, Watch, Subject
         }
 
@@ -69,7 +96,7 @@ PLoop(function(_ENV)
         __EventChangeHandler__(handleDataChangeEvent)
         event "OnDataChange"
 
-        -- For all list classes
+        -- For all classes based on List
         if Class.IsSubType(targetclass, List) then
 
             ---------------------------------------------------------------
@@ -149,10 +176,16 @@ PLoop(function(_ENV)
             function __ctor(self, list)
                 rawset(self, ReactiveList, list)
                 rawset(self, Reactive, newtable(true, true)) -- reactive map
-                rawset(list, ReactiveList, self)
+
+                if rawMap then
+                    rawMap[list]        = self
+                else
+                    rawset(list, ReactiveList, self)
+                end
             end
 
             function __exist(_, list)
+                if rawMap then return rawMap[list] end
                 return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
             end
 
@@ -332,6 +365,17 @@ PLoop(function(_ENV)
             __Arguments__{ RawTable }
             function __ctor(self, list)
                 rawset(self, ReactiveList, list)
+
+                if rawMap then
+                    rawMap[init]            = self
+                else
+                    rawset(init, ReactiveList, self)
+                end
+            end
+
+            function __exist(_, list)
+                if rawMap then return rawMap[init] end
+                return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
             end
 
             -------------------------------------------------------------------

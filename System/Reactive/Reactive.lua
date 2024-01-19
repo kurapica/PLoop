@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2023/12/18                                               --
+-- Update Date  :   2024/01/19                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -76,6 +76,7 @@ PLoop(function(_ENV)
             extend "IKeyValueDict"
 
             export                      {
+                objMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
                 updateDict              = Dictionary.Update,
             }
 
@@ -93,8 +94,20 @@ PLoop(function(_ENV)
             __Iterator__()
             function GetIterator(self)
                 local yield             = yield
-                for k, v in self[Class]:GetIterator() do
-                    yield(k, v)
+                local raw               = self[Class]
+
+                -- for raw
+                for k in raw:GetIterator() do
+                    if type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+
+                -- for reactive with nil value
+                for k, v in pairs(self[Reactive]) do
+                    if raw[k] == nil then
+                        yield(k, getValue(v))
+                    end
                 end
             end
 
@@ -112,13 +125,20 @@ PLoop(function(_ENV)
             --- bind the reactive and object
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
-                rawset(init, Reactive, self)
                 rawset(self, Reactive, {})  -- reactives
                 rawset(self, Class, init)
+
+                -- try avoid to set value in raw dict object is possible
+                if objMap then
+                    objMap[init]        = self
+                else
+                    rawset(init, Reactive, self)
+                end
             end
 
             --- use the wrap for objects
             function __exist(_, init)
+                if objMap then return objMap[init] end
                 return isObjectType(init, Reactive) and init or rawget(init, Reactive)
             end
 
@@ -129,23 +149,21 @@ PLoop(function(_ENV)
             function __index(self, key)
                 local reactives         = rawget(self, Reactive)
                 local r                 = reactives[key]
-                if r then
-                    return getValue(r)
-                else
-                    local value         = rawget(self, Class)[key]
-                    -- wrap if the value is table
-                    if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
-                        r               = reactive(value, true)
-                        if r then
-                            reactives[key] = bindDataChange(self, key, r)
-                            return getValue(r)
-                        else
-                            -- don't try wrap again
-                            reactives[key] = false
-                        end
+                if r then return getValue(r) end
+
+                -- wrap if the value is table
+                local value             = rawget(self, Class)[key]
+                if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
+                    r                   = reactive(value, true)
+                    if r then
+                        reactives[key]  = bindDataChange(self, key, r)
+                        return getValue(r)
+                    else
+                        -- don't try wrap again
+                        reactives[key]  = false
                     end
-                    return value
                 end
+                return value
             end
 
             --- Send the new value
@@ -283,6 +301,7 @@ PLoop(function(_ENV)
                 isProperty              = Property.Validate,
                 isWritable              = Property.IsWritable,
                 isIndexer               = Property.IsIndexer,
+                rawMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
                 updateByClass           = function(self, value)
                     for name, prop in getFeatures(getmetatable(self), true) do
@@ -298,20 +317,9 @@ PLoop(function(_ENV)
 
                     -- update
                     local temp          = {}
-                    for name in (raw.GetIterator or pairs)(raw) do
-                        temp[name]      = true
-                        self[name]      = value[name]
-                    end
-
-                    -- clear
-                    local reactives     = rawget(self, Reactive)
-                    if reactives then
-                        for name in pairs(reactives) do
-                            if not temp[name] then
-                                temp[name]  = true
-                                self[name]  = nil
-                            end
-                        end
+                    for k in self:GetIterator() do
+                        temp[k]         = true
+                        self[k]         = value[k]
                     end
 
                     -- add
@@ -401,10 +409,16 @@ PLoop(function(_ENV)
                     return Observable.From(self.OnDataChange)
                 end
 
+                -- for index value from the reactive list
+                if isObjectType(self, ReactiveList) then
+                    return ReactiveList.From(self, key, create)
+                end
+
+                -- for reactive object
                 local reactives         = rawget(self, Reactive)
 
                 -- for class
-                if not reactives then   return Observable.From(self, key) end
+                if not reactives then return Observable.From(self, key) end
 
                 -- already wrap
                 local r                 = reactives[key]
@@ -412,7 +426,7 @@ PLoop(function(_ENV)
 
                 -- for raw table or dictionary
                 local raw               = rawget(self, RawTable) or rawget(self, Class)
-                if raw then
+                if raw and type(key) == "string" and key ~= "" then
                     r                   = raw[key] ~= nil and reactive(raw[key], true) or create and BehaviorSubject() or nil
                     if r then
                         reactives[key]  = bindDataChange(self, key, r)
@@ -452,12 +466,20 @@ PLoop(function(_ENV)
             function __ctor(self, init)
                 rawset(self, Reactive, {})
                 rawset(self, RawTable, init or {})
-                return init and rawset(init, Reactive, self)
+
+                if init then
+                    if rawMap then
+                        rawMap[init]    = self
+                    else
+                        rawset(init, Reactive, self)
+                    end
+                end
             end
 
             __Arguments__{ RawTable/nil }
             function __exist(_, init)
-                return init and init[Reactive]
+                if not init then return end
+                return rawMap and rawMap[init] or init[Reactive]
             end
 
             ---------------------------------------------------------------
@@ -467,23 +489,21 @@ PLoop(function(_ENV)
             function __index(self, key)
                 local reactives         = rawget(self, Reactive)
                 local r                 = reactives[key]
-                if r then
-                    return getValue(r)
-                else
-                    local value         = rawget(self, RawTable)[key]
-                    -- wrap if the value is table
-                    if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
-                        r               = reactive(value, true)
-                        if r then
-                            reactives[key] = bindDataChange(self, key, r)
-                            return getValue(r)
-                        else
-                            -- don't try wrap again
-                            reactives[key] = false
-                        end
+                if r then return getValue(r) end
+
+                -- wrap if the value is table
+                local value             = rawget(self, RawTable)[key]
+                if r == nil and type(value) == "table" and type(key) == "string" and key ~= "" then
+                    r                   = reactive(value, true)
+                    if r then
+                        reactives[key]  = bindDataChange(self, key, r)
+                        return getValue(r)
+                    else
+                        -- don't try wrap again
+                        reactives[key]  = false
                     end
-                    return value
                 end
+                return value
             end
 
             --- Send the new value
