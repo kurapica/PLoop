@@ -22,8 +22,6 @@ PLoop(function(_ENV)
         extend "IIndexedList"
 
         export                          {
-            ARRARY_INDEX                = "__rlarrindex",
-
             type                        = type,
             rawset                      = rawset,
             rawget                      = rawget,
@@ -37,13 +35,20 @@ PLoop(function(_ENV)
             isObjectType                = Class.IsObjectType,
             rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
-            -- return value if r is behavior subject
-            getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
-
             -- bind data change
-            bindDataChange              = function (self, k, r)
-                if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
-                    r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, r[ARRARY_INDEX], ...) end
+            bindDataChange              = function (self, r)
+                if r and rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                    r.OnDataChange      = r.OnDataChange + function(_, ...)
+                        -- index the data @todo add cache to boost
+                        local raw       = self[ReactiveList]
+                        local reactives = self[Reactive]
+
+                        for i = 1, self.Count do
+                            if reactives[raw[i]] == r then
+                                return OnDataChange(self, i, ...)
+                            end
+                        end
+                    end
                 end
                 return r
             end,
@@ -55,33 +60,12 @@ PLoop(function(_ENV)
 
                     local reactives     = owner[Reactive]
                     for k, r in pairs(reactives) do
-                        bindDataChange(owner, k, r)
+                        bindDataChange(owner, r)
                     end
                 end
             end,
 
             -- gets the index value or wrapper
-            getIndexValue               = function(self, index)
-                local raw               = self[ReactiveList]
-                local value             = raw[index]
-                if value == nil then    return end
-
-                local reactives         = self[Reactive]
-                local r                 = reactives[value]
-                if r then return getValue(r) end
-
-                if r == nil and type(value) == "table" then
-                    r                   = reactive(value, true)
-                    if r then
-                        r[ARRARY_INDEX] = index -- init the array index
-                        reactives[value]= bindDataChange(self, r)
-                        return getValue(r)
-                    else
-                        reactives[value]= false
-                    end
-                end
-                return value
-            end,
 
             ReactiveList, Observable, Observer, Reactive, Watch, Subject
         }
@@ -89,13 +73,93 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                             event                             --
         -------------------------------------------------------------------
-        --- Fired when an element added/removed
-        event "OnElementChange"
-
         --- Fired when any element data changed
         __EventChangeHandler__(handleDataChangeEvent)
         event "OnDataChange"
 
+        -------------------------------------------------------------------
+        --                          constructor                          --
+        -------------------------------------------------------------------
+        if targetclass then __Arguments__{ Class.IsSubType(targetclass, List) and List or targetclass or RawTable } end
+        function __ctor(self, list)
+            rawset(self, ReactiveList, list)
+            rawset(self, Reactive, newtable(true, true)) -- reactive map
+
+            if rawMap then
+                rawMap[list]            = self
+            else
+                rawset(list, ReactiveList, self)
+            end
+        end
+
+        function __exist(_, list)
+            if rawMap then return rawMap[list] end
+            return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
+        end
+
+
+        -------------------------------------------------------------------
+        --                          meta-method                          --
+        -------------------------------------------------------------------
+        function __index(self, index)
+            local raw                   = self[ReactiveList]
+            local value                 = raw[index]
+            if value == nil then return end
+
+            -- Only wrap the table values, the index value changes can be pushed by the list itself
+            if type(value) == "table" then
+                local reactives         = self[Reactive]
+                local r                 = reactives[value]
+                if r then return r end
+
+                if r == nil then
+                    r                   = reactive(value, true)
+                    if r then
+                        reactives[value]= bindDataChange(self, r)
+                        return r
+                    else
+                        reactives[value]= false
+                    end
+                end
+            end
+            return value
+        end
+
+        function __newindex(self, index, value)
+            local raw                   = self[ReactiveList]
+            local proxy
+            if rawget(owner, OnDataChange) then
+                proxy                   = self[index]
+            else
+                local oldval            = raw[index]
+                if oldval == value then return end
+
+                proxy                   = oldval and self[Reactive][oldval]
+            end
+
+            -- check wrapper
+            if proxy and type(proxy) == "table" then
+                if isObjectType(proxy, ReactiveList) then
+                    ReactiveList.SetRaw(proxy, value, 2)
+                    return
+                elseif isObjectType(proxy, Reactive) then
+                    Reactive.SetRaw(proxy, value, 2)
+                    return
+                end
+            end
+
+            -- set directly
+            raw[index]                  = value
+            return OnDataChange(self, index, value)
+        end
+
+        function __len(self)
+            return self.Count
+        end
+
+        -------------------------------------------------------------------
+        --                           template                            --
+        -------------------------------------------------------------------
         -- For all classes based on List
         if Class.IsSubType(targetclass, List) then
 
@@ -169,72 +233,50 @@ PLoop(function(_ENV)
                 return list.Count > count and OnElementChange(self)
             end
 
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
-            __Arguments__{ List }
-            function __ctor(self, list)
-                rawset(self, ReactiveList, list)
-                rawset(self, Reactive, newtable(true, true)) -- reactive map
-
-                if rawMap then
-                    rawMap[list]        = self
-                else
-                    rawset(list, ReactiveList, self)
-                end
-            end
-
-            function __exist(_, list)
-                if rawMap then return rawMap[list] end
-                return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
-            end
-
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
-            function __index(self, index)
-                return rawget(self, ReactiveList)[index]
-            end
-
-            function __newindex(self, index, value)
-                if type(index) ~= "number" then error("Usage: reactiveList[index] = value - the index must be natural integer", 2) end
-                local list              = rawget(self, ReactiveList)
-                if list[index] == value then return end
-
-                -- Validate with list element type
-                if value ~= nil then
-                    local eleType       = getTemplateParameters(getmetatable(list))
-                    if eleType then
-                        local ret, msg  = getmetatable(eleType).ValidateValue(eleType, value, true)
-                        if msg then error(getErrorMessage(msg, "value"), 2) end
-                    end
-                end
-                list[index]             = value
-                OnElementChange(self)
-            end
-
-            function __len(self)
-                return self[ReactiveList].Count
-            end
-
         -- For IIndexedList
         elseif Class.IsSubType(targetclass, IIndexedList) then
 
         -- For raw array
         else
+            export                      {
+                max                     = math.max,
+                error                   = error,
+                pcall                   = pcall,
+            }
+
             -------------------------------------------------------------------
             --                         static method                         --
             -------------------------------------------------------------------
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
-
+                return isObjectType(self, ReactiveList) and rawget(self, ReactiveList) or self
             end
 
             --- Sets a raw table value to the reactive object
             __Static__()
             function SetRaw(self, value, stack)
+                if not isObjectType(self, ReactiveList) then
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1) end
+                end
 
+                if type(value) ~= "table" then
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1) end
+                end
+
+                local ok, err           = pcall(function()
+                    for i = 1, max(self.Count, #value) do
+                        self[i]         = value[i]
+                    end
+                end)
+                if not ok then
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - " .. err, (stack or 1) + 1) end
+                end
+            end
+
+            __Static__()
+            function From(self)
+                return isObjectType(self, ReactiveList) and Observable.From(self.OnDataChange) or nil
             end
 
             -------------------------------------------------------------------
@@ -242,9 +284,6 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --- The item count
             property "Count"                { get = function(self) return #self[ReactiveList] end }
-
-            --- The list item change subject
-            property "Subject"              { set = false, default = function() return Subject() end }
 
             -------------------------------------------------------------------
             --                            method                             --
@@ -399,5 +438,6 @@ PLoop(function(_ENV)
                 return self.Count
             end
         end
+
     end)
 end)

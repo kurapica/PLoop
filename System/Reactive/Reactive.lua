@@ -49,7 +49,7 @@ PLoop(function(_ENV)
 
             -- bind data change event handler
             bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
-                if rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                if r and rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                 end
                 return r
@@ -168,12 +168,17 @@ PLoop(function(_ENV)
 
             --- Send the new value
             function __newindex(self, key, value)
+                -- check raw
+                local raw               = self[Class]
+                if raw[key] == value then return end
+
+                -- check reactive
                 local reactives         = rawget(self, Reactive)
                 local r                 = reactives[key]
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
-                        self[Class][key]= value
+                        raw[key]        = value
                         r:OnNext(value)
                         return OnDataChange(self, key, value)
 
@@ -194,7 +199,7 @@ PLoop(function(_ENV)
                 end
 
                 -- raw directly
-                self[Class][key]        = value
+                raw[key]                = value
                 return OnDataChange(self, key, value)
             end
 
@@ -374,7 +379,7 @@ PLoop(function(_ENV)
             __Static__()
             function SetRaw(self, value, stack)
                 local cls               = getmetatable(self)
-                if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1) end
+                if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1) end
 
                 -- behavior subject
                 if isSubType(cls, BehaviorSubject) then
@@ -388,7 +393,7 @@ PLoop(function(_ENV)
                 -- reactive
                 elseif isSubType(cls, Reactive) then
                     if value ~= nil and type(value) ~= "table" then
-                        error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value is not valid", (stack or 1) + 1)
+                        error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value not valid", (stack or 1) + 1)
                     end
 
                     -- as object proxy
@@ -398,7 +403,7 @@ PLoop(function(_ENV)
                 end
 
                 -- other
-                error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive is not valid", (stack or 1) + 1)
+                error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1)
             end
 
             --- Gets the observable for the field
@@ -508,12 +513,18 @@ PLoop(function(_ENV)
 
             --- Send the new value
             function __newindex(self, key, value)
+                -- check raw
+                local raw               = self[RawTable]
+                if raw[key] == value then return end
+
+                -- check the reactive
                 local reactives         = rawget(self, Reactive)
                 local r                 = reactives[key]
                 if r then
                     -- BehaviorSubject
                     if isObjectType(r, BehaviorSubject) then
-                        self[RawTable][key] = value
+                        -- update
+                        raw[key]        = value
                         r:OnNext(value)
                         return OnDataChange(self, key, value)
 
@@ -534,7 +545,7 @@ PLoop(function(_ENV)
                 end
 
                 -- raw directly
-                self[RawTable][key]     = value
+                raw[key]                = value
                 return OnDataChange(self, key, value)
             end
         end
