@@ -33,11 +33,11 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
-            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
+            getEventDelegate            = Event.Get,
 
             -- bind data change
             bindDataChange              = function (self, r)
-                if r and rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                if r and getEventDelegate(OnDataChange, self, true) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...)
                         -- index the data @todo add cache to boost
                         local raw       = self[ReactiveList]
@@ -54,19 +54,18 @@ PLoop(function(_ENV)
             end,
 
             -- handle data change event handler
-            handleDataChangeEvent       = function (_, owner, name)
-                if not rawget(owner, OnDataChange) then
-                    rawset(owner, OnDataChange, true)
-
-                    local reactives     = owner[Reactive]
-                    for k, r in pairs(reactives) do
-                        bindDataChange(owner, r)
-                    end
+            handleDataChangeEvent       = function (_, owner, name, init)
+                if not init then return end
+                local reactives         = owner[Reactive]
+                for k, r in pairs(reactives) do
+                    bindDataChange(owner, r)
                 end
             end,
 
-            -- gets the index value or wrapper
+            -- list reactive map
+            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
+            -- import types
             ReactiveList, Observable, Observer, Reactive, Watch, Subject
         }
 
@@ -80,7 +79,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        if targetclass then __Arguments__{ Class.IsSubType(targetclass, List) and List or targetclass or RawTable } end
+        __Arguments__{ targetclass and Class.IsSubType(targetclass, List) and List or targetclass or RawTable }
         function __ctor(self, list)
             rawset(self, ReactiveList, list)
             rawset(self, Reactive, newtable(true, true)) -- reactive map
@@ -93,10 +92,10 @@ PLoop(function(_ENV)
         end
 
         function __exist(_, list)
+            if type(list) ~= "table" then return end
             if rawMap then return rawMap[list] end
             return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
         end
-
 
         -------------------------------------------------------------------
         --                          meta-method                          --
@@ -127,26 +126,40 @@ PLoop(function(_ENV)
 
         function __newindex(self, index, value)
             local raw                   = self[ReactiveList]
-            local proxy
-            if rawget(owner, OnDataChange) then
-                proxy                   = self[index]
-            else
-                local oldval            = raw[index]
-                if oldval == value then return end
+            local oldval                = raw[index]
+            if oldval == value then return end
 
-                proxy                   = oldval and self[Reactive][oldval]
-            end
+            -- Check if has event handler
+            if type(oldval) == "table" then
+                if getEventDelegate(OnDataChange, self, true) then
 
-            -- check wrapper
-            if proxy and type(proxy) == "table" then
-                if isObjectType(proxy, ReactiveList) then
-                    ReactiveList.SetRaw(proxy, value, 2)
-                    return
-                elseif isObjectType(proxy, Reactive) then
-                    Reactive.SetRaw(proxy, value, 2)
-                    return
+                else
+
+                end
+
+
+                local proxy
+
+                -- check if need wrap
+                if getEventDelegate(OnDataChange, self, true) then
+                    proxy               = self[index]
+                else
+
+                    proxy               = oldval and self[Reactive][oldval]
+                end
+
+                -- check wrapper
+                if proxy and type(proxy) == "table" then
+                    if isObjectType(proxy, ReactiveList) then
+                        ReactiveList.SetRaw(proxy, value, 2)
+                        return
+                    elseif isObjectType(proxy, Reactive) then
+                        Reactive.SetRaw(proxy, value, 2)
+                        return
+                    end
                 end
             end
+
 
             -- set directly
             raw[index]                  = value
@@ -257,11 +270,11 @@ PLoop(function(_ENV)
             __Static__()
             function SetRaw(self, value, stack)
                 if not isObjectType(self, ReactiveList) then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1) end
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1)
                 end
 
                 if type(value) ~= "table" then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1) end
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1)
                 end
 
                 local ok, err           = pcall(function()
@@ -270,7 +283,7 @@ PLoop(function(_ENV)
                     end
                 end)
                 if not ok then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - " .. err, (stack or 1) + 1) end
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - " .. err, (stack or 1) + 1)
                 end
             end
 

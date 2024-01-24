@@ -43,28 +43,25 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
+            getEventDelegate            = Event.Get,
 
             -- return value if r is behavior subject
             getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
-            -- bind data change event handler
+            -- bind data change event handler when accessed
             bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
-                if r and rawget(self, OnDataChange) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                if r and getEventDelegate(OnDataChange, self, true) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                 end
                 return r
             end or nil,
 
             -- handle data change event
-            handleDataChangeEvent       = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(_, owner, name)
-                if not rawget(owner, OnDataChange) then
-                    -- mark the data change handler is already built
-                    rawset(owner, OnDataChange, true)
-
-                    local reactives     = owner[Reactive]
-                    for k, r in pairs(reactives) do
-                        bindDataChange(owner, k, r)
-                    end
+            handleDataChangeEvent       = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(_, owner, name, init)
+                if not init then return end
+                local reactives         = owner[Reactive]
+                for k, r in pairs(reactives) do
+                    bindDataChange(owner, k, r)
                 end
             end or nil,
 
@@ -126,7 +123,7 @@ PLoop(function(_ENV)
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
                 rawset(self, Reactive, {})  -- reactives
-                rawset(self, Class, init)
+                rawset(self, Class,  init)
 
                 -- try avoid to set value in raw dict object is possible
                 if objMap then

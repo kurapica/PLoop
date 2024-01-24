@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [1.9.3] - 2024-01-24 WangXH  <kurapica125@outlook.com>
+### Changed
+- The event change handler will receive a new argument means if the delegate is just created: (delegate, owner, name, init)
+
+
 ## [1.9.2] - 2023-11-14 WangXH <kurapica125@outlook.com>
 ### Changed
 - Can use `__Arguments__{...}:WithRebuild()` for template struct/interface/class types, so when types used in parameters re-defined, the generate types will be rebuilt.

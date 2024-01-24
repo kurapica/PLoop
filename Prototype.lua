@@ -10775,6 +10775,7 @@ do
                                         return handler(self, owner, name)
                                     end
                                 end)
+                                handler(delegate, owner, name, true)
                             end
                         end
                         return delegate
@@ -10794,6 +10795,7 @@ do
                                         return handler(self, obj, name)
                                     end
                                 end)
+                                handler(delegate, obj, name, true)
                             end
                         end
                         return delegate
