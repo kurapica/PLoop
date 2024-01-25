@@ -56,10 +56,16 @@ PLoop(function(_ENV)
             -- handle data change event handler
             handleDataChangeEvent       = function (_, owner, name, init)
                 if not init then return end
-                local reactives         = owner[Reactive]
-                for k, r in pairs(reactives) do
-                    bindDataChange(owner, r)
+
+                for k, v in owner:GetIterator() do
+                    bindDataChange(owner, v)
                 end
+            end,
+
+            -- wrap the table value as default
+            makeReactive                = function (self, v)
+                local r                 = reactive(v, true)
+                return r and bindDataChange(self, r)
             end,
 
             -- list reactive map
@@ -77,12 +83,32 @@ PLoop(function(_ENV)
         event "OnDataChange"
 
         -------------------------------------------------------------------
+        --                            method                             --
+        -------------------------------------------------------------------
+        --- Gets the iterator
+        function GetIterator(self)
+            return function (self,  index)
+                index                   = (index or 0) + 1
+                local value             = self[index]
+                if value ~= nil then return index, value end
+            end, self, 0
+        end
+
+        -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
         __Arguments__{ targetclass and Class.IsSubType(targetclass, List) and List or targetclass or RawTable }
         function __ctor(self, list)
+            local reactives             = newtable(true, true)
             rawset(self, ReactiveList, list)
-            rawset(self, Reactive, newtable(true, true)) -- reactive map
+            rawset(self, Reactive, reactives)
+
+            -- wrap table values directly
+            for i, v in (list.GetIterator or ipairs)(list) do
+                if type(v) == "table" then
+                    reactives[v]        = makeReactive(self, v)
+                end
+            end
 
             if rawMap then
                 rawMap[list]            = self
@@ -101,27 +127,9 @@ PLoop(function(_ENV)
         --                          meta-method                          --
         -------------------------------------------------------------------
         function __index(self, index)
-            local raw                   = self[ReactiveList]
+            local raw                   = rawget(self, ReactiveList)
             local value                 = raw[index]
-            if value == nil then return end
-
-            -- Only wrap the table values, the index value changes can be pushed by the list itself
-            if type(value) == "table" then
-                local reactives         = self[Reactive]
-                local r                 = reactives[value]
-                if r then return r end
-
-                if r == nil then
-                    r                   = reactive(value, true)
-                    if r then
-                        reactives[value]= bindDataChange(self, r)
-                        return r
-                    else
-                        reactives[value]= false
-                    end
-                end
-            end
-            return value
+            return type(value) == "table" and rawget(self, Reactive)[value] or value
         end
 
         function __newindex(self, index, value)
@@ -129,46 +137,28 @@ PLoop(function(_ENV)
             local oldval                = raw[index]
             if oldval == value then return end
 
-            -- Check if has event handler
+            local reactives             = self[Reactive]
+
             if type(oldval) == "table" then
-                if getEventDelegate(OnDataChange, self, true) then
-
-                else
-
-                end
-
-
-                local proxy
-
-                -- check if need wrap
-                if getEventDelegate(OnDataChange, self, true) then
-                    proxy               = self[index]
-                else
-
-                    proxy               = oldval and self[Reactive][oldval]
-                end
-
-                -- check wrapper
-                if proxy and type(proxy) == "table" then
-                    if isObjectType(proxy, ReactiveList) then
-                        ReactiveList.SetRaw(proxy, value, 2)
-                        return
-                    elseif isObjectType(proxy, Reactive) then
-                        Reactive.SetRaw(proxy, value, 2)
-                        return
-                    end
-                end
+                Reactive.SetRaw(reactives[oldval], value, 2)
+                return
             end
-
 
             -- set directly
             raw[index]                  = value
+
+            if type(value) == "table" then
+                local r                 = makeReactive(self, value)
+                if r then
+                    reactives[value]    = r
+                    value               = r
+                end
+            end
+
             return OnDataChange(self, index, value)
         end
 
-        function __len(self)
-            return self.Count
-        end
+        function __len(self)            return self.Count end
 
         -------------------------------------------------------------------
         --                           template                            --
@@ -185,15 +175,6 @@ PLoop(function(_ENV)
             ---------------------------------------------------------------
             --                          method                           --
             ---------------------------------------------------------------
-            --- Gets the iterator
-            function GetIterator(self)
-                return function (self,  index)
-                    index               = (index or 0) + 1
-                    local value         = self[ReactiveList][index]
-                    if value ~= nil then return index, value end
-                end, self, 0
-            end
-
             --- Insert the item
             function Insert(self, ...)
                 local list              = self[ReactiveList]
@@ -301,17 +282,6 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             --                            method                             --
             -------------------------------------------------------------------
-            --- Gets the iterator
-            function GetIterator(self)
-                local list                  = self[ReactiveList]
-                local count                 = self.Count
-                return function(self, index)
-                    index                   = (index or 0) + 1
-                    if index > count then return end
-                    return index, list[index]
-                end, self, 0
-            end
-
             --- Insert the item
             __Arguments__{ Any }:Throwable()
             function Insert(self, item)
@@ -409,46 +379,6 @@ PLoop(function(_ENV)
                 end
                 self.Subject:OnNext(#list, list[#list])
                 return self
-            end
-
-            -------------------------------------------------------------------
-            --                          constructor                          --
-            -------------------------------------------------------------------
-            __Arguments__{ RawTable }
-            function __ctor(self, list)
-                rawset(self, ReactiveList, list)
-
-                if rawMap then
-                    rawMap[init]            = self
-                else
-                    rawset(init, ReactiveList, self)
-                end
-            end
-
-            function __exist(_, list)
-                if rawMap then return rawMap[init] end
-                return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
-            end
-
-            -------------------------------------------------------------------
-            --                          meta-method                          --
-            -------------------------------------------------------------------
-            function __index(self, index)
-                local list                  = rawget(self, ReactiveList)
-                return list[index]
-            end
-
-            __Arguments__{ NaturalNumber, Any }
-            function __newindex(self, index, value)
-                if type(index) ~= "number" then error("Usage: reactiveList[index] = value - the index must be natural integer", 2) end
-
-                local list                  = rawget(self, ReactiveList)
-                list[index]                 = value
-                self:OnNext(index, value)
-            end
-
-            function __len(self)
-                return self.Count
             end
         end
 
