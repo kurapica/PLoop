@@ -590,4 +590,27 @@ PLoop(function(_ENV)
             return func(...)
         end
     end)
+
+    ---------------------------------------------------------------
+    --                          Toolset                          --
+    ---------------------------------------------------------------
+    export                              {
+        yield                           = coroutine.yield,
+        running                         = coroutine.running,
+        resume                          = coroutine.resume,
+    }
+
+    local function getArgs(_, ...)      return ... end
+
+    --- Keep arguments in a coroutine
+    __Async__()
+    function Toolset.keepargs(...)
+        yield(running())
+        return ...
+    end
+
+    --- Gets the arguments from a coroutine
+    function Toolset.getkeepargs(thread)
+        return getArgs(resume(thread))
+    end
 end)

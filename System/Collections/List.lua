@@ -18,7 +18,7 @@ PLoop(function(_ENV)
     import "System.Serialization"
 
     -- Helpers
-    export { yield = coroutine.yield, unpack = _G.unpack or table.unpack }
+    export { yield = coroutine.yield, running = coroutine.running, unpack = _G.unpack or table.unpack }
 
     __Iterator__() iterforstep          = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
     __Iterator__() iterforlist          = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
@@ -46,7 +46,16 @@ PLoop(function(_ENV)
     class "List"                        (function(_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
-        export { type = type, ipairs = ipairs, tremove = table.remove }
+        export                          {
+            type                        = type,
+            ipairs                      = ipairs,
+            tremove                     = table.remove,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            resume                      = coroutine.resume,
+            keepargs                    = Toolset.keepargs,
+            getkeepargs                 = Toolset.getkeepargs,
+        }
 
         lsttype                         = lsttype ~= Any and lsttype or nil
 
@@ -84,6 +93,51 @@ PLoop(function(_ENV)
         --                        method                         --
         -----------------------------------------------------------
         GetIterator                     = ipairs
+
+        --- Push
+        if lsttype then __Arguments__{ lsttype } end
+        function Push(self, item)
+            self:Insert(item)
+            return self.Count
+        end
+
+        --- Pop
+        function Pop(self)
+            return self:Remove()
+        end
+
+        --- Shift
+        function Shift(self)
+            return self:RemoveByIndex(1)
+        end
+
+        --- Unshift
+        if lsttype then __Arguments__{ lsttype } end
+        function Unshift(self, item)
+            self:Insert(1, item)
+            return self.Count
+        end
+
+        --- Splice
+        __Arguments__{ Number, Number/nil, (lsttype or Any) * 0 }
+        function Splice(self, index, count, ...)
+            local total                 = self.Count
+            local last                  = count and (index + count - 1) or total
+            local addcnt                = select("#", ...)
+            local th
+
+            -- @TODO boost with replace
+            if index <= last then
+                th                      = keepargs(unpack(self, index, last))
+                for i = last, index, -1 do self:RemoveByIndex(i) end
+            end
+
+            for i = 1, addcnt do
+                self:Insert(index + i - 1, (select(i, ...)))
+            end
+
+            if th then                  return getkeepargs(th) end
+        end
 
         --- Insert an item to the list
         if lsttype then

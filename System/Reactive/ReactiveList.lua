@@ -57,7 +57,7 @@ PLoop(function(_ENV)
             handleDataChangeEvent       = function (_, owner, name, init)
                 if not init then return end
 
-                for k, v in owner:GetIterator() do
+                for _, v in owner:GetIterator() do
                     bindDataChange(owner, v)
                 end
             end,

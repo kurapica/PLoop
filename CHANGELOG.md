@@ -3,6 +3,23 @@ All notable changes to this project will be documented in this file.
 
 
 ## [1.9.3] - 2024-01-24 WangXH  <kurapica125@outlook.com>
+### Added
+- Add Push/Pop/Shift/Unshift/Splice to List types.
+- Add keepargs/getkeepargs to Toolset, used to keep temp arguments in a re-usable coroutine, no require table to store them:
+
+	```lua
+	require "PLoop" (function(_ENV)
+		-- return the coroutine to keep them
+	    local th = Toolset.keepargs("hello", "world")
+
+	    -- gets the argument and recycle the coroutine
+	    -- don't re-use th variable again
+	    --
+	    -- hello world
+	    print(Toolset.getkeepargs(th))
+	end)
+	```
+
 ### Changed
 - The event change handler will receive a new argument means if the delegate is just created: (delegate, owner, name, init)
 
