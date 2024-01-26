@@ -15444,11 +15444,13 @@ do
         --- Mark the overload must use this keyword
         function UseThis(self)
             self.IsThisUsable           = true
+            return self
         end
 
         --- Mark the type generatd by the template will be rebuilt when parameter type re-defined
         function WithRebuild(self)
             self.IsRebuildable          = true
+            return self
         end
 
         --- modify the target's definition

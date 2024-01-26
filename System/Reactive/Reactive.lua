@@ -569,8 +569,9 @@ PLoop(function(_ENV)
         isObjectType                    = Class.IsObjectType,
         isarray                         = Toolset.isarray,
         isValueType                     = Class.IsValueType,
+        getTemplateParameters           = Class.GetTemplateParameters,
 
-        IObservable, Reactive, ReactiveList, BehaviorSubject,
+        IObservable, Reactive, ReactiveList, BehaviorSubject, Any,
         IList, List, IDictionary, Dictionary, IIndexedList, IKeyValueDict
     }
 
@@ -596,9 +597,10 @@ PLoop(function(_ENV)
                     -- wrap list or array to reactive list
                     elseif isSubType(cls, IList) then
                         if isSubType(cls, List) then
-                            return ReactiveList[List](value)
-                        elseif isSubType(cls, IIndexedList) then
-                            return ReactiveList[cls](value)
+                            local etype = getTemplateParameters(cls)
+                            return (etype and etype ~= Any and ReactiveList[etype] or ReactiveList)(value)
+                        --elseif isSubType(cls, IIndexedList) then
+                        --   return ReactiveList[cls](value)
                         elseif not silent then
                             error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
                         end

@@ -17,7 +17,7 @@ PLoop(function(_ENV)
 
     --- Provide reactive feature for list or array
     __Sealed__()
-    __Arguments__{ -IIndexedList/nil }:WithRebuild()
+    __Arguments__{ AnyType/nil }:WithRebuild()
     class "ReactiveList"                (function(_ENV, targetclass)
         extend "IIndexedList"
 
@@ -81,6 +81,12 @@ PLoop(function(_ENV)
         --- Fired when any element data changed
         __EventChangeHandler__(handleDataChangeEvent)
         event "OnDataChange"
+
+        -------------------------------------------------------------------
+        --                           property                            --
+        -------------------------------------------------------------------
+        --- The item count
+        property "Count"            { get = targetclass and function(self) return self[ReactiveList].Count end or function(self) return #self[ReactiveList] end }
 
         -------------------------------------------------------------------
         --                            method                             --
@@ -163,14 +169,8 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                           template                            --
         -------------------------------------------------------------------
-        -- For all classes based on List
-        if Class.IsSubType(targetclass, List) then
-
-            ---------------------------------------------------------------
-            --                         property                          --
-            ---------------------------------------------------------------
-            --- The item count
-            property "Count"            { get = function(self) return self[ReactiveList].Count end }
+        -- For all classes based on IIndexedList
+        if Class.IsSubType(targetclass, IIndexedList) then
 
             ---------------------------------------------------------------
             --                          method                           --
@@ -226,9 +226,6 @@ PLoop(function(_ENV)
                 if not ok then error(err, 2) end
                 return list.Count > count and OnElementChange(self)
             end
-
-        -- For IIndexedList
-        elseif Class.IsSubType(targetclass, IIndexedList) then
 
         -- For raw array
         else
