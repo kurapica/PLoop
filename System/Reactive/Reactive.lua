@@ -26,10 +26,10 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- The proxy used to access reactive table field datas
     __Sealed__()
-    __Arguments__{ ClassType/nil }:WithRebuild()
+    __Arguments__{ ClassType/nil, AnyType/nil, AnyType/nil }:WithRebuild()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
-    class "System.Reactive"             (function(_ENV, targetclass)
+    class "System.Reactive"             (function(_ENV, targetclass, keytype, valtype)
 
         export                          {
             type                        = type,
@@ -79,8 +79,8 @@ PLoop(function(_ENV)
             extend "IKeyValueDict"
 
             export                      {
+                setRaw                  = function(self, k, v) self[k] = v end,
                 objMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
-                updateDict              = Dictionary.Update,
             }
 
             ---------------------------------------------------------------
@@ -101,7 +101,7 @@ PLoop(function(_ENV)
 
                 -- for raw
                 for k in raw:GetIterator() do
-                    if type(k) == "string" then
+                    if k ~= Reactive then
                         yield(k, self[k])
                     end
                 end
@@ -112,14 +112,6 @@ PLoop(function(_ENV)
                         yield(k, getValue(v))
                     end
                 end
-            end
-
-            --- Update the dictionary
-            function Update(self, ...)
-                -- For simple
-                local update            = self[Class].Update
-                local ok, err           = pcall(type(update) == "function" and update or updateDict, self, ...)
-                if not ok then error(err, 2) end
             end
 
             ---------------------------------------------------------------
@@ -134,7 +126,7 @@ PLoop(function(_ENV)
 
                 -- make table value reactive, since they may be reactived in other places
                 for k, v in init:GetIterator() do
-                    if type(k) == "string" and type(v) == "table" then
+                    if k ~= Reactive and type(v) == "table" then
                         reactives[k]    = makeReactive(self, k, v)
                     end
                 end
@@ -164,6 +156,9 @@ PLoop(function(_ENV)
             end
 
             --- Send the new value
+            if (keytype and keytype ~= Any) or (valtype and valtype ~= Any) then
+                __Arguments__{ keytype or Any, valtype or Any }
+            end
             function __newindex(self, key, value)
                 -- check raw
                 local raw               = self[Class]
@@ -191,7 +186,8 @@ PLoop(function(_ENV)
                 end
 
                 -- raw directly
-                raw[key]                = value
+                local ok, err           = pcall(setRaw, raw, key, value)
+                if not ok then error(err, 2) end
 
                 -- make table reactive
                 if type(key) == "string" and type(value) == "table" then
@@ -452,7 +448,7 @@ PLoop(function(_ENV)
 
                 -- raw first
                 for k in pairs(raw) do
-                    if type(k) == "string" then
+                    if k ~= Reactive then
                         yield(k, self[k])
                     end
                 end
@@ -477,7 +473,7 @@ PLoop(function(_ENV)
                 if init then
                     -- wrap all child table
                     for k, v in pairs(init) do
-                        if type(k) == "string" and type(v) == "table" then
+                        if k ~= Reactive and type(v) == "table" then
                             reactives[k]= makeReactive(self, k, v)
                         end
                     end
@@ -510,6 +506,10 @@ PLoop(function(_ENV)
 
             --- Send the new value
             function __newindex(self, key, value)
+                if key == Reactive then
+                    error("The Reactive class can't be used as the key", 2)
+                end
+
                 -- check raw
                 local raw               = self[RawTable]
                 if raw[key] == value then return end
@@ -540,7 +540,7 @@ PLoop(function(_ENV)
                 raw[key]                = value
 
                 -- make table reactive
-                if type(key) == "string" and type(value) == "table" then
+                if type(value) == "table" then
                     local r             = makeReactive(self, key, value)
                     if r then
                         reactives[key]  = r
@@ -572,8 +572,47 @@ PLoop(function(_ENV)
         getTemplateParameters           = Class.GetTemplateParameters,
 
         IObservable, Reactive, ReactiveList, BehaviorSubject, Any,
-        IList, List, IDictionary, Dictionary, IIndexedList, IKeyValueDict
+        IList, List, IDictionary, Dictionary, Proxy, IIndexedList, IKeyValueDict
     }
+
+    --- Whether the value can be wrap to a reactive object
+    __Static__() function Reactive.IsReactable(value, onlyContainer)
+        -- Check the value
+        local tval                      = type(value)
+        if tval == "table" then
+            -- Check the class
+            local cls                   = getObjectClass(value)
+
+            if cls then
+                -- already reactable
+                if isSubType(cls, Reactive) or isSubType(cls, ReactiveList) then
+                    return true
+
+                elseif isSubType(cls, BehaviorSubject) or isSubType(cls, IObservable) or isValueType(cls) then
+                    return not onlyContainer
+
+                -- wrap list or array to reactive list
+                elseif isSubType(cls, IList) then
+                    return isSubType(cls, List)
+
+                -- wrap dictionary
+                elseif isSubType(cls, IDictionary) then
+                    return isSubType(cls, IKeyValueDict)
+                end
+
+                -- common wrap
+                return true
+            end
+
+            -- raw table/array alwasy be reactable
+            return true
+
+        elseif tval == "number" or tval == "string" or tval == "boolean" then
+            return not onlyContainer
+        end
+
+        return false
+    end
 
     Environment.RegisterRuntimeKeyword  {
         --- Wrap the target value to a Reactive(for table or object), ReactiveList(for list) or BehaviorSubjcet(for value)
@@ -596,11 +635,11 @@ PLoop(function(_ENV)
 
                     -- wrap list or array to reactive list
                     elseif isSubType(cls, IList) then
+                        -- To complex to cover more list types, only List for now
                         if isSubType(cls, List) then
                             local etype = getTemplateParameters(cls)
-                            return (etype and etype ~= Any and ReactiveList[etype] or ReactiveList)(value)
-                        --elseif isSubType(cls, IIndexedList) then
-                        --   return ReactiveList[cls](value)
+                            return ReactiveList[etype or Any](value)
+
                         elseif not silent then
                             error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
                         end
@@ -608,8 +647,17 @@ PLoop(function(_ENV)
 
                     -- wrap dictionary
                     elseif isSubType(cls, IDictionary) then
-                        if isSubType(cls, IKeyValueDict) then
+                        if isSubType(cls, Dictionary) or isSubType(cls, Proxy) then
+                            -- can get the key/value types
+                            local k, v  = getTemplateParameters(cls)
+                            if k == Any then k = nil end
+                            if v == Any then k = nil end
+                            return Reactive[{ Dictionary, k, v }](value)
+
+                        elseif isSubType(cls, IKeyValueDict) then
+                            -- can't get the key/value types
                             return Reactive[Dictionary](value)
+
                         elseif not silent then
                             error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
                         end

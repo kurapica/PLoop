@@ -18,7 +18,7 @@ PLoop(function(_ENV)
     --- Provide reactive feature for list or array
     __Sealed__()
     __Arguments__{ AnyType/nil }:WithRebuild()
-    class "ReactiveList"                (function(_ENV, targetclass)
+    class "ReactiveList"                (function(_ENV, elementtype)
         extend "IIndexedList"
 
         export                          {
@@ -34,6 +34,7 @@ PLoop(function(_ENV)
             newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
             getEventDelegate            = Event.Get,
+            isReactable                 = Reactive.IsReactable,
 
             -- bind data change
             bindDataChange              = function (self, r)
@@ -86,7 +87,7 @@ PLoop(function(_ENV)
         --                           property                            --
         -------------------------------------------------------------------
         --- The item count
-        property "Count"            { get = targetclass and function(self) return self[ReactiveList].Count end or function(self) return #self[ReactiveList] end }
+        property "Count"            { get = function(self) return #self[ReactiveList] end }
 
         -------------------------------------------------------------------
         --                            method                             --
@@ -103,15 +104,14 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ targetclass and Class.IsSubType(targetclass, List) and List or targetclass or RawTable }
         function __ctor(self, list)
             local reactives             = newtable(true, true)
-            rawset(self, ReactiveList, list)
+            rawset(self, ReactiveList,  list)
             rawset(self, Reactive, reactives)
 
             -- wrap table values directly
             for i, v in (list.GetIterator or ipairs)(list) do
-                if type(v) == "table" then
+                if isReactable(v, true) then
                     reactives[v]        = makeReactive(self, v)
                 end
             end
@@ -169,8 +169,8 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                           template                            --
         -------------------------------------------------------------------
-        -- For all classes based on IIndexedList
-        if Class.IsSubType(targetclass, IIndexedList) then
+        -- For all classes based on List
+        if elementtype then
 
             ---------------------------------------------------------------
             --                          method                           --
