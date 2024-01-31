@@ -28,13 +28,17 @@ PLoop(function(_ENV)
             ipairs                      = ipairs,
             error                       = error,
             pcall                       = pcall,
-            yield                       = coroutine.yield,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            keepargs                    = Toolset.keepargs,
+            getkeepargs                 = Toolset.getkeepargs,
             tinsert                     = table.insert,
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
             getEventDelegate            = Event.Get,
             isReactable                 = Reactive.IsReactable,
+            toRawValue                  = Reactive.ToRaw,
 
             -- bind data change
             bindDataChange              = function (self, r)
@@ -50,6 +54,7 @@ PLoop(function(_ENV)
                             end
                         end
                     end
+
                 end
                 return r
             end,
@@ -57,7 +62,6 @@ PLoop(function(_ENV)
             -- handle data change event handler
             handleDataChangeEvent       = function (_, owner, name, init)
                 if not init then return end
-
                 for _, v in owner:GetIterator() do
                     bindDataChange(owner, v)
                 end
@@ -87,7 +91,7 @@ PLoop(function(_ENV)
         --                           property                            --
         -------------------------------------------------------------------
         --- The item count
-        property "Count"            { get = function(self) return #self[ReactiveList] end }
+        property "Count"            { get = function(self) local list = self[ReactiveList] return list.Count or #list end }
 
         -------------------------------------------------------------------
         --                            method                             --
@@ -99,6 +103,161 @@ PLoop(function(_ENV)
                 local value             = self[index]
                 if value ~= nil then return index, value end
             end, self, 0
+        end
+
+        --- Push
+        if elementtype then __Arguments__{ elementtype } end
+        function Push(self, item)
+            self:Insert(item)
+            return self.Count
+        end
+
+        --- Pop
+        function Pop(self)
+            return self:Remove()
+        end
+
+        --- Shift
+        function Shift(self)
+            return self:RemoveByIndex(1)
+        end
+
+        --- Unshift
+        if elementtype then __Arguments__{ elementtype } end
+        function Unshift(self, item)
+            self:Insert(1, item)
+            return self.Count
+        end
+
+        --- Splice
+        __Arguments__{ Number, Number/nil, (elementtype or Any) * 0 }
+        function Splice(self, index, count, ...)
+            local raw                   = self[ReactiveList]
+            local total                 = raw.Count or #raw
+            local last                  = count and (index + count - 1) or total
+            local addcnt                = select("#", ...)
+            local th
+            local changed               = false
+
+            -- @TODO boost with replace
+            if index <= last then
+                local removeByIndex     = raw.RemoveByIndex or tremove
+                th                      = keepargs(unpack(self, index, last))
+                changed                 = true
+                for i = last, index, -1 do removeByIndex(raw, i) end
+            end
+
+            local insert                = raw.Insert or tinsert
+            local reactives             = self[Reactive]
+            for i = 1, addcnt do
+                changed                 = true
+
+                local value             = toRawValue((select(i, ...)))
+                insert(raw, index + i - 1, value)
+                if isReactable(value, true) then
+                    reactives[value]    = makeReactive(self, value)
+                end
+            end
+
+            -- full list change
+            if changed then OnDataChange(self) end
+
+            if th then                  return getkeepargs(th) end
+        end
+
+        --- Insert an item to the list
+        __Arguments__{ Number, elementtype or Any }
+        function Insert(self, index, item)
+            local raw                   = self[ReactiveList]
+            local reactives             = self[Reactive]
+            local insert                = raw.Insert or tinsert
+
+            item                        = toRawValue(item)
+            insert(raw, index, item)
+            if isReactable(item, true) then
+                local r                 = makeReactive(self, item)
+                if r then
+                    reactives[item]     = r
+                    item                = r
+                end
+            end
+
+            if index == (raw.Count or #raw) then
+                return OnDataChange(self, index, item)
+            else
+                -- full list change
+                return OnDataChange(self)
+            end
+        end
+
+        __Arguments__{ elementtype or Any }
+        function Insert(self, item)
+            local raw                   = self[ReactiveList]
+            local reactives             = self[Reactive]
+            local insert                = raw.Insert or tinsert
+
+            item                        = toRawValue(item)
+            insert(raw, item)
+            if isReactable(item, true) then
+                local r                 = makeReactive(self, item)
+                if r then
+                    reactives[item]     = r
+                    item                = r
+                end
+            end
+
+            return OnDataChange(self, raw.Count or #raw, item)
+        end
+
+        --- Whether an item existed in the list
+        function Contains(self, item) return self:IndexOf(item) and true or false end
+
+        --- Get the index of the item if it existed in the list
+        function IndexOf(self, item)
+            local raw                   = self[ReactiveList]
+            local reactives             = self[Reactive]
+
+            for i, v in (raw.GetIterator or ipairs)(raw) do
+                if v == item or reactives[v] == item then return i end
+            end
+        end
+
+        --- Remove an item
+        function Remove(self, item)
+            if item == nil then
+                return self:RemoveByIndex()
+            else
+                local i = self:IndexOf(item)
+                return i and self:RemoveByIndex(i)
+            end
+        end
+
+        --- Remove an item from the tail or the given index
+        function RemoveByIndex(self, index)
+            local raw                   = self[ReactiveList]
+            local count                 = raw.Count or #raw
+            if count > 0 and (not index or index > 0 and index <= count) then
+                local item              = (raw.RemoveByIndex or tremove)(self, index)
+                OnDataChange(self)
+                return item
+            end
+        end
+
+        --- Clear the list
+        function Clear(self)
+            local raw                   = self[ReactiveList]
+            if (raw.Count or #raw) == 0 then return end
+
+            if raw.Clear then
+                raw:Clear()
+            else
+                for i = #raw, 1, -1 do
+                    raw[i]              = nil
+                end
+            end
+
+            OnDataChange(self)
+            return self
         end
 
         -------------------------------------------------------------------
@@ -139,13 +298,17 @@ PLoop(function(_ENV)
         end
 
         function __newindex(self, index, value)
+            -- Convert to raw value
+            if type(value) == "table" then
+                value                   = toRawValue(value)
+            end
+
             local raw                   = self[ReactiveList]
             local oldval                = raw[index]
             if oldval == value then return end
 
             local reactives             = self[Reactive]
-
-            if type(oldval) == "table" then
+            if reactives[oldval] then
                 Reactive.SetRaw(reactives[oldval], value, 2)
                 return
             end
@@ -153,7 +316,7 @@ PLoop(function(_ENV)
             -- set directly
             raw[index]                  = value
 
-            if type(value) == "table" then
+            if isReactable(value, true) then
                 local r                 = makeReactive(self, value)
                 if r then
                     reactives[value]    = r
@@ -167,77 +330,15 @@ PLoop(function(_ENV)
         function __len(self)            return self.Count end
 
         -------------------------------------------------------------------
-        --                           template                            --
+        --                         static method                         --
         -------------------------------------------------------------------
-        -- For all classes based on List
-        if elementtype then
-
-            ---------------------------------------------------------------
-            --                          method                           --
-            ---------------------------------------------------------------
-            --- Insert the item
-            function Insert(self, ...)
-                local list              = self[ReactiveList]
-                local count             = list.Count
-                local ok, err           = pcall(list.Insert, list, ...)
-                if not ok then error(err, 2) end
-                return OnElementChange(self)
-            end
-
-            --- Whether an item existed in the list
-            function Contains(self,item)return self[ReactiveList]:Contains(item) end
-
-            --- Get the index of the item if it existed in the list
-            function IndexOf(self, item)return self[ReactiveList]:IndexOf(item)  end
-
-            --- Remove an item
-            function Remove(self, item)
-                local item              = self[ReactiveList]:Remove(item)
-                if item ~= nil then
-                    OnElementChange(self)
-                    return item
-                end
-            end
-
-            --- Remove an item from the tail or the given index
-            function RemoveByIndex(self, index)
-                local item              = self[ReactiveList]:RemoveByIndex(item)
-                if item ~= nil then
-                    OnElementChange(self)
-                    return item
-                end
-            end
-
-            --- Clear the list
-            function Clear(self)
-                local list              = self[ReactiveList]
-                local count             = list.Count
-                if count > 0 then
-                    list:Clear()
-                    return OnElementChange(self)
-                end
-            end
-
-            --- Extend the list
-            function Extend(self, ...)
-                local list              = self[ReactiveList]
-                local count             = list.Count
-                local ok, err           = pcall(list.Extend, list, ...)
-                if not ok then error(err, 2) end
-                return list.Count > count and OnElementChange(self)
-            end
-
-        -- For raw array
-        else
+        if not elementtype then
             export                      {
                 max                     = math.max,
                 error                   = error,
                 pcall                   = pcall,
             }
 
-            -------------------------------------------------------------------
-            --                         static method                         --
-            -------------------------------------------------------------------
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
@@ -255,129 +356,13 @@ PLoop(function(_ENV)
                     error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1)
                 end
 
-                local ok, err           = pcall(function()
-                    for i = 1, max(self.Count, #value) do
-                        self[i]         = value[i]
-                    end
-                end)
-                if not ok then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - " .. err, (stack or 1) + 1)
-                end
+                return self:Splice(1, self.Count, unpack(value))
             end
 
             __Static__()
             function From(self)
                 return isObjectType(self, ReactiveList) and Observable.From(self.OnDataChange) or nil
             end
-
-            -------------------------------------------------------------------
-            --                           property                            --
-            -------------------------------------------------------------------
-            --- The item count
-            property "Count"                { get = function(self) return #self[ReactiveList] end }
-
-            -------------------------------------------------------------------
-            --                            method                             --
-            -------------------------------------------------------------------
-            --- Insert the item
-            __Arguments__{ Any }:Throwable()
-            function Insert(self, item)
-                local list                  = self[ReactiveList]
-                local ins                   = list.Insert
-                if ins then
-                    local ok, err           = pcall(ins, list, item)
-                    if not ok then throw(err) end
-                else
-                    tinsert(list, item)
-                end
-                return self.Subject:OnNext(self.Count, item)
-            end
-
-            __Arguments__{ NaturalNumber, Any }
-            function Insert(self, index, item)
-                local list                  = self[ReactiveList]
-                local ins                   = list.Insert
-                if ins then
-                    local ok, err           = pcall(ins, list, index, item)
-                    if not ok then throw(err) end
-                else
-                    tinsert(list, item)
-                end
-                return self.Subject:OnNext(index, item)
-            end
-
-            --- Whether an item existed in the list
-            function Contains(self, item)   for i, chk in self:GetIterator() do if chk == item then return true end end return false end
-
-            --- Get the index of the item if it existed in the list
-            function IndexOf(self, item)    for i, chk in self:GetIterator() do if chk == item then return i end end end
-
-            --- Remove an item
-            function Remove(self, item)
-                local list                  = self[ReactiveList]
-                local remove                = list.Remove -- For List
-                if remove then
-                    item                    = remove(list, item)
-                else
-                    if item == nil then
-                        item                = tremove(list)
-                    else
-                        local i             = self:IndexOf(item)
-                        return i and self:RemoveByIndex(i)
-                    end
-                end
-                if item then
-                    self.Subject:OnNext(self.Count + 1)
-                end
-                return item
-            end
-
-            --- Remove an item from the tail or the given index
-            function RemoveByIndex(self, index)
-                local list                  = rawget(self, ReactiveList)
-                local item                  = (list.RemoveByIndex or tremove)(list, index)
-                self.Subject:OnNext(index)
-                return item
-            end
-
-            --- Clear the list
-            function Clear(self)
-                local list                  = rawget(self, ReactiveList)
-                for i = #list, 1, -1        do list[i] = nil end
-                return self.Subject:OnNext(0)
-            end
-
-            --- Extend the list
-            __Arguments__{ RawTable }
-            function Extend(self, lst)
-                local list                  = rawget(self, ReactiveList)
-                local ins                   = list.Insert or tinsert
-                for _, item in ipairs(lst)  do ins(list, item) end
-                self.Subject:OnNext(#list, list[#list])
-                return self
-            end
-
-            __Arguments__{ IList }
-            function Extend(self, lst)
-                local list                  = rawget(self, ReactiveList)
-                local ins                   = list.Insert or tinsert
-                for _, item in lst:GetIterator() do ins(list, item) end
-                self.Subject:OnNext(#list, list[#list])
-                return self
-            end
-
-            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-            function Extend(self, iter, obj, idx)
-                local list                  = rawget(self, ReactiveList)
-                local ins                   = list.Insert or tinsert
-                for key, item in iter, obj, idx do
-                    if item == nil then item = key end
-                    ins(list, item)
-                end
-                self.Subject:OnNext(#list, list[#list])
-                return self
-            end
         end
-
     end)
 end)

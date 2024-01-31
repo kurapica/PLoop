@@ -79,6 +79,7 @@ PLoop(function(_ENV)
             extend "IKeyValueDict"
 
             export                      {
+                toRawValue              = Reactive.ToRaw,
                 setRaw                  = function(self, k, v) self[k] = v end,
                 objMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
             }
@@ -160,6 +161,10 @@ PLoop(function(_ENV)
                 __Arguments__{ keytype or Any, valtype or Any }
             end
             function __newindex(self, key, value)
+                if type(value) == "table" then
+                    value               = toRawValue(value)
+                end
+
                 -- check raw
                 local raw               = self[Class]
                 if raw[key] == value then return end
@@ -204,6 +209,7 @@ PLoop(function(_ENV)
         -- As object proxy and make all property observable
         elseif targetclass then
             export                      {
+                toRawValue              = Reactive.ToRaw,
                 checkRet                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
                                         and function(ok, ...) if not ok then error(..., 2) end return ... end
                                         or  function(ok, ...) if not ok then error(..., 3) end return ... end,
@@ -244,14 +250,22 @@ PLoop(function(_ENV)
                         property (name) {
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self, idx) return rawget(self, Class)[name][idx] end,
-                            set         = Property.IsWritable(ftr) and function(self, idx, value) rawget(self, Class)[name][idx] = value return OnDataChange(self, name, idx, value) end,
+                            set         = Property.IsWritable(ftr) and function(self, idx, value)
+                                value   = toRawValue(value)
+                                rawget(self, Class)[name][idx] = value
+                                return OnDataChange(self, name, idx, value)
+                            end,
                         }
                     else
                         if Property.IsWritable(ftr) then __Observable__() end
                         property (name) {
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self) return rawget(self, Class)[name] end,
-                            set         = Property.IsWritable(ftr) and function(self, value) rawget(self, Class)[name] = value return OnDataChange(self, name, value) end,
+                            set         = Property.IsWritable(ftr) and function(self, value)
+                                value   = toRawValue(value)
+                                rawget(self, Class)[name] = value
+                                return OnDataChange(self, name, value)
+                            end,
                         }
                     end
                 end
@@ -510,6 +524,11 @@ PLoop(function(_ENV)
                     error("The Reactive class can't be used as the key", 2)
                 end
 
+                -- unpack
+                if type(value) == "table" then
+                    value               = toRawValue(value)
+                end
+
                 -- check raw
                 local raw               = self[RawTable]
                 if raw[key] == value then return end
@@ -550,6 +569,10 @@ PLoop(function(_ENV)
 
                 return OnDataChange(self, key, value)
             end
+
+            export {
+                toRawValue              = ToRaw
+            }
         end
     end)
 
@@ -604,7 +627,7 @@ PLoop(function(_ENV)
                 return true
             end
 
-            -- raw table/array alwasy be reactable
+            -- raw table/array always be reactable
             return true
 
         elseif tval == "number" or tval == "string" or tval == "boolean" then

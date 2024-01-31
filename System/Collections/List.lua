@@ -52,7 +52,6 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
-            resume                      = coroutine.resume,
             keepargs                    = Toolset.keepargs,
             getkeepargs                 = Toolset.getkeepargs,
         }
