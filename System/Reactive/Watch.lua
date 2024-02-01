@@ -191,6 +191,7 @@ PLoop(function(_ENV)
             export                      {
                 getValue                = Environment.GetValue,
                 isObjectType            = Class.IsObjectType,
+                isSubType               = Class.IsSubType,
                 getObjectClass          = Class.GetObjectClass,
                 rawset                  = rawset,
                 rawget                  = rawget,
@@ -200,49 +201,51 @@ PLoop(function(_ENV)
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
 
-                Environment, ReactiveProxy, Observer, Reactive, ReactiveList
-            }
+                -- check the access value if observable
+                parseValue              = function (self, key, value)
+                    local cls           = value and getObjectClass(cls)
+                    if not cls then return value end
 
-            local function parseValue(self, key, value)
-                if not value then return value end
-
-                if type(value) == "table" and getmetatable(value) ~= nil then
-                    -- use reactive to wrap the value for simple
-                    local react         = reactive(value, true)
                     local observer      = rawget(self, Observer)
 
+                    -- convert the observable to behavior subject
+                    if isSubType(cls, IObservable) and not isSubType(cls, BehaviorSubject) then
+                        value           = BehaviorSubject(value)
+                        rawset(self, key, value)
+                    end
+
                     -- Subscribe for reactive field
-                    if isObjectType(react, Reactive) then
-                        value           = ReactiveProxy(observer, react)
+                    if isSubType(cls, Reactive) then
+                        value           = ReactiveProxy(observer, value)
                         rawset(self, key, value)
 
                     -- Subscribe the list
-                    elseif isObjectType(react, ReactiveList) then
+                    elseif isSubType(cls, ReactiveList) then
                         if observer.DeepWatch then
-                            value       = ReactiveListProxy(observer, react)
+                            value       = ReactiveListProxy(observer, value)
                             rawset(self, key, value)
                         else
-                            rawset(self, key, react)
-                            react:Subscribe(observer, observer.Subscription)
-                            return react
+                            Reactive.From(value):Subscribe(observer, observer.Subscription)
                         end
 
                     -- Add proxy to acess the real value
-                    elseif isObjectType(react, BehaviorSubject) then
+                    elseif isSubType(cls, BehaviorSubject) then
                         local watches   = rawget(self, Watch)
                         if not watches then
                             watches     = {}
                             rawset(self, Watch, watches)
                         end
-                        watches[key]    = react
-                        react:Subscribe(observer, observer.Subscription)
+                        watches[key]    = value
+                        value:Subscribe(observer, observer.Subscription)
                         rawset(self, key, nil)
-                        return react:GetValue()
+                        return value:GetValue()
                     end
-                end
 
-                return value
-            end
+                    return value
+                end,
+
+                BehaviorSubject, ReactiveProxy, ReactiveListProxy, Observer, Reactive, ReactiveList
+            }
 
             -------------------------------------------------------------------
             --                         static method                         --
@@ -286,7 +289,7 @@ PLoop(function(_ENV)
             -- gets the func environment
             local watchEnv              = WatchEnvironment(env)
 
-            -- subject chain
+            -- observer
             local processing            = false
             local observer              = Observer(function()
                 if processing then return end
