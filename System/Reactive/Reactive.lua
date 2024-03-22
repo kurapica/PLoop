@@ -79,7 +79,7 @@ PLoop(function(_ENV)
             extend "IKeyValueDict"
 
             export                      {
-                toRawValue              = Reactive.ToRaw,
+                toRaw                   = Reactive.ToRaw,
                 setRaw                  = function(self, k, v) self[k] = v end,
                 objMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
             }
@@ -125,14 +125,14 @@ PLoop(function(_ENV)
                 rawset(self, Reactive, reactives)
                 rawset(self, Class,  init)
 
-                -- make table value reactive, since they may be reactived in other places
+                -- make table value reactive, since they may be made in other places
                 for k, v in init:GetIterator() do
                     if k ~= Reactive and type(v) == "table" then
                         reactives[k]    = makeReactive(self, k, v)
                     end
                 end
 
-                -- try avoid to set value in raw dict object is possible
+                -- avoid to set value in raw dict object if possible
                 if objMap then
                     objMap[init]        = self
                 else
@@ -162,7 +162,7 @@ PLoop(function(_ENV)
             end
             function __newindex(self, key, value)
                 if type(value) == "table" then
-                    value               = toRawValue(value)
+                    value               = toRaw(value)
                 end
 
                 -- check raw
@@ -209,35 +209,31 @@ PLoop(function(_ENV)
         -- As object proxy and make all property observable
         elseif targetclass then
             export                      {
-                toRawValue              = Reactive.ToRaw,
+                toRaw                   = Reactive.ToRaw,
                 checkRet                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
                                         and function(ok, ...) if not ok then error(..., 2) end return ... end
                                         or  function(ok, ...) if not ok then error(..., 3) end return ... end,
                 getObject               = function(value) return type(value) == "table" and rawget(value, Class) or value end,
+                handleEventChange       = function(delegate, owner, name, init)
+                    if not init then return end
+                    local obj           = rawget(owner, Class)
+                    obj[name]           = obj[name] + function(self, ...) return delegate(owner, ...) end
+                end,
             }
 
             ---------------------------------------------------------------
             --                           event                           --
             ---------------------------------------------------------------
-            --- Fired when the data changed
+            --- fired when the data changed
             event "OnDataChange"
 
+            -- auto property/event generate
             for name, ftr in Class.GetFeatures(targetclass, true) do
                 -----------------------------------------------------------
                 --                         event                         --
                 -----------------------------------------------------------
                 if Event.Validate(ftr) then
-                    __EventChangeHandler__(function(delegate, owner, name)
-                        local obj       = rawget(owner, Class)
-                        if not rawget(delegate, Reactive) then
-                            rawset(delegate, Reactive, function(self, ...) return delegate(owner, ...) end)
-                        end
-                        if delegate:IsEmpty() then
-                            obj[name]   = obj[name] - delegate[Reactive]
-                        else
-                            obj[name]   = obj[name] + delegate[Reactive]
-                        end
-                    end)
+                    __EventChangeHandler__(handleEventChange)
                     event(name)
 
                 -----------------------------------------------------------
@@ -251,7 +247,7 @@ PLoop(function(_ENV)
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self, idx) return rawget(self, Class)[name][idx] end,
                             set         = Property.IsWritable(ftr) and function(self, idx, value)
-                                value   = toRawValue(value)
+                                value   = toRaw(value)
                                 rawget(self, Class)[name][idx] = value
                                 return OnDataChange(self, name, idx, value)
                             end,
@@ -262,7 +258,7 @@ PLoop(function(_ENV)
                             type        = Property.GetType(ftr),
                             get         = Property.IsReadable(ftr) and function(self) return rawget(self, Class)[name] end,
                             set         = Property.IsWritable(ftr) and function(self, value)
-                                value   = toRawValue(value)
+                                value   = toRaw(value)
                                 rawget(self, Class)[name] = value
                                 return OnDataChange(self, name, value)
                             end,
@@ -504,7 +500,7 @@ PLoop(function(_ENV)
             __Arguments__{ RawTable/nil }
             function __exist(_, init)
                 if not init then return end
-                return rawMap and rawMap[init] or init[Reactive]
+                return rawMap and rawMap[init] or rawget(init, Reactive)
             end
 
             ---------------------------------------------------------------
@@ -526,7 +522,7 @@ PLoop(function(_ENV)
 
                 -- unpack
                 if type(value) == "table" then
-                    value               = toRawValue(value)
+                    value               = toRaw(value)
                 end
 
                 -- check raw
@@ -571,7 +567,7 @@ PLoop(function(_ENV)
             end
 
             export {
-                toRawValue              = ToRaw
+                toRaw                   = ToRaw
             }
         end
     end)

@@ -265,22 +265,16 @@ PLoop(function(_ENV)
             end
         })
         __Static__()
-        function Just(...)
-            return _JustAutoGen[select("#", ...)](...)
-        end
+        function Just(...)              return _JustAutoGen[select("#", ...)](...) end
         __Static__() Return             = Just
 
         --- Returns and Observable that immediately completes without producing a value
         __Static__()
-        function Empty()
-            return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end)
-        end
+        function Empty()                return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end) end
 
         --- Returns an Observable that never produces values and never completes
         __Static__()
-        function Never()
-            return Observable(function() end)
-        end
+        function Never()                return Observable(function() end) end
 
         --- Returns an Observable that immediately produces an error
         __Static__()
@@ -324,9 +318,7 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
-        function Defer(ctor, ...)
-            return _DeferAutoGen[select("#", ...)](ctor, ...)
-        end
+        function Defer(ctor, ...)       return _DeferAutoGen[select("#", ...)](ctor, ...) end
 
         --- Converts list objects into Observables
         __Static__() __Arguments__{ IList }
@@ -455,9 +447,7 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Number, Any * 1 }
-        function Repeat(count, ...)
-            return _RepeatGen[select("#", ...)](count, ...)
-        end
+        function Repeat(count, ...)     return _RepeatGen[select("#", ...)](count, ...) end
 
         --- Creates an Observable that emits the return value of a function-like directive
         _StartGen                       = setmetatable({
@@ -488,8 +478,6 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
-        function Start(func, ...)
-            return _StartGen[select("#", ...)](func, ...)
-        end
+        function Start(func, ...)       return _StartGen[select("#", ...)](func, ...) end
     end)
 end)

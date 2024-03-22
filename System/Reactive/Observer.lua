@@ -69,14 +69,10 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
-        function OnNext(self, ...)
-            return self.__onNext(...)
-        end
+        function OnNext(self, ...)      return self.__onNext(...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)
-            return self.__onError(...)
-        end
+        function OnError(self, ...)     return self.__onError(...)end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
@@ -89,8 +85,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
         function __ctor(self, onNext, onError, onCompleted, subscription)
-            rawset(self, "__onNext",    onNext or fakefunc)
-            rawset(self, "__onError",   onError or fakefunc)
+            rawset(self, "__onNext",    onNext      or fakefunc)
+            rawset(self, "__onError",   onError     or fakefunc)
             rawset(self, "__onComp",    onCompleted or fakefunc)
             if subscription then
                 self.Subscription       = Subscription(subscription)
