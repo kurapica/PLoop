@@ -189,7 +189,25 @@ PLoop(function(_ENV)
     class "BehaviorSubject"             (function(_ENV)
         inherit "Subject"
 
-        export { select = select, max = math.max, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext, subscribe = Subject.Subscribe, onError = Subject.OnError }
+        export {
+            select                      = select,
+            max                         = math.max,
+            unpack                      = _G.unpack or table.unpack,
+            onNext                      = Subject.OnNext,
+            subscribe                   = Subject.Subscribe,
+            onError                     = Subject.OnError,
+            isObjectType                = Class.IsObjectType,
+            getValue                    = function(self)
+                if isObjectType(self, BehaviorSubject) then
+                    print(self.Value)
+                    return (unpack(self, 1, self[0]))
+                else
+                    return self
+                end
+            end,
+
+            BehaviorSubject
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -271,6 +289,72 @@ PLoop(function(_ENV)
             end
 
             super(self)
+        end
+
+        -----------------------------------------------------------------------
+        --                            meta-method                            --
+        -----------------------------------------------------------------------
+        function __tostring(self)       return tostring(self.Value) end
+
+        -- the addition operation
+        function __add(a, b)            return getValue(a) + getValue(b) end
+
+        -- the subtraction operation
+        function __sub(a, b)            return getValue(a) - getValue(b) end
+
+        -- the multiplication operation
+        function __mul(a, b)            return getValue(a) * getValue(b) end
+
+        -- the division operation
+        function __div(a, b)            return getValue(a) / getValue(b) end
+
+        -- the modulo operation
+        function __mod(a, b)            return getValue(a) % getValue(b) end
+
+        -- the exponentiation operation
+        function __pow(a, b)            return getValue(a) ^ getValue(b) end
+
+        -- the negation operation
+        function __unm(a)               return - getValue(a) end
+
+        -- the concatenation operation
+        function __concat(a, b)         return getValue(a) .. getValue(b) end
+
+        -- the length operation, those won't works in 5.1
+        function __len(a)               return #getValue(a) end
+
+        -- the equal operation
+        function __eq(a, b)             return getValue(a) == getValue(b) end
+
+        -- the less than operation
+        function __lt(a, b)             return getValue(a) < getValue(b) end
+
+        -- the less equal operation
+        function __le(a, b)             return getValue(a) <= getValue(b) end
+
+        if _G._VERSION and tonumber(_G._VERSION:match("[%d%.]+$")) * 10 >= 53 then
+            Toolset.loadsnippet([[
+                -- the floor division operation
+                function __idiv(a, b)           return getValue(a) // getValue(b) end
+
+                -- the bitwise AND operation
+                function __band(a, b)           return getValue(a) & getValue(b) end
+
+                -- the bitwise OR operation
+                function __bor(a, b)            return getValue(a) | getValue(b) end
+
+                -- the bitwise exclusive OR operation
+                function __bxor(a, b)           return getValue(a) ~ getValue(b) end
+
+                -- the bitwise NOToperation
+                function __bnot(a)              return ~getValue(a) end
+
+                -- the bitwise left shift operation
+                function __shl(a, b)            return getValue(a) << getValue(b) end
+
+                -- the bitwise right shift operation
+                function __shr(a, b)            return getValue(a) >> getValue(b) end
+            ]], "BehaviorSubject_Patch_53", _ENV)()
         end
     end)
 

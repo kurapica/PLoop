@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/01/19                                               --
+-- Update Date  :   2024/04/01                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -76,7 +76,7 @@ PLoop(function(_ENV)
 
         -- For dictionary
         if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
-            extend "IKeyValueDict"
+            extend "IKeyValueDict" "IObservable"
 
             export                      {
                 toRaw                   = Reactive.ToRaw,
@@ -115,6 +115,11 @@ PLoop(function(_ENV)
                 end
             end
 
+            --- Subscribe the observers
+            function Subscribe(self, ...)
+                return Observable.From(self.OnDataChange):Subscribe(...)
+            end
+
             ---------------------------------------------------------------
             --                        constructor                        --
             ---------------------------------------------------------------
@@ -151,9 +156,22 @@ PLoop(function(_ENV)
             ---------------------------------------------------------------
             --- Gets the current value
             function __index(self, key)
-                local r                 = rawget(self, Reactive)[key]
-                if r then return getValue(r) end
-                return rawget(self, Class)[key] -- access raw directly
+                -- get existed reactive
+                local reactives         = rawget(self, Reactive)
+                local r                 = reactives[key]
+                if r then return r end
+
+                -- get raw
+                local raw               = rawget(self, Class)
+                local value             = raw[key]
+
+                -- wrap the existed value
+                if value ~= nil and type(key) == "string" then
+                    r                   = makeReactive(self, key, value)
+                    reactives[key]      = r
+                    return r
+                end
+                return value
             end
 
             --- Send the new value
@@ -303,7 +321,7 @@ PLoop(function(_ENV)
         -- As container for reactive fields, common usages
         else
             -- Provide the dictionary features
-            extend "IKeyValueDict"
+            extend "IKeyValueDict" "IObservable"
 
             export                      {
                 pcall                   = pcall,
@@ -414,39 +432,6 @@ PLoop(function(_ENV)
                 error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1)
             end
 
-            --- Gets the observable for the field
-            __Static__()
-            function From(self, key, create)
-                -- for the whole object
-                if not key and (isObjectType(self, Reactive) or isObjectType(self, ReactiveList)) then
-                    return Observable.From(self.OnDataChange)
-                end
-
-                -- for index value from the reactive list
-                if isObjectType(self, ReactiveList) then
-                    return ReactiveList.From(self, key, create)
-                end
-
-                -- for reactive object
-                local reactives         = rawget(self, Reactive)
-
-                -- for class
-                if not reactives then return Observable.From(self, key) end
-
-                -- already wrap
-                local r                 = reactives[key]
-                if r then return r end
-
-                -- for raw table or dictionary
-                local raw               = rawget(self, RawTable) or rawget(self, Class)
-                if raw and type(key) == "string" then
-                    local value         = raw[key]
-                    r                   = (value ~= nil or create) and makeReactive(self, key, value) or nil
-                    reactives[key]      = r
-                    return r
-                end
-            end
-
             ---------------------------------------------------------------
             --                          method                           --
             ---------------------------------------------------------------
@@ -469,6 +454,11 @@ PLoop(function(_ENV)
                         yield(k, getValue(v))
                     end
                 end
+            end
+
+            --- Subscribe the observers
+            function Subscribe(self, ...)
+                return Observable.From(self.OnDataChange):Subscribe(...)
             end
 
             ---------------------------------------------------------------
@@ -510,8 +500,19 @@ PLoop(function(_ENV)
             function __index(self, key)
                 local reactives         = rawget(self, Reactive)
                 local r                 = reactives[key]
-                if r then return getValue(r) end
-                return rawget(self, RawTable)[key]
+                if r then return r end
+
+                -- get raw
+                local raw               = rawget(self, RawTable)
+                local value             = raw[key]
+
+                -- wrap the existed value
+                if value ~= nil and type(key) == "string" then
+                    r                   = makeReactive(self, key, value)
+                    reactives[key]      = r
+                    return r
+                end
+                return value
             end
 
             --- Send the new value
@@ -566,9 +567,7 @@ PLoop(function(_ENV)
                 return OnDataChange(self, key, value)
             end
 
-            export {
-                toRaw                   = ToRaw
-            }
+            export { toRaw = ToRaw }
         end
     end)
 
