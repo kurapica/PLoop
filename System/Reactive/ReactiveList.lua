@@ -19,7 +19,7 @@ PLoop(function(_ENV)
     __Sealed__()
     __Arguments__{ AnyType/nil }:WithRebuild()
     class "ReactiveList"                (function(_ENV, elementtype)
-        extend "IIndexedList"
+        extend "IIndexedList" "IObservable"
 
         export                          {
             type                        = type,
@@ -54,7 +54,6 @@ PLoop(function(_ENV)
                             end
                         end
                     end
-
                 end
                 return r
             end,
@@ -103,6 +102,11 @@ PLoop(function(_ENV)
                 local value             = self[index]
                 if value ~= nil then return index, value end
             end, self, 0
+        end
+
+        --- Subscribe the observers
+        function Subscribe(self, ...)
+            return Observable.From(self.OnDataChange):Subscribe(...)
         end
 
         --- Push
@@ -357,11 +361,6 @@ PLoop(function(_ENV)
                 end
 
                 return self:Splice(1, self.Count, unpack(value))
-            end
-
-            __Static__()
-            function From(self)
-                return isObjectType(self, ReactiveList) and Observable.From(self.OnDataChange) or nil
             end
         end
     end)

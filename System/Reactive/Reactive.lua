@@ -68,6 +68,7 @@ PLoop(function(_ENV)
             -- wrap the table value as default
             makeReactive                = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, v)
                 local r                 = reactive(v, true)
+                self[Reactive][k]       = r or false
                 return r and bindDataChange(self, k, r)
             end or nil,
 
@@ -98,19 +99,11 @@ PLoop(function(_ENV)
             __Iterator__()
             function GetIterator(self)
                 local yield             = yield
-                local raw               = self[Class]
-
-                -- for raw
-                for k in raw:GetIterator() do
-                    if k ~= Reactive then
+                for k, v in self[Class]:GetIterator() do
+                    if type(k) == "string" then
                         yield(k, self[k])
-                    end
-                end
-
-                -- for reactive with nil value
-                for k, v in pairs(self[Reactive]) do
-                    if raw[k] == nil then
-                        yield(k, getValue(v))
+                    elseif k ~= Reactive then
+                        yield(k, v)
                     end
                 end
             end
@@ -129,13 +122,6 @@ PLoop(function(_ENV)
                 local reactives         = {}
                 rawset(self, Reactive, reactives)
                 rawset(self, Class,  init)
-
-                -- make table value reactive, since they may be made in other places
-                for k, v in init:GetIterator() do
-                    if k ~= Reactive and type(v) == "table" then
-                        reactives[k]    = makeReactive(self, k, v)
-                    end
-                end
 
                 -- avoid to set value in raw dict object if possible
                 if objMap then
@@ -161,17 +147,9 @@ PLoop(function(_ENV)
                 local r                 = reactives[key]
                 if r then return r end
 
-                -- get raw
-                local raw               = rawget(self, Class)
-                local value             = raw[key]
-
-                -- wrap the existed value
-                if value ~= nil and type(key) == "string" then
-                    r                   = makeReactive(self, key, value)
-                    reactives[key]      = r
-                    return r
-                end
-                return value
+                -- wrap raw
+                local value             = rawget(self, Class)[key]
+                return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
             end
 
             --- Send the new value
@@ -206,22 +184,16 @@ PLoop(function(_ENV)
                     else
                         error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
                     end
+                elseif r == false then
+                    reactives[key]      = nil
                 end
 
                 -- raw directly
                 local ok, err           = pcall(setRaw, raw, key, value)
                 if not ok then error(err, 2) end
 
-                -- make table reactive
-                if type(key) == "string" and type(value) == "table" then
-                    local r             = makeReactive(self, key, value)
-                    if r then
-                        reactives[key]  = r
-                        value           = r
-                    end
-                end
-
-                return OnDataChange(self, key, value)
+                -- make table reactive now, since it'll be passed as argument
+                return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
             end
 
         -- As object proxy and make all property observable
@@ -439,19 +411,12 @@ PLoop(function(_ENV)
             __Iterator__()
             function GetIterator(self)
                 local yield             = yield
-                local raw               = self[RawTable]
 
-                -- raw first
-                for k in pairs(raw) do
-                    if k ~= Reactive then
+                for k, v in pairs(self[RawTable]) do
+                    if type(k) == "string" then
                         yield(k, self[k])
-                    end
-                end
-
-                -- rest reactives
-                for k, v in pairs(self[Reactive]) do
-                    if raw[k] == nil then
-                        yield(k, getValue(v))
+                    elseif k ~= Reactive then
+                        yield(k, v)
                     end
                 end
             end
@@ -471,13 +436,6 @@ PLoop(function(_ENV)
                 rawset(self, RawTable, init or {})
 
                 if init then
-                    -- wrap all child table
-                    for k, v in pairs(init) do
-                        if k ~= Reactive and type(v) == "table" then
-                            reactives[k]= makeReactive(self, k, v)
-                        end
-                    end
-
                     -- record the map
                     if rawMap then
                         rawMap[init]    = self
@@ -502,25 +460,13 @@ PLoop(function(_ENV)
                 local r                 = reactives[key]
                 if r then return r end
 
-                -- get raw
-                local raw               = rawget(self, RawTable)
-                local value             = raw[key]
-
-                -- wrap the existed value
-                if value ~= nil and type(key) == "string" then
-                    r                   = makeReactive(self, key, value)
-                    reactives[key]      = r
-                    return r
-                end
-                return value
+                -- wrap raw
+                local value             = rawget(self, RawTable)[key]
+                return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
             end
 
             --- Send the new value
             function __newindex(self, key, value)
-                if key == Reactive then
-                    error("The Reactive class can't be used as the key", 2)
-                end
-
                 -- unpack
                 if type(value) == "table" then
                     value               = toRaw(value)
@@ -550,21 +496,15 @@ PLoop(function(_ENV)
                     else
                         error("The reactive field " .. tostring(key) .. " is a reactive table, only accept table value", 2)
                     end
+                elseif r == false then
+                    reactives[key]      = nil
                 end
 
                 -- raw directly
                 raw[key]                = value
 
-                -- make table reactive
-                if type(value) == "table" then
-                    local r             = makeReactive(self, key, value)
-                    if r then
-                        reactives[key]  = r
-                        value           = r
-                    end
-                end
-
-                return OnDataChange(self, key, value)
+                -- make table reactive now, since it'll be passed as argument
+                return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
             end
 
             export { toRaw = ToRaw }
