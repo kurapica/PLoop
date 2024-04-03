@@ -49,11 +49,14 @@ PLoop(function(_ENV)
         export                          {
             type                        = type,
             ipairs                      = ipairs,
+            tinsert                     = table.insert,
             tremove                     = table.remove,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
             keepargs                    = Toolset.keepargs,
             getkeepargs                 = Toolset.getkeepargs,
+            min                         = math.min,
+            max                         = math.max,
         }
 
         lsttype                         = lsttype ~= Any and lsttype or nil
@@ -118,35 +121,60 @@ PLoop(function(_ENV)
         end
 
         --- Splice
-        __Arguments__{ Number, Number/nil, (lsttype or Any) * 0 }
+        __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
         function Splice(self, index, count, ...)
             local total                 = self.Count
-            local last                  = count and (index + count - 1) or total
+            index                       = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+            local last                  = count and min(index + count - 1, total) or total
             local addcnt                = select("#", ...)
             local th
 
-            -- @TODO boost with replace
             if index <= last then
                 th                      = keepargs(unpack(self, index, last))
-                for i = last, index, -1 do self:RemoveByIndex(i) end
-            end
 
-            for i = 1, addcnt do
-                self:Insert(index + i - 1, (select(i, ...)))
+                if addcnt > 0 then
+                    -- replace
+                    for i = 1, min(addcnt, last - index + 1) do
+                        self[index+i-1] = select(i, ...)
+                    end
+
+                    -- remove
+                    for i = last, index + addcnt, -1 do
+                        self:RemoveByIndex(i)
+                    end
+
+                    -- add
+                    for i = last - index + 2, addcnt do
+                        self:Insert(index + i - 1, (select(i, ...)))
+                    end
+                else
+                    for i = last, index, -1 do self:RemoveByIndex(i) end
+                end
+            else
+                for i = 1, addcnt do
+                    self:Insert(index + i - 1, (select(i, ...)))
+                end
             end
 
             if th then                  return getkeepargs(th) end
         end
 
-        --- Insert an item to the list
-        if lsttype then
-            __Arguments__{ NaturalNumber, lsttype }
-            Insert                      = table.insert
+        __Arguments__{ Integer, lsttype or Any }
+        function Insert(self, index, item)
+            local total                 = self.Count
+            index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
+            if index == total + 1 then
+                self[index]             = item
+            else
+                tinsert(self, index, item)
+            end
+            return self.Count
+        end
 
-            __Arguments__{ lsttype }
-            Insert                      = table.insert
-        else
-            Insert                      = table.insert
+        __Arguments__{ lsttype or Any }
+        function Insert(self, item)
+            self[self.Count + 1]        = item
+            return self.Count
         end
 
         --- Whether an item existed in the list
@@ -160,13 +188,24 @@ PLoop(function(_ENV)
             if item == nil then
                 return tremove(self)
             else
-                local i = self:IndexOf(item)
+                local i                 = self:IndexOf(item)
                 return i and self:RemoveByIndex(i)
             end
         end
 
         --- Remove an item from the tail or the given index
-        RemoveByIndex                   = tremove
+        __Arguments__{ Integer/nil }
+        function RemoveByIndex(self, index)
+            local total                 = self.Count
+            index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
+            if index == total then
+                local item              = self[index]
+                self[index]             = nil
+                return item
+            else
+                return tremove(self, index)
+            end
+        end
 
         --- Clear the list
         function Clear(self)

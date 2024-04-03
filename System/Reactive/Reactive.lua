@@ -30,6 +30,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targetclass, keytype, valtype)
+        extend "IObservable"
 
         export                          {
             type                        = type,
@@ -44,9 +45,6 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             isObjectType                = Class.IsObjectType,
             getEventDelegate            = Event.Get,
-
-            -- return value if r is behavior subject
-            getValue                    = function(r) if isObjectType(r, BehaviorSubject) then return r:GetValue() else return r end end,
 
             -- bind data change event handler when accessed
             bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
@@ -72,12 +70,18 @@ PLoop(function(_ENV)
                 return r and bindDataChange(self, k, r)
             end or nil,
 
-            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject
+            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject, Observable
         }
 
-        -- For dictionary
+        -------------------------------------------------------------------
+        --                         common method                         --
+        -------------------------------------------------------------------
+        --- Subscribe the observers
+        function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
+
+        -- For dictionaryd
         if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
-            extend "IKeyValueDict" "IObservable"
+            extend "IKeyValueDict"
 
             export                      {
                 toRaw                   = Reactive.ToRaw,
@@ -97,7 +101,7 @@ PLoop(function(_ENV)
             ---------------------------------------------------------------
             --- Gets the iterator
             __Iterator__()
-            function GetIterator(self)
+            function GetIterator(self, includeNil)
                 local yield             = yield
                 for k, v in self[Class]:GetIterator() do
                     if type(k) == "string" then
@@ -108,19 +112,13 @@ PLoop(function(_ENV)
                 end
             end
 
-            --- Subscribe the observers
-            function Subscribe(self, ...)
-                return Observable.From(self.OnDataChange):Subscribe(...)
-            end
-
             ---------------------------------------------------------------
             --                        constructor                        --
             ---------------------------------------------------------------
             --- bind the reactive and object
             __Arguments__{ IKeyValueDict }
             function __ctor(self, init)
-                local reactives         = {}
-                rawset(self, Reactive, reactives)
+                rawset(self, Reactive, {})
                 rawset(self, Class,  init)
 
                 -- avoid to set value in raw dict object if possible
@@ -192,7 +190,7 @@ PLoop(function(_ENV)
                 local ok, err           = pcall(setRaw, raw, key, value)
                 if not ok then error(err, 2) end
 
-                -- make table reactive now, since it'll be passed as argument
+                -- make table reactive now, since it may be used in the event handler
                 return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
             end
 
@@ -203,7 +201,9 @@ PLoop(function(_ENV)
                 checkRet                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
                                         and function(ok, ...) if not ok then error(..., 2) end return ... end
                                         or  function(ok, ...) if not ok then error(..., 3) end return ... end,
+
                 getObject               = function(value) return type(value) == "table" and rawget(value, Class) or value end,
+
                 handleEventChange       = function(delegate, owner, name, init)
                     if not init then return end
                     local obj           = rawget(owner, Class)
@@ -293,7 +293,7 @@ PLoop(function(_ENV)
         -- As container for reactive fields, common usages
         else
             -- Provide the dictionary features
-            extend "IKeyValueDict" "IObservable"
+            extend "IKeyValueDict"
 
             export                      {
                 pcall                   = pcall,
@@ -331,9 +331,12 @@ PLoop(function(_ENV)
                             self[name]  = value[name]
                         end
                     end
+
+                    -- release
+                    temp                = nil
                 end,
 
-                Reactive, ReactiveList, BehaviorSubject, RawTable, Observable
+                Reactive, ReactiveList, BehaviorSubject, RawTable
             }
 
             ---------------------------------------------------------------
@@ -411,7 +414,6 @@ PLoop(function(_ENV)
             __Iterator__()
             function GetIterator(self)
                 local yield             = yield
-
                 for k, v in pairs(self[RawTable]) do
                     if type(k) == "string" then
                         yield(k, self[k])
@@ -421,18 +423,12 @@ PLoop(function(_ENV)
                 end
             end
 
-            --- Subscribe the observers
-            function Subscribe(self, ...)
-                return Observable.From(self.OnDataChange):Subscribe(...)
-            end
-
             ---------------------------------------------------------------
             --                        constructor                        --
             ---------------------------------------------------------------
             __Arguments__{ RawTable/nil }
             function __ctor(self, init)
-                local reactives         = {}
-                rawset(self, Reactive, reactives)
+                rawset(self, Reactive, {})
                 rawset(self, RawTable, init or {})
 
                 if init then
@@ -474,7 +470,7 @@ PLoop(function(_ENV)
 
                 -- check raw
                 local raw               = self[RawTable]
-                if raw[key] == value then return end
+                if raw[key] == value    then return end
 
                 -- check the reactive
                 local reactives         = rawget(self, Reactive)
@@ -503,7 +499,7 @@ PLoop(function(_ENV)
                 -- raw directly
                 raw[key]                = value
 
-                -- make table reactive now, since it'll be passed as argument
+                -- make table reactive now, since it may be used in the event handler
                 return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
             end
 

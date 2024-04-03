@@ -17,9 +17,9 @@ PLoop(function(_ENV)
 
     --- Provide reactive feature for list or array
     __Sealed__()
-    __Arguments__{ AnyType/nil }:WithRebuild()
+    __Arguments__{ AnyType/nil }
     class "ReactiveList"                (function(_ENV, elementtype)
-        extend "IIndexedList" "IObservable"
+        extend "IObservable" "IIndexedList"
 
         export                          {
             type                        = type,
@@ -30,6 +30,8 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
+            min                         = math.min,
+            max                         = math.max,
             keepargs                    = Toolset.keepargs,
             getkeepargs                 = Toolset.getkeepargs,
             tinsert                     = table.insert,
@@ -44,12 +46,21 @@ PLoop(function(_ENV)
             bindDataChange              = function (self, r)
                 if r and getEventDelegate(OnDataChange, self, true) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...)
-                        -- index the data @todo add cache to boost
                         local raw       = self[ReactiveList]
                         local reactives = self[Reactive]
 
-                        for i = 1, self.Count do
+                        -- index cache to boost, will be reset when element index changed
+                        local cache     = rawget(self, IList)
+                        if not cache then
+                            cache       = newtable(true)
+                            rawset(self, IList, cache)
+                        end
+
+                        if cache[r] then return OnDataChange(self, cache[r], ...) end
+
+                        for i = 1, raw.Count or #raw do
                             if reactives[raw[i]] == r then
+                                cache[r]= i
                                 return OnDataChange(self, i, ...)
                             end
                         end
@@ -61,7 +72,7 @@ PLoop(function(_ENV)
             -- handle data change event handler
             handleDataChangeEvent       = function (_, owner, name, init)
                 if not init then return end
-                for _, v in owner:GetIterator() do
+                for v in pairs(owner[Reactive]) do
                     bindDataChange(owner, v)
                 end
             end,
@@ -69,14 +80,21 @@ PLoop(function(_ENV)
             -- wrap the table value as default
             makeReactive                = function (self, v)
                 local r                 = reactive(v, true)
+                self[Reactive][v]       = r or false
                 return r and bindDataChange(self, r)
+            end,
+
+            -- fire the element data changes
+            fireElementChange           = function(self, ...)
+                rawset(self, IList, nil)
+                return OnDataChange(self, ...)
             end,
 
             -- list reactive map
             rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
             -- import types
-            ReactiveList, Observable, Observer, Reactive, Watch, Subject
+            ReactiveList, Observable, Observer, Reactive, Watch, Subject, IList
         }
 
         -------------------------------------------------------------------
@@ -95,6 +113,11 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                            method                             --
         -------------------------------------------------------------------
+        --- Subscribe the observers
+        function Subscribe(self, ...)
+            return Observable.From(self.OnDataChange):Subscribe(...)
+        end
+
         --- Gets the iterator
         function GetIterator(self)
             return function (self,  index)
@@ -104,117 +127,123 @@ PLoop(function(_ENV)
             end, self, 0
         end
 
-        --- Subscribe the observers
-        function Subscribe(self, ...)
-            return Observable.From(self.OnDataChange):Subscribe(...)
-        end
-
         --- Push
         if elementtype then __Arguments__{ elementtype } end
         function Push(self, item)
-            self:Insert(item)
-            return self.Count
+            item                        = toRawValue(item)
+            if item == nil then return end
+            local raw                   = self[ReactiveList]
+            local insert                = raw.Insert or tinsert
+            insert(raw, item)
+            return fireElementChange(self) or self.Count
         end
 
         --- Pop
         function Pop(self)
-            return self:Remove()
+            local raw                   = self[ReactiveList]
+            local remove                = raw.RemoveByIndex or tremove
+            local item                  = remove(raw)
+            if item == nil then return end
+            self[Reactive][item]        = nil
+            return fireElementChange(self) or item
         end
 
         --- Shift
         function Shift(self)
-            return self:RemoveByIndex(1)
+            local raw                   = self[ReactiveList]
+            local remove                = raw.RemoveByIndex or tremove
+            local item                  = remove(raw, 1)
+            if item == nil then return end
+            self[Reactive][item]        = nil
+            return fireElementChange(self) or item
         end
 
         --- Unshift
         if elementtype then __Arguments__{ elementtype } end
         function Unshift(self, item)
-            self:Insert(1, item)
-            return self.Count
+            item                        = toRawValue(item)
+            if item == nil then return end
+            local raw                   = self[ReactiveList]
+            local insert                = raw.Insert or tinsert
+            insert(raw, 1, item)
+            return fireElementChange(self) or self.Count
         end
 
         --- Splice
-        __Arguments__{ Number, Number/nil, (elementtype or Any) * 0 }
+        __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
         function Splice(self, index, count, ...)
             local raw                   = self[ReactiveList]
+            local reactives             = self[Reactive]
+            local insert                = raw.Insert or tinsert
+            local remove                = raw.RemoveByIndex or tremove
+
             local total                 = raw.Count or #raw
-            local last                  = count and (index + count - 1) or total
+            index                       = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+            local last                  = count and min(index + count - 1, total) or total
             local addcnt                = select("#", ...)
             local th
-            local changed               = false
 
-            -- @TODO boost with replace
             if index <= last then
-                local removeByIndex     = raw.RemoveByIndex or tremove
-                th                      = keepargs(unpack(self, index, last))
-                changed                 = true
-                for i = last, index, -1 do removeByIndex(raw, i) end
-            end
+                th                      = keepargs(unpack(raw, index, last))
 
-            local insert                = raw.Insert or tinsert
-            local reactives             = self[Reactive]
-            for i = 1, addcnt do
-                changed                 = true
+                if addcnt > 0 then
+                    -- replace
+                    for i = 1, min(addcnt, last - index + 1) do
+                        raw[index+i-1]  = toRawValue(select(i, ...))
+                    end
 
-                local value             = toRawValue((select(i, ...)))
-                insert(raw, index + i - 1, value)
-                if isReactable(value, true) then
-                    reactives[value]    = makeReactive(self, value)
+                    -- remove
+                    for i = last, index + addcnt, -1 do
+                        reactives[remove(raw, i)] = nil
+                    end
+
+                    -- add
+                    for i = last - index + 2, addcnt do
+                        raw:Insert(index + i - 1, toRawValue(select(i, ...)))
+                    end
+                else
+                    for i = last, index, -1 do
+                        reactives[remove(raw, i)] = nil
+                    end
+                end
+            else
+                for i = 1, addcnt do
+                    raw:Insert(index + i - 1, toRawValue(select(i, ...)))
                 end
             end
 
-            -- full list change
-            if changed then OnDataChange(self) end
-
-            if th then                  return getkeepargs(th) end
+            if index <= last or addcnt > 0 then fireElementChange(self) end
+            if th then return getkeepargs(th) end
         end
 
         --- Insert an item to the list
-        __Arguments__{ Number, elementtype or Any }
+        __Arguments__{ Integer, elementtype or Any }
         function Insert(self, index, item)
-            local raw                   = self[ReactiveList]
-            local reactives             = self[Reactive]
-            local insert                = raw.Insert or tinsert
-
             item                        = toRawValue(item)
-            insert(raw, index, item)
-            if isReactable(item, true) then
-                local r                 = makeReactive(self, item)
-                if r then
-                    reactives[item]     = r
-                    item                = r
-                end
-            end
-
-            if index == (raw.Count or #raw) then
-                return OnDataChange(self, index, item)
+            if item == nil then return end
+            local raw                   = self[ReactiveList]
+            local total                 = raw.Count or #raw
+            local insert                = raw.Insert or tinsert
+            index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
+            if index == total + 1 then
+                raw[index]              = item
             else
-                -- full list change
-                return OnDataChange(self)
+                insert(raw, index, item)
             end
+            return fireElementChange(self) or self.Count
         end
 
         __Arguments__{ elementtype or Any }
         function Insert(self, item)
-            local raw                   = self[ReactiveList]
-            local reactives             = self[Reactive]
-            local insert                = raw.Insert or tinsert
-
             item                        = toRawValue(item)
-            insert(raw, item)
-            if isReactable(item, true) then
-                local r                 = makeReactive(self, item)
-                if r then
-                    reactives[item]     = r
-                    item                = r
-                end
-            end
-
-            return OnDataChange(self, raw.Count or #raw, item)
+            if item == nil then return end
+            local raw                   = self[ReactiveList]
+            raw[(raw.Count or #raw) + 1]= item
+            return fireElementChange(self) or self.Count
         end
 
         --- Whether an item existed in the list
-        function Contains(self, item) return self:IndexOf(item) and true or false end
+        function Contains(self, item)   return self:IndexOf(item) and true or false end
 
         --- Get the index of the item if it existed in the list
         function IndexOf(self, item)
@@ -231,7 +260,7 @@ PLoop(function(_ENV)
             if item == nil then
                 return self:RemoveByIndex()
             else
-                local i = self:IndexOf(item)
+                local i                 = self:IndexOf(item)
                 return i and self:RemoveByIndex(i)
             end
         end
@@ -239,29 +268,34 @@ PLoop(function(_ENV)
         --- Remove an item from the tail or the given index
         function RemoveByIndex(self, index)
             local raw                   = self[ReactiveList]
-            local count                 = raw.Count or #raw
-            if count > 0 and (not index or index > 0 and index <= count) then
-                local item              = (raw.RemoveByIndex or tremove)(self, index)
-                OnDataChange(self)
-                return item
+            local total                 = raw.Count or #raw
+            index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
+            local item
+            if index == total then
+                item                    = raw[index]
+                raw[index]              = nil
+            else
+                local remove            = raw.RemoveByIndex or tremove
+                item                    = remove(raw, index)
             end
+            return item ~= nil and fireElementChange(self) or item
         end
 
         --- Clear the list
         function Clear(self)
             local raw                   = self[ReactiveList]
-            if (raw.Count or #raw) == 0 then return end
+            local total                 = raw.Count or #raw
+            if total == 0 then return end
 
             if raw.Clear then
                 raw:Clear()
             else
-                for i = #raw, 1, -1 do
+                for i = total, 1, -1 do
                     raw[i]              = nil
                 end
             end
-
-            OnDataChange(self)
-            return self
+            rawset(self, Reactive, newtable(true, true))
+            return fireElementChange(self)
         end
 
         -------------------------------------------------------------------
@@ -271,13 +305,6 @@ PLoop(function(_ENV)
             local reactives             = newtable(true, true)
             rawset(self, ReactiveList,  list)
             rawset(self, Reactive, reactives)
-
-            -- wrap table values directly
-            for i, v in (list.GetIterator or ipairs)(list) do
-                if isReactable(v, true) then
-                    reactives[v]        = makeReactive(self, v)
-                end
-            end
 
             if rawMap then
                 rawMap[list]            = self
@@ -298,7 +325,12 @@ PLoop(function(_ENV)
         function __index(self, index)
             local raw                   = rawget(self, ReactiveList)
             local value                 = raw[index]
-            return type(value) == "table" and rawget(self, Reactive)[value] or value
+            if type(value) == "table" then
+                local r                 = rawget(self, Reactive)[value]
+                if r ~= nil then return r or value end
+                return makeReactive(self, value) or value
+            end
+            return value
         end
 
         function __newindex(self, index, value)
@@ -309,6 +341,7 @@ PLoop(function(_ENV)
 
             local raw                   = self[ReactiveList]
             local oldval                = raw[index]
+            if oldval == nil then error("Usage: reactiveList[index] = value - the index is out of range", 2) end
             if oldval == value then return end
 
             local reactives             = self[Reactive]
@@ -319,16 +352,7 @@ PLoop(function(_ENV)
 
             -- set directly
             raw[index]                  = value
-
-            if isReactable(value, true) then
-                local r                 = makeReactive(self, value)
-                if r then
-                    reactives[value]    = r
-                    value               = r
-                end
-            end
-
-            return OnDataChange(self, index, value)
+            return fireElementChange(self, index, value)
         end
 
         function __len(self)            return self.Count end
@@ -346,7 +370,7 @@ PLoop(function(_ENV)
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
-                return isObjectType(self, ReactiveList) and rawget(self, ReactiveList) or self
+                return isObjectType(self, ReactiveList) and rawget(self, ReactiveList) or toRawValue(self)
             end
 
             --- Sets a raw table value to the reactive object
