@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/01/31                                               --
+-- Update Date  :   2024/04/07                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -25,14 +25,31 @@ PLoop(function(_ENV)
             rawget                      = rawget,
             pcall                       = pcall,
             setfenv                     = _G.setfenv or _G.debug and _G.debug.setfenv or Toolset.fakefunc,
+            getObjectClass              = Class.GetObjectClass,
+            isSubType                   = Class.IsSubType,
 
-            Observer, Exception, List, Boolean
+            -- check the access value if observable
+            makeReactiveProxy           = function (observer, value)
+                local cls               = value and getObjectClass(value)
+                if not (cls and isSubType(cls, IObservable)) then return end
+
+                -- Subscribe for reactive field
+                if isSubType(cls, Reactive) then
+                    return ReactiveProxy(observer, value)
+
+                -- Subscribe the list
+                elseif isSubType(cls, ReactiveList) then
+                    return ReactiveListProxy(observer, value)
+
+                -- Add proxy to acess the real value
+                else
+                    -- convert the observable to behavior subject
+                    return isSubType(cls, BehaviorSubject) and value or BehaviorSubject(value), true
+                end
+            end,
+
+            Observer, Exception, BehaviorSubject, Reactive, ReactiveList, IObservable
         }
-
-        local function onNext(subject, res, ...)
-            if res then return subject:OnNext(...) end
-            return res, ...
-        end
 
         -----------------------------------------------------------------------
         --                            inner type                             --
@@ -43,9 +60,12 @@ PLoop(function(_ENV)
             export                      {
                 rawset                  = rawset,
                 rawget                  = rawget,
+                type                    = type,
+                pairs                   = pairs,
                 isObjectType            = Class.IsObjectType,
+                makeReactiveProxy       = makeReactiveProxy,
 
-                Observer, Reactive, ReactiveProxy
+                Observer, Reactive, ReactiveProxy, IObservable, BehaviorSubject
             }
 
             -------------------------------------------------------------------
@@ -62,6 +82,28 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             function __index(self, key)
                 local react             = rawget(self, Reactive)
+                local proxyes           = rawget(self, ReactiveProxy)
+                local value             = react[key]
+
+                if value ~= nil then
+                    -- method access
+                    if type(value) == "function" then
+                        local func      = function(_, ...) return value(react, ...) end
+                        rawset(self, key, func)
+
+                        -- Deep watch
+                        if proxyes ~= false then
+                            rawset(self, ReactiveProxy, false)
+                            local observer = rawget(self, Observer)
+                            react:Subscribe(observer, observer.Subscription)
+                        end
+                        return func
+
+                    elseif isObjectType(value, IObservable) then
+
+                    end
+                end
+
                 local proxy             = rawget(self, ReactiveProxy)
 
                 if not proxy[key] then
@@ -85,6 +127,9 @@ PLoop(function(_ENV)
 
             function __newindex(self, key, value)
                 error("The reactive data is readonly", 2)
+            end
+
+            function __dtor(self)
             end
         end)
 
@@ -200,45 +245,29 @@ PLoop(function(_ENV)
                 type                    = type,
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
+                makeReactiveProxy       = makeReactiveProxy,
 
                 -- check the access value if observable
                 parseValue              = function (self, key, value)
-                    local cls           = value and getObjectClass(cls)
-                    if not cls then return value end
-
                     local observer      = rawget(self, Observer)
+                    local proxy, isvalue= makeReactiveProxy(observer, value)
 
-                    -- convert the observable to behavior subject
-                    if isSubType(cls, IObservable) and not isSubType(cls, BehaviorSubject) then
-                        value           = BehaviorSubject(value)
-                        rawset(self, key, value)
-                    end
-
-                    -- Subscribe for reactive field
-                    if isSubType(cls, Reactive) then
-                        value           = ReactiveProxy(observer, value)
-                        rawset(self, key, value)
-
-                    -- Subscribe the list
-                    elseif isSubType(cls, ReactiveList) then
-                        if observer.DeepWatch then
-                            value       = ReactiveListProxy(observer, value)
-                            rawset(self, key, value)
+                    if proxy then
+                        if isvalue then
+                            local map   = rawget(self, Watch)
+                            if not map then
+                                map     = {}
+                                rawset(self, Watch, map)
+                            end
+                            map[key]    = proxy
+                            proxy:Subscribe(observer, observer.Subscription)
+                            rawset(self, key, nil)
+                            return proxy:GetValue()
                         else
-                            Reactive.From(value):Subscribe(observer, observer.Subscription)
+                            -- override
+                            rawset(self, key, proxy)
+                            return proxy
                         end
-
-                    -- Add proxy to acess the real value
-                    elseif isSubType(cls, BehaviorSubject) then
-                        local watches   = rawget(self, Watch)
-                        if not watches then
-                            watches     = {}
-                            rawset(self, Watch, watches)
-                        end
-                        watches[key]    = value
-                        value:Subscribe(observer, observer.Subscription)
-                        rawset(self, key, nil)
-                        return value:GetValue()
                     end
 
                     return value
@@ -271,8 +300,8 @@ PLoop(function(_ENV)
             function __index(self, key)
                 if type(key) ~= "string" then return nil end
 
-                local watches           = rawget(self, Watch)
-                if watches and watches[key] then return watches[key]:GetValue() end
+                local map               = rawget(self, Watch)
+                if map and map[key] then return map[key]:GetValue() end
 
                 -- gets from the base env
                 return parseValue(self, key, getValue(self, key))
@@ -288,14 +317,26 @@ PLoop(function(_ENV)
 
             -- gets the func environment
             local watchEnv              = WatchEnvironment(env)
+            local watchObj, isValueObj
 
             -- observer
             local processing            = false
+
+            local function onNext(subject, res, ...)
+                processing              = false
+                if res then return subject:OnNext(...) end
+                return res, ...
+            end
+
             local observer              = Observer(function()
                 if processing then return end
                 processing              = true
-                local ok, err           = onNext(self, pcall(func, watchEnv))
-                processing              = false
+                local ok, err
+                if isValueObj then
+                    ok, err             = onNext(self, pcall(func, watchEnv, watchObj:GetValue()))
+                else
+                    ok, err             = onNext(self, pcall(func, watchEnv, watchObj))
+                end
                 if ok == false then self:OnError(Exception(err)) end
             end)
             rawset(self, Observer, observer)
@@ -304,7 +345,14 @@ PLoop(function(_ENV)
 
             -- install the reactives
             if reactives then
-                WatchEnvironment.Install(watchEnv, reactives)
+                if getmetatable(reactives) == nil then
+                    WatchEnvironment.Install(watchEnv, reactives)
+                else
+                    watchObj, isValueObj= makeReactiveProxy(observer, reactives)
+                    if isValueObj then
+                        watchObj:Subscribe(observer, observer.Subscription)
+                    end
+                end
             end
 
             -- apply and call for subscription
@@ -324,13 +372,15 @@ PLoop(function(_ENV)
             type                        = type,
             error                       = error,
             getKeywordVisitor           = Environment.GetKeywordVisitor,
+            isObjectType                = Class.IsObjectType,
+            getmetatable                = getmetatable,
 
-            BehaviorSubject
+            IObservable
         }
 
         function watch(reactives, func, deep)
             if type(reactives) == "function" then
-                func, deep, reactives         = reactives, func, nil
+                func, deep, reactives   = reactives, func, nil
             end
 
             if type(func) ~= "function" then
@@ -339,6 +389,10 @@ PLoop(function(_ENV)
 
             if reactives and type(reactives) ~= "table" then
                 error("Usage: watch([reactives, ]func) - The reactives must be a table", 2)
+
+                if getmetatable(reactives) ~= nil and not isObjectType(reactives, IObservable) then
+                    error("Usage: watch([reactive, ]func) - The reactive object must be observable", 2)
+                end
             end
 
             return Watch(func, getKeywordVisitor(watch), reactives, deep and true or false)

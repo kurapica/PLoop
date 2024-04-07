@@ -127,6 +127,15 @@ PLoop(function(_ENV)
             end, self, 0
         end
 
+        --- Map the items to other datas, use collection operation instead of observable
+        Map                             = IList.Map
+
+        --- Used to filter the items with a check function
+        Filter                          = IList.Filter
+
+        --- Used to select items with ranged index
+        Range                           = IList.Range
+
         --- Push
         if elementtype then __Arguments__{ elementtype } end
         function Push(self, item)

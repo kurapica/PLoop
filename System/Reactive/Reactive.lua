@@ -26,11 +26,11 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- The proxy used to access reactive table field datas
     __Sealed__()
-    __Arguments__{ ClassType/nil, AnyType/nil, AnyType/nil }:WithRebuild()
+    __Arguments__{ -IKeyValueDict/nil, AnyType/nil, AnyType/nil }
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targetclass, keytype, valtype)
-        extend "IObservable"
+        extend "IObservable" "IKeyValueDict"
 
         export                          {
             type                        = type,
@@ -47,31 +47,38 @@ PLoop(function(_ENV)
             getEventDelegate            = Event.Get,
 
             -- bind data change event handler when accessed
-            bindDataChange              = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, r)
+            bindDataChange              = function(self, k, r)
                 if r and getEventDelegate(OnDataChange, self, true) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                 end
                 return r
-            end or nil,
+            end,
 
             -- handle data change event
-            handleDataChangeEvent       = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(_, owner, name, init)
+            handleDataChangeEvent       = function(_, owner, name, init)
                 if not init then return end
                 local reactives         = owner[Reactive]
                 for k, r in pairs(reactives) do
                     bindDataChange(owner, k, r)
                 end
-            end or nil,
+            end,
 
             -- wrap the table value as default
-            makeReactive                = (not targetclass or Class.IsSubType(targetclass, IKeyValueDict)) and function(self, k, v)
+            makeReactive                = function(self, k, v)
                 local r                 = reactive(v, true)
                 self[Reactive][k]       = r or false
                 return r and bindDataChange(self, k, r)
-            end or nil,
+            end,
 
             Class, Property, Event, Reactive, ReactiveList, BehaviorSubject, Observable
         }
+
+        -------------------------------------------------------------------
+        --                             event                             --
+        -------------------------------------------------------------------
+        --- Fired when the data changed
+        __EventChangeHandler__(handleDataChangeEvent)
+        event "OnDataChange"
 
         -------------------------------------------------------------------
         --                         common method                         --
@@ -79,10 +86,14 @@ PLoop(function(_ENV)
         --- Subscribe the observers
         function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
 
+        --- Map the items to other type datas, use collection operation instead of observable
+        Map                             = IKeyValueDict.Map
+
+        --- Used to filter the items with a check function
+        Filter                          = IKeyValueDict.Filter
+
         -- For dictionaryd
         if targetclass and Class.IsSubType(targetclass, IKeyValueDict) then
-            extend "IKeyValueDict"
-
             export                      {
                 toRaw                   = Reactive.ToRaw,
                 setRaw                  = function(self, k, v) self[k] = v end,
@@ -90,18 +101,11 @@ PLoop(function(_ENV)
             }
 
             ---------------------------------------------------------------
-            --                           event                           --
-            ---------------------------------------------------------------
-            --- Fired when the data changed
-            __EventChangeHandler__(handleDataChangeEvent)
-            event "OnDataChange"
-
-            ---------------------------------------------------------------
             --                          method                           --
             ---------------------------------------------------------------
             --- Gets the iterator
             __Iterator__()
-            function GetIterator(self, includeNil)
+            function GetIterator(self)
                 local yield             = yield
                 for k, v in self[Class]:GetIterator() do
                     if type(k) == "string" then
@@ -194,107 +198,8 @@ PLoop(function(_ENV)
                 return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
             end
 
-        -- As object proxy and make all property observable
-        elseif targetclass then
-            export                      {
-                toRaw                   = Reactive.ToRaw,
-                checkRet                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS
-                                        and function(ok, ...) if not ok then error(..., 2) end return ... end
-                                        or  function(ok, ...) if not ok then error(..., 3) end return ... end,
-
-                getObject               = function(value) return type(value) == "table" and rawget(value, Class) or value end,
-
-                handleEventChange       = function(delegate, owner, name, init)
-                    if not init then return end
-                    local obj           = rawget(owner, Class)
-                    obj[name]           = obj[name] + function(self, ...) return delegate(owner, ...) end
-                end,
-            }
-
-            ---------------------------------------------------------------
-            --                           event                           --
-            ---------------------------------------------------------------
-            --- fired when the data changed
-            event "OnDataChange"
-
-            -- auto property/event generate
-            for name, ftr in Class.GetFeatures(targetclass, true) do
-                -----------------------------------------------------------
-                --                         event                         --
-                -----------------------------------------------------------
-                if Event.Validate(ftr) then
-                    __EventChangeHandler__(handleEventChange)
-                    event(name)
-
-                -----------------------------------------------------------
-                --                       property                        --
-                -----------------------------------------------------------
-                elseif Property.Validate(ftr) then
-                    if Property.IsIndexer(ftr) then
-                        if Property.IsWritable(ftr) then __Observable__() end
-                        __Indexer__(Property.GetIndexType(ftr))
-                        property (name) {
-                            type        = Property.GetType(ftr),
-                            get         = Property.IsReadable(ftr) and function(self, idx) return rawget(self, Class)[name][idx] end,
-                            set         = Property.IsWritable(ftr) and function(self, idx, value)
-                                value   = toRaw(value)
-                                rawget(self, Class)[name][idx] = value
-                                return OnDataChange(self, name, idx, value)
-                            end,
-                        }
-                    else
-                        if Property.IsWritable(ftr) then __Observable__() end
-                        property (name) {
-                            type        = Property.GetType(ftr),
-                            get         = Property.IsReadable(ftr) and function(self) return rawget(self, Class)[name] end,
-                            set         = Property.IsWritable(ftr) and function(self, value)
-                                value   = toRaw(value)
-                                rawget(self, Class)[name] = value
-                                return OnDataChange(self, name, value)
-                            end,
-                        }
-                    end
-                end
-            end
-
-            ---------------------------------------------------------------
-            --                          method                           --
-            ---------------------------------------------------------------
-            for name, method in Class.GetMethods(targetclass, true) do
-                _ENV[name]              = function(self, ...) return checkRet(pcall(method, rawget(self, Class), ...)) end
-            end
-
-            ---------------------------------------------------------------
-            --                        constructor                        --
-            ---------------------------------------------------------------
-            -- bind the reactive and object
-            __Arguments__{ targetclass }
-            function __ctor(self, init)
-                rawset(self, Class, init)
-                rawset(init, Reactive, self)
-            end
-
-            -- use the wrap for objects
-            function __exist(_, init)
-                return init and rawget(init, Reactive)
-            end
-
-            ---------------------------------------------------------------
-            --                        meta-method                        --
-            ---------------------------------------------------------------
-            for name, method in Class.GetMetaMethods(targetclass, true) do
-                if name == "__gc" then
-                    __dtor              = function(self) return rawget(self, Class):Dispose() end
-                else
-                    _ENV[name]          = function(self, other, ...) return method(getObject(self), getObject(other), ...) end
-                end
-            end
-
         -- As container for reactive fields, common usages
         else
-            -- Provide the dictionary features
-            extend "IKeyValueDict"
-
             export                      {
                 pcall                   = pcall,
                 pairs                   = pairs,
@@ -305,14 +210,6 @@ PLoop(function(_ENV)
                 isWritable              = Property.IsWritable,
                 isIndexer               = Property.IsIndexer,
                 rawMap                  = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
-
-                updateByClass           = function(self, value)
-                    for name, prop in getFeatures(getmetatable(self), true) do
-                        if isProperty(prop) and isWritable(prop) and not isIndexer(prop) then
-                            self[name]  = value[name]
-                        end
-                    end
-                end,
 
                 updateTable             = function(self, value)
                     local raw           = rawget(self, Class) or rawget(self, RawTable)
@@ -338,13 +235,6 @@ PLoop(function(_ENV)
 
                 Reactive, ReactiveList, BehaviorSubject, RawTable
             }
-
-            ---------------------------------------------------------------
-            --                           event                           --
-            ---------------------------------------------------------------
-            --- Fired when the data changed
-            __EventChangeHandler__(handleDataChangeEvent)
-            event "OnDataChange"
 
             ---------------------------------------------------------------
             --                       static method                       --
@@ -398,7 +288,7 @@ PLoop(function(_ENV)
                     end
 
                     -- as object proxy
-                    local ok, err       = pcall(rawget(self, Class) and not rawget(self, Reactive) and updateByClass or updateTable, self, value)
+                    local ok, err       = pcall(updateTable, self, value)
                     if not ok then error("Usage: Reactive.SetRaw(reactive, value) - " .. err, (stack or 1) + 1) end
                     return
                 end
@@ -554,8 +444,8 @@ PLoop(function(_ENV)
                     return isSubType(cls, IKeyValueDict)
                 end
 
-                -- common wrap
-                return true
+                -- not allow common object
+                return false
             end
 
             -- raw table/array always be reactable
@@ -617,9 +507,9 @@ PLoop(function(_ENV)
                         end
                         return
 
-                    -- common wrap
+                    -- don't support other types
                     else
-                        return Reactive[cls](value)
+                        error("Usage: reactive(data[, silent]) - the data of " .. tostring(cls) .. " is not supported", 2)
                     end
                 end
 
