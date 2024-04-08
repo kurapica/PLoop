@@ -186,7 +186,8 @@ PLoop(function(_ENV)
     --- Emitting the item most recently emitted by the source Observable (or a seed/default value
     -- if none has yet been emitted) and then continues to emit any other items emitted later by the source Observable
     __Sealed__()
-    class "BehaviorSubject"             (function(_ENV)
+    __Arguments__{ AnyType/nil }
+    class "BehaviorSubject"             (function(_ENV, valtype)
         inherit "Subject"
 
         export {
@@ -199,7 +200,6 @@ PLoop(function(_ENV)
             isObjectType                = Class.IsObjectType,
             getValue                    = function(self)
                 if isObjectType(self, BehaviorSubject) then
-                    print(self.Value)
                     return (unpack(self, 1, self[0]))
                 else
                     return self
@@ -255,6 +255,11 @@ PLoop(function(_ENV)
             return onError(self, ...)
         end
 
+        if valtype then __Arguments__{ valtype } end
+        function SetValue(self, ...)
+            return self:OnNext(...)
+        end
+
         --- Gets the current value
         function GetValue(self)
             return unpack(self, 1, self[0])
@@ -264,7 +269,7 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The current value
-        property "Value"                { get = GetValue, set = OnNext }
+        property "Value"                { get = GetValue, set = SetValue, type = valtype }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -280,7 +285,11 @@ PLoop(function(_ENV)
             super(self, observable)
         end
 
-        __Arguments__{ Any * 0 }
+        if valtype then
+            __Arguments__{ valtype/nil }
+        else
+            __Arguments__{ Any * 0 }
+        end
         function __ctor(self, ...)
             local length                = max(1, select("#", ...))
             self[0]                     = length

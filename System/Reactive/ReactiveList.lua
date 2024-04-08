@@ -39,7 +39,6 @@ PLoop(function(_ENV)
             newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
             getEventDelegate            = Event.Get,
-            isReactable                 = Reactive.IsReactable,
             toRawValue                  = Reactive.ToRaw,
 
             -- bind data change
