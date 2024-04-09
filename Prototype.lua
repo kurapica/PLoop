@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2023/11/14                                               --
--- Version      :   1.9.2                                                    --
+-- Update Date  :   2024/04/09                                               --
+-- Version      :   1.9.4                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -92,6 +92,7 @@ do
             floor                       = math.floor,
             mlog                        = math.log,
             mpow                        = math.pow,
+            random                      = math.random,
 
             -- Safe
             pcall                       = pcall,
@@ -1708,10 +1709,12 @@ do
             ["Apply"]                   = function(env, func, ...)
                 -- Module "Test" (function(_ENV) ... end)
                 if type(func)  == "function" then
+                    local oldenv        = getfenv(func)
                     setfenv(func, env)
                     environment.SetDefinitionMode(env, true)
                     func(env, ...)
                     environment.SetDefinitionMode(env, false)
+                    if oldenv then setfenv(func, oldenv) end
                     return env
                 end
 
@@ -4097,7 +4100,12 @@ do
             if implement then           return implement end
 
             local ok, err               = attribute.IndependentCall(function()
-                implement               = struct {}
+                local names             = { tostring(self) }
+                for _, v in ipairs, key, 0 do
+                    names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
+                end
+                names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+                implement               = struct (tblconcat(names, "_"), {})
 
                 -- Record the template and parameter
                 local tmp               = getStructTargetInfo(implement)
@@ -5364,18 +5372,17 @@ do
             definition                  = attribute.InitDefinition(owner, ATTRTAR_STRUCT, parseDefinition(definition, self, stack), nil, nil, stack)
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD]) then
                     -- Save for template
                     info[FLD_STRUCT_TEMPDEF] = definition
                     info[FLD_STRUCT_TEMPENV] = environment.GetParent(self)
-
-                    local ok, err       = pcall(definition, self, struct.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, struct.GetTemplateParameters(owner))
                 end
+                local ok, err           = pcall(definition, self, struct.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok and type(err) == "string" then error(err, 0) end
             else
                 -- Check base struct first
                 if definition[STRUCT_KEYWORD_BASE] ~= nil then
@@ -8137,7 +8144,12 @@ do
 
             local ok, err               = attribute.IndependentCall(function()
                 local ptype             = getmetatable(self)
-                implement               = ptype {}
+                local names             = { tostring(self) }
+                for _, v in ipairs, key, 0 do
+                    names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
+                end
+                names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+                implement               = ptype (tblconcat(names, "_"), {})
 
                 -- Record template & params
                 local ninfo             = getICTargetInfo(implement)
@@ -8169,7 +8181,6 @@ do
     interface                           = prototype {
         __tostring                      = "interface",
         __index                         = {
-            Get = function(self) return _ICInfo[self] end,
             --- Add an interface to be extended
             -- @static
             -- @method  AddExtend
@@ -10071,18 +10082,18 @@ do
             end
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then
                     -- Save for template
                     info[FLD_IC_TEMPDEF]= definition
                     info[FLD_IC_TEMPENV]= environment.GetParent(self)
-
-                    local ok, err       = pcall(definition, self, interface.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, interface.GetTemplateParameters(owner))
                 end
+
+                local ok, err           = pcall(definition, self, interface.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok and type(err) == "string" then error(err, 0) end
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -10142,18 +10153,18 @@ do
             end
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then
                     -- Save for template
                     info[FLD_IC_TEMPDEF]= definition
                     info[FLD_IC_TEMPENV]= environment.GetParent(self)
-
-                    local ok, err = pcall(definition, self, class.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, class.GetTemplateParameters(owner))
                 end
+
+                local ok, err = pcall(definition, self, class.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok and type(err) == "string" then error(err, 0) end
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -10178,7 +10189,7 @@ do
             local super                 = class.GetSuperRefer(owner)
             if super then rawset(self, IC_KEYWORD_SUPER, super) end
 
-            if getfenv(stack)  == self then
+            if getfenv(stack) == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
             end
 
@@ -10252,8 +10263,11 @@ do
             definition                  = parseDefinition(definition, self, stack)
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
-                definition(self)
+                local ok, err           = pcall(definition, self)
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok and type(err) == "string" then error(err, 0) end
             else
                 if getmetatable(owner) == class then
                     error("Usage: class([env, ][name, ][stack]) (definition) - the definition must be a function", stack)
@@ -12583,7 +12597,6 @@ do
             if not name or name == "" then error([[Usage: property "name" { ... } - the name must be a string]], stack) end
 
             local owner                 = visitor and environment.GetNamespace(visitor)
-
             if owner and (interface.Validate(owner) or class.Validate(owner)) then
                 local prop              = genProperty(owner, name, stack)
                 return prop
@@ -15044,7 +15057,6 @@ do
                     uinsert(apis, "throw")
 
                     tinsert(body, [[local error = throw]])
-                    tinsert(body, [[setfenv(func, getfenv(1))]])
                 end
 
                 tinsert(body, [[local stack = 2]])
@@ -15245,7 +15257,9 @@ do
                     body[1]             = strformat("local %s = %s", declare, declare)
                 end
 
-                if vars[FLD_VAR_THRABL] then
+                if isbuilder then
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "local oldenv = getfenv(func)\nsetfenv(func, getfenv(1))\nlocal ok, err = pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. ")\nif oldenv then setfenv(func, oldenv) end\nif not ok then error(err) end" end), "Argument_Validate_" .. token, _ENV)()
+                elseif vars[FLD_VAR_THRABL] then
                     _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(stack, pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, _ENV)()
                 else
                     _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, _ENV)()

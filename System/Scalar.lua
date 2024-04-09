@@ -45,10 +45,6 @@ PLoop(function(_ENV)
     --- Double, no check
     __Sealed__() struct "Double"        { __base = Number }
 
-    --- Decimal, no check
-    __Sealed__() __Arguments__{ Number, Number }
-    struct "Decimal"                    (function(_ENV, integral, fractional) __base = Number end)
-
     --- Represents the positive number
     __Sealed__()
     struct "PositiveNumber"             { __base = Number, function(val, onlyvalid) return val <= 0 and (onlyvalid or "the %s must be a positive number") or nil end }

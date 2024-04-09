@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 
+## [1.9.4] - 2024-04-09 WangXH  <kurapica125@outlook.com>
+### Changed
+- Fix the environment change for type template definition, will cause template type generation fails.
+- The anonynmous types will have unique namespace name based on its template type and arguments.
+
+### Added
+- The reactive & watch system is re-designed. See [watch & reactive](Docs\025.watch_reactive.md) for more details.
+
+
 ## [1.9.3] - 2024-01-24 WangXH  <kurapica125@outlook.com>
 ### Added
 - Add Push/Pop/Shift/Unshift/Splice to List types.
