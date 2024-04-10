@@ -311,8 +311,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ Function, Table/nil, Table/nil, Boolean/nil }
-        function __ctor(self, func, env, reactives, deep)
+        __Arguments__{ Function, Table/nil, Table/nil }
+        function __ctor(self, func, env, reactives )
             super(self)
 
             -- gets the func environment
@@ -322,9 +322,9 @@ PLoop(function(_ENV)
             -- observer
             local processing            = false
 
-            local function onNext(subject, res, ...)
+            local function onNext(self, res, ...)
                 processing              = false
-                if res then return subject:OnNext(...) end
+                if res then return self:OnNext(...) end
                 return res, ...
             end
 
@@ -339,9 +339,8 @@ PLoop(function(_ENV)
                 end
                 if ok == false then self:OnError(Exception(err)) end
             end)
-            rawset(self, Observer, observer)
+            rawset(self,     Observer, observer)
             rawset(watchEnv, Observer, observer)
-            observer.DeepWatch          = deep or false
 
             -- install the reactives
             if reactives then
@@ -378,24 +377,20 @@ PLoop(function(_ENV)
             IObservable
         }
 
-        function watch(reactives, func, deep)
+        function watch(reactives, func)
             if type(reactives) == "function" then
-                func, deep, reactives   = reactives, func, nil
+                func, reactives         = reactives, nil
             end
 
             if type(func) ~= "function" then
                 error("Usage: watch([reactives, ]func) - The func must be a function", 2)
             end
 
-            if reactives and type(reactives) ~= "table" then
-                error("Usage: watch([reactives, ]func) - The reactives must be a table", 2)
-
-                if getmetatable(reactives) ~= nil and not isObjectType(reactives, IObservable) then
-                    error("Usage: watch([reactive, ]func) - The reactive object must be observable", 2)
-                end
+            if reactives and (type(reactives) ~= "table" or getmetatable(reactives) ~= nil and not isObjectType(reactives, IObservable)) then
+                error("Usage: watch([reactives, ]func) - The reactives must be a table or observable", 2)
             end
 
-            return Watch(func, getKeywordVisitor(watch), reactives, deep and true or false)
+            return Watch(func, getKeywordVisitor(watch), reactives)
         end
 
         Environment.RegisterGlobalKeyword { watch = watch }

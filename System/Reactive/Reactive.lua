@@ -225,7 +225,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targetclass)
-        extend "IObservable"
+        extend "IObservable" "IKeyValueDict"
 
         export                          {
             type                        = type,
@@ -245,6 +245,7 @@ PLoop(function(_ENV)
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
             setrawlist                  = ReactiveList.SetRaw,
+            automake                    = false,
 
             -- bind data change event handler when accessed
             bindDataChange              = function(self, k, r)
@@ -264,8 +265,8 @@ PLoop(function(_ENV)
             end,
 
             -- wrap the table value as default
-            makeReactive                = function(self, k, v)
-                local r                 = reactive(v, true)
+            makeReactive                = function(self, k, v, type)
+                local r                 = reactive(v, true, type)
                 self[Reactive][k]       = r or false
                 return r and bindDataChange(self, k, r)
             end,
@@ -281,13 +282,202 @@ PLoop(function(_ENV)
         event "OnDataChange"
 
         -------------------------------------------------------------------
-        --                         common method                         --
+        --                   non-dict class/interface                    --
+        -------------------------------------------------------------------
+        if targetclass and (Class.Validate(targetclass) or Interface.Validate(targetclass)) and not Interface.IsSubType(targetclass, IKeyValueDict) then
+            properties                  = {}
+            automake                    = true
+
+            for _, ftr in Class.GetFeatures(targetclass, true) do
+                -- only allow read/write non-indexer properties
+                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
+                    local pname         = ftr:GetName()
+                    local ptype         = ftr:GetType() or Any
+                    local rtype         = Reactive.GetReactiveType(nil, ptype)
+
+                    -- only allow reacive types
+                    if rtype then
+                        properties[pname] = true
+
+                        property (pname) {
+                            -- gets the reactive
+                            get         = Class.IsSubType(rtype, BehaviorSubject)
+                            and function(self)
+                                local r = self[Reactive][pname]
+                                return r or makeReactive(self, pname, self[RawTable][pname], ptype)
+                            end
+                            or function(self)
+                                local r = self[Reactive][pname]
+                                if r    then return r end
+                                local d = self[RawTable][pname]
+                                return d and makeReactive(self, pname, d, ptype)
+                            end,
+
+                            -- sets the value
+                            set         = Class.IsSubType(rtype, BehaviorSubject)
+                            and function(self, value)
+                                self[RawTable][pname] = value
+                                local r = self[Reactive][pname]
+                                return r and r:OnNext(value) or OnDataChange(self, pname, value)
+                            end
+                            or Class.IsSubType(rtype, ReactiveList)
+                            and function(self, value)
+                                local r = self[Reactive][pname]
+                                if r    then setrawlist(r, value, 2) return end
+                                self[RawTable][pname] = value
+                            end
+                            or function(self, value)
+                                local r = self[Reactive][pname]
+                                if r    then setraw(r, value, 2) return end
+                                self[RawTable][pname] = value
+                            end,
+                            type        = ptype
+                        }
+
+                    -- for non-reactive
+                    else
+                        property (pname) {
+                            get         = function(self) return self[RawTable][pname] end,
+                            set         = function(self, value) self[RawTable][pname] = value end,
+                            type        = ptype
+                        }
+                    end
+                elseif Property.Validate(ftr) then
+                    if Property.IsIndexer(ftr) then
+                        __Indexer__(Property.GetIndexType(ftr))
+                        property (pname) {
+                            get         = Property.IsReadable(ftr) and function(self, idx) return self[RawTable][pname][idx] end,
+                            set         = Property.IsWritable(ftr) and function(self, idx, value) self[RawTable][pname][idx] = value end,
+                            type        = Property.GetType(ftr),
+                        }
+                    else
+                        property (pname) {
+                            get         = Property.IsReadable(ftr) and function(self) return self[RawTable][pname] end,
+                            set         = Property.IsWritable(ftr) and function(self, value) self[RawTable][pname] = value end,
+                            type        = Property.GetType(ftr),
+                        }
+                    end
+                end
+            end
+
+            __Iterator__()
+            function GetIterator(self)
+                local yield                 = yield
+
+                for k in pairs(properties) do
+                    yield(k, self[k])
+                end
+
+                for k, v in pairs(self[Reactive]) do
+                    if not properties[k] then
+                        yield(k, v)
+                    end
+                end
+            end
+
+        -------------------------------------------------------------------
+        --                         member struct                         --
+        -------------------------------------------------------------------
+        elseif targetclass and Struct.Validate(targetclass) and Struct.GetStructCategory(targetclass) == "MEMBER" then
+            properties                  = {}
+
+            for _, mem in Struct.GetMembers(targetclass) do
+                local mtype             = mem:GetType()
+                local mname             = mem:GetName()
+                local rtype             = Reactive.GetReactiveType(nil, mtype)
+
+                if rtype then
+                    properties[mname]   = true
+                    property (mname)    {
+                        -- gets the reactive
+                        get             = Class.IsSubType(rtype, BehaviorSubject)
+                        and function(self)
+                            local r     = self[Reactive][mname]
+                            return r or makeReactive(self, mname, self[RawTable][mname], mtype)
+                        end
+                        or function(self)
+                            local r     = self[Reactive][mname]
+                            if r    then return r end
+                            local d     = self[RawTable][mname]
+                            return d and makeReactive(self, mname, d, mtype)
+                        end,
+
+                        -- sets the value
+                        set             = Class.IsSubType(rtype, BehaviorSubject)
+                        and function(self, value)
+                            self[RawTable][mname] = value
+                            local r     = self[Reactive][mname]
+                            return r and r:OnNext(value) or OnDataChange(self, mname, value)
+                        end
+                        or Class.IsSubType(rtype, ReactiveList)
+                        and function(self, value)
+                            local r     = self[Reactive][mname]
+                            if r    then setrawlist(r, value, 2) return end
+                            self[RawTable][mname] = value
+                        end
+                        or function(self, value)
+                            local r     = self[Reactive][mname]
+                            if r    then setraw(r, value, 2) return end
+                            self[RawTable][mname] = value
+                        end,
+                        type            = mtype
+                    }
+
+                -- for non-reactive
+                else
+                    property (mname)    {
+                        get             = function(self) return self[RawTable][pname] end,
+                        set             = function(self, value) self[RawTable][pname] = value end,
+                        type            = mtype
+                    }
+                end
+            end
+
+            __Iterator__()
+            function GetIterator(self)
+                local yield                 = yield
+
+                for k in pairs(properties) do
+                    yield(k, self[k])
+                end
+
+                for k, v in pairs(self[RawTable]) do
+                    if not properties[k] and type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+            end
+
+        -------------------------------------------------------------------
+        --                             dict                              --
+        -------------------------------------------------------------------
+        else
+            __Iterator__()
+            function GetIterator(self)
+                local yield                 = yield
+                local raw                   = self[RawTable]
+                for k, v in (raw.GetIterator or pairs)(raw) do
+                    if type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+            end
+        end
+
+        -------------------------------------------------------------------
+        --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
         function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
 
+        --- Map the items to other type datas, use collection operation instead of observable
+        Map                             = IKeyValueDict.Map
+
+        --- Used to filter the items with a check function
+        Filter                          = IKeyValueDict.Filter
+
         -------------------------------------------------------------------
-        --                      common constructor                       --
+        --                          constructor                          --
         -------------------------------------------------------------------
         --- bind the reactive and object
         if targetclass then
@@ -316,150 +506,6 @@ PLoop(function(_ENV)
             return isobjecttype(init, Reactive) and init or rawget(init, Reactive)
         end
 
-        -------------------------------------------------------------------
-        --                   non-dict class/interface                    --
-        -------------------------------------------------------------------
-        if targetclass and (Class.Validate(targetclass) or Interface.Validate(targetclass)) and not Interface.IsSubType(targetclass, IKeyValueDict) then
-            for _, ftr in Class.GetFeatures(targetclass, true) do
-                -- only allow read/write non-indexer properties
-                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
-                    local pname         = ftr:GetName()
-                    local ptype         = ftr:GetType() or Any
-                    local rtype         = Reactive.GetReactiveType(nil, ptype)
-                    local field         = "__" .. pname
-
-                    -- only allow reacive types
-                    if rtype then
-                        property (pname) {
-                            -- gets the reactive
-                            get         = Class.IsSubType(rtype, BehaviorSubject)
-                            and function(self)
-                                local r = rawget(self, field)
-                                if r    then return r end
-                                r       = rtype(self[RawTable][pname])
-                                rawset(self, field, r)
-                                return r
-                            end
-                            or function(self)
-                                local r = rawget(self, field)
-                                if r    then return r end
-                                local d = self[RawTable][pname]
-                                if d then
-                                    r   = rtype(d)
-                                    rawset(self, field, r)
-                                end
-                                return r
-                            end,
-
-                            -- sets the value
-                            set         = Class.IsSubType(rtype, BehaviorSubject)
-                            and function(self, value)
-                                self[RawTable][pname] = value
-                                local r = rawget(self, field)
-                                return r and r:OnNext(value)
-                            end
-                            or Class.IsSubType(rtype, ReactiveList)
-                            and function(self, value)
-                                local r = rawget(self, field)
-                                if r    then setrawlist(r, value, 2) return end
-                                self[RawTable][pname] = value
-                            end
-                            or function(self, value)
-                                local r = rawget(self, field)
-                                if r    then setraw(r, value, 2) return end
-                                self[RawTable][pname] = value
-                            end,
-                            type        = ptype
-                        }
-                    end
-                end
-            end
-
-            return
-        end
-
-        -------------------------------------------------------------------
-        --                         member struct                         --
-        -------------------------------------------------------------------
-        if targetclass and Struct.Validate(targetclass) and Struct.GetStructCategory(targetclass) == "MEMBER" then
-            for _, mem in Struct.GetMembers(targetclass) do
-                local memtype           = mem:GetType()
-                local mname             = mem:GetName()
-                local rtype             = Reactive.GetReactiveType(nil, memtype)
-
-                if rtype then
-                    property (mname)    {
-                        -- gets the reactive
-                        get             = Class.IsSubType(rtype, BehaviorSubject)
-                        and function(self)
-                            local r     = rawget(self, field)
-                            if r    then return r end
-                            r           = rtype(self[RawTable][mname])
-                            rawset(self, field, r)
-                            return r
-                        end
-                        or function(self)
-                            local r     = rawget(self, field)
-                            if r    then return r end
-                            local d     = self[RawTable][mname]
-                            if d then
-                                r       = rtype(d)
-                                rawset(self, field, r)
-                            end
-                            return r
-                        end,
-
-                        -- sets the value
-                        set             = Class.IsSubType(rtype, BehaviorSubject)
-                        and function(self, value)
-                            self[RawTable][mname] = value
-                            local r     = rawget(self, field)
-                            return r and r:OnNext(value)
-                        end
-                        or Class.IsSubType(rtype, ReactiveList)
-                        and function(self, value)
-                            local r     = rawget(self, field)
-                            if r    then setrawlist(r, value, 2) return end
-                            self[RawTable][mname] = value
-                        end
-                        or function(self, value)
-                            local r     = rawget(self, field)
-                            if r    then setraw(r, value, 2) return end
-                            self[RawTable][mname] = value
-                        end,
-                        type            = memtype
-                    }
-                end
-            end
-
-            return
-        end
-
-        ---------------------------------------------------------------
-        --                      dictionary type                      --
-        ---------------------------------------------------------------
-        extend "IKeyValueDict"
-
-        --- Map the items to other type datas, use collection operation instead of observable
-        Map                             = IKeyValueDict.Map
-
-        --- Used to filter the items with a check function
-        Filter                          = IKeyValueDict.Filter
-
-        --- Gets the iterator
-        __Iterator__()
-        function GetIterator(self)
-            local yield                 = yield
-            local raw                   = self[RawTable]
-            for k, v in (raw.GetIterator or pairs)(raw) do
-                if type(k) == "string" then
-                    yield(k, self[k])
-                elseif k ~= Reactive then
-                    yield(k, v)
-                end
-            end
-        end
-
         ---------------------------------------------------------------
         --                        meta-method                        --
         ---------------------------------------------------------------
@@ -479,7 +525,7 @@ PLoop(function(_ENV)
             local keytype, valtype
 
             -- for Dictionary class
-            if Class.Validate(targetclass) then
+            if Class.Validate(targetclass) and Interface.IsSubType(targetclass, IKeyValueDict) then
                 keytype, valtype        = gettempparams(targetclass)
 
             -- for Dictionary struct
@@ -491,6 +537,12 @@ PLoop(function(_ENV)
             end
         end
         function __newindex(self, key, value)
+            -- not work for non-string key
+            if type(key) ~= "string" then
+                rawset(self, key, value)
+                return
+            end
+
             -- unpack
             if type(value) == "table" then
                 value                   = toraw(value)
@@ -527,8 +579,10 @@ PLoop(function(_ENV)
             -- raw directly
             raw[key]                    = value
 
-            -- make table reactive now, since it may be used in the event handler
-            return OnDataChange(self, key, type(key) == "string" and type(value) == "table" and makeReactive(self, key, value) or value)
+            if automake or type(value) == "table" then
+                r                       = makeReactive(self, key, value)
+                return r and OnDataChange(self, key, not isobjecttype(r, BehaviorSubject) and r or value)
+            end
         end
     end)
 
