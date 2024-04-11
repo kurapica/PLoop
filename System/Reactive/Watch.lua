@@ -65,16 +65,22 @@ PLoop(function(_ENV)
                 isObjectType            = Class.IsObjectType,
                 makeReactiveProxy       = makeReactiveProxy,
 
-                Observer, Reactive, ReactiveProxy, IObservable, BehaviorSubject
+                Observer, Reactive, ReactiveProxy, IObservable, BehaviorSubject, Watch
             }
 
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            function __ctor(self, observer, react)
-                rawset(self, Observer, observer)
+            function __ctor(self, observer, react, parent)
                 rawset(self, Reactive, react)
-                rawset(self, ReactiveProxy, {})
+                rawset(self, ReactiveProxy, parent)
+
+                -- block the sub node subscription
+                if parent and rawget(parent, Watch) == false then
+                    rawset(self, Watch, false)
+                else
+                    rawset(self, Observer, observer)
+                end
             end
 
             -------------------------------------------------------------------
@@ -82,7 +88,6 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             function __index(self, key)
                 local react             = rawget(self, Reactive)
-                local proxyes           = rawget(self, ReactiveProxy)
                 local value             = react[key]
 
                 if value ~= nil then
@@ -92,8 +97,9 @@ PLoop(function(_ENV)
                         rawset(self, key, func)
 
                         -- Deep watch
+                        local proxyes   = rawget(self, Watch)
                         if proxyes ~= false then
-                            rawset(self, ReactiveProxy, false)
+                            rawset(self, Watch, false)
                             local observer = rawget(self, Observer)
                             react:Subscribe(observer, observer.Subscription)
                         end
@@ -104,7 +110,7 @@ PLoop(function(_ENV)
                     end
                 end
 
-                local proxy             = rawget(self, ReactiveProxy)
+                local proxy             = rawget(self, Watch)
 
                 if not proxy[key] then
                     local observer      = rawget(self, Observer)
@@ -115,7 +121,7 @@ PLoop(function(_ENV)
                     else
                         observable      = react[key]
                         if observable and isObjectType(observable, Reactive) then
-                            local proxy = ReactiveProxy(observer, observable)
+                            local proxy = Watch(observer, observable)
                             rawset(self, key, proxy)
                             return proxy
                         end
@@ -126,7 +132,7 @@ PLoop(function(_ENV)
             end
 
             function __newindex(self, key, value)
-                error("The reactive data is readonly", 2)
+                error("The reactive proxy is readonly", 2)
             end
 
             function __dtor(self)
@@ -225,7 +231,7 @@ PLoop(function(_ENV)
             end
 
             function __newindex(self, key, value)
-                error("The reactive data is readonly", 2)
+                error("The reactive proxy is readonly", 2)
             end
         end)
 
