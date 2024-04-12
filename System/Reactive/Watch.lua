@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/04/07                                               --
+-- Update Date  :   2024/04/12                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -24,31 +24,91 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             rawget                      = rawget,
             pcall                       = pcall,
+            pairs                       = pairs,
             setfenv                     = _G.setfenv or _G.debug and _G.debug.setfenv or Toolset.fakefunc,
-            getObjectClass              = Class.GetObjectClass,
-            isSubType                   = Class.IsSubType,
+            getobjectclass              = Class.GetObjectClass,
+            issubtype                   = Class.IsSubType,
 
             -- check the access value if observable
             makeReactiveProxy           = function (observer, value)
-                local cls               = value and getObjectClass(value)
-                if not (cls and isSubType(cls, IObservable)) then return end
+                local cls               = value and getobjectclass(value)
+                if not (cls and issubtype(cls, IObservable)) then return end
 
                 -- Subscribe for reactive field
-                if isSubType(cls, Reactive) then
+                if issubtype(cls, Reactive) then
                     return ReactiveProxy(observer, value)
 
                 -- Subscribe the list
-                elseif isSubType(cls, ReactiveList) then
+                elseif issubtype(cls, ReactiveList) then
                     return ReactiveListProxy(observer, value)
 
                 -- Add proxy to acess the real value
                 else
                     -- convert the observable to behavior subject
-                    return isSubType(cls, BehaviorSubject) and value or BehaviorSubject(value), true
+                    return issubtype(cls, BehaviorSubject) and value or BehaviorSubject(value), true
                 end
             end,
 
-            Observer, Exception, BehaviorSubject, Reactive, ReactiveList, IObservable
+            -- use deep watch
+            addDeepWatch                = function(self, observable)
+                local observer          = rawget(self, Observer)
+                if observer and not rawget(self, Subscription) then
+                    rawset(self, Observer, nil)
+                    rawset(self, Subscription, observable:Subscribe(observer, Subscription(observer.Subscription)))
+                    return releaseSubWatches(self)
+                end
+            end,
+
+            -- add value watch
+            addWatch                    = function(self, observable)
+                local observer          = rawget(self, Observer)
+                if observer and not rawget(self, Subscription) then
+                    local subscription  = rawget(self, ISubscription)
+                    if not subscription then
+                        subscription    = Subscription(observer.Subscription)
+                        rawset(self, ISubscription, subscription)
+                    end
+
+                    return observable:Subscribe(observer, subscription)
+                end
+            end,
+
+            -- release child subscription
+            releaseSubWatches           = function (self)
+                -- dispose value watches
+                local sub               = rawget(self, ISubscription)
+                if sub then
+                    rawset(self, ISubscription, nil)
+                    sub:Dispose()
+                end
+
+                -- dispose child proxy watches
+                for k, v in pairs(self) do
+                    local cls           = type(k) == "string" and getobjectclass(v)
+                    if cls and (issubtype(cls, ReactiveProxy) or issubtype(cls, ReactiveList)) then
+                        rawset(v, Observer, nil)
+                        sub             = rawget(v, Subscription)
+                        if sub then
+                            rawset(v, Subscription, nil)
+                            sub:Dispose()
+                        end
+                        releaseSubWatches(v)
+                    end
+                end
+            end,
+
+            disposeWatches              = function(self)
+                -- release subscription for sub values
+                local subscription      = rawget(self, ISubscription)
+                if subscription then subscription:Dispose() end
+
+                -- release deep watch subscription
+                subscription            = rawget(self, Subscription)
+                return subscription and subscription:Dispose()
+            end,
+
+            IObservable, ISubscription,
+            Observer, Exception, BehaviorSubject, Reactive, ReactiveList, Subscription
         }
 
         -----------------------------------------------------------------------
@@ -61,82 +121,72 @@ PLoop(function(_ENV)
                 rawset                  = rawset,
                 rawget                  = rawget,
                 type                    = type,
-                pairs                   = pairs,
-                isObjectType            = Class.IsObjectType,
                 makeReactiveProxy       = makeReactiveProxy,
+                addDeepWatch            = addDeepWatch,
+                addWatch                = addWatch,
 
-                Observer, Reactive, ReactiveProxy, IObservable, BehaviorSubject, Watch
+                Observer, Reactive, Watch
             }
 
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            function __ctor(self, observer, react, parent)
+            function __ctor(self, observer, react)
+                rawset(self, Observer, observer)
                 rawset(self, Reactive, react)
-                rawset(self, ReactiveProxy, parent)
-
-                -- block the sub node subscription
-                if parent and rawget(parent, Watch) == false then
-                    rawset(self, Watch, false)
-                else
-                    rawset(self, Observer, observer)
-                end
             end
 
             -------------------------------------------------------------------
             --                          meta method                          --
             -------------------------------------------------------------------
             function __index(self, key)
+                if type(key) ~= "string" then return end
+
+                -- check behaviour subjects
+                local watches           = rawget(self, Watch)
+                local subject           = watches and watches[key]
+                if subject then return subject:GetValue() end
+
+                -- get from the source
                 local react             = rawget(self, Reactive)
                 local value             = react[key]
 
                 if value ~= nil then
-                    -- method access
+                    -- method access - deep watch require
                     if type(value) == "function" then
                         local func      = function(_, ...) return value(react, ...) end
                         rawset(self, key, func)
-
-                        -- Deep watch
-                        local proxyes   = rawget(self, Watch)
-                        if proxyes ~= false then
-                            rawset(self, Watch, false)
-                            local observer = rawget(self, Observer)
-                            react:Subscribe(observer, observer.Subscription)
-                        end
+                        addDeepWatch(self, react)
                         return func
 
-                    elseif isObjectType(value, IObservable) then
-
-                    end
-                end
-
-                local proxy             = rawget(self, Watch)
-
-                if not proxy[key] then
-                    local observer      = rawget(self, Observer)
-                    local observable    = react(key)
-                    if observable then
-                        proxy[key]      = true
-                        observable:Subscribe(observer, observer.Subscription)
+                    -- make reactive
                     else
-                        observable      = react[key]
-                        if observable and isObjectType(observable, Reactive) then
-                            local proxy = Watch(observer, observable)
-                            rawset(self, key, proxy)
-                            return proxy
+                        local r, isv    = makeReactiveProxy(rawget(self, Observer), value)
+                        if r then
+                            if isv then
+                                if not watches then
+                                    watches = {}
+                                    rawset(self, Watch, watches)
+                                end
+                                watches[key]= r
+                                addWatch(self, r)
+                                return r:GetValue()
+                            else
+                                -- access directly
+                                rawset(self, key, r)
+                            end
+                            return r
                         end
                     end
                 end
-
-                return react[key]
+                return value
             end
 
             function __newindex(self, key, value)
                 error("The reactive proxy is readonly", 2)
             end
 
-            function __dtor(self)
-            end
+            __dtor                      = disposeWatches
         end)
 
         --- The proxy used in watch environment for reactive list
@@ -150,41 +200,33 @@ PLoop(function(_ENV)
                 type                    = type,
                 isObjectType            = Class.IsObjectType,
                 yield                   = coroutine.yield,
+                makeReactiveProxy       = makeReactiveProxy,
+                addDeepWatch            = addDeepWatch,
+                addWatch                = addWatch,
+                newtable                = Toolset.newtable,
 
-                Observer, Reactive, ReactiveList, ReactiveListProxy, Toolset, Watch
+                Observer, Reactive, ReactiveList, ReactiveListProxy
             }
 
             local function parseValue(self, value)
                 if type(value) == "table" then
                     local proxy         = rawget(self, ReactiveProxy)
-                    local react         = proxy[value]
+                    local react, isval  = proxy[value]
                     if react ~= nil then return react or value end
 
-                    react               = reactive(value, false)
-                    local observer      = rawget(self, Observer)
-
-                    -- Subscribe for reactive field
-                    if isObjectType(react, Reactive) then
-                        react           = ReactiveProxy(observer, react)
-                        rawset(proxy, value, react)
-                        return react
-
-                    -- Subscribe the list
-                    elseif isObjectType(react, ReactiveList) then
-                        react           = ReactiveListProxy(observer, react)
-                        rawset(proxy, value, react)
-                        react:Subscribe(observer, observer.Subscription)
-                        return react
-
-                    -- Add proxy to acess the real value
-                    elseif isObjectType(react, BehaviorSubject) then
-                        rawset(proxy, value, false)
-                        return react
-                    end
+                    react, isval        = makeReactiveProxy(rawget(self, Observer), value)
+                    proxy[value]        = react or false
+                    return react or value
                 else
                     return value
                 end
             end
+
+            -------------------------------------------------------------------
+            --                           property                            --
+            -------------------------------------------------------------------
+            --- The item count
+            property "Count"                { get = function(self) return rawget(self, ReactiveList).Count end }
 
             -----------------------------------------------------------------------
             --                              method                               --
@@ -193,25 +235,16 @@ PLoop(function(_ENV)
             __Iterator__()
             function GetIterator(self)
                 local list                  = rawget(self, ReactiveList)
-                for i, v in (list.GetIterator or ipairs)(list) do
+                for i, v in list:GetIterator() do
                     yield(i, parseValue(self, v))
                 end
             end
 
             --- Whether an item existed in the list
-            function Contains(self, item)   for i, chk in self:GetIterator() do if chk == item then return true end end return false end
+            function Contains(self, item)   return rawget(self, ReactiveList):Contains(item) end
 
             --- Get the index of the item if it existed in the list
-            function IndexOf(self, item)    for i, chk in self:GetIterator() do if chk == item then return i end end end
-
-            -----------------------------------------------------------------------
-            --                           extend method                           --
-            -----------------------------------------------------------------------
-            for key, method, isstatic in Class.GetMethods(IList) do
-                if not isstatic then
-                    _ENV[key]           = method
-                end
-            end
+            function IndexOf(self, item)    return rawget(self, ReactiveList):IndexOf(item) end
 
             -------------------------------------------------------------------
             --                          constructor                          --
@@ -219,20 +252,22 @@ PLoop(function(_ENV)
             function __ctor(self, observer, react)
                 rawset(self, Observer, observer)
                 rawset(self, ReactiveList, react)
-                rawset(self, ReactiveProxy, Toolset.newtable(true))
-                react:Subscribe(observer, observer.Subscription)
+                rawset(self, ReactiveListProxy, newtable(true))
+                addDeepWatch(self, react)
             end
 
             -------------------------------------------------------------------
             --                          meta method                          --
             -------------------------------------------------------------------
             function __index(self, key)
-                return parseValue(self, rawget(self, ReactiveList)[key])
+                return type(key) == "number" and parseValue(self, rawget(self, ReactiveList)[key])
             end
 
             function __newindex(self, key, value)
                 error("The reactive proxy is readonly", 2)
             end
+
+            __dtor                      = disposeWatches
         end)
 
         __Sealed__()
@@ -241,9 +276,6 @@ PLoop(function(_ENV)
 
             export                      {
                 getValue                = Environment.GetValue,
-                isObjectType            = Class.IsObjectType,
-                isSubType               = Class.IsSubType,
-                getObjectClass          = Class.GetObjectClass,
                 rawset                  = rawset,
                 rawget                  = rawget,
                 pairs                   = pairs,
@@ -364,6 +396,8 @@ PLoop(function(_ENV)
             setfenv(func, watchEnv)
             return observer:OnNext()
         end
+
+        function __len(self)            return rawget(self, ReactiveList).Count end
 
         -----------------------------------------------------------------------
         --                          de-constructor                           --

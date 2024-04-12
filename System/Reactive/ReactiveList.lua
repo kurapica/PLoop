@@ -37,13 +37,14 @@ PLoop(function(_ENV)
             tinsert                     = table.insert,
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
-            isObjectType                = Class.IsObjectType,
-            getEventDelegate            = Event.Get,
-            toRawValue                  = Reactive.ToRaw,
+            isobjecttype                = Class.IsObjectType,
+            getdelegate                 = Event.Get,
+            toraw                       = Reactive.ToRaw,
+            setraw                      = Reactive.SetRaw,
 
             -- bind data change
             bindDataChange              = function (self, r)
-                if r and getEventDelegate(OnDataChange, self, true) and (isObjectType(r, Reactive) or isObjectType(r, ReactiveList)) then
+                if r and getdelegate(OnDataChange, self, true) and (isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...)
                         local raw       = self[ReactiveList]
                         local reactives = self[Reactive]
@@ -138,7 +139,7 @@ PLoop(function(_ENV)
         --- Push
         if elementtype then __Arguments__{ elementtype } end
         function Push(self, item)
-            item                        = toRawValue(item)
+            item                        = toraw(item)
             if item == nil then return end
             local raw                   = self[ReactiveList]
             local insert                = raw.Insert or tinsert
@@ -169,7 +170,7 @@ PLoop(function(_ENV)
         --- Unshift
         if elementtype then __Arguments__{ elementtype } end
         function Unshift(self, item)
-            item                        = toRawValue(item)
+            item                        = toraw(item)
             if item == nil then return end
             local raw                   = self[ReactiveList]
             local insert                = raw.Insert or tinsert
@@ -197,7 +198,7 @@ PLoop(function(_ENV)
                 if addcnt > 0 then
                     -- replace
                     for i = 1, min(addcnt, last - index + 1) do
-                        raw[index+i-1]  = toRawValue(select(i, ...))
+                        raw[index+i-1]  = toraw(select(i, ...))
                     end
 
                     -- remove
@@ -207,7 +208,7 @@ PLoop(function(_ENV)
 
                     -- add
                     for i = last - index + 2, addcnt do
-                        raw:Insert(index + i - 1, toRawValue(select(i, ...)))
+                        raw:Insert(index + i - 1, toraw(select(i, ...)))
                     end
                 else
                     for i = last, index, -1 do
@@ -216,7 +217,7 @@ PLoop(function(_ENV)
                 end
             else
                 for i = 1, addcnt do
-                    raw:Insert(index + i - 1, toRawValue(select(i, ...)))
+                    raw:Insert(index + i - 1, toraw(select(i, ...)))
                 end
             end
 
@@ -227,7 +228,7 @@ PLoop(function(_ENV)
         --- Insert an item to the list
         __Arguments__{ Integer, elementtype or Any }
         function Insert(self, index, item)
-            item                        = toRawValue(item)
+            item                        = toraw(item)
             if item == nil then return end
             local raw                   = self[ReactiveList]
             local total                 = raw.Count or #raw
@@ -243,7 +244,7 @@ PLoop(function(_ENV)
 
         __Arguments__{ elementtype or Any }
         function Insert(self, item)
-            item                        = toRawValue(item)
+            item                        = toraw(item)
             if item == nil then return end
             local raw                   = self[ReactiveList]
             raw[(raw.Count or #raw) + 1]= item
@@ -324,13 +325,15 @@ PLoop(function(_ENV)
         function __exist(_, list)
             if type(list) ~= "table" then return end
             if rawMap then return rawMap[list] end
-            return isObjectType(list, ReactiveList) and list or rawget(list, ReactiveList)
+            return isobjecttype(list, ReactiveList) and list or rawget(list, ReactiveList)
         end
 
         -------------------------------------------------------------------
         --                          meta-method                          --
         -------------------------------------------------------------------
         function __index(self, index)
+            if type(index) ~= "number" then return end
+
             local raw                   = rawget(self, ReactiveList)
             local value                 = raw[index]
             if type(value) == "table" then
@@ -342,19 +345,31 @@ PLoop(function(_ENV)
         end
 
         function __newindex(self, index, value)
+            if type(index) ~= "number" then return end
+
             -- Convert to raw value
             if type(value) == "table" then
-                value                   = toRawValue(value)
+                value                   = toraw(value)
             end
 
             local raw                   = self[ReactiveList]
             local oldval                = raw[index]
-            if oldval == nil then error("Usage: reactiveList[index] = value - the index is out of range", 2) end
             if oldval == value then return end
 
-            local reactives             = self[Reactive]
-            if reactives[oldval] then
-                Reactive.SetRaw(reactives[oldval], value, 2)
+            -- keep list
+            if oldval == nil and index ~= self.Count + 1 then
+                error("Usage: reactiveList[index] = value - the index is out of range", 2)
+            end
+
+            if value == nil then
+                if index ~= self.Count then
+                    error("Usage: reactiveList[index] = nil - must use RemoveByIndex instead of assign directly", 2)
+                end
+                return self:Pop()
+            end
+
+            if oldval and self[Reactive][oldval] then
+                setraw(self[Reactive][oldval], value, 2)
                 return
             end
 
@@ -378,13 +393,13 @@ PLoop(function(_ENV)
             --- Gets the current raw value of the reactive object
             __Static__()
             function ToRaw(self)
-                return isObjectType(self, ReactiveList) and rawget(self, ReactiveList) or toRawValue(self)
+                return isobjecttype(self, ReactiveList) and rawget(self, ReactiveList) or toraw(self)
             end
 
             --- Sets a raw table value to the reactive object
             __Static__()
             function SetRaw(self, value, stack)
-                if not isObjectType(self, ReactiveList) then
+                if not isobjecttype(self, ReactiveList) then
                     error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1)
                 end
 

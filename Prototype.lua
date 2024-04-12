@@ -6916,6 +6916,11 @@ do
             tinsert(upval, info[FLD_IC_SUPINFO])
         end
 
+        if info[FLD_IC_OBJFTR] then
+            token                       = turnonflags(FLG_IC_OBJFTR, token)
+            tinsert(upval, info[FLD_IC_OBJFTR])
+        end
+
         if info[FLD_IC_OBJMTD] then
             token                       = turnonflags(FLG_IC_OBJMTD, token)
             tinsert(upval, info[FLD_IC_OBJMTD])
@@ -6924,11 +6929,6 @@ do
                 token                   = turnonflags(FLG_IC_ATCACH, token)
                 tinsert(upval, rawset)
             end
-        end
-
-        if info[FLD_IC_OBJFTR] then
-            token                       = turnonflags(FLG_IC_OBJFTR, token)
-            tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
         local data                      = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][IC_META_INDEX] or meta[META_KEYS[IC_META_INDEX]]
@@ -6987,6 +6987,14 @@ do
                 ]])
             end
 
+            if validateflags(FLG_IC_OBJFTR, token) then
+                tinsert(head, "features")
+                tinsert(body, [[
+                    local ftr           = features[key]
+                    if ftr then return ftr:Get(self) end
+                ]])
+            end
+
             if validateflags(FLG_IC_OBJMTD, token) then
                 tinsert(head, "methods")
                 if validateflags(FLG_IC_ATCACH, token) then
@@ -7001,14 +7009,6 @@ do
                         if mtd then return mtd end
                     ]])
                 end
-            end
-
-            if validateflags(FLG_IC_OBJFTR, token) then
-                tinsert(head, "features")
-                tinsert(body, [[
-                    local ftr           = features[key]
-                    if ftr then return ftr:Get(self) end
-                ]])
             end
 
             if validateflags(FLG_IC_IDXFUN, token) then

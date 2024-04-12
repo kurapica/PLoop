@@ -245,7 +245,6 @@ PLoop(function(_ENV)
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
             setrawlist                  = ReactiveList.SetRaw,
-            automake                    = false,
 
             -- bind data change event handler when accessed
             bindDataChange              = function(self, k, r)
@@ -286,7 +285,6 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         if targetclass and (Class.Validate(targetclass) or Interface.Validate(targetclass)) and not Interface.IsSubType(targetclass, IKeyValueDict) then
             properties                  = {}
-            automake                    = true
 
             for _, ftr in Class.GetFeatures(targetclass, true) do
                 -- only allow read/write non-indexer properties
@@ -578,11 +576,8 @@ PLoop(function(_ENV)
 
             -- raw directly
             raw[key]                    = value
-
-            if automake or type(value) == "table" then
-                r                       = makeReactive(self, key, value)
-                return r and OnDataChange(self, key, not isobjecttype(r, BehaviorSubject) and r or value)
-            end
+            r                           = makeReactive(self, key, value)
+            return r and OnDataChange(self, key, not isobjecttype(r, BehaviorSubject) and r or value)
         end
     end)
 

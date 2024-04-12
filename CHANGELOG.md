@@ -2,10 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 
-## [1.9.4] - 2024-04-09 WangXH  <kurapica125@outlook.com>
+## [1.9.4] - 2024-04-12 WangXH  <kurapica125@outlook.com>
 ### Changed
 - Fix the environment change for type template definition, will cause template type generation fails.
 - The anonynmous types will have unique namespace name based on its template type and arguments.
+- The event/property will be accessed before the methods.
 
 ### Added
 - The reactive & watch system is re-designed. See [watch & reactive](Docs\025.watch_reactive.md) for more details.
