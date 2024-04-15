@@ -30,17 +30,17 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
 
             -- check the access value if observable
-            makeReactiveProxy           = function (observer, value)
+            makeReactiveProxy           = function (observer, value, parent)
                 local cls               = value and getobjectclass(value)
                 if not (cls and issubtype(cls, IObservable)) then return end
 
                 -- Subscribe for reactive field
                 if issubtype(cls, Reactive) then
-                    return ReactiveProxy(observer, value)
+                    return ReactiveProxy(observer, value, parent)
 
                 -- Subscribe the list
                 elseif issubtype(cls, ReactiveList) then
-                    return ReactiveListProxy(observer, value)
+                    return ReactiveListProxy(observer, value, parent)
 
                 -- Add proxy to acess the real value
                 else
@@ -49,62 +49,149 @@ PLoop(function(_ENV)
                 end
             end,
 
+            -- add value watch
+            addWatch                    = function(self, key, observable)
+                local watches           = rawget(self, Watch)
+                if not watches then
+                    watches             = {}
+                    rawset(self, Watch, watches)
+                end
+
+                -- subscribe
+                local observer          = rawget(self, Observer)
+                watches[key]            = not rawget(self, Subscription) and observer and observable:Subscribe(observer, Subscription(observer.Subscription)) or false
+                return observable
+            end,
+
             -- use deep watch
             addDeepWatch                = function(self, observable)
                 local observer          = rawget(self, Observer)
-                if observer and not rawget(self, Subscription) then
-                    rawset(self, Observer, nil)
+                if observer and rawget(self, Subscription) == nil then
                     rawset(self, Subscription, observable:Subscribe(observer, Subscription(observer.Subscription)))
                     return releaseSubWatches(self)
-                end
-            end,
-
-            -- add value watch
-            addWatch                    = function(self, observable)
-                local observer          = rawget(self, Observer)
-                if observer and not rawget(self, Subscription) then
-                    local subscription  = rawget(self, ISubscription)
-                    if not subscription then
-                        subscription    = Subscription(observer.Subscription)
-                        rawset(self, ISubscription, subscription)
-                    end
-
-                    return observable:Subscribe(observer, subscription)
                 end
             end,
 
             -- release child subscription
             releaseSubWatches           = function (self)
                 -- dispose value watches
-                local sub               = rawget(self, ISubscription)
-                if sub then
-                    rawset(self, ISubscription, nil)
-                    sub:Dispose()
+                local watches           = rawget(self, Watch)
+                if watches then
+                    for k, v in pairs(watches) do
+                        watches[k]      = false
+                        v:Dispose()
+                    end
                 end
 
                 -- dispose child proxy watches
-                for k, v in pairs(self) do
-                    local cls           = type(k) == "string" and getobjectclass(v)
-                    if cls and (issubtype(cls, ReactiveProxy) or issubtype(cls, ReactiveList)) then
-                        rawset(v, Observer, nil)
-                        sub             = rawget(v, Subscription)
+                local proxyes           = rawget(self, ReactiveProxy)
+                if proxyes then
+                    for name, proxy in pairs(proxyes) do
+                        rawset(proxy, Observer, nil)
+
+                        sub             = rawget(proxy, Subscription)
                         if sub then
-                            rawset(v, Subscription, nil)
+                            rawset(proxy, Subscription, nil)
                             sub:Dispose()
                         end
-                        releaseSubWatches(v)
+                        releaseSubWatches(proxy)
+                    end
+                end
+            end,
+
+            -- write, remove watch
+            makeWritable                = function(self, name)
+                local observer          = rawget(self, Observer)
+                if not observer then
+                    local parent        = rawget(self, IObservable)
+                    while parent and not rawget(parent, Observer) do
+                        parent          = rawget(self, IObservable)
+                    end
+                    observer            = rawget(parent, Observer)
+                end
+
+                -- block the deep watch by path
+                local parent            = self
+                while rawget(parent, Subscription) ~= false and rawget(parent, IObservable) do
+                    parent              = rawget(parent, IObservable)
+                end
+                blockDeepWatch(parent)
+
+
+                local parent            = self
+                if parent and rawget(parent, Subscription) ~= false then
+                    makeWritable(parent)
+                end
+
+                local subscription      = rawget(self, Subscription)
+                if subscription then
+                    -- cancel deep watch
+                    releaseDeepWatch(self)
+                end
+
+                if not name then return end
+
+
+
+                -- make parent writable, disable deep watch
+                makeWritable(rawget(self, IObservable))
+
+                local observer          = rawget(self, Observer)
+                -- make parent writable, disable deep watch
+                if not observer then    makeWritable(rawget(self, IObservable)) end
+
+                if rawget(self, Subscription) ~= false then
+                    -- remove deep watch
+                    local subscription  = rawget(self, Subscription)
+                    if subscription then    subscription:Dispose() end
+
+                    -- remove field watch
+                    subscription        = rawget(self, ISubscription)
+                    if subscription then    subscription:Dispose() end
+
+                    -- block watch
+                    rawset(self, Subscription,  false)
+                    rawset(self, ISubscription, nil)
+                end
+            end,
+
+            -- block deep watch if need writable
+            blockDeepWatch              = function(self)
+                local observer          = rawget(self, Observer)
+                local proxyes           = rawget(self, ReactiveProxy)
+                if proxyes then
+                    for name, proxy in pairs(proxyes) do
+                        rawset(proxy, Observer, observer)
+                        blockDeepWatch(proxy)
                     end
                 end
             end,
 
             disposeWatches              = function(self)
-                -- release subscription for sub values
-                local subscription      = rawget(self, ISubscription)
-                if subscription then subscription:Dispose() end
+                -- dispose value watches
+                local watches           = rawget(self, Watch)
+                if watches then
+                    for k, v in pairs(watches) do
+                        if v then v:Dispose() end
+                    end
+                    rawset(self, Watch, nil)
+                end
 
                 -- release deep watch subscription
                 subscription            = rawget(self, Subscription)
-                return subscription and subscription:Dispose()
+                if subscription then
+                    subscription:Dispose()
+                    rawset(self, Subscription, nil)
+                end
+
+                -- dispose child proxyes
+                local proxyes           = rawget(self, ReactiveProxy)
+                if proxyes then
+                    for name, proxy in pairs(proxyes) do
+                        proxy:Dispose()
+                    end
+                    rawset(self, ReactiveProxy, nil)
+                end
             end,
 
             IObservable, ISubscription,
@@ -125,13 +212,14 @@ PLoop(function(_ENV)
                 addDeepWatch            = addDeepWatch,
                 addWatch                = addWatch,
 
-                Observer, Reactive, Watch
+                IObservable, Observer, Reactive, ReactiveProxy, Watch
             }
 
             -------------------------------------------------------------------
             --                          constructor                          --
             -------------------------------------------------------------------
-            function __ctor(self, observer, react)
+            function __ctor(self, observer, react, parent)
+                rawset(self, IObservable, parent)
                 rawset(self, Observer, observer)
                 rawset(self, Reactive, react)
             end
@@ -142,13 +230,17 @@ PLoop(function(_ENV)
             function __index(self, key)
                 if type(key) ~= "string" then return end
 
+                -- get child proxyes
+                local proxyes           = rawget(self, ReactiveProxy)
+                subject                 = proxyes and proxyes[key]
+                if subject then return subject end
+
                 -- check behaviour subjects
+                local react             = rawget(self, Reactive)
                 local watches           = rawget(self, Watch)
-                local subject           = watches and watches[key]
-                if subject then return subject:GetValue() end
+                if watches and watches[key] ~= nil then return react[key]:GetValue() end
 
                 -- get from the source
-                local react             = rawget(self, Reactive)
                 local value             = react[key]
 
                 if value ~= nil then
@@ -161,19 +253,16 @@ PLoop(function(_ENV)
 
                     -- make reactive
                     else
-                        local r, isv    = makeReactiveProxy(rawget(self, Observer), value)
+                        local r, isv    = makeReactiveProxy(rawget(self, Observer), value, self)
                         if r then
                             if isv then
-                                if not watches then
-                                    watches = {}
-                                    rawset(self, Watch, watches)
-                                end
-                                watches[key]= r
-                                addWatch(self, r)
-                                return r:GetValue()
+                                return addWatch(self, key, r):GetValue()
                             else
-                                -- access directly
-                                rawset(self, key, r)
+                                if not proxyes then
+                                    proxyes = {}
+                                    rawset(self, ReactiveProxy, proxyes)
+                                end
+                                proxyes[key]= r
                             end
                             return r
                         end
@@ -183,7 +272,9 @@ PLoop(function(_ENV)
             end
 
             function __newindex(self, key, value)
-                error("The reactive proxy is readonly", 2)
+                if type(key) ~= "string" then rawset(self, key, value) end
+
+
             end
 
             __dtor                      = disposeWatches
@@ -202,7 +293,6 @@ PLoop(function(_ENV)
                 yield                   = coroutine.yield,
                 makeReactiveProxy       = makeReactiveProxy,
                 addDeepWatch            = addDeepWatch,
-                addWatch                = addWatch,
                 newtable                = Toolset.newtable,
 
                 Observer, Reactive, ReactiveList, ReactiveListProxy
