@@ -5382,7 +5382,10 @@ do
                 end
                 local ok, err           = pcall(definition, self, struct.GetTemplateParameters(owner))
                 if oldenv then setfenv(definition, oldenv) end
-                if not ok and type(err) == "string" then error(err, 0) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_STRUCT_TEMPDEF] then error(err) end
+                end
             else
                 -- Check base struct first
                 if definition[STRUCT_KEYWORD_BASE] ~= nil then
@@ -10076,6 +10079,7 @@ do
             if not (owner and _ICBuilderInDefine[self] and info) then error("The interface's definition is finished", stack) end
 
             definition                  = attribute.InitDefinition(owner, ATTRTAR_INTERFACE, parseDefinition(definition, self, stack), nil, nil, stack)
+
             -- Save template env
             if info[FLD_IC_TEMPDEF] then
                 info[FLD_IC_TEMPENV]    = environment.GetParent(self)
@@ -10093,7 +10097,10 @@ do
 
                 local ok, err           = pcall(definition, self, interface.GetTemplateParameters(owner))
                 if oldenv then setfenv(definition, oldenv) end
-                if not ok and type(err) == "string" then error(err, 0) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_IC_TEMPDEF] then error(err) end
+                end
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -10164,7 +10171,10 @@ do
 
                 local ok, err = pcall(definition, self, class.GetTemplateParameters(owner))
                 if oldenv then setfenv(definition, oldenv) end
-                if not ok and type(err) == "string" then error(err, 0) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_IC_TEMPDEF] then error(err) end
+                end
             else
                 -- Index key
                 for i, v in ipairs, definition, 0 do
@@ -10267,7 +10277,10 @@ do
                 setfenv(definition, self)
                 local ok, err           = pcall(definition, self)
                 if oldenv then setfenv(definition, oldenv) end
-                if not ok and type(err) == "string" then error(err, 0) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    error(tostring(err), stack)
+                end
             else
                 if getmetatable(owner) == class then
                     error("Usage: class([env, ][name, ][stack]) (definition) - the definition must be a function", stack)
