@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/04/12                                               --
+-- Update Date  :   2024/04/16                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -416,9 +416,12 @@ PLoop(function(_ENV)
                 error("The reactive proxy is readonly", 2)
             end
 
+            function __len(self)        return rawget(self, ReactiveList).Count end
+
             __dtor                      = disposeWatches
         end)
 
+        --- The watch environment to provide reactive value access
         __Sealed__()
         class "WatchEnvironment"        (function(_ENV)
             extend "IEnvironment"
@@ -545,8 +548,6 @@ PLoop(function(_ENV)
             setfenv(func, watchEnv)
             return observer:OnNext()
         end
-
-        function __len(self)            return rawget(self, ReactiveList).Count end
 
         -----------------------------------------------------------------------
         --                          de-constructor                           --
