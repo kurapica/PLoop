@@ -49,13 +49,15 @@ PLoop(function(_ENV)
 
                 -- Add proxy to acess the real value
                 elseif issubtype(cls, BehaviorSubject) then
-                    -- convert the observable to behavior subject
                     return value, true
+
+                -- convert the observable to behavior subject
                 elseif not parent then
                     return BehaviorSubject(value), true
                 end
             end,
 
+            -- add reactive proxy
             addProxy                    = function(self, key, proxy)
                 local proxyes           = rawget(self, ReactiveProxy)
                 if not proxyes then
@@ -68,13 +70,14 @@ PLoop(function(_ENV)
 
             -- add value watch
             addWatch                    = function(self, key, observable)
-                -- already watched
                 local watches           = rawget(self, Watch)
                 if not watches then
                     watches             = {}
                     rawset(self, Watch, watches)
                 end
-                if watches[key] ~= nil then return observable end
+
+                -- already watched
+                if watches[key] ~= nil  then return observable end
 
                 -- subscribe
                 local observer          = rawget(self, Observer)
@@ -312,9 +315,7 @@ PLoop(function(_ENV)
                 local react             = rawget(self, Reactive)
                 local watches           = rawget(self, Watch)
                 local watch             = watches and watches[key]
-                if watch ~= nil then
-                    if watch then makeWritable(self, key) end
-                end
+                if watch then makeWritable(self, key) end
 
                 -- assignment
                 local ok, err           = pcall(setvalue, react, key, value)

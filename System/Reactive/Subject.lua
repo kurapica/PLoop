@@ -209,6 +209,9 @@ PLoop(function(_ENV)
             BehaviorSubject
         }
 
+        --- Fired when use SetValue to change the data
+        event "OnDataChange"
+
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
@@ -255,15 +258,17 @@ PLoop(function(_ENV)
             return onError(self, ...)
         end
 
-        if valtype then __Arguments__{ valtype } end
-        function SetValue(self, ...)
-            return self:OnNext(...)
+        --- Sets the current value
+        if valtype then __Arguments__{ valtype/nil } end
+        function SetValue(self, val)
+            if val == self[1] then return end
+            self[0]                     = 1
+            self[1]                     = val
+            return OnDataChange(self, val) or onNext(self, val)
         end
 
         --- Gets the current value
-        function GetValue(self)
-            return unpack(self, 1, self[0])
-        end
+        function GetValue(self)         return self[1] end
 
         -----------------------------------------------------------------------
         --                             property                              --

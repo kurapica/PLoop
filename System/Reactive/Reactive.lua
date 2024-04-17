@@ -27,6 +27,7 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
             isarray                     = Toolset.isarray,
             isvaluetype                 = Class.IsValueType,
+            isobjecttype                = Class.IsObjectType,
             gettempparams               = Class.GetTemplateParameters,
             isenum                      = Enum.Validate,
             isstruct                    = Struct.Validate,
@@ -47,7 +48,7 @@ PLoop(function(_ENV)
                 end
 
                 -- add
-                for name in pairs(value) do
+                for name in (value.GetIterator or pairs)(value) do
                     if not temp[name] then
                         self[name]      = value[name]
                     end
@@ -57,8 +58,8 @@ PLoop(function(_ENV)
                 temp                    = nil
             end,
 
-            IObservable, IList, IDictionary, IIndexedList, IKeyValueDict,
-            Any, Number, String, Boolean, AnyType, RawTable, Reactive, List
+            IObservable, IList, IDictionary, IIndexedList, IKeyValueDict, ISubscription,
+            Any, Number, String, Boolean, AnyType, RawTable, Reactive, List, Subscription
         }
 
         -------------------------------------------------------------------
@@ -84,7 +85,7 @@ PLoop(function(_ENV)
 
             -- behavior subject
             if issubtype(cls, BehaviorSubject) then
-                return self.Value
+                return self:GetValue()
 
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
@@ -107,7 +108,20 @@ PLoop(function(_ENV)
 
             -- behavior subject
             if issubtype(cls, BehaviorSubject) then
-                return self:OnNext(value)
+                -- release previous subscription
+                local subscription      = rawget(self, SetRaw)
+                if subscription then
+                    subscription:Dispose()
+                    rawset(self, SetRaw, nil)
+                end
+
+                if isobjecttype(value, IObservable) then
+                    return rawset(self, SetRaw, value:Subscribe(self, Subscription()))
+                else
+                    local ok, err       = pcall(self.SetValue, self, value)
+                    if not ok then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value not valid", (stack or 1) + 1) end
+                    return
+                end
 
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
