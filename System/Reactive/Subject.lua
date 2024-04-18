@@ -35,7 +35,7 @@ PLoop(function(_ENV)
                 if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
 
                 subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-                subscription.OnUnsubscribe  = subscription.OnUnsubscribe + function()
+                subscription.OnUnsubscribe = subscription.OnUnsubscribe + function()
                     -- Safe check
                     if obs[observer] ~= subscription then return end
 
@@ -47,9 +47,8 @@ PLoop(function(_ENV)
                         self.__newsubject[observer] = nil
 
                     -- With no observers, there is no need to keep subscription
-                    elseif not next(obs) and self.__subscription then
-                        self.__subscription:Dispose()
-                        self.__subscription = false
+                    elseif not next(obs) then
+                        self.Subscription = nil
                     end
                 end
 
@@ -65,9 +64,8 @@ PLoop(function(_ENV)
                 end
 
                 -- Start the subscription if needed
-                if not self.__subscription and self.__observable then
-                    self.__subscription = Subscription()
-                    self.__observable:Subscribe(self, self.__subscription)
+                if not self.Subscription and self.Observable then
+                    self.Subscription   = self.Observable:Subscribe(self, Subscription())
                 end
 
                 return subscription, observer
@@ -78,10 +76,17 @@ PLoop(function(_ENV)
 
         field {
             __newsubject                = false, -- The new subject cache
-            __observable                = false, -- The data source
-            __subscription              = false, -- The subscription to the __observable
             __observers                 = {},    -- The observers
         }
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- The subscription will be used by the observer
+        property "Subscription"         { type = ISubscription, field = "__subscription", handler = function(self, new, old) return old and old:Dispose() end }
+
+        --- The observable that the subject subscribed
+        property "Observable"           { type = IObservable, field = "__observable", handler = function(self, new, old) self.Subscription = new and next(self.__observers) and new:Subscribe(self, Subscription()) or nil end }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -120,7 +125,7 @@ PLoop(function(_ENV)
         function OnError(self, exception)
             for ob, sub in pairs(self.__observers) do
                 if not sub.IsUnsubscribed then
-                    ob:OnError(Exception)
+                    ob:OnError(exception)
                 end
             end
         end
@@ -141,14 +146,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable/nil }
         function __ctor(self, observable)
-            self.__observable           = observable or false
+            self.Observable             = observable
         end
 
         -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            return self.__subscription and self.__subscription:Dispose()
+            self.Subscription           = nil
         end
     end)
 
@@ -193,11 +198,13 @@ PLoop(function(_ENV)
         export {
             select                      = select,
             max                         = math.max,
+            rawget                      = rawget,
             unpack                      = _G.unpack or table.unpack,
             onNext                      = Subject.OnNext,
             subscribe                   = Subject.Subscribe,
             onError                     = Subject.OnError,
             isObjectType                = Class.IsObjectType,
+            geterrormessage             = Struct.GetErrorMessage,
             getValue                    = function(self)
                 if isObjectType(self, BehaviorSubject) then
                     return (unpack(self, 1, self[0]))
@@ -208,9 +215,6 @@ PLoop(function(_ENV)
 
             BehaviorSubject
         }
-
-        --- Fired when use SetValue to change the data
-        event "OnDataChange"
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -228,19 +232,40 @@ PLoop(function(_ENV)
         end
 
         --- Provides the observer with new data
-        function OnNext(self, ...)
-            local length                = max(1, select("#", ...))
-            self[0]                     = length
+        if valtype then
+            local valid                 = getmetatable(valtype).ValidateValue
+            function OnNext(self, val)
+                local ret, msg          = valid(valtype, val)
+                if msg then return onError(self, geterrormessage(msg, "value")) end
 
-            if length <= 2 then
-                self[1], self[2]        = ...
-            else
-                for i = 1, length, 2 do
-                    self[i], self[i+1]  = select(i, ...)
+                self[0]                 = 1
+                self[1]                 = ret
+
+                if rawget(self, "__container") then
+                    self.__container[self.__field] = ret
                 end
-            end
 
-            return onNext(self, ...)
+                return onNext(self, ret)
+            end
+        else
+            function OnNext(self, ...)
+                local length            = max(1, select("#", ...))
+                self[0]                 = length
+
+                if length <= 2 then
+                    self[1], self[2]    = ...
+                else
+                    for i = 1, length, 2 do
+                        self[i], self[i+1]  = select(i, ...)
+                    end
+                end
+
+                if rawget(self, "__container") then
+                    self.__container[self.__field] = self[1]
+                end
+
+                return onNext(self, ...)
+            end
         end
 
         -- Send the error message
@@ -258,15 +283,6 @@ PLoop(function(_ENV)
             return onError(self, ...)
         end
 
-        --- Sets the current value
-        if valtype then __Arguments__{ valtype/nil } end
-        function SetValue(self, val)
-            if val == self[1] then return end
-            self[0]                     = 1
-            self[1]                     = val
-            return OnDataChange(self, val) or onNext(self, val)
-        end
-
         --- Gets the current value
         function GetValue(self)         return self[1] end
 
@@ -274,22 +290,28 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- The current value
-        property "Value"                { get = GetValue, set = SetValue, type = valtype }
+        property "Value"                { get = GetValue, set = OnNext, type = valtype }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Any * 0 }
-        function __ctor(self, observable, ...)
-            local length                = max(1, select("#", ...))
-            self[0]                     = length
-            for i = 1, length, 2 do
-                self[i], self[i + 1]    = select(i, ...)
-            end
-
+        -- Generate behavior subject based on other observable
+        __Arguments__{ IObservable }
+        function __ctor(self, observable)
+            self[0]                     = 0
             super(self, observable)
         end
 
+        -- Binding the behavior subject to a container's field
+        __Arguments__{ Table, String }
+        function __ctor(self, container, field)
+            self[0]                     = 1
+            self[1]                     = container[field]
+            self.__container            = container
+            self.__field                = field
+        end
+
+        -- Generate behavior subject with init data
         if valtype then
             __Arguments__{ valtype/nil }
         else
