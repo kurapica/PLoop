@@ -22,7 +22,7 @@ PLoop(function(_ENV)
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export {
+        export                          {
             next                        = next,
             type                        = type,
             pairs                       = pairs,
@@ -153,7 +153,8 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            self.Subscription           = nil
+            self.Observable             = nil
+            self.__observers            = nil
         end
     end)
 
@@ -233,19 +234,33 @@ PLoop(function(_ENV)
 
         --- Provides the observer with new data
         if valtype then
-            local valid                 = getmetatable(valtype).ValidateValue
-            function OnNext(self, val)
-                local ret, msg          = valid(valtype, val)
-                if msg then return onError(self, geterrormessage(msg, "value")) end
+            if Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
+                function OnNext(self, val)
+                    self[0]             = 1
+                    self[1]             = val
 
-                self[0]                 = 1
-                self[1]                 = ret
+                    if rawget(self, "__container") then
+                        self.__container[self.__field] = val
+                    end
 
-                if rawget(self, "__container") then
-                    self.__container[self.__field] = ret
+                    return onNext(self, val)
                 end
 
-                return onNext(self, ret)
+            else
+                local valid             = getmetatable(valtype).ValidateValue
+                function OnNext(self, val)
+                    local ret, msg      = valid(valtype, val)
+                    if msg then return onError(self, geterrormessage(msg, "value")) end
+
+                    self[0]             = 1
+                    self[1]             = ret
+
+                    if rawget(self, "__container") then
+                        self.__container[self.__field] = ret
+                    end
+
+                    return onNext(self, ret)
+                end
             end
         else
             function OnNext(self, ...)

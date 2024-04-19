@@ -553,7 +553,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
-        function __dtor(self) return self:OnCompleted() or rawget(self, Observer):Dispose() end
+        function __dtor(self) return rawget(self, Observer):Dispose() end
     end)
 
     --- The watch keyword
