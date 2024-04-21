@@ -519,7 +519,7 @@ PLoop(function(_ENV)
                 return res, ...
             end
 
-            local observer              = Observer(function()
+            local observer              = Observer(function(...)
                 if processing then return end
                 processing              = true
                 local ok, err

@@ -106,8 +106,9 @@ PLoop(function(_ENV)
         --- Sets a raw table value to the reactive object
         __Static__()
         function SetRaw(self, value, stack)
+            local error                 = stack == true and throw or error
             local cls                   = getmetatable(self)
-            if type(self) ~= "table" or not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1) end
+            if not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1) end
 
             -- behavior subject
             if issubtype(cls, BehaviorSubject) then
@@ -117,17 +118,19 @@ PLoop(function(_ENV)
                 else
                     self.Observable     = nil
                     local ok, err       = pcall(setBehaviorValue, self, value)
-                    if not ok then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. err:match("%d+:%s*(.-)$"), (stack or 1) + 1) end
+                    if not ok then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. tostring(err):match("%d+:%s*(.-)$"), (stack or 1) + 1) end
                     return
                 end
 
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
-                ReactiveList.SetRaw(self, value, (stack or 1) + 1)
+                ReactiveList.SetRaw(self, value, stack ~= true and ((stack or 1) + 1) or stack)
                 return
 
             -- reactive
             elseif issubtype(cls, Reactive) then
+                -- too complex to handle the observable objects assignment, use raw directly
+                value                   = toraw(value, true)
                 if value ~= nil and type(value) ~= "table" then
                     error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value not valid", (stack or 1) + 1)
                 end
@@ -347,20 +350,21 @@ PLoop(function(_ENV)
                             or Class.IsSubType(rtype, ReactiveList)
                             and function(self, value)
                                 -- too complex to hanlde the value as reactive object
-                                value   = toraw(value, true)
                                 local r = self[Reactive][pname]
-                                if r    then setrawlist(r, value, 2) return end
+                                if r    then return setrawlist(r, value, true) end
+                                value   = toraw(value, true)
                                 self[RawTable][pname] = value
                                 return OnDataChange(self, pname, makeReactive(self, pname, value, ptype))
                             end
                             or function(self, value)
-                                value   = toraw(value, true)
                                 local r = self[Reactive][pname]
-                                if r    then setraw(r, value, 2) return end
+                                if r    then return setraw(r, value, true) end
+                                value   = toraw(value, true)
                                 self[RawTable][pname] = value
                                 return OnDataChange(self, pname, makeReactive(self, pname, value, ptype))
                             end,
-                            type        = Class.IsSubType(rtype, BehaviorSubject) and (ptype + IObservable) or (ptype + rtype)
+                            type        = Class.IsSubType(rtype, BehaviorSubject) and (ptype + IObservable) or (ptype + rtype),
+                            throwable   = true,
                         }
 
                     -- for non-reactive
@@ -444,20 +448,21 @@ PLoop(function(_ENV)
                         end
                         or Class.IsSubType(rtype, ReactiveList)
                         and function(self, value)
-                            value       = toraw(value, true)
                             local r     = self[Reactive][mname]
-                            if r    then setrawlist(r, value, 2) return end
+                            if r        then return setrawlist(r, value, true) end
+                            value       = toraw(value, true)
                             self[RawTable][mname] = value
                             return OnDataChange(self, mname, makeReactive(self, mname, value, mtype))
                         end
                         or function(self, value)
-                            value       = toraw(value, true)
                             local r     = self[Reactive][mname]
-                            if r    then setraw(r, value, 2) return end
+                            if r        then return setraw(r, value, 2) end
+                            value       = toraw(value, true)
                             self[RawTable][mname] = value
                             return OnDataChange(self, mname, makeReactive(self, mname, value, mtype))
                         end,
-                        type            = Class.IsSubType(rtype, BehaviorSubject) and (mtype + IObservable) or (mtype + rtype)
+                        type            = Class.IsSubType(rtype, BehaviorSubject) and (mtype + IObservable) or (mtype + rtype),
+                        throwable       = true,
                     }
 
                 -- for non-reactive
@@ -603,9 +608,11 @@ PLoop(function(_ENV)
 
             -- raw directly
             if isobjecttype(value, IObservable) then
-                r                       = makeReactive(self, key, nil, nil, BehaviorSubject)
+                local vtype             = getmetatable(value)
+                r                       = makeReactive(self, key, nil, nil, isobjecttype(vtype, BehaviorSubject) and vtype or BehaviorSubject)
                 r.Observable            = value
             else
+                value                   = toraw(value, true)
                 raw[key]                = value
                 r                       = makeReactive(self, key, value)
                 return r and OnDataChange(self, key, not isobjecttype(r, BehaviorSubject) and r or value)

@@ -47,7 +47,7 @@ PLoop(function(_ENV)
                         self.__newsubject[observer] = nil
 
                     -- With no observers, there is no need to keep subscription
-                    elseif not next(obs) then
+                    elseif not self.KeepAlive and not next(obs) then
                         self.Subscription = nil
                     end
                 end
@@ -82,11 +82,15 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- Whether always connect the observable
+        __Abstract__()
+        property "KeepAlive"            { type = Boolean }
+
         --- The subscription will be used by the observer
         property "Subscription"         { type = ISubscription, field = "__subscription", handler = function(self, new, old) return old and old:Dispose() end }
 
         --- The observable that the subject subscribed
-        property "Observable"           { type = IObservable, field = "__observable", handler = function(self, new, old) self.Subscription = new and next(self.__observers) and new:Subscribe(self, Subscription()) or nil end }
+        property "Observable"           { type = IObservable, field = "__observable", handler = function(self, new, old) self.Subscription = new and (self.KeepAlive or next(self.__observers)) and new:Subscribe(self, Subscription()) or nil end }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -304,6 +308,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
+        --- Whether always connect the observable
+        property "KeepAlive"            { type = Boolean, default = true }
+
         --- The current value
         property "Value"                { get = GetValue, set = OnNext, type = valtype }
 

@@ -399,6 +399,7 @@ PLoop(function(_ENV)
             --- Sets a raw table value to the reactive object
             __Static__()
             function SetRaw(self, value, stack)
+                local error             = stack == true and throw or error
                 if not isobjecttype(self, ReactiveList) then
                     error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1)
                 end
