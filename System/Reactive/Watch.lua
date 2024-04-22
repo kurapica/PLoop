@@ -240,14 +240,31 @@ PLoop(function(_ENV)
                 type                    = type,
                 makeReactiveProxy       = makeReactiveProxy,
                 addDeepWatch            = addDeepWatch,
+                releaseDeepWatch        = releaseDeepWatch,
                 addWatch                = addWatch,
                 addProxy                = addProxy,
                 makeWritable            = makeWritable,
                 setraw                  = Reactive.SetRaw,
+                isobjecttype            = Class.IsObjectType,
                 setvalue                = function(self, key, value) self[key] = value end,
 
                 IObservable, Observer, Reactive, ReactiveProxy, Watch
             }
+
+            -------------------------------------------------------------------
+            --                         static method                         --
+            -------------------------------------------------------------------
+            __Static__()
+            function ToRaw(self, setraw)
+                if not isobjecttype(self, ReactiveProxy) then return self end
+                local react             = rawget(self, Reactive)
+                if setraw then
+                    releaseDeepWatch(self)
+                else
+                    addDeepWatch(self, react)
+                end
+                return react
+            end
 
             -------------------------------------------------------------------
             --                          constructor                          --
@@ -353,6 +370,7 @@ PLoop(function(_ENV)
                 yield                   = coroutine.yield,
                 makeReactiveProxy       = makeReactiveProxy,
                 addDeepWatch            = addDeepWatch,
+                releaseDeepWatch        = releaseDeepWatch,
                 newtable                = Toolset.newtable,
 
                 Observer, Reactive, ReactiveList, ReactiveListProxy
@@ -370,6 +388,22 @@ PLoop(function(_ENV)
                 else
                     return value
                 end
+            end
+
+
+            -------------------------------------------------------------------
+            --                         static method                         --
+            -------------------------------------------------------------------
+            __Static__()
+            function ToRaw(self, setraw)
+                if not isobjecttype(self, ReactiveListProxy) then return self end
+                local react             = rawget(self, ReactiveList)
+                if setraw then
+                    releaseDeepWatch(self)
+                else
+                    addDeepWatch(self, react)
+                end
+                return react
             end
 
             -------------------------------------------------------------------

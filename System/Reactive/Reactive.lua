@@ -100,12 +100,13 @@ PLoop(function(_ENV)
 
             -- reactive proxy
             elseif issubtype(cls, ReactiveProxy) then
-                self                    = rawget(self, Reactive)
+                -- use static method to add the deep watch
+                self                    = ReactiveProxy.ToRaw(self)
                 return withClone and clone(rawget(self, RawTable), true, true) or rawget(self, RawTable)
 
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
-                self                    = rawget(self, ReactiveList)
+                self                    = ReactiveListProxy.ToRaw(self)
                 return withClone and clone(ReactiveList.ToRaw(self), true, true) or ReactiveList.ToRaw(self)
 
             -- reactive list
@@ -140,8 +141,19 @@ PLoop(function(_ENV)
                     return
                 end
 
+            -- reactive list proxy
+            elseif issubtype(cls, ReactiveListProxy) then
+                self                    = ReactiveListProxy.ToRaw(self, true)
+                cls                     = ReactiveList
+
+            -- reative proxy
+            elseif issubtype(cls, ReactiveProxy) then
+                self                    = ReactiveProxy.ToRaw(self, true)
+                cls                     = Reactive
+            end
+
             -- reactive list
-            elseif issubtype(cls, ReactiveList) then
+            if issubtype(cls, ReactiveList) then
                 ReactiveList.SetRaw(self, value, stack ~= true and ((stack or 1) + 1) or stack)
                 return
 
