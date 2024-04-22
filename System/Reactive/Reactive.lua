@@ -17,6 +17,21 @@ PLoop(function(_ENV)
     --                       Static Implementation                       --
     -----------------------------------------------------------------------
     class "System.Reactive"             (function(_ENV)
+        -------------------------------------------------------------------
+        --                          declaration                          --
+        -------------------------------------------------------------------
+        class "__Observable__"          {}
+        class "BehaviorSubject"         {}
+        class "ReactiveList"            {}
+        class "Observable"              {}
+        class "Watch"                   (function(_ENV)
+            class "ReactiveProxy"       {}
+            class "ReactiveListProxy"   {}
+        end)
+
+        -------------------------------------------------------------------
+        --                            export                             --
+        -------------------------------------------------------------------
         export                          {
             pcall                       = pcall,
             pairs                       = pairs,
@@ -62,16 +77,9 @@ PLoop(function(_ENV)
             setBehaviorValue            = function(self, value) self.Value = value end,
 
             IObservable, IList, IDictionary, IIndexedList, IKeyValueDict, ISubscription,
-            Any, Number, String, Boolean, AnyType, RawTable, Reactive, List, Subscription
+            Any, Number, String, Boolean, AnyType, RawTable, Reactive, List, Subscription,
+            Watch.ReactiveProxy, Watch.ReactiveListProxy
         }
-
-        -------------------------------------------------------------------
-        --                          declaration                          --
-        -------------------------------------------------------------------
-        class "__Observable__"          {}
-        class "BehaviorSubject"         {}
-        class "ReactiveList"            {}
-        class "Observable"              {}
 
         -------------------------------------------------------------------
         --                         static method                         --
@@ -90,6 +98,16 @@ PLoop(function(_ENV)
             if issubtype(cls, BehaviorSubject) then
                 return self:GetValue()
 
+            -- reactive proxy
+            elseif issubtype(cls, ReactiveProxy) then
+                self                    = rawget(self, Reactive)
+                return withClone and clone(rawget(self, RawTable), true, true) or rawget(self, RawTable)
+
+            -- reactive list proxy
+            elseif issubtype(cls, ReactiveListProxy) then
+                self                    = rawget(self, ReactiveList)
+                return withClone and clone(ReactiveList.ToRaw(self), true, true) or ReactiveList.ToRaw(self)
+
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
                 return withClone and clone(ReactiveList.ToRaw(self), true, true) or ReactiveList.ToRaw(self)
@@ -99,8 +117,8 @@ PLoop(function(_ENV)
                 return withClone and clone(rawget(self, RawTable), true, true) or rawget(self, RawTable)
             end
 
-            -- other
-            return self
+            -- observable not allowed
+            return not issubtype(cls, IObservable) and self or nil
         end
 
         --- Sets a raw table value to the reactive object
@@ -229,6 +247,10 @@ PLoop(function(_ENV)
 
             return rtype
         end
+
+        export                          {
+            toraw                       = ToRaw
+        }
     end)
 
     -----------------------------------------------------------------------
@@ -272,18 +294,9 @@ PLoop(function(_ENV)
                 return r
             end,
 
-            -- handle data change event
-            handleDataChangeEvent       = function(_, owner, name, init)
-                if not init then return end
-                local reactives         = owner[Reactive]
-                for k, r in pairs(reactives) do
-                    bindDataChange(owner, k, r)
-                end
-            end,
-
             -- wrap the table value as default
             makeReactive                = function(self, k, v, type, behaviorType)
-                if not type and not behaviorType then
+                if not (type or behaviorType) then
                     local rtype         = Reactive.GetReactiveType(v)
                     if issubtype(rtype, BehaviorSubject) then
                         behaviorType    = rtype
@@ -302,7 +315,10 @@ PLoop(function(_ENV)
         --                             event                             --
         -------------------------------------------------------------------
         --- Fired when the data changed
-        __EventChangeHandler__(handleDataChangeEvent)
+        __EventChangeHandler__(function(_, owner, _, init)
+            if not init then return end
+            for k, r in pairs(owner[Reactive]) do bindDataChange(owner, k, r) end
+        end)
         event "OnDataChange"
 
         -------------------------------------------------------------------

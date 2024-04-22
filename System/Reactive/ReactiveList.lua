@@ -43,7 +43,7 @@ PLoop(function(_ENV)
             setraw                      = Reactive.SetRaw,
 
             -- bind data change
-            bindDataChange              = function (self, r)
+            bindDataChange              = function(self, r)
                 if r and getdelegate(OnDataChange, self, true) and (isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList)) then
                     r.OnDataChange      = r.OnDataChange + function(_, ...)
                         local raw       = self[ReactiveList]
@@ -69,16 +69,8 @@ PLoop(function(_ENV)
                 return r
             end,
 
-            -- handle data change event handler
-            handleDataChangeEvent       = function (_, owner, name, init)
-                if not init then return end
-                for v in pairs(owner[Reactive]) do
-                    bindDataChange(owner, v)
-                end
-            end,
-
             -- wrap the table value as default
-            makeReactive                = function (self, v)
+            makeReactive                = function(self, v)
                 local r                 = reactive(v, true)
                 self[Reactive][v]       = r or false
                 return r and bindDataChange(self, r)
@@ -101,14 +93,17 @@ PLoop(function(_ENV)
         --                             event                             --
         -------------------------------------------------------------------
         --- Fired when any element data changed
-        __EventChangeHandler__(handleDataChangeEvent)
+        __EventChangeHandler__(function(_, owner, _, init)
+            if not init then return end
+            for v in pairs(owner[Reactive]) do bindDataChange(owner, v) end
+        end)
         event "OnDataChange"
 
         -------------------------------------------------------------------
         --                           property                            --
         -------------------------------------------------------------------
         --- The item count
-        property "Count"            { get = function(self) local list = self[ReactiveList] return list.Count or #list end }
+        property "Count"                { get = function(self) local list = self[ReactiveList] return list.Count or #list end }
 
         -------------------------------------------------------------------
         --                            method                             --

@@ -10558,7 +10558,7 @@ end
 -- the other details, let's focus on the event two-way binding :
 --
 --              class "Frame" (function(_ENV)
---                  __EventChangeHandler__(function(delegate, owner, eventname)
+--                  __EventChangeHandler__(function(delegate, owner, eventname, init)
 --                      -- owner is the frame object
 --                      -- eventname is the OnEnter for this case
 --                      if delegate:IsEmpty() then
