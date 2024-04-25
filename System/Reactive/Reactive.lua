@@ -14,7 +14,7 @@
 
 PLoop(function(_ENV)
     -----------------------------------------------------------------------
-    --                       Static Implementation                       --
+    --                       static implementation                       --
     -----------------------------------------------------------------------
     class "System.Reactive"             (function(_ENV)
         -------------------------------------------------------------------
@@ -40,20 +40,21 @@ PLoop(function(_ENV)
             tostring                    = tostring,
             getmetatable                = getmetatable,
             issubtype                   = Class.IsSubType,
-            isarray                     = Toolset.isarray,
             isvaluetype                 = Class.IsValueType,
             isobjecttype                = Class.IsObjectType,
             gettempparams               = Class.GetTemplateParameters,
-            isenum                      = Enum.Validate,
-            isstruct                    = Struct.Validate,
             isclass                     = Class.Validate,
             isinterface                 = Interface.Validate,
+            isenum                      = Enum.Validate,
+            isstruct                    = Struct.Validate,
             getstructcategory           = Struct.GetStructCategory,
             getarrayelement             = Struct.GetArrayElement,
             clone                       = Toolset.clone,
+            setvalue                    = Toolset.setvalue,
+            isarray                     = Toolset.isarray,
 
             updateTable                 = function(self, value)
-                local raw               = rawget(self, Class) or rawget(self, RawTable)
+                local raw               = rawget(self, RawTable)
                 if not raw then return end
 
                 -- update
@@ -74,10 +75,8 @@ PLoop(function(_ENV)
                 temp                    = nil
             end,
 
-            setBehaviorValue            = function(self, value) self.Value = value end,
-
             IObservable, IList, IDictionary, IIndexedList, IKeyValueDict, ISubscription,
-            Any, Number, String, Boolean, AnyType, RawTable, Reactive, List, Subscription,
+            Any, Number, String, Boolean, RawTable, Reactive, List, Subscription,
             Watch.ReactiveProxy, Watch.ReactiveListProxy
         }
 
@@ -102,20 +101,24 @@ PLoop(function(_ENV)
             elseif issubtype(cls, ReactiveProxy) then
                 -- use static method to add the deep watch
                 self                    = ReactiveProxy.ToRaw(self)
-                return withClone and clone(rawget(self, RawTable), true, true) or rawget(self, RawTable)
+                self                    = self and rawget(self, RawTable)
+                return withClone and clone(self, true, true) or self
 
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
                 self                    = ReactiveListProxy.ToRaw(self)
-                return withClone and clone(ReactiveList.ToRaw(self), true, true) or ReactiveList.ToRaw(self)
-
-            -- reactive list
-            elseif issubtype(cls, ReactiveList) then
-                return withClone and clone(ReactiveList.ToRaw(self), true, true) or ReactiveList.ToRaw(self)
+                self                    = self and ReactiveList.ToRaw(self)
+                return withClone and clone(self, true, true) or self
 
             -- reactive
             elseif issubtype(cls, Reactive) then
-                return withClone and clone(rawget(self, RawTable), true, true) or rawget(self, RawTable)
+                self                    = rawget(self, RawTable)
+                return withClone and clone(self, true, true) or self
+
+            -- reactive list
+            elseif issubtype(cls, ReactiveList) then
+                self                    = ReactiveList.ToRaw(self)
+                return withClone and clone(self, true, true) or self
             end
 
             -- observable not allowed
@@ -136,7 +139,7 @@ PLoop(function(_ENV)
                     return
                 else
                     self.Observable     = nil
-                    local ok, err       = pcall(setBehaviorValue, self, value)
+                    local ok, err       = pcall(setvalue, self, "Value", value)
                     if not ok then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. tostring(err):match("%d+:%s*(.-)$"), (stack or 1) + 1) end
                     return
                 end
@@ -266,7 +269,7 @@ PLoop(function(_ENV)
     end)
 
     -----------------------------------------------------------------------
-    --                          Implementation                           --
+    --                          implementation                           --
     -----------------------------------------------------------------------
     --- The proxy used to access reactive table field datas
     __Sealed__()
@@ -418,6 +421,14 @@ PLoop(function(_ENV)
                             type        = Property.GetType(ftr),
                         }
                     end
+
+                -- event proxy
+                elseif Event.Validate(ftr) then
+                    __EventChangeHandler__(function(delegate, owner, name, init)
+                        if not init then return end
+                        owner[RawTable][name] = owner[RawTable][name] + function(_, ...) delegate(owner, ...) end
+                    end)
+                    event (ftr:GetName())
                 end
             end
 
@@ -662,7 +673,7 @@ PLoop(function(_ENV)
         getreactivetype                 = System.Reactive.GetReactiveType,
         istructvalue                    = Struct.ValidateValue,
 
-        Reactive, ReactiveList, BehaviorSubject, Any, Attribute
+        Reactive, ReactiveList, BehaviorSubject, Any, Attribute, AnyType
     }
 
     Environment.RegisterRuntimeKeyword  {

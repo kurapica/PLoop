@@ -14721,6 +14721,9 @@ do
 
         --- A function used to return an empty table with weak settings
         newtable                        = function(weakKey, weakVal) return weakKey and setmetatable({}, weakVal and WEAK_ALL or WEAK_KEY) or weakVal and setmetatable({}, WEAK_VALUE) or {} end,
+
+        --- A common set value func, combine with pcall
+        setvalue                        = function(self, key, value) self[key] = value end,
     }
 
     -----------------------------------------------------------------------
