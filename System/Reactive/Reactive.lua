@@ -54,9 +54,6 @@ PLoop(function(_ENV)
             isarray                     = Toolset.isarray,
 
             updateTable                 = function(self, value)
-                local raw               = rawget(self, RawTable)
-                if not raw then return end
-
                 -- update
                 local temp              = {}
                 for k in self:GetIterator() do
@@ -101,24 +98,23 @@ PLoop(function(_ENV)
             elseif issubtype(cls, ReactiveProxy) then
                 -- use static method to add the deep watch
                 self                    = ReactiveProxy.ToRaw(self)
-                self                    = self and rawget(self, RawTable)
-                return withClone and clone(self, true, true) or self
+                cls                     = getmetatable(self)
 
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
                 self                    = ReactiveListProxy.ToRaw(self)
-                self                    = self and ReactiveList.ToRaw(self)
-                return withClone and clone(self, true, true) or self
+                cls                     = getmetatable(self)
+            end
 
             -- reactive
-            elseif issubtype(cls, Reactive) then
-                self                    = rawget(self, RawTable)
-                return withClone and clone(self, true, true) or self
+            if issubtype(cls, Reactive) then
+                local rawtype           = gettempparams(cls)
+                local raw               = rawget(self, RawTable)
+                return withClone and not (rawtype and isclass(rawtype)) and clone(raw, true, true) or raw
 
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
-                self                    = ReactiveList.ToRaw(self)
-                return withClone and clone(self, true, true) or self
+                return ReactiveList.ToRaw(self, true)
             end
 
             -- observable not allowed
@@ -236,10 +232,6 @@ PLoop(function(_ENV)
                 elseif issubtype(metatype, IObservable) then
                     rtype               = BehaviorSubject
 
-                -- if is value type like Date
-                elseif isvaluetype(metatype) then
-                    rtype               = BehaviorSubject[metatype]
-
                 -- wrap list or array to reactive list
                 elseif issubtype(metatype, IList) then
                     -- to complex to cover more list types, only List for now
@@ -254,9 +246,9 @@ PLoop(function(_ENV)
                         rtype           = Reactive[metatype]
                     end
 
-                -- common wrap
+                -- as ref
                 else
-                    rtype               = Reactive[metatype]
+                    rtype               = BehaviorSubject[metatype]
                 end
             end
 
@@ -273,10 +265,10 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- The proxy used to access reactive table field datas
     __Sealed__()
-    __Arguments__{ AnyType/nil }:WithRebuild()
+    __Arguments__{ (MemberStructType + DictStructType + (-IKeyValueDict))/nil }:WithRebuild()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
-    class "System.Reactive"             (function(_ENV, targetclass)
+    class "System.Reactive"             (function(_ENV, valuetype)
         extend "IObservable" "IKeyValueDict"
 
         export                          {
@@ -337,123 +329,16 @@ PLoop(function(_ENV)
         event "OnDataChange"
 
         -------------------------------------------------------------------
-        --                   non-dict class/interface                    --
+        --                         static method                         --
         -------------------------------------------------------------------
-        if targetclass and (Class.Validate(targetclass) or Interface.Validate(targetclass)) and not Interface.IsSubType(targetclass, IKeyValueDict) then
-            properties                  = {}
-
-            for _, ftr in Class.GetFeatures(targetclass, true) do
-                -- only allow read/write non-indexer properties
-                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
-                    local pname         = ftr:GetName()
-                    local ptype         = ftr:GetType() or Any
-                    local rtype         = Reactive.GetReactiveType(nil, ptype)
-
-                    -- only allow reacive types
-                    if rtype then
-                        properties[pname] = true
-
-                        property(pname) {
-                            -- gets the reactive
-                            get         = Class.IsSubType(rtype, BehaviorSubject)
-                            and function(self)
-                                return self[Reactive][pname] or makeReactive(self, pname, nil, nil, rtype)
-                            end
-                            or function(self)
-                                local r = self[Reactive][pname]
-                                if r    then return r end
-                                local d = self[RawTable][pname]
-                                return d and makeReactive(self, pname, d, ptype)
-                            end,
-
-                            -- sets the value
-                            set         = Class.IsSubType(rtype, BehaviorSubject)
-                            and function(self, value)
-                                -- allow binding observable like watch to the property
-                                local s = self[pname]
-                                if value and isobjecttype(value, IObservable) then
-                                    s.Observable = value
-                                else
-                                    s.Observable = nil
-                                    return s:OnNext(value)
-                                end
-                            end
-                            or Class.IsSubType(rtype, ReactiveList)
-                            and function(self, value)
-                                -- too complex to hanlde the value as reactive object
-                                local r = self[Reactive][pname]
-                                if r    then return setrawlist(r, value, true) end
-                                value   = toraw(value, true)
-                                self[RawTable][pname] = value
-                                return OnDataChange(self, pname, makeReactive(self, pname, value, ptype))
-                            end
-                            or function(self, value)
-                                local r = self[Reactive][pname]
-                                if r    then return setraw(r, value, true) end
-                                value   = toraw(value, true)
-                                self[RawTable][pname] = value
-                                return OnDataChange(self, pname, makeReactive(self, pname, value, ptype))
-                            end,
-                            type        = Class.IsSubType(rtype, BehaviorSubject) and (ptype + IObservable) or (ptype + rtype),
-                            throwable   = true,
-                        }
-
-                    -- for non-reactive
-                    else
-                        property (pname) {
-                            get         = function(self) return self[RawTable][pname] end,
-                            set         = function(self, value) self[RawTable][pname] = value end,
-                            type        = ptype
-                        }
-                    end
-                elseif Property.Validate(ftr) then
-                    if Property.IsIndexer(ftr) then
-                        __Indexer__(Property.GetIndexType(ftr))
-                        property (pname) {
-                            get         = Property.IsReadable(ftr) and function(self, idx) return self[RawTable][pname][idx] end,
-                            set         = Property.IsWritable(ftr) and function(self, idx, value) self[RawTable][pname][idx] = value end,
-                            type        = Property.GetType(ftr),
-                        }
-                    else
-                        property (pname) {
-                            get         = Property.IsReadable(ftr) and function(self) return self[RawTable][pname] end,
-                            set         = Property.IsWritable(ftr) and function(self, value) self[RawTable][pname] = value end,
-                            type        = Property.GetType(ftr),
-                        }
-                    end
-
-                -- event proxy
-                elseif Event.Validate(ftr) then
-                    __EventChangeHandler__(function(delegate, owner, name, init)
-                        if not init then return end
-                        owner[RawTable][name] = owner[RawTable][name] + function(_, ...) delegate(owner, ...) end
-                    end)
-                    event (ftr:GetName())
-                end
-            end
-
-            __Iterator__()
-            function GetIterator(self)
-                local yield                 = yield
-
-                for k in pairs(properties) do
-                    yield(k, self[k])
-                end
-
-                for k, v in pairs(self[Reactive]) do
-                    if not properties[k] then
-                        yield(k, v)
-                    end
-                end
-            end
 
         -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
-        elseif targetclass and Struct.Validate(targetclass) and Struct.GetStructCategory(targetclass) == "MEMBER" then
+        if valuetype and Struct.Validate(valuetype) and Struct.GetStructCategory(valuetype) == "MEMBER" then
             properties                  = {}
 
-            for _, mem in Struct.GetMembers(targetclass) do
+            for _, mem in Struct.GetMembers(valuetype) do
                 local mtype             = mem:GetType()
                 local mname             = mem:GetName()
                 local rtype             = Reactive.GetReactiveType(nil, mtype)
@@ -561,8 +446,8 @@ PLoop(function(_ENV)
         --                          constructor                          --
         -------------------------------------------------------------------
         --- bind the reactive and object
-        if targetclass then
-            __Arguments__{ targetclass }
+        if valuetype then
+            __Arguments__{ valuetype }
         else
             __Arguments__{ RawTable/nil }
         end
@@ -602,16 +487,16 @@ PLoop(function(_ENV)
         end
 
         --- Send the new value
-        if targetclass then
+        if valuetype then
             local keytype, valtype
 
             -- for Dictionary class
-            if Class.Validate(targetclass) and Interface.IsSubType(targetclass, IKeyValueDict) then
-                keytype, valtype        = gettempparams(targetclass)
+            if Class.Validate(valuetype) and Interface.IsSubType(valuetype, IKeyValueDict) then
+                keytype, valtype        = gettempparams(valuetype)
 
             -- for Dictionary struct
-            elseif Struct.GetStructCategory(targetclass) == "DICTIONARY" then
-                keytype, valtype        = Struct.GetDictionaryKey(targetclass), Struct.GetDictionaryValue(targetclass)
+            elseif Struct.GetStructCategory(valuetype) == "DICTIONARY" then
+                keytype, valtype        = Struct.GetDictionaryKey(valuetype), Struct.GetDictionaryValue(valuetype)
             end
 
             -- Check Platform settings
