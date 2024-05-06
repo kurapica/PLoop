@@ -54,9 +54,6 @@ PLoop(function(_ENV)
             isarray                     = Toolset.isarray,
 
             updateTable                 = function(self, value)
-                local raw               = rawget(self, RawTable)
-                if not raw then return end
-
                 -- update
                 local temp              = {}
                 for k in self:GetIterator() do
@@ -101,24 +98,22 @@ PLoop(function(_ENV)
             elseif issubtype(cls, ReactiveProxy) then
                 -- use static method to add the deep watch
                 self                    = ReactiveProxy.ToRaw(self)
-                self                    = self and rawget(self, RawTable)
-                return withClone and clone(self, true, true) or self
+                cls                     = getmetatable(self)
 
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
                 self                    = ReactiveListProxy.ToRaw(self)
-                self                    = self and ReactiveList.ToRaw(self)
-                return withClone and clone(self, true, true) or self
+                cls                     = getmetatable(self)
+            end
 
             -- reactive
-            elseif issubtype(cls, Reactive) then
+            if issubtype(cls, Reactive) then
                 self                    = rawget(self, RawTable)
                 return withClone and clone(self, true, true) or self
 
             -- reactive list
             elseif issubtype(cls, ReactiveList) then
-                self                    = ReactiveList.ToRaw(self)
-                return withClone and clone(self, true, true) or self
+                return ReactiveList.ToRaw(self, withClone)
             end
 
             -- observable not allowed
@@ -128,7 +123,11 @@ PLoop(function(_ENV)
         --- Sets a raw table value to the reactive object
         __Static__()
         function SetRaw(self, value, stack)
+            -- throw or error
             local error                 = stack == true and throw or error
+            if stack == true then stack = 1 end
+
+            -- check type
             local cls                   = getmetatable(self)
             if not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1) end
 
@@ -147,12 +146,12 @@ PLoop(function(_ENV)
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
                 self                    = ReactiveListProxy.ToRaw(self, true)
-                cls                     = ReactiveList
+                cls                     = getmetatable(self)
 
             -- reative proxy
             elseif issubtype(cls, ReactiveProxy) then
                 self                    = ReactiveProxy.ToRaw(self, true)
-                cls                     = Reactive
+                cls                     = getmetatable(self)
             end
 
             -- reactive list
