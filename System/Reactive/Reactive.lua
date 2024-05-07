@@ -72,8 +72,12 @@ PLoop(function(_ENV)
                 temp                    = nil
             end,
 
-            IObservable, IList, IDictionary, IIndexedList, IKeyValueDict, ISubscription,
-            Any, Number, String, Boolean, RawTable, Reactive, List, Subscription,
+            raiseError                  = function(err, stack)
+                error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. tostring(err), stack + 1)
+            end,
+
+            IList, IIndexedList, IDictionary, IKeyValueDict, IObservable,
+            Any, Number, String, Boolean, RawTable, List, Reactive,
             Watch.ReactiveProxy, Watch.ReactiveListProxy
         }
 
@@ -96,13 +100,13 @@ PLoop(function(_ENV)
 
             -- reactive proxy
             elseif issubtype(cls, ReactiveProxy) then
-                -- use static method to add the deep watch
-                self                    = ReactiveProxy.ToRaw(self)
+                -- use static method to add the deep watch if possible
+                self                    = ReactiveProxy.GetReactive(self)
                 cls                     = getmetatable(self)
 
             -- reactive list proxy
             elseif issubtype(cls, ReactiveListProxy) then
-                self                    = ReactiveListProxy.ToRaw(self)
+                self                    = ReactiveListProxy.GetReactive(self)
                 cls                     = getmetatable(self)
             end
 
@@ -116,7 +120,7 @@ PLoop(function(_ENV)
                 return ReactiveList.ToRaw(self, withClone)
             end
 
-            -- observable not allowed
+            -- other observable not allowed
             return not issubtype(cls, IObservable) and self or nil
         end
 
@@ -124,22 +128,31 @@ PLoop(function(_ENV)
         __Static__()
         function SetRaw(self, value, stack)
             -- throw or error
-            local error                 = stack == true and throw or error
-            if stack == true then stack = 1 end
+            local error                 = raiseError
+            local ostack                = stack
+            if ostack == true then
+                error                   = throw
+                stack                   = 1
+            elseif not ostack then
+                stack                   = 1
+            end
 
             -- check type
             local cls                   = getmetatable(self)
-            if not cls then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1) end
+            if not cls then error("the reactive not valid", stack + 1) end
 
             -- behavior subject
             if issubtype(cls, BehaviorSubject) then
+                -- subscribe the observable
                 if isobjecttype(value, IObservable) then
                     self.Observable     = value
                     return
+
+                -- set the single value and remove the observable
                 else
                     self.Observable     = nil
                     local ok, err       = pcall(setvalue, self, "Value", value)
-                    if not ok then error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. tostring(err):match("%d+:%s*(.-)$"), (stack or 1) + 1) end
+                    if not ok then error("" .. tostring(err):match("%d+:%s*(.-)$"), stack + 1) end
                     return
                 end
 
@@ -156,25 +169,27 @@ PLoop(function(_ENV)
 
             -- reactive list
             if issubtype(cls, ReactiveList) then
-                ReactiveList.SetRaw(self, value, stack ~= true and ((stack or 1) + 1) or stack)
+                ReactiveList.SetRaw(self, value, ostack ~= true and (stack + 1) or ostack)
                 return
 
             -- reactive
             elseif issubtype(cls, Reactive) then
-                -- too complex to handle the observable objects assignment, use raw directly
-                value                   = toraw(value, true)
-                if value ~= nil and type(value) ~= "table" then
-                    error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the value not valid", (stack or 1) + 1)
+                local valtype           = gettempparams(cls)
+
+                -- common class
+                if valtype and isclass(valtype) and not issubtype(cls, IKeyValueDict) then
+
+                -- dict
+                else
+                    local ok, err           = pcall(updateTable, self, value)
+                    if not ok then error(err, stack + 1) end
                 end
 
-                -- as object proxy
-                local ok, err           = pcall(updateTable, self, value)
-                if not ok then error("Usage: Reactive.SetRaw(reactive, value) - " .. err, (stack or 1) + 1) end
                 return
             end
 
             -- other
-            error("Usage: Reactive.SetRaw(reactive, value[, stack]) - the reactive not valid", (stack or 1) + 1)
+            error("the reactive not valid", stack + 1)
         end
 
         -- Gets the recommend ractive type for the given type
@@ -222,16 +237,17 @@ PLoop(function(_ENV)
                     local element       = getarrayelement(metatype)
                     rtype               = element and ReactiveList[element] or ReactiveList
 
+                -- member or dict
                 else
                     rtype               = Reactive[metatype]
                 end
 
             elseif isclass(metatype) then
-                -- already wrap
+                -- already as reactive
                 if issubtype(metatype, Reactive) or issubtype(metatype, ReactiveList) or issubtype(metatype, BehaviorSubject) then
                     rtype               = nil
 
-                -- wrap the observable
+                -- observable as value queue
                 elseif issubtype(metatype, IObservable) then
                     rtype               = BehaviorSubject
 
@@ -247,13 +263,11 @@ PLoop(function(_ENV)
                         rtype           = ele and ReactiveList[ele] or ReactiveList
                     end
 
-                -- wrap dictionary
-                elseif issubtype(metatype, IDictionary) then
-                    if issubtype(metatype, IKeyValueDict) then
-                        rtype           = Reactive[metatype]
-                    end
+                -- wrap key-value dictionary
+                elseif issubtype(metatype, IKeyValueDict) then
+                    rtype               = Reactive[metatype]
 
-                -- common wrap
+                -- common class
                 else
                     rtype               = Reactive[metatype]
                 end
@@ -270,12 +284,12 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                          implementation                           --
     -----------------------------------------------------------------------
-    --- The proxy used to access reactive table field datas
+    --- The proxy used to access reactive table/class field/property datas
     __Sealed__()
     __Arguments__{ AnyType/nil }:WithRebuild()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
-    class "System.Reactive"             (function(_ENV, targetclass)
+    class "System.Reactive"             (function(_ENV, targettype)
         extend "IObservable" "IKeyValueDict"
 
         export                          {
@@ -291,7 +305,7 @@ PLoop(function(_ENV)
             gettempparams               = Class.GetTemplateParameters,
             isobjecttype                = Class.IsObjectType,
             geteventdelegate            = Event.Get,
-            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
+            clone                       = Toolset.clone,
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
             setrawlist                  = ReactiveList.SetRaw,
@@ -302,7 +316,12 @@ PLoop(function(_ENV)
                     if isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList) then
                         r.OnDataChange  = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                     else
-                        r:Subscribe(function(val) return OnDataChange(self, k, val) end)
+                        local sub       = rawget(self, Subscription)
+                        if not sub then
+                            sub         = Subscription()
+                            rawset(self, Subscription, sub)
+                        end
+                        r:Subscribe(function(val) return OnDataChange(self, k, val) end, nil, nil, sub)
                     end
                 end
                 return r
@@ -322,7 +341,7 @@ PLoop(function(_ENV)
                 return r and bindDataChange(self, k, r)
             end,
 
-            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject, Observable
+            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject, Observable, Subscription
         }
 
         -------------------------------------------------------------------
@@ -338,10 +357,10 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
-        if targetclass and (Class.Validate(targetclass) or Interface.Validate(targetclass)) and not Interface.IsSubType(targetclass, IKeyValueDict) then
+        if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
             properties                  = {}
 
-            for _, ftr in Class.GetFeatures(targetclass, true) do
+            for _, ftr in Class.GetFeatures(targettype, true) do
                 -- only allow read/write non-indexer properties
                 if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
                     local pname         = ftr:GetName()
@@ -431,6 +450,7 @@ PLoop(function(_ENV)
                 end
             end
 
+            -- implementation
             __Iterator__()
             function GetIterator(self)
                 local yield                 = yield
@@ -449,10 +469,10 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
-        elseif targetclass and Struct.Validate(targetclass) and Struct.GetStructCategory(targetclass) == "MEMBER" then
+        elseif targettype and Struct.Validate(targettype) and Struct.GetStructCategory(targettype) == "MEMBER" then
             properties                  = {}
 
-            for _, mem in Struct.GetMembers(targetclass) do
+            for _, mem in Struct.GetMembers(targettype) do
                 local mtype             = mem:GetType()
                 local mname             = mem:GetName()
                 local rtype             = Reactive.GetReactiveType(nil, mtype)
@@ -560,35 +580,52 @@ PLoop(function(_ENV)
         --                          constructor                          --
         -------------------------------------------------------------------
         --- bind the reactive and object
-        if targetclass then
-            __Arguments__{ targetclass }
+        if Class.Validate(targettype) or Interface.Validate(targettype) then
+            __Arguments__{ targettype }
+            function __ctor(self, init)
+                rawset(self, Reactive, {})
+                rawset(self, RawTable, init)
+                rawset(init, Reactive, self)
+            end
+
+            --- use the wrap for objects
+            function __exist(_, init)
+                return init and rawget(init, Reactive)
+            end
+
+        -- validate and clone
+        elseif Struct.Validate(targettype) then
+            __Arguments__{ targettype }
+            function __ctor(self, init)
+                rawset(self, Reactive, {})
+                rawset(self, RawTable, clone(init, true, true))
+            end
+
+        -- clone only
         else
             __Arguments__{ RawTable/nil }
-        end
-        function __ctor(self, init)
-            rawset(self, Reactive, {})
-            rawset(self, RawTable, init or {})
-
-            -- avoid to set value in raw dict object if possible
-            if init then
-                if rawMap then
-                    rawMap[init]        = self
-                else
-                    rawset(init, Reactive, self)
-                end
+            function __ctor(self, init)
+                rawset(self, Reactive, {})
+                rawset(self, RawTable, init and clone(init, true, true) or {})
             end
         end
 
-        --- use the wrap for objects
-        function __exist(_, init)
-            if not init then return end
-            if rawMap then return rawMap[init] end
-            return isobjecttype(init, Reactive) and init or rawget(init, Reactive)
+        -------------------------------------------------------------------
+        --                        de-constructor                         --
+        -------------------------------------------------------------------
+        function __dtor(self)
+            local reactives             = rawget(self, Reactive)
+            local subscription          = rawget(self, Subscription)
+            if subscription then subscription:Dispose() end
+
+            for k, v in pairs(reactives) do
+                if v then v:Dispose() end
+            end
         end
 
-        ---------------------------------------------------------------
-        --                        meta-method                        --
-        ---------------------------------------------------------------
+        -------------------------------------------------------------------
+        --                          meta-method                          --
+        -------------------------------------------------------------------
         --- Gets the current value
         function __index(self, key)
             local reactives             = rawget(self, Reactive)
@@ -601,16 +638,16 @@ PLoop(function(_ENV)
         end
 
         --- Send the new value
-        if targetclass then
+        if targettype then
             local keytype, valtype
 
             -- for Dictionary class
-            if Class.Validate(targetclass) and Interface.IsSubType(targetclass, IKeyValueDict) then
-                keytype, valtype        = gettempparams(targetclass)
+            if Class.Validate(targettype) and Interface.IsSubType(targettype, IKeyValueDict) then
+                keytype, valtype        = gettempparams(targettype)
 
             -- for Dictionary struct
-            elseif Struct.GetStructCategory(targetclass) == "DICTIONARY" then
-                keytype, valtype        = Struct.GetDictionaryKey(targetclass), Struct.GetDictionaryValue(targetclass)
+            elseif Struct.GetStructCategory(targettype) == "DICTIONARY" then
+                keytype, valtype        = Struct.GetDictionaryKey(targettype), Struct.GetDictionaryValue(targettype)
             end
 
             -- Check Platform settings

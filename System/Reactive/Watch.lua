@@ -255,7 +255,7 @@ PLoop(function(_ENV)
             --                         static method                         --
             -------------------------------------------------------------------
             __Static__()
-            function ToRaw(self, setraw)
+            function GetReactive(self, setraw)
                 if not isobjecttype(self, ReactiveProxy) then return self end
                 local react             = rawget(self, Reactive)
                 if setraw then
@@ -395,7 +395,7 @@ PLoop(function(_ENV)
             --                         static method                         --
             -------------------------------------------------------------------
             __Static__()
-            function ToRaw(self, setraw)
+            function GetReactive(self, setraw)
                 if not isobjecttype(self, ReactiveListProxy) then return self end
                 local react             = rawget(self, ReactiveList)
                 if setraw then
