@@ -2,11 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 
-## [1.9.4] - 2024-04-12 WangXH  <kurapica125@outlook.com>
+## [1.9.4] - 2024-05-09 WangXH  <kurapica125@outlook.com>
 ### Changed
 - Fix the environment change for type template definition, will cause template type generation fails.
 - The anonynmous types will have unique namespace name based on its template type and arguments.
 - The event/property will be accessed before the methods.
+- The System.ISubscription is replaced by System.Subscription class, it's a final class so can't be inherited.
+- The System.IObserver provide a new Subscription property used to manage the subscription for the observer.
 
 ### Added
 - The reactive & watch system is re-designed. See [watch & reactive](Docs\025.watch_reactive.md) for more details.

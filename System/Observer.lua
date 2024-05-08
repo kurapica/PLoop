@@ -13,11 +13,12 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    --- The subscription that should be returned by Observable's Subscribe
-    __Sealed__() __AnonymousClass__()
-    interface "System.ISubscription"    (function(_ENV)
+    --- The subscription that used to track the observer's subscription
+    __Sealed__() __Final__()
+    class "System.Subscription"         (function(_ENV)
         export                          { rawset = rawset, rawget = rawget }
 
+        --- Fired when un-subscribed
         event "OnUnsubscribe"
 
         -----------------------------------------------------------------------
@@ -30,12 +31,15 @@ PLoop(function(_ENV)
         --                            constructor                            --
         -----------------------------------------------------------------------
         -- As sub subscription that will be disposed when the root is disposed
-        __Arguments__{ ISubscription/nil }
-        function __ctor(self, subscription)
-            if not subscription then return end
-            rawset(self, "__root",      subscription)
-            rawset(self, "__handler",   function() return self:Dispose() end)
-            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + self.__handler
+        __Arguments__{ Subscription/nil }
+        function __ctor(self, root)
+            if not root then return end
+            if root.IsUnsubscribed then throw("Usage: Subscription([root]) - The root is already unsubscribed") end
+
+            local handler               = function() return self:Dispose() end
+            rawset(self, "__root",      root)
+            rawset(self, "__handler",   handler)
+            root.OnUnsubscribe          = root.OnUnsubscribe + handler
         end
 
         -----------------------------------------------------------------------
@@ -45,9 +49,11 @@ PLoop(function(_ENV)
             if self.IsUnsubscribed then return end
 
             local root                  = rawget(self, "__root")
-            local handler               = rawget(self, "__handler")
-            if root and handler and not root.IsUnsubscribed then
-                root.OnUnsubscribe      = root.OnUnsubscribe - handler
+            if root and not root.IsUnsubscribed then
+                local handler           = rawget(self, "__handler")
+                if handler then
+                    root.OnUnsubscribe  = root.OnUnsubscribe - handler
+                end
             end
 
             OnUnsubscribe(self)
@@ -65,6 +71,8 @@ PLoop(function(_ENV)
     --- Provides a mechanism for receiving push-based notifications
     __Sealed__() __AnonymousClass__()
     interface "System.IObserver"        (function(_ENV)
+        export                          { rawset = rawset, Subscription }
+
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
@@ -79,6 +87,29 @@ PLoop(function(_ENV)
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
         function OnCompleted(self) end
+
+        -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        -- The subscription will be used by the observer
+        property "Subscription"         {
+            type                        = Subscription,
+            field                       = "__subscription",
+            default                     = function(self) return Subscription() end,
+            handler                     = function(self, new, old)
+                if new and not new.IsUnsubscribed then
+                    new.OnUnsubscribe   = new.OnUnsubscribe + function() rawset(self, "__subscription", nil) end
+                end
+                return old and not old.IsUnsubscribed and old:Dispose()
+            end
+        }
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            self.Subscription           = nil
+        end
     end)
 
     --- Provide the Connect mechanism for observable queues

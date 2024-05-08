@@ -26,6 +26,7 @@ PLoop(function(_ENV)
             next                        = next,
             type                        = type,
             pairs                       = pairs,
+            newtable                    = Toolset.newtable,
             isObjectType                = Class.IsObjectType,
 
             -- the core subscribe
@@ -33,24 +34,9 @@ PLoop(function(_ENV)
                 -- Check existed subscription
                 local obs               = self.__observers
                 if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
+                local iscold            = not (self.KeepAlive or next(obs))
 
-                subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-                subscription.OnUnsubscribe = subscription.OnUnsubscribe + function()
-                    -- Safe check
-                    if obs[observer] ~= subscription then return end
-
-                    -- un-subscribe
-                    obs[observer]       = nil
-
-                    -- Remove the register
-                    if self.__newsubject and self.__newsubject ~= true and self.__newsubject[observer] then
-                        self.__newsubject[observer] = nil
-
-                    -- With no observers, there is no need to keep subscription
-                    elseif not self.KeepAlive and not next(obs) then
-                        self.Subscription = nil
-                    end
-                end
+                subscription            = subscription or observer.Subscription
 
                 -- Subscribe the subject
                 if self.__newsubject then
@@ -63,8 +49,8 @@ PLoop(function(_ENV)
                     obs[observer]       = subscription
                 end
 
-                -- Start the subscription if needed
-                if not self.Subscription and self.Observable then
+                -- Start the subscription if cold
+                if iscold and self.Observable then
                     self.Subscription   = self.Observable:Subscribe(self, Subscription())
                 end
 
@@ -74,11 +60,6 @@ PLoop(function(_ENV)
             Observer, Dictionary, Subscription
         }
 
-        field {
-            __newsubject                = false, -- The new subject cache
-            __observers                 = {},    -- The observers
-        }
-
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
@@ -86,62 +67,90 @@ PLoop(function(_ENV)
         __Abstract__()
         property "KeepAlive"            { type = Boolean }
 
-        --- The subscription will be used by the observer
-        property "Subscription"         { type = ISubscription, field = "__subscription", handler = function(self, new, old) return old and old:Dispose() end }
-
         --- The observable that the subject subscribed
-        property "Observable"           { type = IObservable, field = "__observable", handler = function(self, new, old) self.Subscription = new and (self.KeepAlive or next(self.__observers)) and new:Subscribe(self, Subscription()) or nil end }
+        property "Observable"           {
+            type                        = IObservable,
+            field                       = "__observable",
+            handler                     = function(self, new, old)
+                self.Subscription       = new and (self.KeepAlive or next(self.__observers)) and new:Subscribe(self, Subscription()) or nil
+            end
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         --- Notifies the provider that an observer is to receive notifications.
-        __Arguments__{ IObserver, ISubscription/nil }
+        __Arguments__{ IObserver, Subscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }
         function Subscribe(self, onNext, onError, onCompleted, subscription)
-            local observer              = Observer(onNext, onError, onCompleted, subscription)
-            return subscribe(self, observer, observer.Subscription)
+            return subscribe(self, Observer(onNext, onError, onCompleted, subscription))
         end
 
         --- Provides the observer with new data
         function OnNext(self, ...)
             self.__newsubject           = self.__newsubject or true
 
-            for ob, sub in pairs(self.__observers) do
+            local obs                   = self.__observers
+            local becold                = false
+            for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
                     ob:OnNext(...)
+                else
+                    obs[ob]             = nil
+                    becold              = true
                 end
             end
 
             -- Register the new observers
             local newSubs               = self.__newsubject
             self.__newsubject           = false
-            if newSubs and type(newSubs)== "table" then
+            if newSubs and newSubs ~= true then
                 for ob, sub in pairs(newSubs) do
-                    self.__observers[ob]= sub
+                    if not sub.IsUnsubscribed then
+                        obs[ob]         = sub
+                    end
                 end
+            end
+
+            -- be cold
+            if becold and not (self.KeepAlive or next(obs)) then
+                self.Subscription       = nil
             end
         end
 
         --- Notifies the observer that the provider has experienced an error condition
         function OnError(self, exception)
-            for ob, sub in pairs(self.__observers) do
+            local obs                   = self.__observers
+            local becold                = false
+            for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
                     ob:OnError(exception)
+                else
+                    obs[ob]             = nil
+                    becold              = true
                 end
+            end
+
+            -- be cold
+            if becold and not (self.KeepAlive or next(obs)) then
+                self.Subscription       = nil
             end
         end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            local observers             = self.__observers
-            self.__observers            = {}
-            for ob, sub in pairs(observers) do
+            local obs                   = self.__observers
+            self.__observers            = newtable(false, true)
+            for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
                     ob:OnCompleted()
                 end
+            end
+
+            if not self.KeepAlive then
+                self.Subscription       = nil
             end
         end
 
@@ -151,6 +160,8 @@ PLoop(function(_ENV)
         __Arguments__{ IObservable/nil }
         function __ctor(self, observable)
             self.Observable             = observable
+            self.__newsubject           = false
+            self.__observers            = newtable(false, true)
         end
 
         -----------------------------------------------------------------------
