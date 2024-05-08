@@ -263,9 +263,12 @@ PLoop(function(_ENV)
                         rtype           = ele and ReactiveList[ele] or ReactiveList
                     end
 
-                -- wrap key-value dictionary
-                elseif issubtype(metatype, IKeyValueDict) then
-                    rtype               = Reactive[metatype]
+                -- wrap dictionary
+                elseif issubtype(metatype, IDictionary) then
+                    -- only key-value dict support
+                    if issubtype(metatype, IKeyValueDict) then
+                        rtype           = Reactive[metatype]
+                    end
 
                 -- common class
                 else
@@ -309,6 +312,7 @@ PLoop(function(_ENV)
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
             setrawlist                  = ReactiveList.SetRaw,
+            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
             -- bind data change event handler when accessed
             bindDataChange              = function(self, k, r)
@@ -579,40 +583,25 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        --- bind the reactive and object
-        if Class.Validate(targettype) or Interface.Validate(targettype) then
-            __Arguments__{ targettype }
-            function __ctor(self, init)
-                rawset(self, Reactive, {})
-                rawset(self, RawTable, init)
+        __Arguments__{ targettype or (RawTable/nil) }
+        function __ctor(self, init)
+            init                        = init or {}
+            rawset(self, Reactive, {})
+            rawset(self, RawTable, init)
+
+            -- keep tracking
+            if rawMap then
+                rawMap[init]            = self
+            else
                 rawset(init, Reactive, self)
-            end
-
-            --- use the wrap for objects
-            function __exist(_, init)
-                return init and rawget(init, Reactive)
-            end
-
-        -- validate and clone
-        elseif Struct.Validate(targettype) then
-            __Arguments__{ targettype }
-            function __ctor(self, init)
-                rawset(self, Reactive, {})
-                rawset(self, RawTable, clone(init, true, true))
-            end
-
-        -- clone only
-        else
-            __Arguments__{ RawTable/nil }
-            function __ctor(self, init)
-                rawset(self, Reactive, {})
-                rawset(self, RawTable, init and clone(init, true, true) or {})
             end
         end
 
+        function __exist(_, init)       return init and (rawMap and rawMap[init] or rawget(init, Reactive)) end
+
         -------------------------------------------------------------------
         --                        de-constructor                         --
-        -------------------------------------------------------------------
+        -------------------------------------------------------------------4
         function __dtor(self)
             local reactives             = rawget(self, Reactive)
             local subscription          = rawget(self, Subscription)

@@ -16,7 +16,7 @@ PLoop(function(_ENV)
     --- The subscription that should be returned by Observable's Subscribe
     __Sealed__() __AnonymousClass__()
     interface "System.ISubscription"    (function(_ENV)
-        export { rawget }
+        export                          { rawset = rawset, rawget = rawget }
 
         event "OnUnsubscribe"
 
@@ -27,10 +27,29 @@ PLoop(function(_ENV)
         property "IsUnsubscribed"       { get = function(self) return rawget(self, "Disposed") or false end }
 
         -----------------------------------------------------------------------
+        --                            constructor                            --
+        -----------------------------------------------------------------------
+        -- As sub subscription that will be disposed when the root is disposed
+        __Arguments__{ ISubscription/nil }
+        function __ctor(self, subscription)
+            if not subscription then return end
+            rawset(self, "__root",      subscription)
+            rawset(self, "__handler",   function() return self:Dispose() end)
+            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + self.__handler
+        end
+
+        -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
             if self.IsUnsubscribed then return end
+
+            local root                  = rawget(self, "__root")
+            local handler               = rawget(self, "__handler")
+            if root and handler and not root.IsUnsubscribed then
+                root.OnUnsubscribe      = root.OnUnsubscribe - handler
+            end
+
             OnUnsubscribe(self)
         end
     end)

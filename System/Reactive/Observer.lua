@@ -17,34 +17,7 @@ PLoop(function(_ENV)
 
     --- The default subscription can be created based on root subscription
     __Sealed__()
-    class "Subscription"                (function(_ENV)
-        extend "System.ISubscription"
-
-        export                          { rawset = rawset, rawget = rawget }
-
-        -----------------------------------------------------------------------
-        --                            constructor                            --
-        -----------------------------------------------------------------------
-        -- As sub subscription that will be disposed when the root is disposed
-        __Arguments__{ ISubscription/nil }
-        function __ctor(self, subscription)
-            if not subscription then return end
-            rawset(self, "__root",      subscription)
-            rawset(self, "__handler",   function() return self:Dispose() end)
-            subscription.OnUnsubscribe  = subscription.OnUnsubscribe + self.__handler
-        end
-
-        -----------------------------------------------------------------------
-        --                          de-constructor                           --
-        -----------------------------------------------------------------------
-        function __dtor(self)
-            local root                  = rawget(self, "__root")
-            local handler               = rawget(self, "__handler")
-            if root and handler and not root.IsUnsubscribed then
-                root.OnUnsubscribe      = root.OnUnsubscribe - handler
-            end
-        end
-    end)
+    class "Subscription"                 { System.ISubscription }
 
     --- The default observer
     __Sealed__()
@@ -63,7 +36,16 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         -- The subscription will be used by the observer
-        property "Subscription"         { type = ISubscription, field = "__subscription", default = function() return Subscription() end }
+        property "Subscription"         {
+            type                        = ISubscription,
+            field                       = "__subscription",
+            default                     = function(self)
+                local sub               = Subscription()
+                -- make sure a new subscription will be created if the observer is reused
+                sub.OnUnsubscribe       = sub.OnUnsubscribe + function() rawset(self, "__subscription", nil) end
+                return sub
+            end
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
