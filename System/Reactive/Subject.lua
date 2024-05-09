@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2023/10/20                                               --
+-- Update Date  :   2024/05/09                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -27,13 +27,17 @@ PLoop(function(_ENV)
             type                        = type,
             pairs                       = pairs,
             newtable                    = Toolset.newtable,
-            isObjectType                = Class.IsObjectType,
 
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 -- Check existed subscription
                 local obs               = self.__observers
-                if obs[observer] and not obs[observer].IsUnsubscribed then return obs[observer], observer end
+                local exist             = obs[observer]
+                if exist then
+                    if exist ~= subscription and not exist.IsUnsubscribed then exist:Dispose() end
+                    obs[observer]       = subscription
+                    return subscription, observer
+                end
                 local iscold            = not (self.KeepAlive or next(obs))
 
                 subscription            = subscription or observer.Subscription
@@ -121,15 +125,28 @@ PLoop(function(_ENV)
         end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, exception)
+        function OnError(self, ...)
+            self.__newsubject           = self.__newsubject or true
+
             local obs                   = self.__observers
             local becold                = false
             for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
-                    ob:OnError(exception)
+                    ob:OnError(...)
                 else
                     obs[ob]             = nil
                     becold              = true
+                end
+            end
+
+            -- Register the new observers
+            local newSubs               = self.__newsubject
+            self.__newsubject           = false
+            if newSubs and newSubs ~= true then
+                for ob, sub in pairs(newSubs) do
+                    if not sub.IsUnsubscribed then
+                        obs[ob]         = sub
+                    end
                 end
             end
 
@@ -149,7 +166,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            if not self.KeepAlive then
+            if not (self.KeepAlive or next(self.__observers)) then
                 self.Subscription       = nil
             end
         end
@@ -179,7 +196,7 @@ PLoop(function(_ENV)
     class "AsyncSubject"                (function(_ENV)
         inherit "Subject"
 
-        export { max = math.max, select = select, unpack = _G.unpack or table.unpack }
+        export { max = math.max, select = select, unpack = _G.unpack or table.unpack, onnext = Subject.OnNext, oncompleted= Subject.OnCompleted }
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -199,8 +216,8 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            if self[0] > 0 then super.OnNext(self, unpack(self, 1, self[0])) end
-            super.OnCompleted(self)
+            if self[0] > 0 then onnext(self, unpack(self, 1, self[0])) end
+            return oncompleted(self)
         end
     end)
 
@@ -212,18 +229,18 @@ PLoop(function(_ENV)
         inherit "Subject"
 
         export {
-            select                      = select,
             max                         = math.max,
+            select                      = select,
             rawget                      = rawget,
             unpack                      = _G.unpack or table.unpack,
-            onNext                      = Subject.OnNext,
             subscribe                   = Subject.Subscribe,
-            onError                     = Subject.OnError,
-            isObjectType                = Class.IsObjectType,
+            onnext                      = Subject.OnNext,
+            onerror                     = Subject.OnError,
+            isobjecttype                = Class.IsObjectType,
             geterrormessage             = Struct.GetErrorMessage,
-            getValue                    = function(self)
-                if isObjectType(self, BehaviorSubject) then
-                    return (unpack(self, 1, self[0]))
+            getvalue                    = function(self)
+                if isobjecttype(self, BehaviorSubject) then
+                    return self[1]
                 else
                     return self
                 end
@@ -254,27 +271,29 @@ PLoop(function(_ENV)
                     self[0]             = 1
                     self[1]             = val
 
-                    if rawget(self, "__container") then
-                        self.__container[self.__field] = val
+                    local container     = rawget(self, "__container")
+                    if container then
+                        container[self.__field] = val
                     end
 
-                    return onNext(self, val)
+                    return onnext(self, val)
                 end
 
             else
                 local valid             = getmetatable(valtype).ValidateValue
                 function OnNext(self, val)
                     local ret, msg      = valid(valtype, val)
-                    if msg then return onError(self, geterrormessage(msg, "value")) end
+                    if msg then return onerror(self, geterrormessage(msg, "value")) end
 
                     self[0]             = 1
                     self[1]             = ret
 
-                    if rawget(self, "__container") then
-                        self.__container[self.__field] = ret
+                    local container     = rawget(self, "__container")
+                    if container then
+                        container[self.__field] = ret
                     end
 
-                    return onNext(self, ret)
+                    return onnext(self, ret)
                 end
             end
         else
@@ -290,11 +309,12 @@ PLoop(function(_ENV)
                     end
                 end
 
-                if rawget(self, "__container") then
-                    self.__container[self.__field] = self[1]
+                local container         = rawget(self, "__container")
+                if container then
+                    container[self.__field] = self[1]
                 end
 
-                return onNext(self, ...)
+                return onnext(self, ...)
             end
         end
 
@@ -310,7 +330,7 @@ PLoop(function(_ENV)
                     self[i], self[i+1]  = select(i, ...)
                 end
             end
-            return onError(self, ...)
+            return onerror(self, ...)
         end
 
         --- Gets the current value
@@ -366,63 +386,63 @@ PLoop(function(_ENV)
         function __tostring(self)       return tostring(self.Value) end
 
         -- the addition operation
-        function __add(a, b)            return getValue(a) + getValue(b) end
+        function __add(a, b)            return getvalue(a) + getvalue(b) end
 
         -- the subtraction operation
-        function __sub(a, b)            return getValue(a) - getValue(b) end
+        function __sub(a, b)            return getvalue(a) - getvalue(b) end
 
         -- the multiplication operation
-        function __mul(a, b)            return getValue(a) * getValue(b) end
+        function __mul(a, b)            return getvalue(a) * getvalue(b) end
 
         -- the division operation
-        function __div(a, b)            return getValue(a) / getValue(b) end
+        function __div(a, b)            return getvalue(a) / getvalue(b) end
 
         -- the modulo operation
-        function __mod(a, b)            return getValue(a) % getValue(b) end
+        function __mod(a, b)            return getvalue(a) % getvalue(b) end
 
         -- the exponentiation operation
-        function __pow(a, b)            return getValue(a) ^ getValue(b) end
+        function __pow(a, b)            return getvalue(a) ^ getvalue(b) end
 
         -- the negation operation
-        function __unm(a)               return - getValue(a) end
+        function __unm(a)               return - getvalue(a) end
 
         -- the concatenation operation
-        function __concat(a, b)         return getValue(a) .. getValue(b) end
+        function __concat(a, b)         return getvalue(a) .. getvalue(b) end
 
         -- the length operation, those won't works in 5.1
-        function __len(a)               return #getValue(a) end
+        function __len(a)               return #getvalue(a) end
 
         -- the equal operation
-        function __eq(a, b)             return getValue(a) == getValue(b) end
+        function __eq(a, b)             return getvalue(a) == getvalue(b) end
 
         -- the less than operation
-        function __lt(a, b)             return getValue(a) < getValue(b) end
+        function __lt(a, b)             return getvalue(a) < getvalue(b) end
 
         -- the less equal operation
-        function __le(a, b)             return getValue(a) <= getValue(b) end
+        function __le(a, b)             return getvalue(a) <= getvalue(b) end
 
         if _G._VERSION and tonumber(_G._VERSION:match("[%d%.]+$")) * 10 >= 53 then
             Toolset.loadsnippet([[
                 -- the floor division operation
-                function __idiv(a, b)           return getValue(a) // getValue(b) end
+                function __idiv(a, b)           return getvalue(a) // getvalue(b) end
 
                 -- the bitwise AND operation
-                function __band(a, b)           return getValue(a) & getValue(b) end
+                function __band(a, b)           return getvalue(a) & getvalue(b) end
 
                 -- the bitwise OR operation
-                function __bor(a, b)            return getValue(a) | getValue(b) end
+                function __bor(a, b)            return getvalue(a) | getvalue(b) end
 
                 -- the bitwise exclusive OR operation
-                function __bxor(a, b)           return getValue(a) ~ getValue(b) end
+                function __bxor(a, b)           return getvalue(a) ~ getvalue(b) end
 
                 -- the bitwise NOToperation
-                function __bnot(a)              return ~getValue(a) end
+                function __bnot(a)              return ~getvalue(a) end
 
                 -- the bitwise left shift operation
-                function __shl(a, b)            return getValue(a) << getValue(b) end
+                function __shl(a, b)            return getvalue(a) << getvalue(b) end
 
                 -- the bitwise right shift operation
-                function __shr(a, b)            return getValue(a) >> getValue(b) end
+                function __shr(a, b)            return getvalue(a) >> getvalue(b) end
             ]], "BehaviorSubject_Patch_53", _ENV)()
         end
     end)
@@ -433,30 +453,19 @@ PLoop(function(_ENV)
         inherit "Subject"
         extend "IConnectableObservable"
 
-        export { Observable, Subject, Subscription }
-
-        field {
-            __publicsubscription        = false
-        }
-
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        property "PublishObservable"    { type = IObservable }
+        export { Subject, Subscription }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         function Connect(self)
-            if self.__publicsubscription then return end
-            self.__publicsubscription   = Subscription()
-            self.PublishObservable:Subscribe(self, self.__publicsubscription)
+            self.__pubsub               = self.__pubsub or self.__pubobs:Subscribe(self, Subscription())
             return self
         end
 
         --- Make a Connectable Observable behave like an ordinary Observable
         function RefCount(self)
-            return Subject(self.PublishObservable)
+            return Subject(self.__pubobs)
         end
 
         -----------------------------------------------------------------------
@@ -464,7 +473,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable }
         function __ctor(self, observable)
-            self.PublishObservable      = observable
+            self.__pubobs               = observable
+            self.__pubsub               = false
             super(self)
         end
 
@@ -472,7 +482,7 @@ PLoop(function(_ENV)
         --                          de-constructor                           --
         -----------------------------------------------------------------------
         function __dtor(self)
-            return self.__publicsubscription and self.__publicsubscription:Dispose()
+            return self.__pubsub and self.__pubsub:Dispose()
         end
     end)
 
@@ -481,7 +491,7 @@ PLoop(function(_ENV)
     class "ReplaySubject"               (function(_ENV)
         inherit "Subject"
 
-        export { Queue, select = select, onNext = Subject.OnNext }
+        export { Queue, select = select, onnext = Subject.OnNext, subscribe = Subject.Subscribe }
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -490,7 +500,7 @@ PLoop(function(_ENV)
         property "QueueCount"           { type = Number, default = 0 }
 
         --- The last values from the source observable
-        property "Queue"                { set = false, default = function() return Queue() end }
+        property "Queue"                { set = false,   default = function() return Queue() end }
 
         --- The max length of the buff size
         property "QueueSize"            { type = Number, default = math.huge }
@@ -499,7 +509,7 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local subscription, observer= super.Subscribe(self, ...)
+            local subscription, observer= subscribe(self, ...)
             if self.Queue:Peek() then
                 local queue             = self.Queue
                 local index             = 1
@@ -522,7 +532,7 @@ PLoop(function(_ENV)
             else
                 self.QueueCount         = self.QueueCount + 1
             end
-            return onNext(self, ...)
+            return onnext(self, ...)
         end
 
         -----------------------------------------------------------------------

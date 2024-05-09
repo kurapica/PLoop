@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2023/10/19                                               --
+-- Update Date  :   2024/05/09                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -68,9 +68,6 @@ PLoop(function(_ENV)
         extend "System.IObservable"
 
         export                          {
-            rawset                      = rawset,
-            isObjectType                = Class.IsObjectType,
-
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 subscription            = subscription or observer.Subscription
@@ -98,7 +95,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ Callable }
         function __ctor(self, subscribe)
-            rawset(self, "__subscribe", subscribe)
+            self.__subscribe            = subscribe
         end
     end)
 end)

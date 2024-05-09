@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2023/10/19                                               --
+-- Update Date  :   2024/05/09                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -56,7 +56,7 @@ PLoop(function(_ENV)
                 end
             end
 
-            OnUnsubscribe(self)
+            return OnUnsubscribe(self)
         end
     end)
 
@@ -64,7 +64,7 @@ PLoop(function(_ENV)
     __Sealed__() __AnonymousClass__()
     interface "System.IObservable"      (function(_ENV)
         --- Notifies the provider that an observer is to receive notifications.
-        -- should return ISubscription object for unsubscribe.
+        -- should return Subscription object for unsubscribe.
         __Abstract__() function Subscribe(self, observer, subscription) return subscription, observer end
     end)
 
@@ -78,15 +78,15 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Provides the observer with new data
         __Abstract__()
-        function OnNext(self, ...) end
+        OnNext                          = Toolset.fakefunc
 
         --- Notifies the observer that the provider has experienced an error condition
         __Abstract__()
-        function OnError(self, exception) end
+        OnError                         = Toolset.fakefunc
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
-        function OnCompleted(self) end
+        OnCompleted                     = Toolset.fakefunc
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -98,7 +98,7 @@ PLoop(function(_ENV)
             default                     = function(self) return Subscription() end,
             handler                     = function(self, new, old)
                 if new and not new.IsUnsubscribed then
-                    new.OnUnsubscribe   = new.OnUnsubscribe + function() rawset(self, "__subscription", nil) end
+                    new.OnUnsubscribe   = new.OnUnsubscribe + function() return rawset(self, "__subscription", nil) end
                 end
                 return old and not old.IsUnsubscribed and old:Dispose()
             end

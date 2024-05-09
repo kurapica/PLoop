@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/04                                               --
--- Update Date  :   2023/10/20                                               --
+-- Update Date  :   2024/05/09                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -21,46 +21,33 @@ PLoop(function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
         export                          {
-            isObjectType                = Class.IsObjectType,
-            onNextDefault               = function(observer,...)return observer:OnNext(...)  end,
-            onErrorDefault              = function(observer, e) return observer:OnError(e)   end,
-            onCompletedDefault          = function(observer)    return observer:OnCompleted()end,
+            isobjecttype                = Class.IsObjectType,
+            onnextdefault               = function(observer,...)return observer:OnNext(...)  end,
+            onerrordefault              = function(observer,...)return observer:OnError(...) end,
+            oncompleteddefault          = function(observer)    return observer:OnCompleted()end,
 
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
-                subscription            = subscription or isObjectType(observer, Observer) and observer.Subscription or Subscription()
-                subscription            = self:HandleSubscription(subscription,  observer) or  subscription
-
                 -- The operator can't be re-used
                 if self.__observer then
                     if self.__observer == observer then
-                        return subscription, observer
+                        return self.Subscription, observer
                     else
                         throw "The operator can't be subscribed by multi observers"
                     end
                 end
-
-                subscription.OnUnsubscribe = subscription.OnUnsubscribe + function()
-                    if self.__observer == observer then
-                        self.__observer = false
-                    end
-                end
                 self.__observer         = observer
 
+                -- handle the subscription
+                subscription            = subscription or observer.Subscription
+                subscription            = self:HandleSubscription(subscription, observer) or subscription
+
                 -- Keep using the same subscription
-                self.__observable:Subscribe(self, subscription)
+                self.Subscription       = self.__observable:Subscribe(self, subscription)
                 return subscription, observer
             end,
 
-            Observable, Observer, Operator, Subscription
-        }
-
-        field                           {
-            __observable                = false, -- The data source
-            __observer                  = false, -- The observer
-            __onNext                    = onNextDefault,
-            __onError                   = onErrorDefault,
-            __onComp                    = onCompletedDefault,
+            Observer
         }
 
         -----------------------------------------------------------------------
@@ -74,23 +61,22 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         --- Notifies the provider that an observer is to receive notifications.
-        __Arguments__{ IObserver, ISubscription/nil }:Throwable()
+        __Arguments__{ IObserver, Subscription/nil }:Throwable()
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, ISubscription/nil }:Throwable()
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }:Throwable()
         function Subscribe(self, onNext, onError, onCompleted, subscription)
-            local observer              = Observer(onNext, onError, onCompleted, subscription)
-            return subscribe(self, observer, observer.Subscription)
+            return subscribe(self, Observer(onNext, onError, onCompleted, subscription))
         end
 
         --- Provides the observer with new data
-        function OnNext(self, ...)      return self.__observer and self.__onNext(self.__observer, ...) end
+        function OnNext(self, ...)      return self.__onNext(self.__observer, ...) end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)     return self.__observer and self.__onError(self.__observer, ...) end
+        function OnError(self, ...)     return self.__onError(self.__observer, ...) end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)      return self.__observer and self.__onComp(self.__observer) end
+        function OnCompleted(self)      return self.__onComp(self.__observer) end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
@@ -98,9 +84,10 @@ PLoop(function(_ENV)
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, observable, onNext, onError, onCompleted)
             self.__observable           = observable
-            self.__onNext               = onNext or onNextDefault
-            self.__onError              = onError or onErrorDefault
-            self.__onComp               = onCompleted or onCompletedDefault
+            self.__observer             = false
+            self.__onNext               = onNext        or onnextdefault
+            self.__onError              = onError       or onerrordefault
+            self.__onComp               = onCompleted   or oncompleteddefault
         end
     end)
 
@@ -126,7 +113,7 @@ PLoop(function(_ENV)
             combinearray                = Toolset.combinearray,
             otime                       = _G.os and (os.clock or os.time) or false,
             unpack                      = _G.unpack or table.unpack,
-            isObjectType                = Class.IsObjectType,
+            isobjecttype                = Class.IsObjectType,
             running                     = coroutine.running,
             yield                       = coroutine.yield,
             resume                      = coroutine.resume,
@@ -141,7 +128,7 @@ PLoop(function(_ENV)
 
             Info                        = Logger.Default[Logger.LogLevel.Info],
 
-            Operator, IObservable, Observer, Observable, ISubscription, Subscription,
+            Operator, IObservable, Observer, Observable, Subscription,
             Threading, Guid, Exception, Dictionary, Queue, List,
             PublishSubject, ReplaySubject, Subject
         }
@@ -254,7 +241,7 @@ PLoop(function(_ENV)
             local subscription, replace
             local oper                  = Operator(self, nil, function(observer, ex)
                 local ok, ret           = pcall(onError, ex)
-                if not (ok and isObjectType(ret, IObservable)) then
+                if not (ok and isobjecttype(ret, IObservable)) then
                     return observer:OnError(ex)
                 else
                     if replace then replace:Dispose() replace = nil end
@@ -1053,7 +1040,7 @@ PLoop(function(_ENV)
             local oper                  = Operator(self,
                 function(observer, ...)
                     local ok, ret       = pcall(selector, ...)
-                    if not (ok and isObjectType(ret, IObservable)) then
+                    if not (ok and isobjecttype(ret, IObservable)) then
                         return observer:OnError(Exception(ret or "The key selector doesn't return an observable sequence"))
                     end
 
@@ -1436,7 +1423,7 @@ PLoop(function(_ENV)
                         -- Open window
                         local ok, selector = pcall(leftDurationSelector, ...)
                         if not ok then  return onError(Exception(selector)) end
-                        if not isObjectType(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
+                        if not isobjecttype(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
 
                         local window
                         local closeWin  = function()
@@ -1486,7 +1473,7 @@ PLoop(function(_ENV)
                         -- Open window
                         local ok, selector = pcall(rightDurationSelector, ...)
                         if not ok then  return onError(Exception(selector)) end
-                        if not isObjectType(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
+                        if not isobjecttype(selector, IObservable) then return onError(Exception("The selector doesn't return a valid value")) end
 
                         local window
                         local closeWin  = function()
