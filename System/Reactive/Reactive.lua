@@ -44,6 +44,7 @@ PLoop(function(_ENV)
             isobjecttype                = Class.IsObjectType,
             gettempparams               = Class.GetTemplateParameters,
             isclass                     = Class.Validate,
+            getsuperclass               = Class.GetSuperClass,
             isinterface                 = Interface.Validate,
             isenum                      = Enum.Validate,
             isstruct                    = Struct.Validate,
@@ -86,42 +87,39 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Gets the current raw value of the reactive object
         __Static__()
-        function ToRaw(self, withClone)
-            -- for values
-            if type(self) ~= "table" then return self end
+        function ToRaw(self)
+            local cls                   = type(self) == "table" and getmetatable(self)
 
-            -- for raw table
-            local cls                   = getmetatable(self)
-            if cls == nil then return self end
+            while cls do
+                -- reactive proxy
+                if cls == ReactiveProxy then
+                    -- use static method to add the deep watch if possible
+                    self                = ReactiveProxy.GetReactive(self)
+                    return self and rawget(self, RawTable)
 
-            -- behavior subject
-            if issubtype(cls, BehaviorSubject) then
-                return self:GetValue()
+                -- reactive list proxy
+                elseif cls == ReactiveListProxy then
+                    self                = ReactiveListProxy.GetReactive(self)
+                    return self and ReactiveList.ToRaw(self)
 
-            -- reactive proxy
-            elseif issubtype(cls, ReactiveProxy) then
-                -- use static method to add the deep watch if possible
-                self                    = ReactiveProxy.GetReactive(self)
-                cls                     = getmetatable(self)
+                -- behavior subject
+                elseif cls == BehaviorSubject then
+                    return self:GetValue()
 
-            -- reactive list proxy
-            elseif issubtype(cls, ReactiveListProxy) then
-                self                    = ReactiveListProxy.GetReactive(self)
-                cls                     = getmetatable(self)
+                -- reactive
+                elseif cls == Reactive then
+                    return rawget(self, RawTable)
+
+                -- reactive list
+                elseif cls == ReactiveList then
+                    return ReactiveList.ToRaw(self)
+                end
+
+                -- for quick type check
+                cls                     = getsuperclass(cls)
             end
 
-            -- reactive
-            if issubtype(cls, Reactive) then
-                self                    = rawget(self, RawTable)
-                return withClone and clone(self, true, true) or self
-
-            -- reactive list
-            elseif issubtype(cls, ReactiveList) then
-                return ReactiveList.ToRaw(self, withClone)
-            end
-
-            -- other observable not allowed
-            return not issubtype(cls, IObservable) and self or nil
+            return self
         end
 
         --- Sets a raw table value to the reactive object
@@ -138,54 +136,59 @@ PLoop(function(_ENV)
             end
 
             -- check type
-            local cls                   = getmetatable(self)
+            local cls                   = type(self) == "table" and getmetatable(self)
             if not cls then error("the reactive not valid", stack + 1) end
 
             -- behavior subject
-            if issubtype(cls, BehaviorSubject) then
-                -- subscribe the observable
-                if isobjecttype(value, IObservable) then
-                    self.Observable     = value
+            while cls do
+                if cls == BehaviorSubject then
+                    -- subscribe the observable
+                    if isobjecttype(value, IObservable) then
+                        self.Observable = value
+                        return
+
+                    -- set the single value and remove the observable
+                    else
+                        self.Observable = nil
+                        local ok, err   = pcall(setvalue, self, "Value", value)
+                        if not ok then error("" .. tostring(err):match("%d+:%s*(.-)$"), stack + 1) end
+                        return
+                    end
+
+                -- reactive list proxy
+                elseif cls == ReactiveListProxy then
+                    self                = ReactiveListProxy.ToRaw(self, true)
+                    cls                 = ReactiveList
+
+                -- reative proxy
+                elseif cls == ReactiveProxy then
+                    self                = ReactiveProxy.ToRaw(self, true)
+                    cls                 = Reactive
+                end
+
+                -- reactive list
+                if cls == ReactiveList then
+                    ReactiveList.SetRaw(self, value, ostack == true or (stack + 1))
                     return
 
-                -- set the single value and remove the observable
-                else
-                    self.Observable     = nil
-                    local ok, err       = pcall(setvalue, self, "Value", value)
-                    if not ok then error("" .. tostring(err):match("%d+:%s*(.-)$"), stack + 1) end
+                -- reactive
+                elseif cls == Reactive then
+                    local valtype       = gettempparams(cls)
+
+                    -- common class
+                    if valtype and isclass(valtype) and not issubtype(cls, IKeyValueDict) then
+
+                    -- dict
+                    else
+                        local ok, err   = pcall(updateTable, self, value)
+                        if not ok then error(err, stack + 1) end
+                    end
+
                     return
                 end
 
-            -- reactive list proxy
-            elseif issubtype(cls, ReactiveListProxy) then
-                self                    = ReactiveListProxy.ToRaw(self, true)
-                cls                     = getmetatable(self)
-
-            -- reative proxy
-            elseif issubtype(cls, ReactiveProxy) then
-                self                    = ReactiveProxy.ToRaw(self, true)
-                cls                     = getmetatable(self)
-            end
-
-            -- reactive list
-            if issubtype(cls, ReactiveList) then
-                ReactiveList.SetRaw(self, value, ostack ~= true and (stack + 1) or ostack)
-                return
-
-            -- reactive
-            elseif issubtype(cls, Reactive) then
-                local valtype           = gettempparams(cls)
-
-                -- common class
-                if valtype and isclass(valtype) and not issubtype(cls, IKeyValueDict) then
-
-                -- dict
-                else
-                    local ok, err           = pcall(updateTable, self, value)
-                    if not ok then error(err, stack + 1) end
-                end
-
-                return
+                -- for quick type check
+                cls                     = getsuperclass(cls)
             end
 
             -- other
@@ -305,7 +308,6 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
-            gettempparams               = Class.GetTemplateParameters,
             isobjecttype                = Class.IsObjectType,
             geteventdelegate            = Event.Get,
             clone                       = Toolset.clone,
@@ -624,7 +626,7 @@ PLoop(function(_ENV)
 
             -- for Dictionary class
             if Class.Validate(targettype) and Interface.IsSubType(targettype, IKeyValueDict) then
-                keytype, valtype        = gettempparams(targettype)
+                keytype, valtype        = Class.GetTemplateParameters(targettype)
 
             -- for Dictionary struct
             elseif Struct.GetStructCategory(targettype) == "DICTIONARY" then
