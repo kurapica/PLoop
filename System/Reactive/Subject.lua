@@ -176,9 +176,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable/nil }
         function __ctor(self, observable)
-            self.Observable             = observable
             self.__newsubject           = false
             self.__observers            = newtable(false, true)
+            self.Observable             = observable
         end
 
         -----------------------------------------------------------------------
@@ -186,7 +186,6 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function __dtor(self)
             self.Observable             = nil
-            self.__observers            = nil
         end
     end)
 
@@ -362,6 +361,7 @@ PLoop(function(_ENV)
             self[1]                     = container[field]
             self.__container            = container
             self.__field                = field
+            super(self)
         end
 
         -- Generate behavior subject with init data
@@ -376,7 +376,6 @@ PLoop(function(_ENV)
             for i = 1, length, 2 do
                 self[i], self[i + 1]    = select(i, ...)
             end
-
             super(self)
         end
 
