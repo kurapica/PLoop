@@ -104,7 +104,7 @@ PLoop(function(_ENV)
 
                 -- behavior subject
                 elseif cls == BehaviorSubject then
-                    return self:GetValue()
+                    return self.Value
 
                 -- reactive
                 elseif cls == Reactive then
@@ -309,7 +309,7 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isobjecttype                = Class.IsObjectType,
-            geteventdelegate            = Event.Get,
+            getdelegate                 = Event.Get,
             clone                       = Toolset.clone,
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
@@ -318,7 +318,7 @@ PLoop(function(_ENV)
 
             -- bind data change event handler when accessed
             binddatachange              = function(self, k, r)
-                if r and geteventdelegate(OnDataChange, self, true) then
+                if r and getdelegate(OnDataChange, self, true) then
                     if isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList) then
                         r.OnDataChange  = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                     else
@@ -368,7 +368,7 @@ PLoop(function(_ENV)
             properties                  = {}
 
             for _, ftr in Class.GetFeatures(targettype, true) do
-                -- only allow read/write non-indexer properties
+                -- read/write non-indexer properties
                 if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
                     local name          = ftr:GetName()
                     local ptype         = ftr:GetType() or Any
@@ -381,11 +381,15 @@ PLoop(function(_ENV)
                             -- gets the reactive
                             get         = Class.IsSubType(rtype, BehaviorSubject)
                             and function(self)
+                                -- gets or create the behavior subject
                                 return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
                             end
                             or function(self)
                                 local r = self[Reactive][name]
-                                if r    then return r end
+                                -- the raw value may not exist
+                                if r then return r and r[RawTable] and r or nil end
+
+                                -- generate it when access and exist
                                 local d = self[RawTable][name]
                                 return d and makereactive(self, name, d, ptype)
                             end,
@@ -399,14 +403,15 @@ PLoop(function(_ENV)
                             and function(self, value)
                                 -- too complex to hanlde the value as reactive object
                                 local r = self[Reactive][name]
-                                if r    then return setrawlist(r, value, true) end
+                                if r then return setrawlist(r, value, true) end
                                 value   = toraw(value)
                                 self[RawTable][name] = value
                                 return OnDataChange(self, name, makereactive(self, name, value, ptype))
                             end
                             or function(self, value)
                                 local r = self[Reactive][name]
-                                if r    then return setraw(r, value, true) end
+                                if r then return setraw(r, value, true) end
+
                                 value   = toraw(value)
                                 self[RawTable][name] = value
                                 return OnDataChange(self, name, makereactive(self, name, value, ptype))

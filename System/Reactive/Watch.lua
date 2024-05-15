@@ -289,7 +289,7 @@ PLoop(function(_ENV)
                 -- check behaviour subjects
                 local react             = rawget(self, Reactive)
                 local watches           = rawget(self, Watch)
-                if watches and watches[key] ~= nil then return react[key]:GetValue() end
+                if watches and watches[key] ~= nil then return react[key].Value end
 
                 -- get from the source
                 local value             = react[key]
@@ -306,7 +306,7 @@ PLoop(function(_ENV)
                         local r, isv    = makeReactiveProxy(rawget(self, Observer), value, self)
                         if r then
                             if isv then
-                                return addWatch(self, key, r):GetValue()
+                                return addWatch(self, key, r).Value
                             else
                                 return addProxy(self, key, r)
                             end
@@ -487,7 +487,7 @@ PLoop(function(_ENV)
                             map[key]    = proxy
                             proxy:Subscribe(observer, observer.Subscription)
                             rawset(self, key, nil)
-                            return proxy:GetValue()
+                            return proxy.Value
                         else
                             -- override
                             rawset(self, key, proxy)
@@ -526,7 +526,7 @@ PLoop(function(_ENV)
                 if type(key) ~= "string" then return nil end
 
                 local map               = rawget(self, Watch)
-                if map and map[key] then return map[key]:GetValue() end
+                if map and map[key] then return map[key].Value end
 
                 -- gets from the base env
                 return parseValue(self, key, getValue(self, key))
@@ -558,7 +558,7 @@ PLoop(function(_ENV)
                 processing              = true
                 local ok, err
                 if isValueObj then
-                    ok, err             = onNext(pcall(func, watchEnv, watchObj:GetValue()))
+                    ok, err             = onNext(pcall(func, watchEnv, watchObj.Value))
                 else
                     ok, err             = onNext(pcall(func, watchEnv, watchObj))
                 end

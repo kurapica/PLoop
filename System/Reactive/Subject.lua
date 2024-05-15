@@ -244,6 +244,15 @@ PLoop(function(_ENV)
                     return self
                 end
             end,
+            hanldercontainer            = function(self)
+                local container         = self.__container
+                local field             = self.__field
+                if container and field then
+                    self.Value          = container[field]
+                else
+                    self.Value          = nil
+                end
+            end
 
             BehaviorSubject
         }
@@ -332,17 +341,20 @@ PLoop(function(_ENV)
             return onerror(self, ...)
         end
 
-        --- Gets the current value
-        function GetValue(self)         return self[1] end
-
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
         --- Whether always connect the observable
         property "KeepAlive"            { type = Boolean, default = true }
 
-        --- The current value
-        property "Value"                { get = GetValue, set = OnNext, type = valtype }
+        --- The current value, use handler not set to detect the value change
+        property "Value"                { type = valtype, field = 1, handler = function(self, new) return self:OnNext(new) end }
+
+        --- The container of the value
+        property "Container"            { type = Table, field = "__container", handler = hanldercontainer }
+
+        --- The field of the value
+        property "Field"                { type = String, field = "__field", handler = hanldercontainer }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
