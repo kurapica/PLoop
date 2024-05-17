@@ -244,17 +244,8 @@ PLoop(function(_ENV)
                     return self
                 end
             end,
-            hanldercontainer            = function(self)
-                local container         = self.__container
-                local field             = self.__field
-                if container and field then
-                    self.Value          = container[field]
-                else
-                    self.Value          = nil
-                end
-            end
 
-            BehaviorSubject
+            BehaviorSubject, RawTable
         }
 
         -----------------------------------------------------------------------
@@ -278,12 +269,6 @@ PLoop(function(_ENV)
                 function OnNext(self, val)
                     self[0]             = 1
                     self[1]             = val
-
-                    local container     = rawget(self, "__container")
-                    if container then
-                        container[self.__field] = val
-                    end
-
                     return onnext(self, val)
                 end
 
@@ -292,15 +277,8 @@ PLoop(function(_ENV)
                 function OnNext(self, val)
                     local ret, msg      = valid(valtype, val)
                     if msg then return onerror(self, geterrormessage(msg, "value")) end
-
                     self[0]             = 1
                     self[1]             = ret
-
-                    local container     = rawget(self, "__container")
-                    if container then
-                        container[self.__field] = ret
-                    end
-
                     return onnext(self, ret)
                 end
             end
@@ -316,12 +294,6 @@ PLoop(function(_ENV)
                         self[i], self[i+1]  = select(i, ...)
                     end
                 end
-
-                local container         = rawget(self, "__container")
-                if container then
-                    container[self.__field] = self[1]
-                end
-
                 return onnext(self, ...)
             end
         end
@@ -348,32 +320,46 @@ PLoop(function(_ENV)
         property "KeepAlive"            { type = Boolean, default = true }
 
         --- The current value, use handler not set to detect the value change
-        property "Value"                { type = valtype, field = 1, handler = function(self, new) return self:OnNext(new) end }
-
-        --- The container of the value
-        property "Container"            { type = Table, field = "__container", handler = hanldercontainer }
-
-        --- The field of the value
-        property "Field"                { type = String, field = "__field", handler = hanldercontainer }
+        property "Value"                { type = valtype, field = 1, handler = "OnNext" }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
+        -- Binding the behavior subject to a reactive object's field
+        __Arguments__{ Reactive, String }
+        function __ctor(self, react, field)
+            super(self)
+
+            local raw                   = rawget(react, RawTable)
+
+            self[0]                     = 1
+            self[1]                     = raw and raw[field]
+
+            subscribe(self, function(value)
+                local raw               = rawget(react, RawTable)
+                if raw then raw[field]  = value end
+            end)
+        end
+
         -- Generate behavior subject based on other observable
         __Arguments__{ IObservable }
         function __ctor(self, observable)
-            self[0]                     = 0
             super(self, observable)
+
+            self[0]                     = 0
         end
 
         -- Binding the behavior subject to a container's field
         __Arguments__{ Table, String }
         function __ctor(self, container, field)
+            super(self)
+
             self[0]                     = 1
             self[1]                     = container[field]
-            self.__container            = container
-            self.__field                = field
-            super(self)
+
+            subscribe(self, function(value)
+                container[field]        = value
+            end)
         end
 
         -- Generate behavior subject with init data
@@ -383,12 +369,13 @@ PLoop(function(_ENV)
             __Arguments__{ Any * 0 }
         end
         function __ctor(self, ...)
+            super(self)
+
             local length                = max(1, select("#", ...))
             self[0]                     = length
             for i = 1, length, 2 do
                 self[i], self[i + 1]    = select(i, ...)
             end
-            super(self)
         end
 
         -----------------------------------------------------------------------

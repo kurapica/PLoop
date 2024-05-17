@@ -199,8 +199,8 @@ PLoop(function(_ENV)
         __Static__()
         __Arguments__{ Any/nil, AnyType/nil }
         function GetReactiveType(value, recommendtype)
-            -- validate the value
-            if recommendtype and value ~= nil and not getmetatable(recommendtype).ValidateValue(recommendtype, value) then return end
+            -- validate the value with the recommend type
+            if recommendtype and value ~= nil and not getmetatable(recommendtype).ValidateValue(recommendtype, value) then recommendtype = nil end
 
             -- get value type
             local valtype               = type(value)
@@ -335,15 +335,9 @@ PLoop(function(_ENV)
             end,
 
             -- wrap the table value as default
-            makereactive                = function(self, k, v, type, behaviorType)
-                if not (type or behaviorType) then
-                    local rtype         = Reactive.GetReactiveType(v)
-                    if rtype and issubtype(rtype, BehaviorSubject) then
-                        behaviorType    = rtype
-                    end
-                end
-
-                local r                 = behaviorType and behaviorType(self[RawTable], k) or reactive(v, true, type)
+            makereactive                = function(self, k, v, type, rtype)
+                rtype                   = rtype or Reactive.GetReactiveType(v, type)
+                local r                 = rtype and (issubtype(rtype, BehaviorSubject) and rtype(self, k) or rtype(v))
                 self[Reactive][k]       = r or false
                 return r and binddatachange(self, k, r)
             end,
@@ -377,17 +371,18 @@ PLoop(function(_ENV)
                     if rtype then
                         properties[name]= true
 
+                        -- define the reactive property as proxy
                         property (name) {
                             -- gets the reactive
                             get         = Class.IsSubType(rtype, BehaviorSubject)
-                            and function(self)
-                                -- gets or create the behavior subject
-                                return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
-                            end
+                            -- gets or create the behavior subject
+                            and function(self) return self[Reactive][name] or makereactive(self, name, nil, nil, rtype) end
+
+                            -- gets or create the reactive object
                             or function(self)
                                 local r = self[Reactive][name]
                                 -- the raw value may not exist
-                                if r then return r and r[RawTable] and r or nil end
+                                if r then return r or nil end
 
                                 -- generate it when access and exist
                                 local d = self[RawTable][name]
@@ -476,7 +471,7 @@ PLoop(function(_ENV)
             properties                  = {}
 
             for _, mem in Struct.GetMembers(targettype) do
-                local name             = mem:GetName()
+                local name              = mem:GetName()
                 local mtype             = mem:GetType()
                 local rtype             = Reactive.GetReactiveType(nil, mtype)
 
