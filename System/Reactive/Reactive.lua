@@ -21,7 +21,7 @@ PLoop(function(_ENV)
         --                          declaration                          --
         -------------------------------------------------------------------
         class "__Observable__"          {}
-        class "BehaviorSubject"         {}
+        class "ReactiveField"           {}
         class "ReactiveList"            {}
         class "Observable"              {}
         class "Watch"                   (function(_ENV)
@@ -103,7 +103,7 @@ PLoop(function(_ENV)
                     return self and ReactiveList.ToRaw(self)
 
                 -- behavior subject
-                elseif cls == BehaviorSubject then
+                elseif cls == ReactiveField then
                     return self.Value
 
                 -- reactive
@@ -141,7 +141,7 @@ PLoop(function(_ENV)
 
             -- behavior subject
             while cls do
-                if cls == BehaviorSubject then
+                if cls == ReactiveField then
                     -- subscribe the observable
                     if isobjecttype(value, IObservable) then
                         self.Observable = value
@@ -225,16 +225,16 @@ PLoop(function(_ENV)
                 rtype                   = valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
 
             elseif metatype == Any then
-                rtype                   = BehaviorSubject
+                rtype                   = ReactiveField
 
             elseif isenum(metatype) then
-                rtype                   = BehaviorSubject[metatype]
+                rtype                   = ReactiveField[metatype]
 
             elseif isstruct(metatype) then
                 local cate              = getstructcategory(metatype)
 
                 if cate == "CUSTOM" then
-                    rtype               = BehaviorSubject[metatype]
+                    rtype               = ReactiveField[metatype]
 
                 elseif cate == "ARRAY" then
                     local element       = getarrayelement(metatype)
@@ -247,16 +247,16 @@ PLoop(function(_ENV)
 
             elseif isclass(metatype) then
                 -- already as reactive
-                if issubtype(metatype, Reactive) or issubtype(metatype, ReactiveList) or issubtype(metatype, BehaviorSubject) then
+                if issubtype(metatype, Reactive) or issubtype(metatype, ReactiveList) or issubtype(metatype, ReactiveField) then
                     rtype               = nil
 
                 -- observable as value queue
                 elseif issubtype(metatype, IObservable) then
-                    rtype               = BehaviorSubject
+                    rtype               = ReactiveField
 
                 -- if is value type like Date
                 elseif isvaluetype(metatype) then
-                    rtype               = BehaviorSubject[metatype]
+                    rtype               = ReactiveField[metatype]
 
                 -- wrap list or array to reactive list
                 elseif issubtype(metatype, IList) then
@@ -337,12 +337,12 @@ PLoop(function(_ENV)
             -- wrap the table value as default
             makereactive                = function(self, k, v, type, rtype)
                 rtype                   = rtype or Reactive.GetReactiveType(v, type)
-                local r                 = rtype and (issubtype(rtype, BehaviorSubject) and rtype(self, k) or rtype(v))
+                local r                 = rtype and (issubtype(rtype, ReactiveField) and rtype(self, k) or rtype(v))
                 self[Reactive][k]       = r or false
                 return r and binddatachange(self, k, r)
             end,
 
-            Class, Property, Event, Reactive, ReactiveList, BehaviorSubject, Observable, Subscription
+            Class, Property, Event, Reactive, ReactiveList, ReactiveField, Observable, Subscription
         }
 
         -------------------------------------------------------------------
@@ -374,7 +374,7 @@ PLoop(function(_ENV)
                         -- define the reactive property as proxy
                         property (name) {
                             -- gets the reactive
-                            get         = Class.IsSubType(rtype, BehaviorSubject)
+                            get         = Class.IsSubType(rtype, ReactiveField)
                             -- gets or create the behavior subject
                             and function(self) return self[Reactive][name] or makereactive(self, name, nil, nil, rtype) end
 
@@ -390,7 +390,7 @@ PLoop(function(_ENV)
                             end,
 
                             -- sets the value
-                            set         = Class.IsSubType(rtype, BehaviorSubject)
+                            set         = Class.IsSubType(rtype, ReactiveField)
                             and function(self, value)
                                 return setraw(self[Reactive][name] or makereactive(self, name, nil, nil, rtype), value, true)
                             end
@@ -479,7 +479,7 @@ PLoop(function(_ENV)
                     properties[name]   = true
                     property (name)    {
                         -- gets the reactive
-                        get             = Class.IsSubType(rtype, BehaviorSubject)
+                        get             = Class.IsSubType(rtype, ReactiveField)
                         and function(self)
                             return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
                         end
@@ -491,7 +491,7 @@ PLoop(function(_ENV)
                         end,
 
                         -- sets the value
-                        set             = Class.IsSubType(rtype, BehaviorSubject)
+                        set             = Class.IsSubType(rtype, ReactiveField)
                         and function(self, value)
                             -- allow binding observable like watch to the property
                             local s     = self[name]
@@ -517,7 +517,7 @@ PLoop(function(_ENV)
                             self[RawTable][name] = value
                             return OnDataChange(self, name, makereactive(self, name, value, mtype))
                         end,
-                        type            = Class.IsSubType(rtype, BehaviorSubject) and (mtype + IObservable) or (mtype + rtype),
+                        type            = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
                         throwable       = true,
                     }
 
@@ -667,13 +667,13 @@ PLoop(function(_ENV)
             -- raw directly
             if isobjecttype(value, IObservable) then
                 local vtype             = getmetatable(value)
-                r                       = makereactive(self, key, nil, nil, isobjecttype(vtype, BehaviorSubject) and vtype or BehaviorSubject)
+                r                       = makereactive(self, key, nil, nil, isobjecttype(vtype, ReactiveField) and vtype or ReactiveField)
                 r.Observable            = value
             else
                 value                   = toraw(value, true)
                 raw[key]                = value
                 r                       = makereactive(self, key, value)
-                return r and OnDataChange(self, key, not isobjecttype(r, BehaviorSubject) and r or value)
+                return r and OnDataChange(self, key, not isobjecttype(r, ReactiveField) and r or value)
             end
         end
     end)
@@ -692,7 +692,7 @@ PLoop(function(_ENV)
         getreactivetype                 = System.Reactive.GetReactiveType,
         istructvalue                    = Struct.ValidateValue,
 
-        Reactive, ReactiveList, BehaviorSubject, Any, Attribute, AnyType
+        Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -713,7 +713,7 @@ PLoop(function(_ENV)
 
                 -- return reactive objects directly
                 local cls               = value and getobjectclass(value) or nil
-                if cls and (issubtype(cls, Reactive) or issubtype(cls, ReactiveList) or issubtype(cls, BehaviorSubject)) then return value end
+                if cls and (issubtype(cls, Reactive) or issubtype(cls, ReactiveList) or issubtype(cls, ReactiveField)) then return value end
 
                 if value == nil and isclass(recommendtype) then
                     if not silent then

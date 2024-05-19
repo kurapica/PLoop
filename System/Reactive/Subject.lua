@@ -258,7 +258,7 @@ PLoop(function(_ENV)
             if length > 0 then
                 observer:OnNext (unpack(self, 1, length))
             elseif length < 0 then
-                observer:OnError(unpack(self, 1,-length))
+                observer:OnError(self[1])
             end
             return subscription, observer
         end
@@ -299,18 +299,10 @@ PLoop(function(_ENV)
         end
 
         -- Send the error message
-        function OnError(self, ...)
-            local length                = max(1, select("#", ...))
-            self[0]                     =-length
-
-            if length <= 2 then
-                self[1], self[2]        = ...
-            else
-                for i = 1, length, 2 do
-                    self[i], self[i+1]  = select(i, ...)
-                end
-            end
-            return onerror(self, ...)
+        function OnError(self, ex)
+            self[0]                     = -1
+            self[1]                     = ex
+            return onerror(self, ex)
         end
 
         -----------------------------------------------------------------------

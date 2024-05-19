@@ -13,12 +13,10 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    namespace "System.Reactive"
-
     --- Provide reactive feature for list or array
     __Sealed__()
     __Arguments__{ AnyType/nil }
-    class "ReactiveList"                (function(_ENV, elementtype)
+    class "System.Reactive.ReactiveList"(function(_ENV, elementtype)
         extend "IObservable" "IIndexedList"
 
         export                          {
