@@ -20,46 +20,17 @@ PLoop(function(_ENV)
     class "Observer"                    (function(_ENV)
         extend "System.IObserver"
 
-        export                          {
-            rawset                      = rawset,
-            rawget                      = rawget,
-
-            Subscription
-        }
-
-        -----------------------------------------------------------------------
-        --                              method                               --
-        -----------------------------------------------------------------------
-        --- Provides the observer with new data
-        function OnNext(self, ...)
-            local on                    = self.__onNext
-            return on and on(...)
-        end
-
-        --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)
-            local on                    = self.__onError
-            return on and on(...)
-        end
-
-        --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)
-            self.Subscription           = nil
-            local on                    = self.__onComp
-            return on and on()
-        end
+        export                          { Subscription }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }
         function __ctor(self, onNext, onError, onCompleted, subscription)
-            rawset(self, "__onNext",    onNext      or false)
-            rawset(self, "__onError",   onError     or false)
-            rawset(self, "__onComp",    onCompleted or false)
-            if subscription then
-                self.Subscription       = Subscription(subscription)
-            end
+            self.OnNext                 = onNext and function (self, ...) return onNext(...) end
+            self.OnError                = onError and function (self, ex) return onError(ex) end
+            self.OnCompleted            = onCompleted and function (self) self.Subscription = nil return onCompleted() end
+            self.Subscription           = subscription and Subscription(subscription)
         end
     end)
 
@@ -71,7 +42,7 @@ PLoop(function(_ENV)
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 subscription            = subscription or observer.Subscription
-                self.__subscribe(observer, subscription)
+                self[1](observer, subscription)
                 return subscription, observer
             end,
 
@@ -86,7 +57,7 @@ PLoop(function(_ENV)
         Subscribe                       = subscribe
 
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }
-        function Subscribe(self, onNext, onError, onCompleted, subscription)
+        Subscribe                       = function (self, onNext, onError, onCompleted, subscription)
             return subscribe(self, Observer(onNext, onError, onCompleted, subscription))
         end
 
@@ -94,8 +65,6 @@ PLoop(function(_ENV)
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ Callable }
-        function __ctor(self, subscribe)
-            self.__subscribe            = subscribe
-        end
+        function __new(_, subscribe)    return { subscribe }, true end
     end)
 end)

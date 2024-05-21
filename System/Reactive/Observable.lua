@@ -194,8 +194,6 @@ PLoop(function(_ENV)
     __Sealed__()
     class "Observable"                  (function(_ENV)
         export                          {
-            Observer, Observable, IObservable, Subscription, Subject, List, __Observable__,
-
             tostring                    = tostring,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
@@ -203,14 +201,17 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             rawget                      = rawget,
             loadsnippet                 = Toolset.loadsnippet,
-            IsObjectType                = Class.IsObjectType,
+            fakefunc                    = Toolset.fakefunc,
+            isobjecttype                = Class.IsObjectType,
             Exception                   = System.Exception,
-            RunAsync                    = Threading.RunAsync,
+            runasync                    = Threading.RunAsync,
 
-            getProperty                 = Class.GetFeature,
-            getObjectClass              = Class.GetObjectClass,
-            onNextIterKey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
-            onAsyncNext                 = function(observer, subscription, ...) return not subscription.IsUnsubscribed and observer:OnNext(...) end,
+            getproperty                 = Class.GetFeature,
+            getobjectclass              = Class.GetObjectClass,
+            onnextiterkey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
+            onasyncnext                 = function(observer, subscription, ...) return not subscription.IsUnsubscribed and observer:OnNext(...) end,
+
+            Observer, Observable, IObservable, Subscription, Subject, List, __Observable__,
         }
 
         -----------------------------------------------------------------------
@@ -243,19 +244,15 @@ PLoop(function(_ENV)
         end
 
         --- Returns an Observable that just provide one value
-        _JustAutoGen                    = setmetatable({
-            [0]                         = function()
-                return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end)
-            end
-        },
+        _JustAutoGen                    = setmetatable({},
         {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(]] .. args .. [[)
                         return Observable(function(observer, subscription)
                             if subscription.IsUnsubscribed then return end
-                            observer:OnNext(]] .. args .. [[)
+                            observer:OnNext(]] .. (count == 0 and "nil" or args) .. [[)
                             return not subscription.IsUnsubscribed and observer:OnCompleted()
                         end)
                     end
@@ -274,37 +271,26 @@ PLoop(function(_ENV)
 
         --- Returns an Observable that never produces values and never completes
         __Static__()
-        function Never()                return Observable(function() end) end
+        function Never()                return Observable(fakefunc) end
 
         --- Returns an Observable that immediately produces an error
         __Static__()
         function Throw(exception)
-            if not (exception and IsObjectType(exception, Exception)) then
+            if not (exception and isobjecttype(exception, Exception)) then
                 exception               = Exception(exception and tostring(exception) or "Unknown error")
             end
             return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnError(exception) end)
         end
 
         --- Creates the Observable only when the observer subscribes
-        _DeferAutoGen                   = setmetatable({
-            [0]                         = function(ctor)
-                return Observable(function(observer, subscription)
-                    local obs           = ctor()
-                    if not IsObjectType(obs, IObservable) then
-                        observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                    elseif not subscription.IsUnsubscribed then
-                        return obs:Subscribe(observer, subscription)
-                    end
-                end)
-            end,
-        }, {
+        _DeferAutoGen                   = setmetatable({}, {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
-                    return function(ctor, ]] .. args .. [[)
+                    return function(ctor]] .. (count == 0 and "" or (", " .. args)) .. [[)
                         return Observable(function(observer, subscription)
                             local obs   = ctor(]] .. args .. [[)
-                            if not IsObjectType(obs, IObservable) then
+                            if not isobjecttype(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
                             elseif not subscription.IsUnsubscribed then
                                 return obs:Subscribe(observer, subscription)
@@ -352,7 +338,7 @@ PLoop(function(_ENV)
                 local f, t, k           = iter:GetIterator()
                 repeat
                     if subscription.IsUnsubscribed then return end
-                    k                   = onNextIterKey(observer, f(t, k))
+                    k                   = onnextiterkey(observer, f(t, k))
                 until k == nil
                 return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
@@ -376,7 +362,7 @@ PLoop(function(_ENV)
             return Observable(function(observer, subscription)
                 repeat
                     if subscription.IsUnsubscribed then return end
-                    k                   = onNextIterKey(observer, func(t, k))
+                    k                   = onnextiterkey(observer, func(t, k))
                 until k == nil
                 return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
@@ -401,14 +387,14 @@ PLoop(function(_ENV)
 
         __Arguments__{ InterfaceType + ClassType, String }
         __Static__() function From(class, name)
-            local prop                  = getProperty(class, name)
+            local prop                  = getproperty(class, name)
             return prop and __Observable__.GetPropertyObservable(prop, nil, true)
         end
 
         __Static__() __Arguments__{ Table, String }
         function From(self, name)
-            local cls                   = getObjectClass(self)
-            local prop                  = cls and getProperty(cls, name, true)
+            local cls                   = getobjectclass(self)
+            local prop                  = cls and getproperty(cls, name, true)
             return prop and __Observable__.GetPropertyObservable(prop, self, true)
         end
 
@@ -450,23 +436,14 @@ PLoop(function(_ENV)
         function Repeat(count, ...)     return _RepeatGen[select("#", ...)](count, ...) end
 
         --- Creates an Observable that emits the return value of a function-like directive
-        _StartGen                       = setmetatable({
-            [0]                         = function(func)
-                return Observable(function(observer)
-                    RunAsync(function()
-                        observer:OnNext(func())
-                        observer:OnCompleted()
-                    end)
-                end)
-            end
-        }, {
+        _StartGen                       = setmetatable({}, {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
-                    return function(func, ]] .. args .. [[)
+                    return function(func]] .. (count == 0 and "" or (", " .. args)) .. [[)
                         return Observable(function(observer, subscription)
-                            RunAsync(function()
-                                onAsyncNext(observer, subscription, func(]] .. args .. [[))
+                            runasync(function()
+                                onasyncnext(observer, subscription, func(]] .. args .. [[))
                                 return not subscription.IsUnsubscribed and observer:OnCompleted()
                             end)
                         end)

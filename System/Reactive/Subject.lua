@@ -16,7 +16,7 @@ PLoop(function(_ENV)
     namespace "System.Reactive"
 
     --- A bridge or proxy that acts both as an observer and as an Observable
-    __Sealed__()
+    __Sealed__() __AutoCache__()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "Subject"                     (function(_ENV)
@@ -38,8 +38,8 @@ PLoop(function(_ENV)
                     obs[observer]       = subscription
                     return subscription, observer
                 end
-                local iscold            = not (self.KeepAlive or next(obs))
 
+                local iscold            = not (self.KeepAlive or next(obs))
                 subscription            = subscription or observer.Subscription
 
                 -- Subscribe the subject
@@ -191,7 +191,7 @@ PLoop(function(_ENV)
 
     --- Only emits the last value (and only the last value) emitted by the source Observable,
     -- and only after that source Observable completes
-    __Sealed__()
+    __Sealed__() __AutoCache__()
     class "AsyncSubject"                (function(_ENV)
         inherit "Subject"
 
@@ -228,7 +228,7 @@ PLoop(function(_ENV)
 
     --- Emitting the item most recently emitted by the source Observable (or a seed/default value
     -- if none has yet been emitted) and then continues to emit any other items emitted later by the source Observable
-    __Sealed__()
+    __Sealed__() __AutoCache__()
     class "BehaviorSubject"             (function(_ENV)
         inherit "Subject"
 
@@ -304,7 +304,7 @@ PLoop(function(_ENV)
     end)
 
     --- Emits to an observers only when connect to the observable source
-    __Sealed__()
+    __Sealed__() __AutoCache__()
     class "PublishSubject"              (function(_ENV)
         inherit "Subject"
         extend "IConnectableObservable"
@@ -343,7 +343,7 @@ PLoop(function(_ENV)
     end)
 
     --- Emits to any observer all of the items that were emitted by the source Observable(s), regardless of when the observer subscribes
-    __Sealed__()
+    __Sealed__() __AutoCache__()
     class "ReplaySubject"               (function(_ENV)
         inherit "Subject"
 

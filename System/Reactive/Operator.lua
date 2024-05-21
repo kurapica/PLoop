@@ -21,29 +21,28 @@ PLoop(function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
         export                          {
-            isobjecttype                = Class.IsObjectType,
-            onnextdefault               = function(observer,...)return observer:OnNext(...)  end,
-            onerrordefault              = function(observer,...)return observer:OnError(...) end,
-            oncompleteddefault          = function(observer)    return observer:OnCompleted()end,
+            dftnext                     = function(self, ...) return self.Observer:OnNext(...) end,
+            dfterror                    = function(self, ex) return self.Observer:OnError(ex) end,
+            dftcomp                     = function(self) return self.Observer:OnCompleted() end,
 
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 -- The operator can't be re-used
-                if self.__observer then
-                    if self.__observer == observer then
+                if self.Observer then
+                    if self.Observer == observer then
                         return self.Subscription, observer
                     else
                         throw "The operator can't be subscribed by multi observers"
                     end
                 end
-                self.__observer         = observer
+                self.Observer           = observer
 
                 -- handle the subscription
                 subscription            = subscription or observer.Subscription
                 subscription            = self:HandleSubscription(subscription, observer) or subscription
 
                 -- Keep using the same subscription
-                self.Subscription       = self.__observable:Subscribe(self, subscription)
+                self.Subscription       = self.Observable:Subscribe(self, subscription)
                 return subscription, observer
             end,
 
@@ -55,7 +54,7 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Used to handle the subscription, can be used to replace the original one
         __Abstract__()
-        function HandleSubscription(self, subscription, observer) return subscription end
+        HandleSubscription              = function (self, subscription, observer) return subscription end
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -65,29 +64,21 @@ PLoop(function(_ENV)
         Subscribe                       = subscribe
 
         __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }:Throwable()
-        function Subscribe(self, onNext, onError, onCompleted, subscription)
+        Subscribe                       = function (self, onNext, onError, onCompleted, subscription)
             return subscribe(self, Observer(onNext, onError, onCompleted, subscription))
         end
-
-        --- Provides the observer with new data
-        function OnNext(self, ...)      return self.__onNext(self.__observer, ...) end
-
-        --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, ...)     return self.__onError(self.__observer, ...) end
-
-        --- Notifies the observer that the provider has finished sending push-based notifications
-        function OnCompleted(self)      return self.__onComp(self.__observer) end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
         function __ctor(self, observable, onNext, onError, onCompleted)
-            self.__observable           = observable
-            self.__observer             = false
-            self.__onNext               = onNext        or onnextdefault
-            self.__onError              = onError       or onerrordefault
-            self.__onComp               = onCompleted   or oncompleteddefault
+            self.OnNext                 = onNext and function(self, ...) return onNext(self.Observer, ...) end or dftnext
+            self.OnError                = onError and function(self, ex) return onError(self.Observer, ex) end or dfterror
+            self.OnCompleted            = onCompleted and function(self) return onCompleted(self.Observer) end or dftcomp
+
+            self.Observable             = observable
+            self.Observer               = false
         end
     end)
 
@@ -213,7 +204,7 @@ PLoop(function(_ENV)
 
         --- Encapsulate the sequence as a new observable sequence, so the outside can't
         -- access the real sequece directly
-        function AsObservable(self) return Observable(function(...) return self:Subscribe(...) end) end
+        function AsObservable(self)     return Observable(function(...) return self:Subscribe(...) end) end
 
         --- Invokes actions with side effecting behavior for each element in the observable sequence
         __Observable__()
@@ -270,20 +261,8 @@ PLoop(function(_ENV)
                     return _finally()
                 end
             end
-
-            -- Hack the operator
-            oper.Subscribe              = function(self, ...)
-                local sub, ob           = Operator.Subscribe(self, ...)
+            oper.HandleSubscription     = function(self, sub)
                 sub.OnUnsubscribe       = sub.OnUnsubscribe + callFinally
-                return sub, ob
-            end
-            oper.OnError                 = function(self, ...)
-                Operator.OnError(self, ...)
-                return callFinally()
-            end
-            oper.OnCompleted            = function()
-                Operator.OnCompleted(self)
-                return callFinally()
             end
             return oper
         end

@@ -71,7 +71,7 @@ PLoop(function(_ENV)
     --- Provides a mechanism for receiving push-based notifications
     __Sealed__() __AnonymousClass__()
     interface "System.IObserver"        (function(_ENV)
-        export                          { rawset = rawset, Subscription }
+        export                          { rawset = rawset, rawget = rawget, Subscription }
 
         -----------------------------------------------------------------------
         --                          abstract method                          --
@@ -86,7 +86,7 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
-        OnCompleted                     = Toolset.fakefunc
+        OnCompleted                     = function (self) self.Subscription = nil end
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -94,11 +94,13 @@ PLoop(function(_ENV)
         -- The subscription will be used by the observer
         property "Subscription"         {
             type                        = Subscription,
-            field                       = "__subscription",
+            field                       = "__subscr",
             default                     = function(self) return Subscription() end,
             handler                     = function(self, new, old)
                 if new and not new.IsUnsubscribed then
-                    new.OnUnsubscribe   = new.OnUnsubscribe + function() return rawset(self, "__subscription", nil) end
+                    new.OnUnsubscribe   = new.OnUnsubscribe + function() return rawget(self, "__subscr") == new and rawset(self, "__subscr", nil) end
+                else
+                    rawset(self, "__subscr", nil)
                 end
                 return old and not old.IsUnsubscribed and old:Dispose()
             end
