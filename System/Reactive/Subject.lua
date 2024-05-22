@@ -15,8 +15,9 @@
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    --- A bridge or proxy that acts both as an observer and as an Observable
-    __Sealed__() __AutoCache__()
+    --- A bridge or proxy that acts as observer and observable
+    __Sealed__()
+    __AutoCache__{ Inheritable = true }
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "Subject"                     (function(_ENV)
@@ -30,38 +31,43 @@ PLoop(function(_ENV)
 
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
-                -- Check existed subscription
-                local obs               = self.__observers
+                -- check subscription
+                subscription            = subscription or observer.Subscription
+                if subscription.IsUnsubscribed then return subscription, observer end
+
+                -- check existed subscription
+                local obs               = self.Observers
                 local exist             = obs[observer]
                 if exist then
-                    if exist ~= subscription and not exist.IsUnsubscribed then exist:Dispose() end
                     obs[observer]       = subscription
+                    if exist ~= subscription and not exist.IsUnsubscribed then exist:Dispose() end
                     return subscription, observer
                 end
 
                 local iscold            = not (self.KeepAlive or next(obs))
-                subscription            = subscription or observer.Subscription
 
-                -- Subscribe the subject
-                if self.__newsubject then
-                    if self.__newsubject == true then
-                        self.__newsubject = {}
+                -- subscribe the subject
+                local newobs            = self.__newobs
+                if newobs then
+                    if newobs == true then
+                        newobs          = {}
+                        self.__newobs   = newobs
                     end
 
-                    self.__newsubject[observer] = subscription
+                    newobs[observer]    = subscription
                 else
                     obs[observer]       = subscription
                 end
 
-                -- Start the subscription if cold
+                -- start the subscription if cold
                 if iscold and self.Observable then
-                    self.Subscription   = self.Observable:Subscribe(self, Subscription())
+                    self.Subscription   = self.Observable:Subscribe(self, self.Subscription)
                 end
 
                 return subscription, observer
             end,
 
-            Observer, Dictionary, Subscription
+            Observer
         }
 
         -----------------------------------------------------------------------
@@ -74,9 +80,8 @@ PLoop(function(_ENV)
         --- The observable that the subject subscribed
         property "Observable"           {
             type                        = IObservable,
-            field                       = "__observable",
             handler                     = function(self, new, old)
-                self.Subscription       = new and (self.KeepAlive or next(self.__observers)) and new:Subscribe(self, Subscription()) or nil
+                self.Subscription       = new and (self.KeepAlive or next(self.Observers)) and new:Subscribe(self, Subscription()) or nil
             end
         }
 
@@ -94,9 +99,9 @@ PLoop(function(_ENV)
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            self.__newsubject           = self.__newsubject or true
+            self.__newobs               = self.__newobs or true
 
-            local obs                   = self.__observers
+            local obs                   = self.Observers
             local becold                = false
             for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
@@ -108,11 +113,12 @@ PLoop(function(_ENV)
             end
 
             -- Register the new observers
-            local newSubs               = self.__newsubject
-            self.__newsubject           = false
-            if newSubs and newSubs ~= true then
-                for ob, sub in pairs(newSubs) do
+            local newobs                = self.__newobs
+            self.__newobs               = false
+            if newobs and newobs ~= true then
+                for ob, sub in pairs(newobs) do
                     if not sub.IsUnsubscribed then
+                        becold          = false
                         obs[ob]         = sub
                     end
                 end
@@ -126,9 +132,9 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has experienced an error condition
         function OnError(self, ...)
-            self.__newsubject           = self.__newsubject or true
+            self.__newobs           = self.__newobs or true
 
-            local obs                   = self.__observers
+            local obs                   = self.Observers
             local becold                = false
             for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
@@ -140,11 +146,12 @@ PLoop(function(_ENV)
             end
 
             -- Register the new observers
-            local newSubs               = self.__newsubject
-            self.__newsubject           = false
-            if newSubs and newSubs ~= true then
-                for ob, sub in pairs(newSubs) do
+            local newsub                = self.__newobs
+            self.__newobs               = false
+            if newsub and newsub ~= true then
+                for ob, sub in pairs(newsub) do
                     if not sub.IsUnsubscribed then
+                        becold          = false
                         obs[ob]         = sub
                     end
                 end
@@ -158,15 +165,15 @@ PLoop(function(_ENV)
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            local obs                   = self.__observers
-            self.__observers            = newtable(false, true)
+            local obs                   = self.Observers
+            self.Observers              = newtable(false, true)
             for ob, sub in pairs(obs) do
                 if not sub.IsUnsubscribed then
                     ob:OnCompleted()
                 end
             end
 
-            if not (self.KeepAlive or next(self.__observers)) then
+            if not (self.KeepAlive or next(self.Observers)) then
                 self.Subscription       = nil
             end
         end
@@ -176,8 +183,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable/nil }
         function __ctor(self, observable)
-            self.__newsubject           = false
-            self.__observers            = newtable(false, true)
+            self.__newobs               = false
+            self.Observers              = newtable(false, true)
             self.Observable             = observable
         end
 
@@ -186,12 +193,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         function __dtor(self)
             self.Observable             = nil
+            self.Observers              = nil
         end
     end)
 
     --- Only emits the last value (and only the last value) emitted by the source Observable,
     -- and only after that source Observable completes
-    __Sealed__() __AutoCache__()
+    __Sealed__()
     class "AsyncSubject"                (function(_ENV)
         inherit "Subject"
 
@@ -228,7 +236,7 @@ PLoop(function(_ENV)
 
     --- Emitting the item most recently emitted by the source Observable (or a seed/default value
     -- if none has yet been emitted) and then continues to emit any other items emitted later by the source Observable
-    __Sealed__() __AutoCache__()
+    __Sealed__()
     class "BehaviorSubject"             (function(_ENV)
         inherit "Subject"
 
@@ -304,7 +312,7 @@ PLoop(function(_ENV)
     end)
 
     --- Emits to an observers only when connect to the observable source
-    __Sealed__() __AutoCache__()
+    __Sealed__()
     class "PublishSubject"              (function(_ENV)
         inherit "Subject"
         extend "IConnectableObservable"
@@ -343,7 +351,7 @@ PLoop(function(_ENV)
     end)
 
     --- Emits to any observer all of the items that were emitted by the source Observable(s), regardless of when the observer subscribes
-    __Sealed__() __AutoCache__()
+    __Sealed__()
     class "ReplaySubject"               (function(_ENV)
         inherit "Subject"
 

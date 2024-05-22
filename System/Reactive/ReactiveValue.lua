@@ -1,6 +1,7 @@
+
 --===========================================================================--
 --                                                                           --
---                       System.Reactive.ReactiveField                        --
+--                       System.Reactive.ReactiveValue                       --
 --                                                                           --
 --===========================================================================--
 
@@ -13,10 +14,10 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
-    --- Represents the field in reactive objects
+    --- Represents the reactive value
     __Sealed__()
     __Arguments__{ AnyType/nil }
-    class"System.Reactive.ReactiveField"(function(_ENV, valtype)
+    class"System.Reactive.ReactiveValue"(function(_ENV, valtype)
         inherit "Subject"
         extend "IValueWrapper"
 
@@ -25,8 +26,6 @@ PLoop(function(_ENV)
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
             geterrormessage             = Struct.GetErrorMessage,
-
-            RawTable
         }
 
         -----------------------------------------------------------------------
@@ -35,7 +34,7 @@ PLoop(function(_ENV)
         --- Subscribe the observer
         function Subscribe(self, ...)
             local subscription, observer= subscribe(self, ...)
-            observer:OnNext(self[3])
+            observer:OnNext(self[1])
             return subscription, observer
         end
 
@@ -43,7 +42,7 @@ PLoop(function(_ENV)
         if valtype then
             if Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
                 function OnNext(self, val)
-                    self[3]             = val
+                    self[1]             = val
                     return onnext(self, val)
                 end
             else
@@ -51,13 +50,13 @@ PLoop(function(_ENV)
                 function OnNext(self, val)
                     local ret, msg      = valid(valtype, val)
                     if msg then return onerror(self, geterrormessage(msg, "value")) end
-                    self[3]             = ret
+                    self[1]             = ret
                     return onnext(self, ret)
                 end
             end
         else
             function OnNext(self, val)
-                self[3]                 = val
+                self[1]                 = val
                 return onnext(self, val)
             end
         end
@@ -66,34 +65,25 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- Whether always connect the observable
-        property "KeepAlive"            { type = Boolean,  default = true }
-
-        --- The reactive container
-        property "Container"            { type = Reactive, field = 1 }
-
-        --- The field
-        property "Field"                { type = String,   field = 2 }
+        property "KeepAlive"            { type = Boolean, default = true }
 
         --- The current value, use handler not set to detect the value change
-        property "Value"                { type = valtype,  field = 3, handler = "OnNext" }
+        property "Value"                { type = valtype, field = 1, handler = "OnNext" }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        -- Binding the behavior subject to a reactive object's field
-        __Arguments__{ Reactive, String }
-        function __ctor(self, react, field)
+        -- Generate reactive value based on other observable
+        __Arguments__{ IObservable }
+        function __ctor(self, observable)
+            super(self, observable)
+        end
+
+        -- Generate reactive value with init data
+        __Arguments__{ valtype and valtype/nil or Any/nil }
+        function __ctor(self, val)
             super(self)
-
-            local raw                   = rawget(react, RawTable)
-
-            self[0]                     = 1
-            self[1]                     = raw and raw[field]
-
-            subscribe(self, function(value)
-                local raw               = rawget(react, RawTable)
-                if raw then raw[field]  = value end
-            end)
+            self[1]                     = val
         end
     end)
 end)

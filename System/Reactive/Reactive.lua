@@ -22,6 +22,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         class "__Observable__"          {}
         class "ReactiveField"           {}
+        class "ReactiveValue"           {}
         class "ReactiveList"            {}
         class "Observable"              {}
         class "Watch"                   (function(_ENV)

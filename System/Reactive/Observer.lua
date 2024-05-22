@@ -42,7 +42,7 @@ PLoop(function(_ENV)
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 subscription            = subscription or observer.Subscription
-                self[1](observer, subscription)
+                if not subscription.IsUnsubscribed then self[1](observer, subscription) end
                 return subscription, observer
             end,
 

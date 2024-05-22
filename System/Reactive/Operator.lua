@@ -39,6 +39,7 @@ PLoop(function(_ENV)
 
                 -- handle the subscription
                 subscription            = subscription or observer.Subscription
+                if subscription.IsUnsubscribed then return subscription, observer end
                 subscription            = self:HandleSubscription(subscription, observer) or subscription
 
                 -- Keep using the same subscription
