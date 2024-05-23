@@ -21,7 +21,7 @@ PLoop(function(_ENV)
         inherit "Subject"
         extend "IValueWrapper"
 
-        export {
+        export                          {
             subscribe                   = Subject.Subscribe,
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
@@ -39,25 +39,18 @@ PLoop(function(_ENV)
         end
 
         --- Provides the observer with new data
-        if valtype then
-            if Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
-                function OnNext(self, val)
-                    self[1]             = val
-                    return onnext(self, val)
-                end
-            else
-                local valid             = getmetatable(valtype).ValidateValue
-                function OnNext(self, val)
-                    local ret, msg      = valid(valtype, val)
-                    if msg then return onerror(self, geterrormessage(msg, "value")) end
-                    self[1]             = ret
-                    return onnext(self, ret)
-                end
+        if not valtype or Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
+            function OnNext(self, val)
+                self[1]             = val
+                return onnext(self, val)
             end
         else
+            local valid             = getmetatable(valtype).ValidateValue
             function OnNext(self, val)
-                self[1]                 = val
-                return onnext(self, val)
+                local ret, msg      = valid(valtype, val)
+                if msg then return onerror(self, geterrormessage(msg, "value")) end
+                self[1]             = ret
+                return onnext(self, ret)
             end
         end
 

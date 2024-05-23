@@ -20,13 +20,25 @@ PLoop(function(_ENV)
         inherit "Subject"
         extend "IValueWrapper"
 
-        export {
+        export                          {
             subscribe                   = Subject.Subscribe,
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
             geterrormessage             = Struct.GetErrorMessage,
+            toraw                       = Reactive.ToRaw,
 
-            RawTable
+            refreshvalue                = function(self)
+                local container         = self[1]
+                local field             = self[2]
+                if container and field then
+                    local raw           = toraw(self.Container)
+                    if raw then
+                        self.Value      = raw[field]
+                        return
+                    end
+                end
+                self.Value              = nil
+            end,
         }
 
         -----------------------------------------------------------------------
@@ -40,25 +52,18 @@ PLoop(function(_ENV)
         end
 
         --- Provides the observer with new data
-        if valtype then
-            if Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
-                function OnNext(self, val)
-                    self[3]             = val
-                    return onnext(self, val)
-                end
-            else
-                local valid             = getmetatable(valtype).ValidateValue
-                function OnNext(self, val)
-                    local ret, msg      = valid(valtype, val)
-                    if msg then return onerror(self, geterrormessage(msg, "value")) end
-                    self[3]             = ret
-                    return onnext(self, ret)
-                end
-            end
-        else
+        if not valtype or Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
             function OnNext(self, val)
                 self[3]                 = val
                 return onnext(self, val)
+            end
+        else
+            local valid                 = getmetatable(valtype).ValidateValue
+            function OnNext(self, val)
+                local ret, msg          = valid(valtype, val)
+                if msg then return onerror(self, geterrormessage(msg, "value")) end
+                self[3]                 = ret
+                return onnext(self, ret)
             end
         end
 
@@ -69,10 +74,10 @@ PLoop(function(_ENV)
         property "KeepAlive"            { type = Boolean,  default = true }
 
         --- The reactive container
-        property "Container"            { type = Reactive, field = 1 }
+        property "Container"            { type = Reactive, field = 1, handler = refreshvalue }
 
         --- The field
-        property "Field"                { type = String,   field = 2 }
+        property "Field"                { type = String,   field = 2, handler = refreshvalue }
 
         --- The current value, use handler not set to detect the value change
         property "Value"                { type = valtype,  field = 3, handler = "OnNext" }
@@ -82,16 +87,18 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         -- Binding the behavior subject to a reactive object's field
         __Arguments__{ Reactive, String }
-        function __ctor(self, react, field)
+        function __ctor(self, react, field, val)
             super(self)
 
-            local raw                   = rawget(react, RawTable)
+            local raw                   = toraw(react)
 
-            self[0]                     = 1
-            self[1]                     = raw and raw[field]
+            self[1]                     = react
+            self[2]                     = field
+            self[3]                     = raw and raw[field]
 
+            -- write back to the container's field
             subscribe(self, function(value)
-                local raw               = rawget(react, RawTable)
+                local raw               = toraw(react)
                 if raw then raw[field]  = value end
             end)
         end

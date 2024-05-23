@@ -21,10 +21,10 @@ PLoop(function(_ENV)
         --                          declaration                          --
         -------------------------------------------------------------------
         class "__Observable__"          {}
-        class "ReactiveField"           {}
-        class "ReactiveValue"           {}
-        class "ReactiveList"            {}
         class "Observable"              {}
+        class "ReactiveValue"           {}
+        class "ReactiveField"           {}
+        class "ReactiveList"            {}
         class "Watch"                   (function(_ENV)
             class "ReactiveProxy"       {}
             class "ReactiveListProxy"   {}
@@ -43,6 +43,7 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
             isvaluetype                 = Class.IsValueType,
             isobjecttype                = Class.IsObjectType,
+            getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
             isclass                     = Class.Validate,
             getsuperclass               = Class.GetSuperClass,
@@ -103,8 +104,8 @@ PLoop(function(_ENV)
                     self                = ReactiveListProxy.GetReactive(self)
                     return self and ReactiveList.ToRaw(self)
 
-                -- behavior subject
-                elseif cls == ReactiveField then
+                -- reactive value
+                elseif cls == ReactiveField or cls == ReactiveValue then
                     return self.Value
 
                 -- reactive
@@ -142,7 +143,7 @@ PLoop(function(_ENV)
 
             -- behavior subject
             while cls do
-                if cls == ReactiveField then
+                if cls == ReactiveField or cls == ReactiveValue then
                     -- subscribe the observable
                     if isobjecttype(value, IObservable) then
                         self.Observable = value
@@ -196,26 +197,29 @@ PLoop(function(_ENV)
             error("the reactive not valid", stack + 1)
         end
 
-        -- Gets the recommend ractive type for the given type
+        --- Gets the recommend reactive type for the given value or type
+        -- @param value                 the value to be check
+        -- @param valuetype             the value type
+        -- @param asfield               use ReactiveField instead of ReactiveValue
         __Static__()
-        __Arguments__{ Any/nil, AnyType/nil }
-        function GetReactiveType(value, recommendtype)
-            -- validate the value with the recommend type
-            if recommendtype and value ~= nil and not getmetatable(recommendtype).ValidateValue(recommendtype, value) then recommendtype = nil end
+        __Arguments__{ Any/nil, AnyType/nil, Boolean/nil }
+        function GetReactiveType(value, valuetype, asfield)
+            -- validate the value with the value type
+            if valuetype and value ~= nil and not getmetatable(valuetype).ValidateValue(valuetype, value, true) then valuetype = nil end
 
             -- get value type
             local valtype               = type(value)
             local metatype
             if value == nil then
-                metatype                = recommendtype
+                metatype                = valuetype
             elseif valtype == "table" then
-                metatype                = getmetatable(value) or recommendtype
+                metatype                = getobjectclass(value) or valuetype
             elseif valtype == "number" then
-                metatype                = recommendtype or Number
+                metatype                = valuetype or Number
             elseif valtype == "string" then
-                metatype                = recommendtype or String
+                metatype                = valuetype or String
             elseif valtype == "boolean" then
-                metatype                = recommendtype or Boolean
+                metatype                = valuetype or Boolean
             else
                 return
             end
@@ -226,16 +230,16 @@ PLoop(function(_ENV)
                 rtype                   = valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
 
             elseif metatype == Any then
-                rtype                   = ReactiveField
+                rtype                   = asfield and ReactiveField or ReactiveValue
 
             elseif isenum(metatype) then
-                rtype                   = ReactiveField[metatype]
+                rtype                   = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
             elseif isstruct(metatype) then
                 local cate              = getstructcategory(metatype)
 
                 if cate == "CUSTOM" then
-                    rtype               = ReactiveField[metatype]
+                    rtype               = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
                 elseif cate == "ARRAY" then
                     local element       = getarrayelement(metatype)
@@ -247,17 +251,22 @@ PLoop(function(_ENV)
                 end
 
             elseif isclass(metatype) then
-                -- already as reactive
-                if issubtype(metatype, Reactive) or issubtype(metatype, ReactiveList) or issubtype(metatype, ReactiveField) then
+                -- already reactive
+                if  issubtype(metatype, Reactive) or
+                    issubtype(metatype, ReactiveList) or
+                    issubtype(metatype, ReactiveField) or
+                    issubtype(metatype, ReactiveValue) or
+                    issubtype(metatype, ReactiveProxy) or
+                    issubtype(metatype, ReactiveListProxy) then
                     rtype               = nil
 
                 -- observable as value queue
                 elseif issubtype(metatype, IObservable) then
-                    rtype               = ReactiveField
+                    rtype               = ReactiveValue
 
                 -- if is value type like Date
                 elseif isvaluetype(metatype) then
-                    rtype               = ReactiveField[metatype]
+                    rtype               = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
                 -- wrap list or array to reactive list
                 elseif issubtype(metatype, IList) then
@@ -315,7 +324,6 @@ PLoop(function(_ENV)
             toraw                       = Reactive.ToRaw,
             setraw                      = Reactive.SetRaw,
             setrawlist                  = ReactiveList.SetRaw,
-            rawmap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
 
             -- bind data change event handler when accessed
             binddatachange              = function(self, k, r)
@@ -323,7 +331,7 @@ PLoop(function(_ENV)
                     if isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList) then
                         r.OnDataChange  = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
                     else
-                        -- behavior subject
+                        -- Reactive Field or Reactive Value
                         local sub       = rawget(self, Subscription)
                         if not sub then
                             sub         = Subscription()
@@ -337,13 +345,13 @@ PLoop(function(_ENV)
 
             -- wrap the table value as default
             makereactive                = function(self, k, v, type, rtype)
-                rtype                   = rtype or Reactive.GetReactiveType(v, type)
+                rtype                   = rtype or Reactive.GetReactiveType(v, type, true)
                 local r                 = rtype and (issubtype(rtype, ReactiveField) and rtype(self, k) or rtype(v))
                 self[Reactive][k]       = r or false
                 return r and binddatachange(self, k, r)
             end,
 
-            Class, Property, Event, Reactive, ReactiveList, ReactiveField, Observable, Subscription
+            Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription
         }
 
         -------------------------------------------------------------------
@@ -360,17 +368,63 @@ PLoop(function(_ENV)
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
         if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
-            properties                  = {}
+            export                      {
+                properties              = {},
 
+                simpleparse             = function(val) return type(val) == "table" and rawget(val, RawTable) or val end,
+
+                handlecall              = function(self, ...)
+                    -- refresh reactive object data
+                    local raw           = self[RawTable]
+                    local reactives     = self[Reactive]
+                    for name in pairs(properties) do
+                        local r         = reactives[name]
+                        if r then       setraw(r, raw[name]) end
+                    end
+                    return ...
+                end
+            }
+
+            -- Binding object methods
+            for name, func, isstatic in Class.GetMethods(targettype, true) do
+                if not isstatic then
+                    _ENV[name]          = function(self, ...)
+                        local raw       = self[RawTable]
+                        return handlecall(self, raw[name](raw, ...))
+                    end
+                end
+            end
+
+            -- Binding meta-methods
+            for name, func in Class.GetMetaMethods(targettype, true) do
+                -- dispose
+                if name == "__gc" then
+                    _ENV.__dtor         = function(self) return self[RawTable]:Dispose() end
+
+                -- single argument
+                elseif name == "__unm" or name == "__len" or name == "__tostring" or name == "__ipairs" or name == "__pairs" then
+                    _ENV[name]          = function(self) return func(self[RawTable]) end
+
+                -- __call
+                elseif name == "__call" then
+                    _ENV.__call         = function(self, ...) return handlecall(self, func(self[RawTable], ...)) end
+
+                -- others
+                elseif name ~= "__index" and name ~= "__newindex" and name ~= "__ctor" and name ~= "__init" and name ~= "__new" and name ~= "__exist" then
+                    _ENV[name]          = function(a, b) return func(simpleparse(a), simpleparse(b)) end
+                end
+            end
+
+            -- Binding object features
             for _, ftr in Class.GetFeatures(targettype, true) do
                 -- read/write non-indexer properties
                 if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
                     local name          = ftr:GetName()
                     local ptype         = ftr:GetType() or Any
-                    local rtype         = Reactive.GetReactiveType(nil, ptype)
+                    local rtype         = Reactive.GetReactiveType(nil, ptype, true)
 
                     if rtype then
-                        properties[name]= true
+                        properties[name]= rtype
 
                         -- define the reactive property as proxy
                         property (name) {
@@ -578,21 +632,11 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ targettype or (RawTable/nil) }
+        __Arguments__{ (targettype or RawTable)/nil }
         function __ctor(self, init)
-            init                        = init or {}
             rawset(self, Reactive, {})
             rawset(self, RawTable, init)
-
-            -- keep tracking
-            if rawmap then
-                rawmap[init]            = self
-            else
-                rawset(init, Reactive, self)
-            end
         end
-
-        function __exist(_, init)       return init and (rawmap and rawmap[init] or rawget(init, Reactive)) end
 
         -------------------------------------------------------------------
         --                        de-constructor                         --

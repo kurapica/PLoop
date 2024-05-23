@@ -80,9 +80,6 @@ PLoop(function(_ENV)
                 return OnDataChange(self, ...)
             end,
 
-            -- list reactive map
-            rawMap                      = not Platform.MULTI_OS_THREAD and Toolset.newtable(true, true) or false,
-
             -- import types
             ReactiveList, Observable, Observer, Reactive, Watch, Subject, IList
         }
@@ -307,18 +304,6 @@ PLoop(function(_ENV)
             local reactives             = newtable(true, true)
             rawset(self, ReactiveList,  list)
             rawset(self, Reactive, reactives)
-
-            if rawMap then
-                rawMap[list]            = self
-            else
-                rawset(list, ReactiveList, self)
-            end
-        end
-
-        function __exist(_, list)
-            if type(list) ~= "table" then return end
-            if rawMap then return rawMap[list] end
-            return isobjecttype(list, ReactiveList) and list or rawget(list, ReactiveList)
         end
 
         -------------------------------------------------------------------
