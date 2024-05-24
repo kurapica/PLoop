@@ -33,7 +33,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2024/04/09                                               --
+-- Update Date  :   2024/05/24                                               --
 -- Version      :   1.9.4                                                    --
 --===========================================================================--
 
@@ -300,6 +300,12 @@ do
         --- Whether enable thread lock features like __Lock__
         -- Default false
         ENABLE_THREAD_LOCK                  = false,
+
+        --- Whether record the async function map for __Async__ and __Iterator__
+        -- useful when wrap object with async method into reactive objects
+        -- disable it to reduce the memory cost
+        -- Default true
+        RECORD_ASYNC_FUNC_WRAP              = true,
 
         --- Whehther active safe thread iterator so it will stop for dead coroutine
         -- On some platforms like Openresty call a dead wrap won't raise error but

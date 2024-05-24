@@ -87,116 +87,6 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                         static method                         --
         -------------------------------------------------------------------
-        --- Gets the current raw value of the reactive object
-        __Static__()
-        function ToRaw(self)
-            local cls                   = type(self) == "table" and getmetatable(self)
-
-            while cls do
-                -- reactive proxy
-                if cls == ReactiveProxy then
-                    -- use static method to add the deep watch if possible
-                    self                = ReactiveProxy.GetReactive(self)
-                    return self and rawget(self, RawTable)
-
-                -- reactive list proxy
-                elseif cls == ReactiveListProxy then
-                    self                = ReactiveListProxy.GetReactive(self)
-                    return self and ReactiveList.ToRaw(self)
-
-                -- reactive value
-                elseif cls == ReactiveField or cls == ReactiveValue then
-                    return self.Value
-
-                -- reactive
-                elseif cls == Reactive then
-                    return rawget(self, RawTable)
-
-                -- reactive list
-                elseif cls == ReactiveList then
-                    return ReactiveList.ToRaw(self)
-                end
-
-                -- for quick type check
-                cls                     = getsuperclass(cls)
-            end
-
-            return self
-        end
-
-        --- Sets a raw table value to the reactive object
-        __Static__()
-        function SetRaw(self, value, stack)
-            -- throw or error
-            local error                 = raise
-            local ostack                = stack
-            if ostack == true then
-                error                   = throw
-                stack                   = 1
-            elseif not ostack then
-                stack                   = 1
-            end
-
-            -- check type
-            local cls                   = type(self) == "table" and getmetatable(self)
-            if not cls then error("the reactive not valid", stack + 1) end
-
-            -- behavior subject
-            while cls do
-                if cls == ReactiveField or cls == ReactiveValue then
-                    -- subscribe the observable
-                    if isobjecttype(value, IObservable) then
-                        self.Observable = value
-                        return
-
-                    -- set the single value and remove the observable
-                    else
-                        self.Observable = nil
-                        local ok, err   = pcall(setvalue, self, "Value", value)
-                        if not ok then error("" .. tostring(err):match("%d+:%s*(.-)$"), stack + 1) end
-                        return
-                    end
-
-                -- reactive list proxy
-                elseif cls == ReactiveListProxy then
-                    self                = ReactiveListProxy.ToRaw(self, true)
-                    cls                 = ReactiveList
-
-                -- reative proxy
-                elseif cls == ReactiveProxy then
-                    self                = ReactiveProxy.ToRaw(self, true)
-                    cls                 = Reactive
-                end
-
-                -- reactive list
-                if cls == ReactiveList then
-                    ReactiveList.SetRaw(self, value, ostack == true or (stack + 1))
-                    return
-
-                -- reactive
-                elseif cls == Reactive then
-                    local valtype       = gettempparams(cls)
-
-                    -- common class
-                    if valtype and isclass(valtype) and not issubtype(cls, IKeyValueDict) then
-
-                    -- dict
-                    else
-                        local ok, err   = pcall(updateTable, self, value)
-                        if not ok then error(err, stack + 1) end
-                    end
-
-                    return
-                end
-
-                -- for quick type check
-                cls                     = getsuperclass(cls)
-            end
-
-            -- other
-            error("the reactive not valid", stack + 1)
-        end
-
         --- Gets the recommend reactive type for the given value or type
         -- @param value                 the value to be check
         -- @param valuetype             the value type
@@ -291,10 +181,6 @@ PLoop(function(_ENV)
 
             return rtype
         end
-
-        export                          {
-            toraw                       = ToRaw
-        }
     end)
 
     -----------------------------------------------------------------------
@@ -368,46 +254,68 @@ PLoop(function(_ENV)
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
         if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
-            export                      {
-                properties              = {},
+            properties                  = {}
 
-                simpleparse             = function(val) return type(val) == "table" and rawget(val, RawTable) or val end,
+            -- simple parse value, use local so it'll be removed when no use
+            local function simpleparse(val)
+                return type(val) == "table" and rawget(val, RawTable) or val
+            end
 
-                handlecall              = function(self, ...)
-                    -- refresh reactive object data
-                    local raw           = self[RawTable]
-                    local reactives     = self[Reactive]
-                    for name in pairs(properties) do
-                        local r         = reactives[name]
-                        if r then       setraw(r, raw[name]) end
-                    end
-                    return ...
+            -- handle the function call
+            local function handlecall(self, ...)
+                -- refresh reactive object data
+                local reactives         = self[Reactive]
+                for name in pairs(properties) do
+                    local r             = reactives[name]
+                    if r then r:Refresh() end
                 end
-            }
+                return ...
+            end
+
+            -- wrap the target function
+            local wrapmethod            = function(name, func)
+                -- __Async__
+                local original, safe    = __Async__.GetOriginal(func)
+                if original then
+                    __Async__(safe)
+
+                -- __Iterator__
+                else
+                    original            = __Iterator__.GetOriginal(func)
+                    if original then
+                        __Iterator__()
+
+                    -- Normal
+                    else
+                        original        = func
+                    end
+                end
+
+                _ENV[name]              = function(self, ...)
+                    local raw           = rawget(self, RawTable)
+                    if not raw then return end
+                    return handlecall(self, original(raw, ...))
+                end
+            end
 
             -- Binding object methods
             for name, func, isstatic in Class.GetMethods(targettype, true) do
-                if not isstatic then
-                    _ENV[name]          = function(self, ...)
-                        local raw       = self[RawTable]
-                        return handlecall(self, raw[name](raw, ...))
-                    end
-                end
+                if not isstatic then    wrapmethod(name, func) end
             end
 
             -- Binding meta-methods
             for name, func in Class.GetMetaMethods(targettype, true) do
                 -- dispose
                 if name == "__gc" then
-                    _ENV.__dtor         = function(self) return self[RawTable]:Dispose() end
+                    _ENV.__dtor         = function(self) local raw = rawget(self, RawTable) return raw and raw:Dispose() end
 
                 -- single argument
-                elseif name == "__unm" or name == "__len" or name == "__tostring" or name == "__ipairs" or name == "__pairs" then
-                    _ENV[name]          = function(self) return func(self[RawTable]) end
+                elseif name == "__unm" or name == "__len" or name == "__tostring" then
+                    _ENV[name]          = function(self) local raw = rawget(self, RawTable) return raw and func(raw) end
 
                 -- __call
-                elseif name == "__call" then
-                    _ENV.__call         = function(self, ...) return handlecall(self, func(self[RawTable], ...)) end
+                elseif name == "__call" or name == "__ipairs" or name == "__pairs" then
+                    wrapmethod(name, func)
 
                 -- others
                 elseif name ~= "__index" and name ~= "__newindex" and name ~= "__ctor" and name ~= "__init" and name ~= "__new" and name ~= "__exist" then
@@ -428,52 +336,15 @@ PLoop(function(_ENV)
 
                         -- define the reactive property as proxy
                         property (name) {
-                            -- gets the reactive
-                            get         = Class.IsSubType(rtype, ReactiveField)
-                            -- gets or create the behavior subject
-                            and function(self) return self[Reactive][name] or makereactive(self, name, nil, nil, rtype) end
-
-                            -- gets or create the reactive object
-                            or function(self)
-                                local r = self[Reactive][name]
-                                -- the raw value may not exist
-                                if r then return r or nil end
-
-                                -- generate it when access and exist
-                                local d = self[RawTable][name]
-                                return d and makereactive(self, name, d, ptype)
-                            end,
-
-                            -- sets the value
-                            set         = Class.IsSubType(rtype, ReactiveField)
-                            and function(self, value)
-                                return setraw(self[Reactive][name] or makereactive(self, name, nil, nil, rtype), value, true)
-                            end
-                            or Class.IsSubType(rtype, ReactiveList)
-                            and function(self, value)
-                                -- too complex to hanlde the value as reactive object
-                                local r = self[Reactive][name]
-                                if r then return setrawlist(r, value, true) end
-                                value   = toraw(value)
-                                self[RawTable][name] = value
-                                return OnDataChange(self, name, makereactive(self, name, value, ptype))
-                            end
-                            or function(self, value)
-                                local r = self[Reactive][name]
-                                if r then return setraw(r, value, true) end
-
-                                value   = toraw(value)
-                                self[RawTable][name] = value
-                                return OnDataChange(self, name, makereactive(self, name, value, ptype))
-                            end,
-                            throwable   = true,
+                            get         = function(self) return self[Reactive][name] or makereactive(self, name, self[RawTable] and self[RawTable][name], nil, rtype) end,
+                            set         = function(self, value) return self[name]:SetRaw(value) end,
                         }
 
                     -- for non-reactive
                     else
                         property (name) {
-                            get         = function(self) return self[RawTable][name] end,
-                            set         = function(self, value) self[RawTable][name] = value end,
+                            get         = function(self) local raw = rawget(self, RawTable) return raw and raw[name] end,
+                            set         = function(self, value) local raw = rawget(self, Ratable) if raw then raw[name] = value end end,
                             type        = ptype
                         }
                     end
@@ -481,14 +352,14 @@ PLoop(function(_ENV)
                     if Property.IsIndexer(ftr) then
                         __Indexer__(Property.GetIndexType(ftr))
                         property (name) {
-                            get         = Property.IsReadable(ftr) and function(self, idx) return self[RawTable][name][idx] end,
-                            set         = Property.IsWritable(ftr) and function(self, idx, value) self[RawTable][name][idx] = value end,
+                            get         = Property.IsReadable(ftr) and function(self, idx) local raw = rawget(self, RawTable) return raw and raw[name][idx] end,
+                            set         = Property.IsWritable(ftr) and function(self, idx, value) local raw = rawget(self, Ratable) if raw then raw[name][idx] = value end end,
                             type        = Property.GetType(ftr),
                         }
                     else
                         property (name) {
-                            get         = Property.IsReadable(ftr) and function(self) return self[RawTable][name] end,
-                            set         = Property.IsWritable(ftr) and function(self, value) self[RawTable][name] = value end,
+                            get         = Property.IsReadable(ftr) and function(self) local raw = rawget(self, RawTable) return raw and raw[name] end,
+                            set         = Property.IsWritable(ftr) and function(self, value) local raw = rawget(self, Ratable) if raw then raw[name] = value end end,
                             type        = Property.GetType(ftr),
                         }
                     end
@@ -518,6 +389,9 @@ PLoop(function(_ENV)
                     end
                 end
             end
+
+            -- clear
+            wrapmethod                  = nil
 
         -------------------------------------------------------------------
         --                         member struct                         --
@@ -622,6 +496,9 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Subscribe the observers
         function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
+
+        --- Gets the raw value
+        function GetRaw(self)           return rawget(self, RawTable) end
 
         --- Map the items to other type datas, use collection operation instead of observable
         Map                             = IKeyValueDict.Map

@@ -41,18 +41,33 @@ PLoop(function(_ENV)
         --- Provides the observer with new data
         if not valtype or Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
             function OnNext(self, val)
-                self[1]             = val
+                self[1]                 = val
                 return onnext(self, val)
             end
         else
-            local valid             = getmetatable(valtype).ValidateValue
+            local valid                 = getmetatable(valtype).ValidateValue
             function OnNext(self, val)
-                local ret, msg      = valid(valtype, val)
+                local ret, msg          = valid(valtype, val)
                 if msg then return onerror(self, geterrormessage(msg, "value")) end
-                self[1]             = ret
+                self[1]                 = ret
                 return onnext(self, ret)
             end
         end
+
+        --- Sets the raw value
+        __Arguments__{ IObservable }
+        function SetRaw(self, observable)
+            self.Observable             = observable
+        end
+
+        __Arguments__{ (valtype or Any)/nil }
+        function SetRaw(self, value)
+            self.Observable             = nil
+            self.Value                  = value
+        end
+
+        --- Gets the raw value
+        function GetRaw(self)           return self[1] end
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -73,7 +88,7 @@ PLoop(function(_ENV)
         end
 
         -- Generate reactive value with init data
-        __Arguments__{ valtype and valtype/nil or Any/nil }
+        __Arguments__{ (valtype or Any)/nil }
         function __ctor(self, val)
             super(self)
             self[1]                     = val
