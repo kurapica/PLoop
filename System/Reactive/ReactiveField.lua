@@ -89,7 +89,7 @@ PLoop(function(_ENV)
         end
 
         --- Gets the raw value
-        function GetRaw(self)           return self[3] end
+        function ToRaw(self)            return self[3] end
 
         --- Update the value by the container's field
         function Refresh(self)

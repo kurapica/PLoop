@@ -207,9 +207,18 @@ PLoop(function(_ENV)
             isobjecttype                = Class.IsObjectType,
             getdelegate                 = Event.Get,
             clone                       = Toolset.clone,
-            toraw                       = Reactive.ToRaw,
-            setraw                      = Reactive.SetRaw,
-            setrawlist                  = ReactiveList.SetRaw,
+
+            setrawfield                 = function(name, field, raw)
+                local ok, err           = pcall(field.SetRaw, raw)
+                if not ok then
+                    if type(err) == "string" then
+                        error(err, 0)
+                    else
+                        err.Message     = err.Message:gsub("value", "value." .. name)
+                        throw(err)
+                    end
+                end
+            end,
 
             -- bind data change event handler when accessed
             binddatachange              = function(self, k, r)
@@ -253,10 +262,11 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
+        -- for common types
         if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
             properties                  = {}
 
-            -- simple parse value, use local so it'll be removed when no use
+            -- simple parse value, use local so it'll be collected when no use
             local function simpleparse(val)
                 return type(val) == "table" and rawget(val, RawTable) or val
             end
@@ -336,11 +346,15 @@ PLoop(function(_ENV)
 
                         -- define the reactive property as proxy
                         property (name) {
+                            -- allow the reactive object be created no matter the raw exists or not
+                            -- also don't check the cycle ref since the access paths is decided by the access code
+                            -- no type check here to allow complex observable value or others
                             get         = function(self) return self[Reactive][name] or makereactive(self, name, self[RawTable] and self[RawTable][name], nil, rtype) end,
-                            set         = function(self, value) return self[name]:SetRaw(value) end,
+                            set         = function(self, value) return setrawfield(name, self[name], value) end,
+                            throwable   = true,
                         }
 
-                    -- for non-reactive
+                    -- for un-reactive
                     else
                         property (name) {
                             get         = function(self) local raw = rawget(self, RawTable) return raw and raw[name] end,
@@ -348,6 +362,8 @@ PLoop(function(_ENV)
                             type        = ptype
                         }
                     end
+
+                -- un-reactive properties
                 elseif Property.Validate(ftr) then
                     if Property.IsIndexer(ftr) then
                         __Indexer__(Property.GetIndexType(ftr))
@@ -388,6 +404,30 @@ PLoop(function(_ENV)
                         yield(k, v)
                     end
                 end
+            end
+
+            --- Sets the raw value
+            function SetRaw(self, value)
+                if value and not isobjecttype(value, targettype) then
+                    throw("The value must be " .. tostring(targettype))
+                end
+
+                -- update
+                local temp              = {}
+                for k in self:GetIterator() do
+                    temp[k]             = true
+                    self[k]             = value[k]
+                end
+
+                -- add
+                for name in (value.GetIterator or pairs)(value) do
+                    if not temp[name] then
+                        self[name]      = value[name]
+                    end
+                end
+
+                -- release
+                temp                    = nil
             end
 
             -- clear
@@ -498,7 +538,7 @@ PLoop(function(_ENV)
         function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
 
         --- Gets the raw value
-        function GetRaw(self)           return rawget(self, RawTable) end
+        function ToRaw(self)            return rawget(self, RawTable) end
 
         --- Map the items to other type datas, use collection operation instead of observable
         Map                             = IKeyValueDict.Map

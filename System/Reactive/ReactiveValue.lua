@@ -67,7 +67,7 @@ PLoop(function(_ENV)
         end
 
         --- Gets the raw value
-        function GetRaw(self)           return self[1] end
+        function ToRaw(self)            return self[1] end
 
         -----------------------------------------------------------------------
         --                             property                              --
