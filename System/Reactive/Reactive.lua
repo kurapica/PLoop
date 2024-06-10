@@ -34,53 +34,22 @@ PLoop(function(_ENV)
         --                            export                             --
         -------------------------------------------------------------------
         export                          {
-            pcall                       = pcall,
-            pairs                       = pairs,
             type                        = type,
-            error                       = error,
-            tostring                    = tostring,
             getmetatable                = getmetatable,
             issubtype                   = Class.IsSubType,
             isvaluetype                 = Class.IsValueType,
-            isobjecttype                = Class.IsObjectType,
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
             isclass                     = Class.Validate,
             getsuperclass               = Class.GetSuperClass,
-            isinterface                 = Interface.Validate,
             isenum                      = Enum.Validate,
             isstruct                    = Struct.Validate,
             getstructcategory           = Struct.GetStructCategory,
             getarrayelement             = Struct.GetArrayElement,
-            clone                       = Toolset.clone,
-            setvalue                    = Toolset.setvalue,
             isarray                     = Toolset.isarray,
 
-            updateTable                 = function(self, value)
-                -- update
-                local temp              = {}
-                for k in self:GetIterator() do
-                    temp[k]             = true
-                    self[k]             = value[k]
-                end
-
-                -- add
-                for name in (value.GetIterator or pairs)(value) do
-                    if not temp[name] then
-                        self[name]      = value[name]
-                    end
-                end
-
-                -- release
-                temp                    = nil
-            end,
-
-            raise                       = function(err, stack)
-                error("Usage: Reactive.SetRaw(reactive, value[, stack]) - " .. tostring(err), stack + 1)
-            end,
-
-            IList, IIndexedList, IDictionary, IKeyValueDict, IObservable,
-            Any, Number, String, Boolean, RawTable, List, Reactive,
+            IList, IDictionary, IKeyValueDict, IObservable,
+            Any, Number, String, Boolean, List, Reactive,
             Watch.ReactiveProxy, Watch.ReactiveListProxy
         }
 
@@ -115,71 +84,68 @@ PLoop(function(_ENV)
             end
 
             -- get reactive type
-            local rtype
             if metatype == nil then
-                rtype                   = valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
+                return valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
 
             elseif metatype == Any then
-                rtype                   = asfield and ReactiveField or ReactiveValue
+                return asfield and ReactiveField or ReactiveValue
 
             elseif isenum(metatype) then
-                rtype                   = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
+                return asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
             elseif isstruct(metatype) then
                 local cate              = getstructcategory(metatype)
 
                 if cate == "CUSTOM" then
-                    rtype               = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
+                    return asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
                 elseif cate == "ARRAY" then
                     local element       = getarrayelement(metatype)
-                    rtype               = element and ReactiveList[element] or ReactiveList
+                    return element and ReactiveList[element] or ReactiveList
 
                 -- member or dict
                 else
-                    rtype               = Reactive[metatype]
+                    return Reactive[metatype]
                 end
 
             elseif isclass(metatype) then
-                -- already reactive
-                if  issubtype(metatype, Reactive) or
-                    issubtype(metatype, ReactiveList) or
-                    issubtype(metatype, ReactiveField) or
-                    issubtype(metatype, ReactiveValue) or
-                    issubtype(metatype, ReactiveProxy) or
-                    issubtype(metatype, ReactiveListProxy) then
-                    rtype               = nil
+                local cls               = metatype
+                while cls and cls ~= Reactive and cls ~= ReactiveList and cls ~= ReactiveField and cls ~= ReactiveValue and cls ~= ReactiveProxy and cls ~= ReactiveListProxy do
+                    cls                 = getsuperclass(cls)
+                end
+
+                -- filter reactive
+                if cls then
+                    return nil
 
                 -- observable as value queue
                 elseif issubtype(metatype, IObservable) then
-                    rtype               = ReactiveValue
+                    return ReactiveValue
 
                 -- if is value type like Date
                 elseif isvaluetype(metatype) then
-                    rtype               = asfield and ReactiveField[metatype] or ReactiveValue[metatype]
+                    return asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
                 -- wrap list or array to reactive list
                 elseif issubtype(metatype, IList) then
                     -- to complex to cover more list types, only List for now
                     if issubtype(metatype, List) then
                         local ele       = gettempparams(metatype)
-                        rtype           = ele and ReactiveList[ele] or ReactiveList
+                        return ele and ReactiveList[ele] or ReactiveList
                     end
 
                 -- wrap dictionary
                 elseif issubtype(metatype, IDictionary) then
                     -- only key-value dict support
                     if issubtype(metatype, IKeyValueDict) then
-                        rtype           = Reactive[metatype]
+                        return Reactive[metatype]
                     end
 
                 -- common class
                 else
-                    rtype               = Reactive[metatype]
+                    return Reactive[metatype]
                 end
             end
-
-            return rtype
         end
     end)
 
@@ -205,6 +171,7 @@ PLoop(function(_ENV)
             yield                       = coroutine.yield,
             getmetatable                = getmetatable,
             isobjecttype                = Class.IsObjectType,
+            issubtype                   = Class.IsSubType,
             getdelegate                 = Event.Get,
             clone                       = Toolset.clone,
 
@@ -232,7 +199,7 @@ PLoop(function(_ENV)
                             sub         = Subscription()
                             rawset(self, Subscription, sub)
                         end
-                        r:Subscribe(function(val) return OnDataChange(self, k, val) end, nil, nil, sub)
+                        r:Subscribe(function(v) return OnDataChange(self, k, v) end, nil, nil, sub)
                     end
                 end
                 return r
@@ -267,12 +234,10 @@ PLoop(function(_ENV)
             properties                  = {}
 
             -- simple parse value, use local so it'll be collected when no use
-            local function simpleparse(val)
-                return type(val) == "table" and rawget(val, RawTable) or val
-            end
+            local simpleparse           = function (val) return type(val) == "table" and rawget(val, RawTable) or val end
 
             -- handle the function call
-            local function handlecall(self, ...)
+            local handlecall            = function (self, ...)
                 -- refresh reactive object data
                 local reactives         = self[Reactive]
                 for name in pairs(properties) do

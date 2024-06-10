@@ -54,12 +54,13 @@ PLoop(function(_ENV)
             end
         end
 
-        --- Sets the raw value
+        --- Sets observable as raw value
         __Arguments__{ IObservable }
         function SetRaw(self, observable)
             self.Observable             = observable
         end
 
+        --- Sets the raw value
         __Arguments__{ (valtype or Any)/nil }
         function SetRaw(self, value)
             self.Observable             = nil

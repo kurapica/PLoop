@@ -25,7 +25,6 @@ PLoop(function(_ENV)
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
             geterrormessage             = Struct.GetErrorMessage,
-            toraw                       = Reactive.ToRaw,
         }
 
         -----------------------------------------------------------------------
@@ -68,7 +67,7 @@ PLoop(function(_ENV)
                 if container then
                     local field         = self[2]
                     if field then
-                        container[field]= val
+                        container[field]= ret
                     end
                 end
 
@@ -97,16 +96,18 @@ PLoop(function(_ENV)
             local field                 = self[2]
             container                   = container and container:ToRaw()
             if container and field then
-                local value             = raw[field]
-                if self[3] == value then return end
+                if self.Observable then
+                    raw[field]          = self[3]
+                else
+                    local value         = raw[field]
+                    if self[3] == value then return end
 
-                self.Observable         = nil
-                self[3]                 = value
-                return onnext(self, value)
-            end
+                    self[3]             = value
+                    return onnext(self, value)
+                end
 
             -- otherwise
-            if self[3] ~= nil and not self.Observable then
+            elseif self[3] ~= nil and not self.Observable then
                 self[3]                 = nil
                 return onnext(self, nil)
             end
@@ -133,11 +134,17 @@ PLoop(function(_ENV)
         -- Binding the behavior subject to a reactive object's field
         __Arguments__{ Reactive, String }
         function __ctor(self, react, field)
-            super(self)
-
             self[1]                     = react
             self[2]                     = field
-            return self:Refresh()
+            super(self)
+            self:Refresh()
+        end
+
+        __Arguments__{ Reactive, String, IObservable }
+        function __ctor(self, react, field, observable)
+            self[1]                     = react
+            self[2]                     = field
+            super(self, observable)
         end
     end)
 end)
