@@ -8,7 +8,6 @@ require "PLoop.System.Threading"
 require "PLoop.System.Text"
 require "PLoop.System.Serialization"
 require "PLoop.System.Date"
-require "PLoop.System.Context"
 require "PLoop.System.Logger"
 require "PLoop.System.Recycle"
 require "PLoop.System.ValueWrapper"
@@ -53,11 +52,5 @@ require "PLoop.System.Reactive.ReactiveList"
 require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Operator"
 require "PLoop.System.Reactive.Watch"
-
--- System.Message
-require "PLoop.System.Message"
-
--- System.DependencyInjection
-require "PLoop.System.Service"
 
 return root

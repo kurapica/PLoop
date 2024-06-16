@@ -1,6 +1,7 @@
 -- The init file of PLoop.System.Web
 
 require "PLoop"
+require "PLoop.System.Context"
 require "PLoop.System.IO"
 require "PLoop.System.Data"
 
