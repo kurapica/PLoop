@@ -16914,7 +16914,6 @@ do
         }
 
         local customGetContext          = fakefunc
-        local customSaveContext         = fakefunc
 
         local getStackContext           = getlocal and function(stack)
             local n, v                  = getlocal(stack, 1)
@@ -16945,16 +16944,9 @@ do
         -----------------------------------------------------------
         --                   static property                     --
         -----------------------------------------------------------
-        --- The API used to save the current context
-        __Static__() property "SaveCurrentContext" {
-            type                        = Function,
-            set                         = function(_, func) customSaveContext = func end,
-            get                         = function() return customSaveContext end,
-            require                     = true,
-        }
-
         --- The API used to get the current context
-        __Static__() property "GetCurrentContext" {
+        __Static__()
+        property "GetCurrentContext"    {
             type                        = Function,
             set                         = function(_, func) customGetContext = func end,
             get                         = function() return getCurrentContext end,
@@ -16966,22 +16958,15 @@ do
         -----------------------------------------------------------
         --- Process the operations under the context
         __Abstract__() function Process(self) end
-
-        -----------------------------------------------------------
-        --                      initializer                      --
-        -----------------------------------------------------------
-        __Sealed__()
-        local contextSaver              = interface { __init = function(self) return customSaveContext(self) end }
-        extend (contextSaver)
     end)
 
-    --- Represents the interface of thread related context, which will
-    -- cache all sharable datas in the same os-thread
+    --- Represents the objects that need context support
     __Sealed__()
     interface "System.IContext"         (function(_ENV)
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
+        --- Gets the current context
         property "Context"              { type = Context }
 
         -----------------------------------------------------------
@@ -16995,7 +16980,6 @@ do
             end
         end
     end)
-
     -----------------------------------------------------------------------
     --                             runtime                              --
     -----------------------------------------------------------------------
