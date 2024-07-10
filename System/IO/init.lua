@@ -1,6 +1,8 @@
 -- The init file of PLoop.System.IO
 require "PLoop"
 
+require "PLoop.System.Threading.Lock"
+
 require "PLoop.System.IO.OperationSystem"
 require "PLoop.System.IO.Path"
 require "PLoop.System.IO.Directory"

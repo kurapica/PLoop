@@ -14408,7 +14408,7 @@ do
     end)
 
     -----------------------------------------------------------------------
-    --                             interface                             --
+    --                               types                               --
     -----------------------------------------------------------------------
     --- Represents the interface of attribute
     __Sealed__() __ObjectSource__{ Inheritable = true }
@@ -14732,9 +14732,6 @@ do
         setvalue                        = function(self, key, value) self[key] = value end,
     }
 
-    -----------------------------------------------------------------------
-    --                              classes                              --
-    -----------------------------------------------------------------------
     --- the attribute to build the overload system, also can be used to set
     -- the target struct, class or interface as template
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
@@ -16980,6 +16977,7 @@ do
             end
         end
     end)
+
     -----------------------------------------------------------------------
     --                             runtime                              --
     -----------------------------------------------------------------------
