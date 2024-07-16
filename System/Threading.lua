@@ -235,10 +235,10 @@ PLoop(function(_ENV)
             __Static__()
             property "Default"          { set = false, default = function() return ThreadPool{ PoolSize = DEFAULT_POOL_SIZE } end }
 
-            --- the current thread pool if not use default
+            --- the current thread pool of the context
             __Static__()
             property "Current"          {
-                get                     = function()
+                get                     = Platform.ENABLE_CONTEXT_FEATURES and function()
                     local ok, ret       = pcall(getCurrentPool)
                     if ok and ret then return ret end
 
@@ -252,6 +252,8 @@ PLoop(function(_ENV)
                         return cpool
                     end
 
+                    return ThreadPool.Default
+                end or function()
                     return ThreadPool.Default
                 end
             }

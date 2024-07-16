@@ -1,6 +1,6 @@
 --===========================================================================--
 --                                                                           --
---                           System.Threading.Task                           --
+--                      System.Threading.TaskScheduler                       --
 --                                                                           --
 --===========================================================================--
 
@@ -15,41 +15,22 @@
 PLoop(function(_ENV)
     namespace "System.Threading"
 
-    --- The task represents asynchronous jobs
-    __Sealed__()
-    class "Task"                        (function(_ENV)
-        extend "System.IContext"
-
-        export                          {
-            select                      = select
-        }
+    --- THe task scheduler system used to process the tasks
+    __Sealed__() __Abstract__()
+    class "TaskScheduler"               (function(_ENV)
 
         -----------------------------------------------------------
-        --                     static method                     --
+        --                    static property                    --
         -----------------------------------------------------------
-        if Platform.ENABLE_CONTEXT_FEATURES then
-            __Static__() __Arguments__{ Function, Any * 0 }
-            function Run(func, ...)
-
-            end
-        else
-
-        end
-
+        --- The default task scheduler
+        __Static__()
+        property "Default"              { type = TaskScheduler }
 
         -----------------------------------------------------------
         --                        method                         --
         -----------------------------------------------------------
-        __Arguments__{ Function, Any * 0 }
-        function ContinueWith(self, func, ...)
-        end
-
-        -----------------------------------------------------------
-        --                      constructor                      --
-        -----------------------------------------------------------
-        __Arguments__{ Function, Any * 0 }
-        function __new(_, func, ...)
-            return { select("#", ...) + 2, task, ... }
-        end
+        --- Schedule the task
+        __Abstract__() __Arguments__{ Thread }
+        function Schedule(self, task)   end
     end)
 end)
