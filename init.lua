@@ -20,6 +20,9 @@ require "PLoop.System.Collections.IIndexedListSorter"
 require "PLoop.System.Collections.Array"
 require "PLoop.System.Collections.Queue"
 
+-- System.Threading
+require "PLoop.System.Threading.TaskScheduler"
+
 -- System Configuration
 require "PLoop.System.Configuration"
 
