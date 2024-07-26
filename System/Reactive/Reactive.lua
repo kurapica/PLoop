@@ -20,15 +20,15 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          declaration                          --
         -------------------------------------------------------------------
+        --- Represents the reactive values
+        __Sealed__()
+        interface "IReactive"           {}
+
         class "__Observable__"          {}
         class "Observable"              {}
-        class "ReactiveValue"           {}
-        class "ReactiveField"           {}
-        class "ReactiveList"            {}
-        class "Watch"                   (function(_ENV)
-            class "ReactiveProxy"       {}
-            class "ReactiveListProxy"   {}
-        end)
+        class "ReactiveValue"           { IReactive }
+        class "ReactiveField"           { IReactive }
+        class "ReactiveList"            { IReactive }
 
         -------------------------------------------------------------------
         --                            export                             --
@@ -50,7 +50,6 @@ PLoop(function(_ENV)
 
             IList, IDictionary, IKeyValueDict, IObservable,
             Any, Number, String, Boolean, List, Reactive,
-            Watch.ReactiveProxy, Watch.ReactiveListProxy
         }
 
         -------------------------------------------------------------------
@@ -109,13 +108,8 @@ PLoop(function(_ENV)
                 end
 
             elseif isclass(metatype) then
-                local cls               = metatype
-                while cls and cls ~= Reactive and cls ~= ReactiveList and cls ~= ReactiveField and cls ~= ReactiveValue and cls ~= ReactiveProxy and cls ~= ReactiveListProxy do
-                    cls                 = getsuperclass(cls)
-                end
-
-                -- filter reactive
-                if cls then
+                -- already reactive
+                if issubtype(metatype, IReactive) then
                     return nil
 
                 -- observable as value queue
@@ -158,7 +152,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
-        extend "IObservable" "IKeyValueDict"
+        extend "IObservable" "IKeyValueDict" "System.Reactive.IReactive"
 
         export                          {
             type                        = type,
