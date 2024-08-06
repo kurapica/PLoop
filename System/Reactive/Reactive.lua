@@ -152,7 +152,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
-        extend "IObservable" "IKeyValueDict" "System.Reactive.IReactive"
+        extend "IObservable" "IKeyValueDict" "IReactive"
 
         export                          {
             type                        = type,
@@ -230,46 +230,11 @@ PLoop(function(_ENV)
             -- simple parse value, use local so it'll be collected when no use
             local simpleparse           = function (val) return type(val) == "table" and rawget(val, RawTable) or val end
 
-            -- handle the function call
-            local handlecall            = function (self, ...)
-                -- refresh reactive object data
-                local reactives         = self[Reactive]
-                for name in pairs(properties) do
-                    local r             = reactives[name]
-                    if r then r:Refresh() end
-                end
-                return ...
-            end
-
-            -- wrap the target function
-            local wrapmethod            = function(name, func)
-                -- __Async__
-                local original, safe    = __Async__.GetOriginal(func)
-                if original then
-                    __Async__(safe)
-
-                -- __Iterator__
-                else
-                    original            = __Iterator__.GetOriginal(func)
-                    if original then
-                        __Iterator__()
-
-                    -- Normal
-                    else
-                        original        = func
-                    end
-                end
-
-                _ENV[name]              = function(self, ...)
-                    local raw           = rawget(self, RawTable)
-                    if not raw then return end
-                    return handlecall(self, original(raw, ...))
-                end
-            end
-
             -- Binding object methods
             for name, func, isstatic in Class.GetMethods(targettype, true) do
-                if not isstatic then    wrapmethod(name, func) end
+                if not isstatic then
+                    _ENV[name]          = function(self, ...) local raw = rawget(self, RawTable) if raw then return func(raw, ...) end end
+                end
             end
 
             -- Binding meta-methods
@@ -284,7 +249,7 @@ PLoop(function(_ENV)
 
                 -- __call
                 elseif name == "__call" or name == "__ipairs" or name == "__pairs" then
-                    wrapmethod(name, func)
+                    _ENV[name]          = function(self, ...) local raw = rawget(self, RawTable) if raw then return func(raw, ...) end end
 
                 -- others
                 elseif name ~= "__index" and name ~= "__newindex" and name ~= "__ctor" and name ~= "__init" and name ~= "__new" and name ~= "__exist" then
@@ -389,9 +354,6 @@ PLoop(function(_ENV)
                 temp                    = nil
             end
 
-            -- clear
-            wrapmethod                  = nil
-
         -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
@@ -401,12 +363,12 @@ PLoop(function(_ENV)
             for _, mem in Struct.GetMembers(targettype) do
                 local name              = mem:GetName()
                 local mtype             = mem:GetType()
-                local rtype             = Reactive.GetReactiveType(nil, mtype)
+                local rtype             = Reactive.GetReactiveType(nil, mtype, true)
 
                 if rtype then
                     properties[name]   = true
-                    property (name)    {
-                        -- gets the reactive
+                    property (name)    {reactive
+                        -- gets the
                         get             = Class.IsSubType(rtype, ReactiveField)
                         and function(self)
                             return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
