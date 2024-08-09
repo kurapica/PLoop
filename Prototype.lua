@@ -301,12 +301,6 @@ do
         -- Default false
         ENABLE_THREAD_LOCK                  = false,
 
-        --- Whether record the async function map for __Async__ and __Iterator__
-        -- useful when wrap object with async method into reactive objects
-        -- disable it to reduce the memory cost
-        -- Default true
-        RECORD_ASYNC_FUNC_WRAP              = true,
-
         --- Whehther active safe thread iterator so it will stop for dead coroutine
         -- On some platforms like Openresty call a dead wrap won't raise error but
         -- return the error message 'cannot resume dead coroutine'
