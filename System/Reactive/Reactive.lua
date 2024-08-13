@@ -168,6 +168,7 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
             getdelegate                 = Event.Get,
             clone                       = Toolset.clone,
+            properties                  = false,
 
             setrawfield                 = function(name, field, raw)
                 local ok, err           = pcall(field.SetRaw, raw)
@@ -227,7 +228,7 @@ PLoop(function(_ENV)
         if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
             properties                  = {}
 
-            -- simple parse value, use local so it'll be collected when no use
+            -- simple parse value
             local simpleparse           = function (val) return type(val) == "table" and rawget(val, RawTable) or val end
 
             -- Binding object methods
@@ -258,34 +259,10 @@ PLoop(function(_ENV)
             end
 
             -- Binding object features
-            for _, ftr in Class.GetFeatures(targettype, true) do
+            for name, ftr in Class.GetFeatures(targettype, true) do
                 -- read/write non-indexer properties
-                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() then
-                    local name          = ftr:GetName()
-                    local ptype         = ftr:GetType() or Any
-                    local rtype         = Reactive.GetReactiveType(nil, ptype, true)
-
-                    if rtype then
-                        properties[name]= rtype
-
-                        -- define the reactive property as proxy
-                        property (name) {
-                            -- allow the reactive object be created no matter the raw exists or not
-                            -- also don't check the cycle ref since the access paths is decided by the access code
-                            -- no type check here to allow complex observable value or others
-                            get         = function(self) return self[Reactive][name] or makereactive(self, name, self[RawTable] and self[RawTable][name], nil, rtype) end,
-                            set         = function(self, value) return setrawfield(name, self[name], value) end,
-                            throwable   = true,
-                        }
-
-                    -- for un-reactive
-                    else
-                        property (name) {
-                            get         = function(self) local raw = rawget(self, RawTable) return raw and raw[name] end,
-                            set         = function(self, value) local raw = rawget(self, Ratable) if raw then raw[name] = value end end,
-                            type        = ptype
-                        }
-                    end
+                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() and Reactive.GetReactiveType(nil, ftr:GetType() or Any, true) then
+                    properties[name]    = ftr:GetType() or Any
 
                 -- un-reactive properties
                 elseif Property.Validate(ftr) then
@@ -360,56 +337,11 @@ PLoop(function(_ENV)
         elseif targettype and Struct.Validate(targettype) and Struct.GetStructCategory(targettype) == "MEMBER" then
             properties                  = {}
 
-            for _, mem in Struct.GetMembers(targettype) do
-                local name              = mem:GetName()
+            for name, mem in Struct.GetMembers(targettype) do
                 local mtype             = mem:GetType()
-                local rtype             = Reactive.GetReactiveType(nil, mtype, true)
 
-                if rtype then
-                    properties[name]   = true
-                    property (name)    {reactive
-                        -- gets the
-                        get             = Class.IsSubType(rtype, ReactiveField)
-                        and function(self)
-                            return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
-                        end
-                        or function(self)
-                            local r     = self[Reactive][name]
-                            if r    then return r end
-                            local d     = self[RawTable][name]
-                            return d and makereactive(self, name, d, mtype)
-                        end,
-
-                        -- sets the value
-                        set             = Class.IsSubType(rtype, ReactiveField)
-                        and function(self, value)
-                            -- allow binding observable like watch to the property
-                            local s     = self[name]
-                            if value and isobjecttype(value, IObservable) then
-                                s.Observable = value
-                            else
-                                s.Observable = nil
-                                return s:OnNext(value)
-                            end
-                        end
-                        or Class.IsSubType(rtype, ReactiveList)
-                        and function(self, value)
-                            local r     = self[Reactive][name]
-                            if r        then return setrawlist(r, value, true) end
-                            value       = toraw(value, true)
-                            self[RawTable][name] = value
-                            return OnDataChange(self, name, makereactive(self, name, value, mtype))
-                        end
-                        or function(self, value)
-                            local r     = self[Reactive][name]
-                            if r        then return setraw(r, value, 2) end
-                            value       = toraw(value, true)
-                            self[RawTable][name] = value
-                            return OnDataChange(self, name, makereactive(self, name, value, mtype))
-                        end,
-                        type            = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
-                        throwable       = true,
-                    }
+                if Reactive.GetReactiveType(nil, mtype, true) then
+                    properties[name]   = mtype
 
                 -- for non-reactive
                 else
@@ -442,13 +374,66 @@ PLoop(function(_ENV)
         else
             __Iterator__()
             function GetIterator(self)
-                local yield                 = yield
-                local raw                   = self[RawTable]
+                local yield             = yield
+                local raw               = self[RawTable]
                 for k, v in (raw.GetIterator or pairs)(raw) do
                     if type(k) == "string" then
                         yield(k, self[k])
                     end
                 end
+            end
+        end
+
+        -------------------------------------------------------------------
+        --                           property                            --
+        -------------------------------------------------------------------
+        if properties then
+            for name, ptype in pairs(properties)
+                local rtype             = Reactive.GetReactiveType(nil, ptype, true)
+
+                property (name)         {
+                    -- gets the
+                    get                 = Class.IsSubType(rtype, ReactiveField)
+                    and function(self)
+                        return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
+                    end
+                    or function(self)
+                        local r         = self[Reactive][name]
+                        if r    then return r end
+                        local d         = self[RawTable][name]
+                        return d and makereactive(self, name, d, mtype)
+                    end,
+
+                    -- sets the value
+                    set                 = Class.IsSubType(rtype, ReactiveField)
+                    and function(self, value)
+                        -- allow binding observable like watch to the property
+                        local s         = self[name]
+                        if value and isobjecttype(value, IObservable) then
+                            s.Observable= value
+                        else
+                            s.Observable= nil
+                            return s:OnNext(value)
+                        end
+                    end
+                    or Class.IsSubType(rtype, ReactiveList)
+                    and function(self, value)
+                        local r         = self[Reactive][name]
+                        if r        then return setrawlist(r, value, true) end
+                        value           = toraw(value, true)
+                        self[RawTable][name] = value
+                        return OnDataChange(self, name, makereactive(self, name, value, mtype))
+                    end
+                    or function(self, value)
+                        local r         = self[Reactive][name]
+                        if r        then return setraw(r, value, 2) end
+                        value           = toraw(value, true)
+                        self[RawTable][name] = value
+                        return OnDataChange(self, name, makereactive(self, name, value, mtype))
+                    end,
+                    type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
+                    throwable           = true,
+                }
             end
         end
 
