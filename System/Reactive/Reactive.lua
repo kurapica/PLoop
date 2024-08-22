@@ -260,8 +260,11 @@ PLoop(function(_ENV)
 
             -- Binding object features
             for name, ftr in Class.GetFeatures(targettype, true) do
-                -- read/write non-indexer properties
-                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() and Reactive.GetReactiveType(nil, ftr:GetType() or Any, true) then
+                if name == "OnDataChange" then
+                    -- pass
+
+                -- gather reactive properties
+                elseif Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() and Reactive.GetReactiveType(nil, ftr:GetType() or Any, true) then
                     properties[name]    = ftr:GetType() or Any
 
                 -- un-reactive properties
@@ -291,46 +294,6 @@ PLoop(function(_ENV)
                 end
             end
 
-            -- implementation
-            __Iterator__()
-            function GetIterator(self)
-                local yield                 = yield
-
-                for k in pairs(properties) do
-                    yield(k, self[k])
-                end
-
-                for k, v in pairs(self[Reactive]) do
-                    if not properties[k] then
-                        yield(k, v)
-                    end
-                end
-            end
-
-            --- Sets the raw value
-            function SetRaw(self, value)
-                if value and not isobjecttype(value, targettype) then
-                    throw("The value must be " .. tostring(targettype))
-                end
-
-                -- update
-                local temp              = {}
-                for k in self:GetIterator() do
-                    temp[k]             = true
-                    self[k]             = value[k]
-                end
-
-                -- add
-                for name in (value.GetIterator or pairs)(value) do
-                    if not temp[name] then
-                        self[name]      = value[name]
-                    end
-                end
-
-                -- release
-                temp                    = nil
-            end
-
         -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
@@ -341,7 +304,7 @@ PLoop(function(_ENV)
                 local mtype             = mem:GetType()
 
                 if Reactive.GetReactiveType(nil, mtype, true) then
-                    properties[name]   = mtype
+                    properties[name]    = mtype
 
                 -- for non-reactive
                 else
@@ -352,56 +315,26 @@ PLoop(function(_ENV)
                     }
                 end
             end
-
-            __Iterator__()
-            function GetIterator(self)
-                local yield                 = yield
-
-                for k in pairs(properties) do
-                    yield(k, self[k])
-                end
-
-                for k, v in pairs(self[RawTable]) do
-                    if not properties[k] and type(k) == "string" then
-                        yield(k, self[k])
-                    end
-                end
-            end
-
-        -------------------------------------------------------------------
-        --                             dict                              --
-        -------------------------------------------------------------------
-        else
-            __Iterator__()
-            function GetIterator(self)
-                local yield             = yield
-                local raw               = self[RawTable]
-                for k, v in (raw.GetIterator or pairs)(raw) do
-                    if type(k) == "string" then
-                        yield(k, self[k])
-                    end
-                end
-            end
         end
 
         -------------------------------------------------------------------
-        --                           property                            --
+        --                           auto-gen                            --
         -------------------------------------------------------------------
         if properties then
-            for name, ptype in pairs(properties)
+            for name, ptype in pairs(properties) do
                 local rtype             = Reactive.GetReactiveType(nil, ptype, true)
 
                 property (name)         {
-                    -- gets the
+                    -- gets the reactive value
                     get                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self)
                         return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
                     end
                     or function(self)
                         local r         = self[Reactive][name]
-                        if r    then return r end
+                        if r then return r end
                         local d         = self[RawTable][name]
-                        return d and makereactive(self, name, d, mtype)
+                        return d and makereactive(self, name, d, ptype, rtype)
                     end,
 
                     -- sets the value
@@ -435,6 +368,33 @@ PLoop(function(_ENV)
                     throwable           = true,
                 }
             end
+
+            __Iterator__()
+            function GetIterator(self)
+                local yield                 = yield
+
+                for k in pairs(properties) do
+                    yield(k, self[k])
+                end
+
+                for k, v in pairs(self[RawTable]) do
+                    if not properties[k] and type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+            end
+
+        else
+            __Iterator__()
+            function GetIterator(self)
+                local yield             = yield
+                local raw               = self[RawTable]
+                for k, v in (raw.GetIterator or pairs)(raw) do
+                    if type(k) == "string" then
+                        yield(k, self[k])
+                    end
+                end
+            end
         end
 
         -------------------------------------------------------------------
@@ -445,6 +405,30 @@ PLoop(function(_ENV)
 
         --- Gets the raw value
         function ToRaw(self)            return rawget(self, RawTable) end
+
+        --- Sets the raw value
+        function SetRaw(self, value)
+            if value and not isobjecttype(value, targettype) then
+                throw("The value must be " .. tostring(targettype))
+            end
+
+            -- update
+            local temp                  = {}
+            for k in self:GetIterator() do
+                temp[k]                 = true
+                self[k]                 = value[k]
+            end
+
+            -- add
+            for name in (value.GetIterator or pairs)(value) do
+                if not temp[name] then
+                    self[name]          = value[name]
+                end
+            end
+
+            -- release
+            temp                        = nil
+        end
 
         --- Map the items to other type datas, use collection operation instead of observable
         Map                             = IKeyValueDict.Map
