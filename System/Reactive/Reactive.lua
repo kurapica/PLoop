@@ -328,7 +328,7 @@ PLoop(function(_ENV)
                     -- gets the reactive value
                     get                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self)
-                        return self[Reactive][name] or makereactive(self, name, nil, nil, rtype)
+                        return self[Reactive][name] or makereactive(self, name, nil, ptype, rtype)
                     end
                     or function(self)
                         local r         = self[Reactive][name]
