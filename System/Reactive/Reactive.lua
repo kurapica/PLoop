@@ -349,23 +349,15 @@ PLoop(function(_ENV)
                             return s:OnNext(value)
                         end
                     end
-                    or Class.IsSubType(rtype, ReactiveList)
-                    and function(self, value)
+                    or  function(self, value)
                         local r         = self[Reactive][name]
-                        if r        then return setrawlist(r, value, true) end
-                        value           = toraw(value, true)
-                        self[RawTable][name] = value
-                        return OnDataChange(self, name, makereactive(self, name, value, mtype))
-                    end
-                    or function(self, value)
-                        local r         = self[Reactive][name]
-                        if r        then return setraw(r, value, 2) end
+                        if r then return r:SetRaw(value) end
                         value           = toraw(value, true)
                         self[RawTable][name] = value
                         return OnDataChange(self, name, makereactive(self, name, value, mtype))
                     end,
                     type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
-                    throwable           = true,
+                    --throwable         = true,
                 }
             end
 
