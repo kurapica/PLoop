@@ -22,7 +22,13 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Represents the reactive values
         __Sealed__()
-        interface "IReactive"           {}
+        interface "IReactive"           (function(_ENV)
+            --- Gets the raw value
+            __Abstract__() function ToRaw(self) end
+
+            --- Sets the raw value
+            __Abstract__() function SetRaw(self, value) end
+        end)
 
         class "__Observable__"          {}
         class "Observable"              {}
@@ -208,7 +214,7 @@ PLoop(function(_ENV)
                 return r and binddatachange(self, k, r)
             end,
 
-            Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription
+            Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription, IReactive
         }
 
         -------------------------------------------------------------------
@@ -340,20 +346,19 @@ PLoop(function(_ENV)
                     -- sets the value
                     set                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self, value)
-                        -- allow binding observable like watch to the property
-                        local s         = self[name]
-                        if value and isobjecttype(value, IObservable) then
-                            s.Observable= value
-                        else
-                            s.Observable= nil
-                            return s:OnNext(value)
-                        end
+                        return (self[Reactive][name] or makereactive(self, name, nil, ptype, rtype)):SetRaw(value)
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
                         if r then return r:SetRaw(value) end
-                        value           = toraw(value, true)
-                        self[RawTable][name] = value
+
+                        if isobjecttype(value, IReactive) then
+                            self[RawTable][name] = value:ToRaw()
+                            self[Reactive][name] = value
+                        else
+                            self[RawTable][name] = value
+                        end
+
                         return OnDataChange(self, name, makereactive(self, name, value, mtype))
                     end,
                     type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
