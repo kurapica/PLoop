@@ -4105,7 +4105,10 @@ do
                     names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
                 end
                 names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+
+                -- save the implement first
                 implement               = struct (tblconcat(names, "_"), {})
+                info[FLD_STRUCT_TEMPIMP]= saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD]), genStructImplement)
 
                 -- Record the template and parameter
                 local tmp               = getStructTargetInfo(implement)
@@ -4123,7 +4126,6 @@ do
                 end
             end
 
-            info[FLD_STRUCT_TEMPIMP]    = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD]), genStructImplement)
 
             return implement
         end
@@ -8152,7 +8154,10 @@ do
                     names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
                 end
                 names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+
+                -- save the implement first
                 implement               = ptype (tblconcat(names, "_"), {})
+                info[FLD_IC_TEMPIMP]    = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD]), genICImplement)
 
                 -- Record template & params
                 local ninfo             = getICTargetInfo(implement)
@@ -8169,8 +8174,6 @@ do
                     error(tostring(err), parsestack(stack) + 1)
                 end
             end
-
-            info[FLD_IC_TEMPIMP]        = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD]), genICImplement)
 
             return implement
         end
