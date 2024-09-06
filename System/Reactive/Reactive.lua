@@ -35,6 +35,7 @@ PLoop(function(_ENV)
         class "ReactiveValue"           { IReactive }
         class "ReactiveField"           { IReactive }
         class "ReactiveList"            { IReactive }
+        class "Subject"                 {}
 
         -------------------------------------------------------------------
         --                            export                             --
@@ -149,6 +150,118 @@ PLoop(function(_ENV)
         end
     end)
 
+
+    -----------------------------------------------------------------------
+    --                              Keyword                              --
+    -----------------------------------------------------------------------
+    Environment.RegisterGlobalNamespace("System.Reactive")
+
+    export                              {
+        type                            = type,
+        getmetatable                    = getmetatable,
+        error                           = error,
+        pcall                           = pcall,
+        rawget                          = rawget,
+        rawset                          = rawset,
+        isclass                         = Class.Validate,
+        issubtype                       = Class.IsSubType,
+        getobjectclass                  = Class.GetObjectClass,
+        getreactivetype                 = System.Reactive.GetReactiveType,
+        istructvalue                    = Struct.ValidateValue,
+        getdelegate                     = Event.Get,
+        clone                           = Toolset.clone,
+
+        Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType, Subject
+    }
+
+    Environment.RegisterRuntimeKeyword  {
+        --- Wrap the target value to a Reactive(for table or object), ReactiveList(for list) or BehaviorSubjcet(for value)
+        reactive                        = Prototype {
+            __index                     = function(self, rtype, stack)
+                if type(rtype) == "table" and getmetatable(rtype) == nil then
+                    local ok, stype     = Attribute.IndependentCall(function(temp) local type = struct(temp) return type end, rtype)
+                    if not ok then error(stype, (stack or 1) + 1) end
+                    rtype               = stype
+                end
+                if not istructvalue(AnyType, rtype) then error("Usage: reactive[type](data[, silent]) - the type is not a validation type", (stack or 1) + 1) end
+                return function(value, silent) local result = self(value, silent, rtype, (stack or 1) + 1) return result end
+            end,
+            __call                      = function(self, value, silent, recommendtype, stack)
+                -- default
+                if value == nil and recommendtype == nil then return Reactive() end
+
+                -- return reactive objects directly
+                local cls               = value and getobjectclass(value) or nil
+                if cls and (issubtype(cls, Reactive) or issubtype(cls, ReactiveList) or issubtype(cls, ReactiveField)) then return value end
+
+                if value == nil and isclass(recommendtype) then
+                    if not silent then
+                        error("Usage: reactive[type](object[, silent]) - the data object is not provided", (stack or 1) + 1)
+                    end
+                    return
+                end
+
+                -- gets the reactive type
+                local rtype             = getreactivetype(value, recommendtype)
+                if rtype == nil then
+                    if not silent then
+                        error("Usage: reactive[type](data[, silent]) - the data or type is not supported", (stack or 1) + 1)
+                    end
+                    return
+                end
+
+                return rtype(value)
+            end
+        }
+    }
+
+    -----------------------------------------------------------------------
+    --                               Share                               --
+    -----------------------------------------------------------------------
+    -- bind data change event handler when accessed
+    local binddatachange                = function(self, k, r)
+        local subject                   = rawget(self, Subject)
+        if r and subject and not rawget(subject, r) then
+            rawset(subject, r, r:Subscribe(function(...) return subject:OnNext(k, ...) end, function(ex) return subject:OnError(ex) end))
+        end
+        return r
+    end
+
+    -- release the datachange binding
+    local releasereactive               = function(self, r)
+        local subject                   = rawget(self, Subject)
+        if r and subject and rawget(subject, r) then
+            subject[r]:Dispose()
+            rawset(subject, r, nil)
+        end
+    end
+
+    -- wrap the table value as default
+    local makereactive                  = function(self, k, v, type, rtype)
+        rtype                           = rtype or getreactivetype(v, type, true)
+        local r                         = rtype and (issubtype(rtype, ReactiveField) and rtype(self, k) or rtype(v))
+        self[Reactive][k]               = r or false
+        return r and binddatachange(self, k, r)
+    end
+
+    -- subscribe
+    local subscribe                     = function(self, ...)
+        local subject                   = rawget(self, Subject)
+        if not subject then
+            subject                     = Subject()
+            rawset(self, Subject, subject)
+
+            -- init
+            for k, r in pairs(self[Reactive]) do binddatachange(self, k, r) end
+        end
+
+        -- subscribe
+        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...)
+        if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+
+        return subscription, observer
+    end
+
     -----------------------------------------------------------------------
     --                          implementation                           --
     -----------------------------------------------------------------------
@@ -176,56 +289,8 @@ PLoop(function(_ENV)
             clone                       = Toolset.clone,
             properties                  = false,
 
-            setrawfield                 = function(name, field, raw)
-                local ok, err           = pcall(field.SetRaw, raw)
-                if not ok then
-                    if type(err) == "string" then
-                        error(err, 0)
-                    else
-                        err.Message     = err.Message:gsub("value", "value." .. name)
-                        throw(err)
-                    end
-                end
-            end,
-
-            -- bind data change event handler when accessed
-            binddatachange              = function(self, k, r)
-                if r and getdelegate(OnDataChange, self, true) then
-                    if isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList) then
-                        r.OnDataChange  = r.OnDataChange + function(_, ...) return OnDataChange(self, k, ...) end
-                    else
-                        -- Reactive Field or Reactive Value
-                        local sub       = rawget(self, Subscription)
-                        if not sub then
-                            sub         = Subscription()
-                            rawset(self, Subscription, sub)
-                        end
-                        r:Subscribe(function(v) return OnDataChange(self, k, v) end, nil, nil, sub)
-                    end
-                end
-                return r
-            end,
-
-            -- wrap the table value as default
-            makereactive                = function(self, k, v, type, rtype)
-                rtype                   = rtype or Reactive.GetReactiveType(v, type, true)
-                local r                 = rtype and (issubtype(rtype, ReactiveField) and rtype(self, k) or rtype(v))
-                self[Reactive][k]       = r or false
-                return r and binddatachange(self, k, r)
-            end,
-
             Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription, IReactive
         }
-
-        -------------------------------------------------------------------
-        --                             event                             --
-        -------------------------------------------------------------------
-        --- Fired when the data changed
-        __EventChangeHandler__(function(_, owner, _, init)
-            if not init then return end
-            for k, r in pairs(owner[Reactive]) do binddatachange(owner, k, r) end
-        end)
-        event "OnDataChange"
 
         -------------------------------------------------------------------
         --                   non-dict class/interface                    --
@@ -266,11 +331,8 @@ PLoop(function(_ENV)
 
             -- Binding object features
             for name, ftr in Class.GetFeatures(targettype, true) do
-                if name == "OnDataChange" then
-                    -- pass
-
                 -- gather reactive properties
-                elseif Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() and Reactive.GetReactiveType(nil, ftr:GetType() or Any, true) then
+                if Property.Validate(ftr) and ftr:IsWritable() and ftr:IsReadable() and not ftr:IsIndexer() and Reactive.GetReactiveType(nil, ftr:GetType() or Any, true) then
                     properties[name]    = ftr:GetType() or Any
 
                 -- un-reactive properties
@@ -350,19 +412,30 @@ PLoop(function(_ENV)
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
-                        if r then return r:SetRaw(value) end
+                        if r then
+                            local ok, err       = pcall(r.SetRaw, r, value)
+                            if not ok then
+                                if type(err) == "string" then
+                                    error(err, 0)
+                                else
+                                    err.Message = err.Message:gsub("value", "value." .. name)
+                                    throw(err)
+                                end
+                            end
+                            return
+                        end
 
                         if isobjecttype(value, IReactive) then
-                            self[RawTable][name] = value:ToRaw()
-                            self[Reactive][name] = value
+                            self[RawTable][name]= value:ToRaw()
+                            self[Reactive][name]= value
                         else
-                            self[RawTable][name] = value
+                            self[RawTable][name]= value
                         end
 
                         return OnDataChange(self, name, makereactive(self, name, value, mtype))
                     end,
                     type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
-                    --throwable         = true,
+                    throwable           = true,
                 }
             end
 
@@ -398,7 +471,8 @@ PLoop(function(_ENV)
         --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
-        function Subscribe(self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
+        Subscribe                       = subscribe
+        --function (self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
 
         --- Gets the raw value
         function ToRaw(self)            return rawget(self, RawTable) end
@@ -526,62 +600,4 @@ PLoop(function(_ENV)
             end
         end
     end)
-
-    -----------------------------------------------------------------------
-    --                              Keyword                              --
-    -----------------------------------------------------------------------
-    Environment.RegisterGlobalNamespace("System.Reactive")
-
-    export                              {
-        type                            = type,
-        getmetatable                    = getmetatable,
-        isclass                         = Class.Validate,
-        issubtype                       = Class.IsSubType,
-        getobjectclass                  = Class.GetObjectClass,
-        getreactivetype                 = System.Reactive.GetReactiveType,
-        istructvalue                    = Struct.ValidateValue,
-
-        Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType
-    }
-
-    Environment.RegisterRuntimeKeyword  {
-        --- Wrap the target value to a Reactive(for table or object), ReactiveList(for list) or BehaviorSubjcet(for value)
-        reactive                        = Prototype {
-            __index                     = function(self, rtype, stack)
-                if type(rtype) == "table" and getmetatable(rtype) == nil then
-                    local ok, stype     = Attribute.IndependentCall(function(temp) local type = struct(temp) return type end, rtype)
-                    if not ok then error(stype, (stack or 1) + 1) end
-                    rtype               = stype
-                end
-                if not istructvalue(AnyType, rtype) then error("Usage: reactive[type](data[, silent]) - the type is not a validation type", (stack or 1) + 1) end
-                return function(value, silent) local result = self(value, silent, rtype, (stack or 1) + 1) return result end
-            end,
-            __call                      = function(self, value, silent, recommendtype, stack)
-                -- default
-                if value == nil and recommendtype == nil then return Reactive() end
-
-                -- return reactive objects directly
-                local cls               = value and getobjectclass(value) or nil
-                if cls and (issubtype(cls, Reactive) or issubtype(cls, ReactiveList) or issubtype(cls, ReactiveField)) then return value end
-
-                if value == nil and isclass(recommendtype) then
-                    if not silent then
-                        error("Usage: reactive[type](object[, silent]) - the data object is not provided", (stack or 1) + 1)
-                    end
-                    return
-                end
-
-                -- gets the reactive type
-                local rtype             = getreactivetype(value, recommendtype)
-                if rtype == nil then
-                    if not silent then
-                        error("Usage: reactive[type](data[, silent]) - the data or type is not supported", (stack or 1) + 1)
-                    end
-                    return
-                end
-
-                return rtype(value)
-            end
-        }
-    }
 end)
