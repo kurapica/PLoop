@@ -171,7 +171,7 @@ PLoop(function(_ENV)
         getdelegate                     = Event.Get,
         clone                           = Toolset.clone,
 
-        Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType, Subject
+        Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType, Subject, IReactive
     }
 
     Environment.RegisterRuntimeKeyword  {
@@ -218,17 +218,22 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --                               Share                               --
     -----------------------------------------------------------------------
-    -- bind data change event handler when accessed
-    local binddatachange                = function(self, k, r)
+    -- the reactive map
+    local reactiveMap                   = Toolset.newtable(true, true)
+    local getReactiveMap                = function(obj) return type(obj) == "table" and isclass(getmetatable(obj)) and issubtype(getmetatable(obj), IReactive) and obj or reactiveMap[obj] end
+    local setReactiveMap                = function(obj, r) reactiveMap[obj] = r end
+
+    -- Subscribe the children
+    local subscribeReactive             = function(self, k, r)
         local subject                   = rawget(self, Subject)
         if r and subject and not rawget(subject, r) then
-            rawset(subject, r, r:Subscribe(function(...) return subject:OnNext(k, ...) end, function(ex) return subject:OnError(ex) end))
+            rawset(subject, r, (r:Subscribe(function(...) return subject:OnNext(k, ...) end, function(ex) return subject:OnError(ex) end)))
         end
         return r
     end
 
-    -- release the datachange binding
-    local releasereactive               = function(self, r)
+    -- Release the children
+    local releaseReactive               = function(self, r)
         local subject                   = rawget(self, Subject)
         if r and subject and rawget(subject, r) then
             subject[r]:Dispose()
@@ -237,11 +242,11 @@ PLoop(function(_ENV)
     end
 
     -- wrap the table value as default
-    local makereactive                  = function(self, k, v, type, rtype)
+    local makeReactive                  = function(self, k, v, type, rtype)
         rtype                           = rtype or getreactivetype(v, type, true)
         local r                         = rtype and (issubtype(rtype, ReactiveField) and rtype(self, k) or rtype(v))
         self[Reactive][k]               = r or false
-        return r and binddatachange(self, k, r)
+        return r and subscribeReactive(self, k, r)
     end
 
     -- subscribe
@@ -252,11 +257,11 @@ PLoop(function(_ENV)
             rawset(self, Subject, subject)
 
             -- init
-            for k, r in pairs(self[Reactive]) do binddatachange(self, k, r) end
+            for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
         end
 
         -- subscribe
-        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...)
+        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...))
         if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
 
         return subscription, observer
@@ -396,19 +401,19 @@ PLoop(function(_ENV)
                     -- gets the reactive value
                     get                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self)
-                        return self[Reactive][name] or makereactive(self, name, nil, ptype, rtype)
+                        return self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
                     end
                     or function(self)
                         local r         = self[Reactive][name]
                         if r then return r end
                         local d         = self[RawTable][name]
-                        return d and makereactive(self, name, d, ptype, rtype)
+                        return d and makeReactive(self, name, d, ptype, rtype)
                     end,
 
                     -- sets the value
                     set                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self, value)
-                        return (self[Reactive][name] or makereactive(self, name, nil, ptype, rtype)):SetRaw(value)
+                        return (self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)):SetRaw(value)
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
@@ -432,7 +437,7 @@ PLoop(function(_ENV)
                             self[RawTable][name]= value
                         end
 
-                        return OnDataChange(self, name, makereactive(self, name, value, mtype))
+                        return OnDataChange(self, name, makeReactive(self, name, value, mtype))
                     end,
                     type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
                     throwable           = true,
@@ -540,7 +545,7 @@ PLoop(function(_ENV)
 
             -- wrap raw
             local value                 = rawget(self, RawTable)[key]
-            return r == nil and value ~= nil and type(key) == "string" and makereactive(self, key, value) or value
+            return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
         end
 
         --- Send the new value
@@ -590,12 +595,12 @@ PLoop(function(_ENV)
             -- raw directly
             if isobjecttype(value, IObservable) then
                 local vtype             = getmetatable(value)
-                r                       = makereactive(self, key, nil, nil, isobjecttype(vtype, ReactiveField) and vtype or ReactiveField)
+                r                       = makeReactive(self, key, nil, nil, isobjecttype(vtype, ReactiveField) and vtype or ReactiveField)
                 r.Observable            = value
             else
                 value                   = toraw(value, true)
                 raw[key]                = value
-                r                       = makereactive(self, key, value)
+                r                       = makeReactive(self, key, value)
                 return r and OnDataChange(self, key, not isobjecttype(r, ReactiveField) and r or value)
             end
         end
