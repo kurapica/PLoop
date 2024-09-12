@@ -25,7 +25,33 @@ PLoop(function(_ENV)
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
             geterrormessage             = Struct.GetErrorMessage,
+            issubtype                   = Class.ValidateValue,
+
+            IObservable
         }
+
+        --- Update the value by the container's field
+        local function Refresh(self)
+            local container             = self[1]
+            local field                 = self[2]
+            container                   = container and container:ToRaw()
+            if container and field then
+                if self.Observable then
+                    raw[field]          = self[3]
+                else
+                    local value         = raw[field]
+                    if self[3] == value then return end
+
+                    self[3]             = value
+                    return onnext(self, value)
+                end
+
+            -- otherwise
+            elseif self[3] ~= nil and not self.Observable then
+                self[3]                 = nil
+                return onnext(self, nil)
+            end
+        end
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -54,6 +80,16 @@ PLoop(function(_ENV)
 
                 return onnext(self, val)
             end
+
+            --- Sets the raw value
+            function SetRaw(self, value)
+                if issubtype(value, IObservable) then
+                    self.Observable     = observable ~= self and observable or nil
+                else
+                    self.Observable     = nil
+                    self.Value          = value
+                end
+            end
         else
             local valid                 = getmetatable(valtype).ValidateValue
             function OnNext(self, val)
@@ -73,45 +109,25 @@ PLoop(function(_ENV)
 
                 return onnext(self, ret)
             end
-        end
 
-        --- Sets the raw value
-        __Arguments__{ IObservable }
-        function SetRaw(self, observable)
-            self.Observable             = observable ~= self and observable or nil
-        end
-
-        __Arguments__{ (valtype or Any)/nil }
-        function SetRaw(self, value)
-            self.Observable             = nil
-            self.Value                  = value
+            --- Sets the raw value
+            function SetRaw(self, value)
+                if issubtype(value, IObservable) then
+                    self.Observable     = observable ~= self and observable or nil
+                elseif value == nil then
+                    self.Observable     = nil
+                    self.Value          = value
+                else
+                    local ret, msg      = valid(valtype, value)
+                    if msg then error(geterrormessage(msg, "value"), 2) end
+                    self.Observable     = nil
+                    self.Value          = ret
+                end
+            end
         end
 
         --- Gets the raw value
         function ToRaw(self)            return self[3] end
-
-        --- Update the value by the container's field
-        function Refresh(self)
-            local container             = self[1]
-            local field                 = self[2]
-            container                   = container and container:ToRaw()
-            if container and field then
-                if self.Observable then
-                    raw[field]          = self[3]
-                else
-                    local value         = raw[field]
-                    if self[3] == value then return end
-
-                    self[3]             = value
-                    return onnext(self, value)
-                end
-
-            -- otherwise
-            elseif self[3] ~= nil and not self.Observable then
-                self[3]                 = nil
-                return onnext(self, nil)
-            end
-        end
 
         -----------------------------------------------------------------------
         --                             property                              --

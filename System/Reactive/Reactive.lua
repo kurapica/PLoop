@@ -220,8 +220,15 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     -- the reactive map
     local reactiveMap                   = Toolset.newtable(true, true)
-    local getReactiveMap                = function(obj) return type(obj) == "table" and isclass(getmetatable(obj)) and issubtype(getmetatable(obj), IReactive) and obj or reactiveMap[obj] end
-    local setReactiveMap                = function(obj, r) reactiveMap[obj] = r end
+    local getReactiveMap                = Platform.MULTI_OS_THREAD
+                                        and function(obj) return rawget(obj, IReactive) end
+                                        or  function(obj) return reactiveMap[obj] end
+    local setReactiveMap                = Platform.MULTI_OS_THREAD
+                                        and function(self, obj) rawset(obj, IReactive, self) end
+                                        or  function(self, obj) reactiveMap[obj] = self end
+    local clearReactiveMap              = Platform.MULTI_OS_THREAD
+                                        and function(self) rawset(self:ToRaw(), IReactive, nil) end
+                                        or  function(self) reactiveMap[self:ToRaw()] = nil end
 
     -- Subscribe the children
     local subscribeReactive             = function(self, k, r)
@@ -238,6 +245,20 @@ PLoop(function(_ENV)
         if r and subject and rawget(subject, r) then
             subject[r]:Dispose()
             rawset(subject, r, nil)
+        end
+    end
+
+    -- Release all subscriptions
+    local releaseAllSub                 = function(self)
+        local subject                   = rawget(self, Subject)
+        if subject then
+            for k, r in pairs(self[Reactive]) do
+                local subscription      = r and rawget(subject, r)
+                if subscription then
+                    subscription:Dispose()
+                    rawset(subject, r, nil)
+                end
+            end
         end
     end
 
@@ -413,7 +434,14 @@ PLoop(function(_ENV)
                     -- sets the value
                     set                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self, value)
-                        return (self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)):SetRaw(value)
+                        local r         = self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
+                        local ok, err   = pcall(r.SetRaw, r, value)
+                        if type(err) == "string" then
+                            throw(err)
+                        else
+                            err.Message = err.Message:gsub("value", "value." .. name)
+                            throw(err)
+                        end
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
@@ -515,23 +543,29 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ (targettype or RawTable)/nil }
+        __Arguments__{ targettype or RawTable/nil }
         function __ctor(self, init)
-            rawset(self, Reactive, {})
-            rawset(self, RawTable, init)
+            rawset(self, Reactive, {})          -- sub-reactives
+            rawset(self, RawTable, init or {})  -- raw
+            if init then setReactiveMap(self, init) end
+        end
+
+        __Arguments__{ targettype or RawTable/nil }
+        function __exist(_, init)
+            return init and getReactiveMap(init) or nil
         end
 
         -------------------------------------------------------------------
         --                        de-constructor                         --
         -------------------------------------------------------------------4
         function __dtor(self)
-            local reactives             = rawget(self, Reactive)
-            local subscription          = rawget(self, Subscription)
-            if subscription then subscription:Dispose() end
+            releaseAllSub()
 
-            for k, v in pairs(reactives) do
+            for k, v in pairs(rawget(self, Reactive)) do
                 if v then v:Dispose() end
             end
+
+            return clearReactiveMap(self)
         end
 
         -------------------------------------------------------------------
