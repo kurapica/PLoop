@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2024/05/22                                               --
--- Update Date  :   2024/05/22                                               --
+-- Update Date  :   2024/09/20                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -18,9 +18,11 @@ PLoop(function(_ENV)
     __Arguments__{ AnyType/nil }
     class"System.Reactive.ReactiveField"(function(_ENV, valtype)
         inherit "Subject"
-        extend "IValueWrapper"
+        extend "IValueWrapper" "IReactive"
 
         export                          {
+            rawset                      = rawset,
+            rawget                      = rawget,
             subscribe                   = Subject.Subscribe,
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
@@ -29,29 +31,6 @@ PLoop(function(_ENV)
 
             IObservable
         }
-
-        --- Update the value by the container's field
-        local function Refresh(self)
-            local container             = self[1]
-            local field                 = self[2]
-            container                   = container and container:ToRaw()
-            if container and field then
-                if self.Observable then
-                    raw[field]          = self[3]
-                else
-                    local value         = raw[field]
-                    if self[3] == value then return end
-
-                    self[3]             = value
-                    return onnext(self, value)
-                end
-
-            -- otherwise
-            elseif self[3] ~= nil and not self.Observable then
-                self[3]                 = nil
-                return onnext(self, nil)
-            end
-        end
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -69,26 +48,9 @@ PLoop(function(_ENV)
                 self[3]                 = val
 
                 -- save to the container
-                local container         = self[1]
-                container               = container and container:ToRaw()
-                if container then
-                    local field         = self[2]
-                    if field then
-                        container[field]= val
-                    end
-                end
+                self[1].Value[self[2]]  = val
 
                 return onnext(self, val)
-            end
-
-            --- Sets the raw value
-            function SetRaw(self, value)
-                if issubtype(value, IObservable) then
-                    self.Observable     = observable ~= self and observable or nil
-                else
-                    self.Observable     = nil
-                    self.Value          = value
-                end
             end
         else
             local valid                 = getmetatable(valtype).ValidateValue
@@ -98,48 +60,23 @@ PLoop(function(_ENV)
                 self[3]                 = ret
 
                 -- save to the container
-                local container         = self[1]
-                container               = container and container:ToRaw()
-                if container then
-                    local field         = self[2]
-                    if field then
-                        container[field]= ret
-                    end
-                end
+                self[1].Value[self[2]]  = ret
 
                 return onnext(self, ret)
             end
-
-            --- Sets the raw value
-            function SetRaw(self, value)
-                if issubtype(value, IObservable) then
-                    self.Observable     = observable ~= self and observable or nil
-                elseif value == nil then
-                    self.Observable     = nil
-                    self.Value          = value
-                else
-                    local ret, msg      = valid(valtype, value)
-                    if msg then error(geterrormessage(msg, "value"), 2) end
-                    self.Observable     = nil
-                    self.Value          = ret
-                end
-            end
         end
-
-        --- Gets the raw value
-        function ToRaw(self)            return self[3] end
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- Whether always connect the observable
-        property "KeepAlive"            { type = Boolean,  default = true }
-
         --- The reactive container
-        property "Container"            { type = Reactive, field = 1, handler = "Refresh" }
+        property "Container"            { type = Reactive, set = false, field = 1 }
 
         --- The field
-        property "Field"                { type = String,   field = 2, handler = "Refresh" }
+        property "Field"                { type = String,   set = false, field = 2 }
+
+        --- Whether always connect the observable
+        property "KeepAlive"            { type = Boolean,  default = true }
 
         --- The current value, use handler not set to detect the value change
         property "Value"                { type = valtype,  field = 3, handler = "OnNext" }
@@ -148,19 +85,23 @@ PLoop(function(_ENV)
         --                            constructor                            --
         -----------------------------------------------------------------------
         -- Binding the behavior subject to a reactive object's field
-        __Arguments__{ Reactive, String }
-        function __ctor(self, react, field)
-            self[1]                     = react
-            self[2]                     = field
-            super(self)
-            self:Refresh()
-        end
-
-        __Arguments__{ Reactive, String, IObservable }
+        __Arguments__{ Reactive, String, IObservable/nil }
         function __ctor(self, react, field, observable)
             self[1]                     = react
             self[2]                     = field
             super(self, observable)
+
+            -- Refresh
+            local container             = react.Value
+            if observable then
+                raw[field]              = rawget(self, 3)
+            else
+                local value             = raw[field]
+                if self[3] == value then return end
+
+                self[3]                 = value
+                return onnext(self, value)
+            end
         end
     end)
 end)

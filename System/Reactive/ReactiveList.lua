@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/10/25                                               --
--- Update Date  :   2024/05/09                                               --
+-- Update Date  :   2024/09/20                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -17,7 +17,7 @@ PLoop(function(_ENV)
     __Sealed__()
     __Arguments__{ AnyType/nil }
     class "System.Reactive.ReactiveList"(function(_ENV, elementtype)
-        extend "IObservable" "IIndexedList"
+        extend "IObservable" "IIndexedList" "IReactive"
 
         export                          {
             type                        = type,

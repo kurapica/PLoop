@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/05/09                                               --
+-- Update Date  :   2024/09/20                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -23,18 +23,16 @@ PLoop(function(_ENV)
         --- Represents the reactive values
         __Sealed__()
         interface "IReactive"           (function(_ENV)
-            --- Gets the raw value
-            __Abstract__() function ToRaw(self) end
-
-            --- Sets the raw value
-            __Abstract__() function SetRaw(self, value) end
+            --- Gets/Sets the raw value
+            __Abstract__()
+            property "Value"            { type = Any }
         end)
 
         class "__Observable__"          {}
         class "Observable"              {}
-        class "ReactiveValue"           { IReactive }
-        class "ReactiveField"           { IReactive }
-        class "ReactiveList"            { IReactive }
+        class "ReactiveValue"           {}
+        class "ReactiveField"           {}
+        class "ReactiveList"            {}
         class "Subject"                 {}
 
         -------------------------------------------------------------------
@@ -150,7 +148,6 @@ PLoop(function(_ENV)
         end
     end)
 
-
     -----------------------------------------------------------------------
     --                              Keyword                              --
     -----------------------------------------------------------------------
@@ -168,8 +165,6 @@ PLoop(function(_ENV)
         getobjectclass                  = Class.GetObjectClass,
         getreactivetype                 = System.Reactive.GetReactiveType,
         istructvalue                    = Struct.ValidateValue,
-        getdelegate                     = Event.Get,
-        clone                           = Toolset.clone,
 
         Reactive, ReactiveList, ReactiveField, Any, Attribute, AnyType, Subject, IReactive
     }
@@ -216,7 +211,7 @@ PLoop(function(_ENV)
     }
 
     -----------------------------------------------------------------------
-    --                               Share                               --
+    --                              Utility                              --
     -----------------------------------------------------------------------
     -- the reactive map
     local reactiveMap                   = Toolset.newtable(true, true)
@@ -224,11 +219,11 @@ PLoop(function(_ENV)
                                         and function(obj) return rawget(obj, IReactive) end
                                         or  function(obj) return reactiveMap[obj] end
     local setReactiveMap                = Platform.MULTI_OS_THREAD
-                                        and function(self, obj) rawset(obj, IReactive, self) end
-                                        or  function(self, obj) reactiveMap[obj] = self end
+                                        and function(obj, react) rawset(obj, IReactive, react) end
+                                        or  function(obj, react) reactiveMap[obj] = react end
     local clearReactiveMap              = Platform.MULTI_OS_THREAD
-                                        and function(self) rawset(self:ToRaw(), IReactive, nil) end
-                                        or  function(self) reactiveMap[self:ToRaw()] = nil end
+                                        and function(obj) rawset(obj.Value, IReactive, nil) end
+                                        or  function(obj) reactiveMap[obj.Value] = nil end
 
     -- Subscribe the children
     local subscribeReactive             = function(self, k, r)
@@ -311,11 +306,9 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             isobjecttype                = Class.IsObjectType,
             issubtype                   = Class.IsSubType,
-            getdelegate                 = Event.Get,
-            clone                       = Toolset.clone,
             properties                  = false,
 
-            Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription, IReactive
+            Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription, IReactive, IObservable
         }
 
         -------------------------------------------------------------------
@@ -547,7 +540,7 @@ PLoop(function(_ENV)
         function __ctor(self, init)
             rawset(self, Reactive, {})          -- sub-reactives
             rawset(self, RawTable, init or {})  -- raw
-            if init then setReactiveMap(self, init) end
+            if init then setReactiveMap(init, self) end
         end
 
         __Arguments__{ targettype or RawTable/nil }
@@ -565,7 +558,7 @@ PLoop(function(_ENV)
                 if v then v:Dispose() end
             end
 
-            return clearReactiveMap(self)
+            return clearReactiveMap(self.Value)
         end
 
         -------------------------------------------------------------------

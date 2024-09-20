@@ -9,7 +9,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2024/05/22                                               --
--- Update Date  :   2024/05/22                                               --
+-- Update Date  :   2024/09/20                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -19,7 +19,7 @@ PLoop(function(_ENV)
     __Arguments__{ AnyType/nil }
     class"System.Reactive.ReactiveValue"(function(_ENV, valtype)
         inherit "Subject"
-        extend "IValueWrapper"
+        extend "IValueWrapper" "IReactive"
 
         export                          {
             subscribe                   = Subject.Subscribe,
@@ -34,7 +34,7 @@ PLoop(function(_ENV)
         --- Subscribe the observer
         function Subscribe(self, ...)
             local subscription, observer= subscribe(self, ...)
-            observer:OnNext(self[1])
+            if self[1] ~= nil then observer:OnNext(self[1]) end
             return subscription, observer
         end
 
@@ -53,22 +53,6 @@ PLoop(function(_ENV)
                 return onnext(self, ret)
             end
         end
-
-        --- Sets observable as raw value
-        __Arguments__{ IObservable }
-        function SetRaw(self, observable)
-            self.Observable             = observable ~= self and observable or nil
-        end
-
-        --- Sets the raw value
-        __Arguments__{ (valtype or Any)/nil }
-        function SetRaw(self, value)
-            self.Observable             = nil
-            self.Value                  = value
-        end
-
-        --- Gets the raw value
-        function ToRaw(self)            return self[1] end
 
         -----------------------------------------------------------------------
         --                             property                              --
