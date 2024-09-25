@@ -215,15 +215,9 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     -- the reactive map
     local reactiveMap                   = Toolset.newtable(true, true)
-    local getReactiveMap                = Platform.MULTI_OS_THREAD
-                                        and function(obj) return rawget(obj, IReactive) end
-                                        or  function(obj) return reactiveMap[obj] end
-    local setReactiveMap                = Platform.MULTI_OS_THREAD
-                                        and function(obj, react) rawset(obj, IReactive, react) end
-                                        or  function(obj, react) reactiveMap[obj] = react end
-    local clearReactiveMap              = Platform.MULTI_OS_THREAD
-                                        and function(obj) rawset(obj.Value, IReactive, nil) end
-                                        or  function(obj) reactiveMap[obj.Value] = nil end
+    local getReactiveMap                = Platform.MULTI_OS_THREAD and function(obj) return rawget(obj, IReactive) end or function(obj) return reactiveMap[obj]  end
+    local setReactiveMap                = Platform.MULTI_OS_THREAD and function(obj, r) rawset(obj, IReactive, r)  end or function(obj, r) reactiveMap[obj] = r  end
+    local clearReactiveMap              = Platform.MULTI_OS_THREAD and function(r) rawset(r.Value, IReactive, nil) end or function(r) reactiveMap[r.Value] = nil end
 
     -- Subscribe the children
     local subscribeReactive             = function(self, k, r)
@@ -283,6 +277,15 @@ PLoop(function(_ENV)
         return subscription, observer
     end
 
+    local format                        = function(name, err)
+        if type(err) == "string" then
+            return err:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
+        else
+            err.Message = err.Message:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
+            return err
+        end
+    end
+
     -----------------------------------------------------------------------
     --                          implementation                           --
     -----------------------------------------------------------------------
@@ -307,6 +310,7 @@ PLoop(function(_ENV)
             isobjecttype                = Class.IsObjectType,
             issubtype                   = Class.IsSubType,
             properties                  = false,
+            setvalue                    = Toolset.setvalue,
 
             Class, Property, Event, Reactive, ReactiveList, ReactiveField, ReactiveValue, Observable, Subscription, IReactive, IObservable
         }
@@ -410,6 +414,7 @@ PLoop(function(_ENV)
         if properties then
             for name, ptype in pairs(properties) do
                 local rtype             = Reactive.GetReactiveType(nil, ptype, true)
+                local replace           =
 
                 property (name)         {
                     -- gets the reactive value
@@ -428,39 +433,33 @@ PLoop(function(_ENV)
                     set                 = Class.IsSubType(rtype, ReactiveField)
                     and function(self, value)
                         local r         = self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
-                        local ok, err   = pcall(r.SetRaw, r, value)
-                        if type(err) == "string" then
-                            throw(err)
-                        else
-                            err.Message = err.Message:gsub("value", "value." .. name)
-                            throw(err)
+                        if isobjecttype(value, IReactive) then
+                            value       = value.Value
                         end
+
+                        local ok, err   = pcall(setvalue, r, "Value", value)
+                        return ok or throw(format(name, err))
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
-                        if r then
-                            local ok, err       = pcall(r.SetRaw, r, value)
-                            if not ok then
-                                if type(err) == "string" then
-                                    error(err, 0)
-                                else
-                                    err.Message = err.Message:gsub("value", "value." .. name)
-                                    throw(err)
-                                end
+                        if not r then
+                            if isobjecttype(value, IReactive) then
+                                self[RawTable][name]= value:ToRaw()
+                                self[Reactive][name]= value
+                            else
+                                self[RawTable][name]= value
                             end
-                            return
+
+                            r           = makeReactive(self, name, value, ptype, rtype)
+                            local sub   = rawget(self, Subject)
+                            return sub and sub:OnNext(name, r)
                         end
 
-                        if isobjecttype(value, IReactive) then
-                            self[RawTable][name]= value:ToRaw()
-                            self[Reactive][name]= value
-                        else
-                            self[RawTable][name]= value
-                        end
-
-                        return OnDataChange(self, name, makeReactive(self, name, value, mtype))
+                        -- set value
+                        local ok, err   = pcall(setvalue, r, "Value", value)
+                        return ok or throw(format(name, err))
                     end,
-                    type                = Class.IsSubType(rtype, ReactiveField) and (mtype + IObservable) or (mtype + rtype),
+                    type                = mtype + rtype,
                     throwable           = true,
                 }
             end
