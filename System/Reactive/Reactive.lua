@@ -412,9 +412,11 @@ PLoop(function(_ENV)
         --                           auto-gen                            --
         -------------------------------------------------------------------
         if properties then
+            -- already used
+            if properties["Value"] then properties.Value = nil end
+
             for name, ptype in pairs(properties) do
                 local rtype             = Reactive.GetReactiveType(nil, ptype, true)
-                local replace           =
 
                 property (name)         {
                     -- gets the reactive value
@@ -443,14 +445,15 @@ PLoop(function(_ENV)
                     or  function(self, value)
                         local r         = self[Reactive][name]
                         if not r then
+                            -- create or use
                             if isobjecttype(value, IReactive) then
-                                self[RawTable][name]= value:ToRaw()
+                                self[RawTable][name]= value.Value
                                 self[Reactive][name]= value
+                                r       = subscribeReactive(self, name, value)
                             else
                                 self[RawTable][name]= value
+                                r       = makeReactive(self, name, value, ptype, rtype)
                             end
-
-                            r           = makeReactive(self, name, value, ptype, rtype)
                             local sub   = rawget(self, Subject)
                             return sub and sub:OnNext(name, r)
                         end
@@ -459,26 +462,26 @@ PLoop(function(_ENV)
                         local ok, err   = pcall(setvalue, r, "Value", value)
                         return ok or throw(format(name, err))
                     end,
-                    type                = mtype + rtype,
+                    type                = ptype + rtype,
                     throwable           = true,
                 }
             end
 
             __Iterator__()
             function GetIterator(self)
-                local yield                 = yield
+                local yield             = yield
 
                 for k in pairs(properties) do
                     yield(k, self[k])
                 end
 
-                for k, v in pairs(self[RawTable]) do
+                local raw               = self[RawTable]
+                for k, v in (raw.GetIterator or pairs)(raw) do
                     if not properties[k] and type(k) == "string" then
                         yield(k, self[k])
                     end
                 end
             end
-
         else
             __Iterator__()
             function GetIterator(self)
@@ -497,40 +500,43 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Subscribe the observers
         Subscribe                       = subscribe
-        --function (self, ...)   return Observable.From(self.OnDataChange):Subscribe(...) end
-
-        --- Gets the raw value
-        function ToRaw(self)            return rawget(self, RawTable) end
-
-        --- Sets the raw value
-        function SetRaw(self, value)
-            if value and not isobjecttype(value, targettype) then
-                throw("The value must be " .. tostring(targettype))
-            end
-
-            -- update
-            local temp                  = {}
-            for k in self:GetIterator() do
-                temp[k]                 = true
-                self[k]                 = value[k]
-            end
-
-            -- add
-            for name in (value.GetIterator or pairs)(value) do
-                if not temp[name] then
-                    self[name]          = value[name]
-                end
-            end
-
-            -- release
-            temp                        = nil
-        end
 
         --- Map the items to other type datas, use collection operation instead of observable
         Map                             = IKeyValueDict.Map
 
         --- Used to filter the items with a check function
         Filter                          = IKeyValueDict.Filter
+
+        -------------------------------------------------------------------
+        --                           property                            --
+        -------------------------------------------------------------------
+        --- Gets/Sets the raw value
+        property "Value"                {
+            get                         = function(self) return self[RawTable] end,
+            set                         = function(self, value)
+                if isobjecttype(value, IReactive) then
+                    value               = value.Value
+                end
+
+                -- update
+                local temp                  = {}
+                for k in self:GetIterator() do
+                    temp[k]                 = true
+                    self[k]                 = value[k]
+                end
+
+                -- add
+                for name in (value.GetIterator or pairs)(value) do
+                    if not temp[name] then
+                        self[name]          = value[name]
+                    end
+                end
+
+                -- release
+                temp                        = nil
+            end,
+            type                        = targettype + Reactive[targettype]
+        }
 
         -------------------------------------------------------------------
         --                          constructor                          --
@@ -553,11 +559,11 @@ PLoop(function(_ENV)
         function __dtor(self)
             releaseAllSub()
 
-            for k, v in pairs(rawget(self, Reactive)) do
+            for k, v in pairs(self[Reactive]) do
                 if v then v:Dispose() end
             end
 
-            return clearReactiveMap(self.Value)
+            return clearReactiveMap(self)
         end
 
         -------------------------------------------------------------------

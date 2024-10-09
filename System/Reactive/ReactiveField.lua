@@ -69,14 +69,14 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- The reactive container
-        property "Container"            { type = Reactive, set = false, field = 1 }
-
-        --- The field
-        property "Field"                { type = String,   set = false, field = 2 }
-
         --- Whether always connect the observable
         property "KeepAlive"            { type = Boolean,  default = true }
+
+        --- The reactive container
+        property "Container"            { type = Reactive, field = 1, set = false }
+
+        --- The field
+        property "Field"                { type = String,   field = 2, set = false }
 
         --- The current value, use handler not set to detect the value change
         property "Value"                { type = valtype,  field = 3, handler = "OnNext" }
@@ -87,8 +87,8 @@ PLoop(function(_ENV)
         -- Binding the behavior subject to a reactive object's field
         __Arguments__{ Reactive, String, IObservable/nil }
         function __ctor(self, react, field, observable)
-            self[1]                     = react
-            self[2]                     = field
+            rawset(self, 1, react)
+            rawset(self, 2, field)
             super(self, observable)
 
             -- Refresh
@@ -97,9 +97,9 @@ PLoop(function(_ENV)
                 raw[field]              = rawget(self, 3)
             else
                 local value             = raw[field]
-                if self[3] == value then return end
+                if rawget(self, 3) == value then return end
 
-                self[3]                 = value
+                rawset(self, 3, value)
                 return onnext(self, value)
             end
         end
