@@ -444,6 +444,18 @@ PLoop(function(_ENV)
                     end
                     or  function(self, value)
                         local r         = self[Reactive][name]
+
+                        if not value then
+                            -- clear
+                            if r then
+                                self[Reactive][name]= nil
+                                releaseReactive(self, r)
+                                local sub   = rawget(self, Subject)
+                                return sub and sub:OnNext(name, nil)
+                            end
+                            return
+                        end
+
                         if not r then
                             -- create or use
                             if isobjecttype(value, IReactive) then
@@ -560,7 +572,8 @@ PLoop(function(_ENV)
             releaseAllSub()
 
             for k, v in pairs(self[Reactive]) do
-                if v then v:Dispose() end
+                -- only reactive fields will be disposed with the parent
+                if v and isobjecttype(v, ReactiveField) then v:Dispose() end
             end
 
             return clearReactiveMap(self)
@@ -580,7 +593,7 @@ PLoop(function(_ENV)
             return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
         end
 
-        --- Send the new value
+        --- Set the new value
         if targettype then
             local keytype, valtype
 
@@ -604,37 +617,37 @@ PLoop(function(_ENV)
             end
         end
         function __newindex(self, key, value)
-            -- not work for non-string key
-            if type(key) ~= "string" then
-                rawset(self, key, value)
+            -- non-scalar value will be saved in self directly
+            local tkey                  = type(key)
+            if tkey ~= "string" and tkey ~= "number" and tkey ~= "boolean" then return rawset(self, key, value) end
+
+            -- replace with the value
+            if isobjecttype(value, IReactive) then
+                value                   = value.Value
+            elseif isobjecttype(value, IObservable) then
+                error("The " .. key .. " can't accept observable value", 2)
+            end
+
+            -- check the reactive
+            local reactives             = self[Reactive]
+            local r                     = reactives[key]
+            if r then
+                local ok, err           = pcall(setvalue, r, "Value", value)
+                if not ok then error(format(key, err), 2) end
                 return
+            elseif r == false then
+                reactives[key]          = nil
             end
 
             -- check raw
             local raw                   = self[RawTable]
             if raw[key] == value then return end
 
-            -- check the reactive
-            local reactives             = self[Reactive]
-            local r                     = reactives[key]
-            if r then
-                setraw(r, value, 2)
-                return
-            elseif r == false then
-                reactives[key]          = nil
-            end
-
             -- raw directly
-            if isobjecttype(value, IObservable) then
-                local vtype             = getmetatable(value)
-                r                       = makeReactive(self, key, nil, nil, isobjecttype(vtype, ReactiveField) and vtype or ReactiveField)
-                r.Observable            = value
-            else
-                value                   = toraw(value, true)
-                raw[key]                = value
-                r                       = makeReactive(self, key, value)
-                return r and OnDataChange(self, key, not isobjecttype(r, ReactiveField) and r or value)
-            end
+            raw[key]                    = value
+            r                           = makeReactive(self, key, value)
+            local sub                   = rawget(self, Subject)
+            return sub and sub:OnNext(key, r)
         end
     end)
 end)
