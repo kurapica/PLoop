@@ -13,9 +13,125 @@
 --===========================================================================--
 
 PLoop(function(_ENV)
+    -----------------------------------------------------------------------
+    --                              Utility                              --
+    -----------------------------------------------------------------------
+    export                              {
+        rawset                          = rawset,
+        rawget                          = rawget,
+        newtable                        = Toolset.newtable,
+        isobjecttype                    = Class.IsObjectType,
+        issubtype                       = Class.IsSubType,
+        getreactivetype                 = System.Reactive.GetReactiveType,
+
+        ReactiveValue
+    }
+
+    -- the reactive map
+    local reactiveMap                   = newtable(true, true)
+    local getReactiveMap                = Platform.MULTI_OS_THREAD and function(obj) return rawget(obj, IReactive) end or function(obj) return reactiveMap[obj]  end
+    local setReactiveMap                = Platform.MULTI_OS_THREAD and function(obj, r) rawset(obj, IReactive, r)  end or function(obj, r) reactiveMap[obj] = r  end
+    local clearReactiveMap              = Platform.MULTI_OS_THREAD and function(r) rawset(r.Value, IReactive, nil) end or function(r) reactiveMap[r.Value] = nil end
+
+    -- Subscribe the children
+    local subscribeReactive             = function(self, k, r)
+        local subject                   = rawget(self, Subject)
+        -- no need to support scalar value
+        if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
+            rawset(subject, r, (r:Subscribe(function(...)
+                local raw               = self[RawTable]
+                local reactives         = self[Reactive]
+
+                -- index cache to boost, will be reset when element index changed
+                local cache             = rawget(self, IList)
+                if not cache then
+                    cache               = newtable(true)
+                    rawset(self, IList, cache)
+                end
+
+                if cache[r] then return subject:OnNext(cache[r], ...) end
+
+                for i = 1, raw.Count or #raw do
+                    if reactives[raw[i]] == r then
+                        cache[r]        = i
+                        return subject:OnNext(i, ...)
+                    end
+                end
+            end, function(ex) return subject:OnError(ex) end)))
+        end
+        return r
+    end
+
+    -- Release the children
+    local releaseReactive               = function(self, r)
+        local subject                   = rawget(self, Subject)
+        if r and subject and rawget(subject, r) then
+            subject[r]:Dispose()
+            rawset(subject, r, nil)
+        end
+    end
+
+    -- Release all subscriptions
+    local releaseAllSub                 = function(self)
+        local subject                   = rawget(self, Subject)
+        if subject then
+            for k, r in pairs(self[Reactive]) do
+                local subscription      = r and rawget(subject, r)
+                if subscription then
+                    subscription:Dispose()
+                    rawset(subject, r, nil)
+                end
+            end
+        end
+    end
+
+    -- wrap the table value as default
+    local makeReactive                  = function(self, v)
+        local rtype                     = getreactivetype(v)
+        local r                         = rtype and not issubtype(rtype, ReactiveValue) and rtype(v)
+        self[Reactive][k]               = r or false
+        return r and subscribeReactive(self, k, r)
+    end
+
+    -- subscribe
+    local subscribe                     = function(self, ...)
+        local subject                   = rawget(self, Subject)
+        if not subject then
+            subject                     = Subject()
+            rawset(self, Subject, subject)
+
+            -- init
+            for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
+        end
+
+        -- subscribe
+        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...))
+        if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+
+        return subscription, observer
+    end
+
+    local format                        = function(name, err)
+        if type(err) == "string" then
+            return err:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
+        else
+            err.Message = err.Message:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
+            return err
+        end
+    end
+
+    -- fire the element data changes
+    local fireElementChange             = function(self, ...)
+        rawset(self, IList, nil)
+        local subject                   = rawget(self, Subject)
+        return subject and subject:OnNext(...)
+    end
+
     --- Provide reactive feature for list or array
     __Sealed__()
     __Arguments__{ AnyType/nil }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "System.Reactive.ReactiveList"(function(_ENV, elementtype)
         extend "IObservable" "IIndexedList" "IReactive"
 
@@ -74,25 +190,9 @@ PLoop(function(_ENV)
                 return r and bindDataChange(self, r)
             end,
 
-            -- fire the element data changes
-            fireElementChange           = function(self, ...)
-                rawset(self, IList, nil)
-                return OnDataChange(self, ...)
-            end,
-
             -- import types
             ReactiveList, Observable, Observer, Reactive, Watch, Subject, IList
         }
-
-        -------------------------------------------------------------------
-        --                             event                             --
-        -------------------------------------------------------------------
-        --- Fired when any element data changed
-        __EventChangeHandler__(function(_, owner, _, init)
-            if not init then return end
-            for v in pairs(owner[Reactive]) do bindDataChange(owner, v) end
-        end)
-        event "OnDataChange"
 
         -------------------------------------------------------------------
         --                           property                            --
