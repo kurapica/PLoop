@@ -152,61 +152,36 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isobjecttype                = Class.IsObjectType,
-            getdelegate                 = Event.Get,
-            toraw                       = Reactive.ToRaw,
-            setraw                      = Reactive.SetRaw,
-
-            -- bind data change
-            bindDataChange              = function(self, r)
-                if r and getdelegate(OnDataChange, self, true) and (isobjecttype(r, Reactive) or isobjecttype(r, ReactiveList)) then
-                    r.OnDataChange      = r.OnDataChange + function(_, ...)
-                        local raw       = self[ReactiveList]
-                        local reactives = self[Reactive]
-
-                        -- index cache to boost, will be reset when element index changed
-                        local cache     = rawget(self, IList)
-                        if not cache then
-                            cache       = newtable(true)
-                            rawset(self, IList, cache)
-                        end
-
-                        if cache[r] then return OnDataChange(self, cache[r], ...) end
-
-                        for i = 1, raw.Count or #raw do
-                            if reactives[raw[i]] == r then
-                                cache[r]= i
-                                return OnDataChange(self, i, ...)
-                            end
-                        end
-                    end
-                end
-                return r
-            end,
-
-            -- wrap the table value as default
-            makeReactive                = function(self, v)
-                local r                 = reactive(v, true)
-                self[Reactive][v]       = r or false
-                return r and bindDataChange(self, r)
-            end,
 
             -- import types
-            ReactiveList, Observable, Observer, Reactive, Watch, Subject, IList
+            RawTable, Observable, Observer, Reactive, Watch, Subject, IList
         }
 
         -------------------------------------------------------------------
         --                           property                            --
         -------------------------------------------------------------------
         --- The item count
-        property "Count"                { get = function(self) local list = self[ReactiveList] return list.Count or #list end }
+        property "Count"                { get = function(self) local list = self[RawTable] return list.Count or #list end }
+
+        --- Gets/Sets the raw value
+        property "Value"                {
+            get                         = function(self) return self[RawTable] end,
+            set                         = function(self, value)
+                local error             = stack == true and throw or error
+                if type(value) ~= "table" then
+                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1)
+                end
+
+                return self:Splice(1, self.Count, unpack(value))
+            end,
+            type                        = targettype + ReactiveList[targettype]
+        }
 
         -------------------------------------------------------------------
         --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
-        function Subscribe(self, ...)
-            return Observable.From(self.OnDataChange):Subscribe(...)
-        end
+        Subscribe                       = subscribe
 
         --- Gets the iterator
         function GetIterator(self)
@@ -270,6 +245,53 @@ PLoop(function(_ENV)
 
         --- Splice
         __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
+        function Splice(self, index, count, ...)
+            local raw                   = self[ReactiveList]
+            local reactives             = self[Reactive]
+            local insert                = raw.Insert or tinsert
+            local remove                = raw.RemoveByIndex or tremove
+
+            local total                 = raw.Count or #raw
+            index                       = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+            local last                  = count and min(index + count - 1, total) or total
+            local addcnt                = select("#", ...)
+            local th
+
+            if index <= last then
+                th                      = keepargs(unpack(raw, index, last))
+
+                if addcnt > 0 then
+                    -- replace
+                    for i = 1, min(addcnt, last - index + 1) do
+                        raw[index+i-1]  = toraw(select(i, ...))
+                    end
+
+                    -- remove
+                    for i = last, index + addcnt, -1 do
+                        reactives[remove(raw, i)] = nil
+                    end
+
+                    -- add
+                    for i = last - index + 2, addcnt do
+                        raw:Insert(index + i - 1, toraw(select(i, ...)))
+                    end
+                else
+                    for i = last, index, -1 do
+                        reactives[remove(raw, i)] = nil
+                    end
+                end
+            else
+                for i = 1, addcnt do
+                    raw:Insert(index + i - 1, toraw(select(i, ...)))
+                end
+            end
+
+            if index <= last or addcnt > 0 then fireElementChange(self) end
+            if th then return getkeepargs(th) end
+        end
+
+        --- Splice
+        __Arguments__{ Integer, NaturalNumber/nil, Callable, System.Any/nil, System.Any/nil }
         function Splice(self, index, count, ...)
             local raw                   = self[ReactiveList]
             local reactives             = self[Reactive]
@@ -402,7 +424,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         function __ctor(self, list)
             local reactives             = newtable(true, true)
-            rawset(self, ReactiveList,  list)
+            rawset(self, RawTable,  list)
             rawset(self, Reactive, reactives)
         end
 
@@ -412,7 +434,7 @@ PLoop(function(_ENV)
         function __index(self, index)
             if type(index) ~= "number" then return end
 
-            local raw                   = rawget(self, ReactiveList)
+            local raw                   = rawget(self, RawTable)
             local value                 = raw[index]
             if type(value) == "table" then
                 local r                 = rawget(self, Reactive)[value]
@@ -430,7 +452,7 @@ PLoop(function(_ENV)
                 value                   = toraw(value)
             end
 
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local oldval                = raw[index]
             if oldval == value then return end
 
@@ -457,37 +479,5 @@ PLoop(function(_ENV)
         end
 
         function __len(self)            return self.Count end
-
-        -------------------------------------------------------------------
-        --                         static method                         --
-        -------------------------------------------------------------------
-        if not elementtype then
-            export                      {
-                max                     = math.max,
-                error                   = error,
-                pcall                   = pcall,
-            }
-
-            --- Gets the current raw value of the reactive object
-            __Static__()
-            function ToRaw(self)
-                return isobjecttype(self, ReactiveList) and rawget(self, ReactiveList) or toraw(self)
-            end
-
-            --- Sets a raw table value to the reactive object
-            __Static__()
-            function SetRaw(self, value, stack)
-                local error             = stack == true and throw or error
-                if not isobjecttype(self, ReactiveList) then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the reactive list not valid", (stack or 1) + 1)
-                end
-
-                if type(value) ~= "table" then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1)
-                end
-
-                return self:Splice(1, self.Count, unpack(value))
-            end
-        end
     end)
 end)

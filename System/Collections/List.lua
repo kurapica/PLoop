@@ -121,6 +121,137 @@ PLoop(function(_ENV)
         end
 
         --- Splice
+        if lsttype then
+            __Arguments__{ Integer, NaturalNumber/nil, Callable/nil, Any/nil, Any/nil }
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count and min(index + count - 1, total) or total
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    if iter then
+                        local i         = 0
+                        local ridx      = last - index
+                        for key, item in iter, obj, idx do
+                            if item == nil then item = key end
+                            local ret, msg = valid(lsttype, item, true)
+                            if not msg then
+                                -- replace
+                                if i <= ridx then
+                                    self[index + i] = item
+
+                                    if i == ridx then
+                                        -- remove
+                                        for j = last, index + ridx + 1, -1 do
+                                            self:RemoveByIndex(j)
+                                        end
+                                    end
+                                else
+                                    self:Insert(index + i, item)
+                                end
+                                i       = i + 1
+                            end
+                        end
+
+                        if i <= ridx then
+                            -- remove
+                            for j = last, index + i, -1 do
+                                self:RemoveByIndex(j)
+                            end
+                        end
+                    else
+                        for i = last, index, -1 do self:RemoveByIndex(i) end
+                    end
+                elseif iter ~= nil then
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil then item = key end
+                        self:Insert(index + i, item)
+                        i               = i + 1
+                    end
+                end
+
+                if th then                  return getkeepargs(th) end
+            end
+        else
+            __Arguments__{ Integer, NaturalNumber/nil, Callable/nil, Any/nil, Any/nil }
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count and min(index + count - 1, total) or total
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    if iter then
+                        local i         = 0
+                        local ridx      = last - index
+                        for key, item in iter, obj, idx do
+                            if item == nil then item = key end
+
+                            -- replace
+                            if i <= ridx then
+                                self[index + i] = item
+
+                                if i == ridx then
+                                    -- remove
+                                    for j = last, index + ridx + 1, -1 do
+                                        self:RemoveByIndex(j)
+                                    end
+                                end
+                            else
+                                self:Insert(index + i, item)
+                            end
+                            i           = i + 1
+                        end
+
+                        if i <= ridx then
+                            -- remove
+                            for j = last, index + i, -1 do
+                                self:RemoveByIndex(j)
+                            end
+                        end
+                    else
+                        for i = last, index, -1 do self:RemoveByIndex(i) end
+                    end
+                elseif iter ~= nil then
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil then item = key end
+                        self:Insert(index + i, item)
+                        i               = i + 1
+                    end
+                end
+
+                if th then return getkeepargs(th) end
+            end
+        end
+
+        --- Splice
+        __Arguments__{ Integer, NaturalNumber/nil, RawTable/nil }
+        function Splice(self, index, count, raw)
+            if raw then
+                return Splice(self, index, count, ipairs(raw))
+            else
+                return Splice(self, index, count)
+            end
+        end
+
+        --- Spice
+        __Arguments__{ Integer, NaturalNumber/nil, IList/nil }
+        function Splice(self, index, count, list)
+            if list then
+                return Splice(self, index, count, list:GetIterator())
+            else
+                return Splice(self, index, count)
+            end
+        end
+
+        --- Splice
         __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
         function Splice(self, index, count, ...)
             local total                 = self.Count
