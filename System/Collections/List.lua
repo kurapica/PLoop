@@ -64,7 +64,7 @@ PLoop(function(_ENV)
         if lsttype then
             export                      {
                 valid                   = getmetatable(lsttype).ValidateValue,
-                GetErrorMessage         = Struct.GetErrorMessage,
+                geterrormessage         = Struct.GetErrorMessage,
                 parseindex              = Toolset.parseindex,
             }
         end
@@ -421,7 +421,7 @@ PLoop(function(_ENV)
                 local msg
                 for k, v in self:GetIterator() do
                     v, msg              = valid(lsttype, v)
-                    if msg then throw(GetErrorMessage(msg, parseindex(k))) end
+                    if msg then throw(geterrormessage(msg, parseindex(k))) end
                     self[k]             = v
                 end
             end

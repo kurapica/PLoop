@@ -152,10 +152,20 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isobjecttype                = Class.IsObjectType,
+            getreactivetype             = System.Reactive.GetReactiveType,
 
             -- import types
             RawTable, Observable, Observer, Reactive, Watch, Subject, IList
         }
+
+        if elementtype then
+            export                      {
+                validatetype            = getreactivetype(elementtype) and (elementtype + getreactivetype(elementtype)) or elementtype,
+                valid                   = getmetatable(elementtype).ValidateValue,
+                geterrormessage         = Struct.GetErrorMessage,
+                parseindex              = Toolset.parseindex,
+            }
+        end
 
         -------------------------------------------------------------------
         --                           property                            --
@@ -167,14 +177,12 @@ PLoop(function(_ENV)
         property "Value"                {
             get                         = function(self) return self[RawTable] end,
             set                         = function(self, value)
-                local error             = stack == true and throw or error
-                if type(value) ~= "table" then
-                    error("Usage: ReactiveList.SetRaw(reactiveList, value[, stack]) - the value not valid", (stack or 1) + 1)
+                if isobjecttype(value, IReactive) then
+                    value               = value.Value
                 end
-
-                return self:Splice(1, self.Count, unpack(value))
+                return self:Splice(1, self.Count, value)
             end,
-            type                        = targettype + ReactiveList[targettype]
+            type                        = RawTable + IIndexedList, -- @TODO: more excatly type combination
         }
 
         -------------------------------------------------------------------
@@ -202,11 +210,13 @@ PLoop(function(_ENV)
         Range                           = IList.Range
 
         --- Push
-        if elementtype then __Arguments__{ elementtype } end
+        if elementtype then __Arguments__{ validatetype } end
         function Push(self, item)
-            item                        = toraw(item)
+            if item and isobjecttype(item, IReactive) then
+                item                    = item.Value
+            end
             if item == nil then return end
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local insert                = raw.Insert or tinsert
             insert(raw, item)
             return fireElementChange(self) or self.Count
@@ -214,7 +224,7 @@ PLoop(function(_ENV)
 
         --- Pop
         function Pop(self)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw)
             if item == nil then return end
@@ -224,7 +234,7 @@ PLoop(function(_ENV)
 
         --- Shift
         function Shift(self)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw, 1)
             if item == nil then return end
@@ -233,11 +243,13 @@ PLoop(function(_ENV)
         end
 
         --- Unshift
-        if elementtype then __Arguments__{ elementtype } end
-        function Unshift(self, item)
-            item                        = toraw(item)
+        if elementtype then __Arguments__{ validatetype } end
+        function Unshift(self, item))
+            if item and isobjecttype(item, IReactive) then
+                item                    = item.Value
+            end
             if item == nil then return end
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local insert                = raw.Insert or tinsert
             insert(raw, 1, item)
             return fireElementChange(self) or self.Count
@@ -246,7 +258,7 @@ PLoop(function(_ENV)
         --- Splice
         __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
         function Splice(self, index, count, ...)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local reactives             = self[Reactive]
             local insert                = raw.Insert or tinsert
             local remove                = raw.RemoveByIndex or tremove
@@ -293,7 +305,7 @@ PLoop(function(_ENV)
         --- Splice
         __Arguments__{ Integer, NaturalNumber/nil, Callable, System.Any/nil, System.Any/nil }
         function Splice(self, index, count, ...)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local reactives             = self[Reactive]
             local insert                = raw.Insert or tinsert
             local remove                = raw.RemoveByIndex or tremove
@@ -342,7 +354,7 @@ PLoop(function(_ENV)
         function Insert(self, index, item)
             item                        = toraw(item)
             if item == nil then return end
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local total                 = raw.Count or #raw
             local insert                = raw.Insert or tinsert
             index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
@@ -358,7 +370,7 @@ PLoop(function(_ENV)
         function Insert(self, item)
             item                        = toraw(item)
             if item == nil then return end
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             raw[(raw.Count or #raw) + 1]= item
             return fireElementChange(self) or self.Count
         end
@@ -368,7 +380,7 @@ PLoop(function(_ENV)
 
         --- Get the index of the item if it existed in the list
         function IndexOf(self, item)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local reactives             = self[Reactive]
 
             for i, v in (raw.GetIterator or ipairs)(raw) do
@@ -388,7 +400,7 @@ PLoop(function(_ENV)
 
         --- Remove an item from the tail or the given index
         function RemoveByIndex(self, index)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local total                 = raw.Count or #raw
             index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
             local item
@@ -404,7 +416,7 @@ PLoop(function(_ENV)
 
         --- Clear the list
         function Clear(self)
-            local raw                   = self[ReactiveList]
+            local raw                   = self[RawTable]
             local total                 = raw.Count or #raw
             if total == 0 then return end
 
