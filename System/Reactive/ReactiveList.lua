@@ -182,7 +182,7 @@ PLoop(function(_ENV)
                 end
                 return self:Splice(1, self.Count, value)
             end,
-            type                        = RawTable + IIndexedList, -- @TODO: more excatly type combination
+            type                        = RawTable + IList, -- @TODO: more excatly type combination
         }
 
         -------------------------------------------------------------------
@@ -244,7 +244,7 @@ PLoop(function(_ENV)
 
         --- Unshift
         if elementtype then __Arguments__{ validatetype } end
-        function Unshift(self, item))
+        function Unshift(self, item)
             if item and isobjecttype(item, IReactive) then
                 item                    = item.Value
             end
@@ -254,6 +254,134 @@ PLoop(function(_ENV)
             insert(raw, 1, item)
             return fireElementChange(self) or self.Count
         end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
+        if elementtype then
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    local i             = 0
+                    local ridx          = last - index
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        if isobjecttype(item, IReactive) then item = item.Value end
+
+                        local ret, msg  = valid(lsttype, item, true)
+                        if not msg then
+                            -- replace
+                            if i <= ridx then
+                                self[index + i] = item
+
+                                if i == ridx then
+                                    -- remove
+                                    for j = last, index + ridx + 1, -1 do
+                                        self:RemoveByIndex(j)
+                                    end
+                                end
+                            else
+                                self:Insert(index + i, item)
+                            end
+                            i           = i + 1
+                        end
+                    end
+
+                    if i <= ridx then
+                        -- remove
+                        for j = last, index + i, -1 do
+                            self:RemoveByIndex(j)
+                        end
+                    end
+                else
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        local ret, msg  = valid(lsttype, item, true)
+                        if not msg then
+                            self:Insert(index + i, item)
+                            i           = i + 1
+                        end
+                    end
+                end
+
+                if th then                  return getkeepargs(th) end
+            end
+        else
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    local i             = 0
+                    local ridx          = last - index
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        if isobjecttype(item, IReactive) then item = item.Value end
+
+                        -- replace
+                        if i <= ridx then
+                            self[index + i] = item
+
+                            if i == ridx then
+                                -- remove
+                                for j = last, index + ridx + 1, -1 do
+                                    self:RemoveByIndex(j)
+                                end
+                            end
+                        else
+                            self:Insert(index + i, item)
+                        end
+                        i               = i + 1
+                    end
+
+                    if i <= ridx then
+                        -- remove
+                        for j = last, index + i, -1 do
+                            self:RemoveByIndex(j)
+                        end
+                    end
+                else
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil then item = key end
+                        self:Insert(index + i, item)
+                        i               = i + 1
+                    end
+                end
+
+                if th then                  return getkeepargs(th) end
+            end
+        end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, RawTable }
+        function Splice(self, index, count, raw)
+            return Splice(index, count, ipairs(raw))
+        end
+
+        --- Spice
+        __Arguments__{ Integer, Integer, IList }
+        function Splice(self, index, count, list)
+            return Splice(self, index, count, list:GetIterator())
+        end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, (lsttype or Any) * 0 }
+        function Splice(self, index, count, ...)
+            return Splice(self, index, count, ipairs{...})
+        end
+
+
 
         --- Splice
         __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }

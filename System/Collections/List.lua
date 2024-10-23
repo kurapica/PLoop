@@ -145,11 +145,11 @@ PLoop(function(_ENV)
                                 if i == ridx then
                                     -- remove
                                     for j = last, index + ridx + 1, -1 do
-                                        self:RemoveByIndex(j)
+                                        RemoveByIndex(self, j)
                                     end
                                 end
                             else
-                                self:Insert(index + i, item)
+                                Insert(self, index + i, item)
                             end
                             i           = i + 1
                         end
@@ -158,7 +158,7 @@ PLoop(function(_ENV)
                     if i <= ridx then
                         -- remove
                         for j = last, index + i, -1 do
-                            self:RemoveByIndex(j)
+                            RemoveByIndex(self, j)
                         end
                     end
                 else
@@ -167,7 +167,7 @@ PLoop(function(_ENV)
                         if item == nil  then item = key end
                         local ret, msg  = valid(lsttype, item, true)
                         if not msg then
-                            self:Insert(index + i, item)
+                            Insert(self, index + i, item)
                             i           = i + 1
                         end
                     end
@@ -196,11 +196,11 @@ PLoop(function(_ENV)
                             if i == ridx then
                                 -- remove
                                 for j = last, index + ridx + 1, -1 do
-                                    self:RemoveByIndex(j)
+                                    RemoveByIndex(self, j)
                                 end
                             end
                         else
-                            self:Insert(index + i, item)
+                            Insert(self, index + i, item)
                         end
                         i               = i + 1
                     end
@@ -208,14 +208,14 @@ PLoop(function(_ENV)
                     if i <= ridx then
                         -- remove
                         for j = last, index + i, -1 do
-                            self:RemoveByIndex(j)
+                            RemoveByIndex(self, j)
                         end
                     end
                 else
                     local i             = 0
                     for key, item in iter, obj, idx do
                         if item == nil then item = key end
-                        self:Insert(index + i, item)
+                        Insert(self, index + i, item)
                         i               = i + 1
                     end
                 end
@@ -294,64 +294,6 @@ PLoop(function(_ENV)
         function Clear(self)
             for i = self.Count, 1, -1 do self[i] = nil end
             return self
-        end
-
-        --- Extend the list
-        if lsttype then
-            __Arguments__{ RawTable }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in ipairs(lst) do
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-
-            __Arguments__{ IList }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in lst:GetIterator() do
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-
-            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-            function Extend(self, iter, obj, idx)
-                local ins               = self.Insert
-                for key, item in iter, obj, idx do
-                    if item == nil then item = key end
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-        else
-            __Arguments__{ RawTable }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in ipairs(lst) do ins(self, item) end
-                return self
-            end
-
-            __Arguments__{ IList }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in lst:GetIterator() do ins(self, item) end
-                return self
-            end
-
-            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-            function Extend(self, iter, obj, idx)
-                local ins               = self.Insert
-                for key, item in iter, obj, idx do
-                    if item == nil then item = key end
-                    ins(self, item)
-                end
-                return self
-            end
         end
 
         -----------------------------------------------------------
