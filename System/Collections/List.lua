@@ -383,6 +383,15 @@ PLoop(function(_ENV)
                 return nil
             end
         end
+
+
+        -----------------------------------------------------------
+        --                         cache                         --
+        -----------------------------------------------------------
+        export                          {
+            RemoveByIndex               = RemoveByIndex,
+            Insert                      = Insert,
+        }
     end)
 
     --- The dynamic list
