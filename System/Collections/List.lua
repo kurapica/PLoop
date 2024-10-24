@@ -145,11 +145,11 @@ PLoop(function(_ENV)
                                 if i == ridx then
                                     -- remove
                                     for j = last, index + ridx + 1, -1 do
-                                        RemoveByIndex(self, j)
+                                        tremove(self, j)
                                     end
                                 end
                             else
-                                Insert(self, index + i, item)
+                                tinsert(self, index + i, item)
                             end
                             i           = i + 1
                         end
@@ -158,7 +158,7 @@ PLoop(function(_ENV)
                     if i <= ridx then
                         -- remove
                         for j = last, index + i, -1 do
-                            RemoveByIndex(self, j)
+                            tremove(self, j)
                         end
                     end
                 else
@@ -167,7 +167,7 @@ PLoop(function(_ENV)
                         if item == nil  then item = key end
                         local ret, msg  = valid(lsttype, item, true)
                         if not msg then
-                            Insert(self, index + i, item)
+                            tinsert(self, index + i, item)
                             i           = i + 1
                         end
                     end
@@ -196,11 +196,11 @@ PLoop(function(_ENV)
                             if i == ridx then
                                 -- remove
                                 for j = last, index + ridx + 1, -1 do
-                                    RemoveByIndex(self, j)
+                                    tremove(self, j)
                                 end
                             end
                         else
-                            Insert(self, index + i, item)
+                            tinsert(self, index + i, item)
                         end
                         i               = i + 1
                     end
@@ -208,14 +208,14 @@ PLoop(function(_ENV)
                     if i <= ridx then
                         -- remove
                         for j = last, index + i, -1 do
-                            RemoveByIndex(self, j)
+                            tremove(self, j)
                         end
                     end
                 else
                     local i             = 0
                     for key, item in iter, obj, idx do
                         if item == nil then item = key end
-                        Insert(self, index + i, item)
+                        tinsert(self, index + i, item)
                         i               = i + 1
                     end
                 end
@@ -383,15 +383,6 @@ PLoop(function(_ENV)
                 return nil
             end
         end
-
-
-        -----------------------------------------------------------
-        --                         cache                         --
-        -----------------------------------------------------------
-        export                          {
-            RemoveByIndex               = RemoveByIndex,
-            Insert                      = Insert,
-        }
     end)
 
     --- The dynamic list
