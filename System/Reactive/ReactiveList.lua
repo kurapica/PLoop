@@ -153,6 +153,7 @@ PLoop(function(_ENV)
             newtable                    = Toolset.newtable,
             isobjecttype                = Class.IsObjectType,
             getreactivetype             = System.Reactive.GetReactiveType,
+            splice                      = List.Splice,
 
             -- import types
             RawTable, Observable, Observer, Reactive, Watch, Subject, IList
@@ -193,11 +194,11 @@ PLoop(function(_ENV)
 
         --- Gets the iterator
         function GetIterator(self)
-            return function (self,  index)
+            return function(self, index)
                 index                   = (index or 0) + 1
                 local value             = self[index]
                 if value ~= nil then return index, value end
-            end, self, 0
+            end, self, nil
         end
 
         --- Map the items to other datas, use collection operation instead of observable
@@ -259,107 +260,41 @@ PLoop(function(_ENV)
         __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
         if elementtype then
             function Splice(self, index, count, iter, obj, idx)
-                local total             = self.Count
-                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
-                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
-                local th
-
-                if index <= last then
-                    th                  = keepargs(unpack(self, index, last))
-
-                    local i             = 0
-                    local ridx          = last - index
-                    for key, item in iter, obj, idx do
-                        if item == nil  then item = key end
+                local th                = keepargs(splice(self[RawTable], index, count, function()
+                    local item
+                    idx, item           = iter(obj, idx)
+                    while idx ~= nil do
+                        if item == nil  then item = idx end
                         if isobjecttype(item, IReactive) then item = item.Value end
 
-                        local ret, msg  = valid(lsttype, item, true)
-                        if not msg then
-                            -- replace
-                            if i <= ridx then
-                                self[index + i] = item
+                        local ret, msg  = valid(elementtype, item, true)
+                        if not msg then     return idx, ret end
 
-                                if i == ridx then
-                                    -- remove
-                                    for j = last, index + ridx + 1, -1 do
-                                        self:RemoveByIndex(j)
-                                    end
-                                end
-                            else
-                                self:Insert(index + i, item)
-                            end
-                            i           = i + 1
-                        end
+                        idx, item       = iter(obj, idx)
                     end
+                end))
 
-                    if i <= ridx then
-                        -- remove
-                        for j = last, index + i, -1 do
-                            self:RemoveByIndex(j)
-                        end
-                    end
-                else
-                    local i             = 0
-                    for key, item in iter, obj, idx do
-                        if item == nil  then item = key end
-                        local ret, msg  = valid(lsttype, item, true)
-                        if not msg then
-                            self:Insert(index + i, item)
-                            i           = i + 1
-                        end
-                    end
+                if th then
+                    fireElementChange(self)
+                    return getkeepargs(th)
                 end
-
-                if th then                  return getkeepargs(th) end
             end
         else
             function Splice(self, index, count, iter, obj, idx)
-                local total             = self.Count
-                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
-                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
-                local th
-
-                if index <= last then
-                    th                  = keepargs(unpack(self, index, last))
-
-                    local i             = 0
-                    local ridx          = last - index
-                    for key, item in iter, obj, idx do
-                        if item == nil  then item = key end
+                local th                = keepargs(splice(self[RawTable], index, count, function()
+                    local item
+                    idx, item           = iter(obj, idx)
+                    while idx ~= nil do
+                        if item == nil  then item = idx end
                         if isobjecttype(item, IReactive) then item = item.Value end
-
-                        -- replace
-                        if i <= ridx then
-                            self[index + i] = item
-
-                            if i == ridx then
-                                -- remove
-                                for j = last, index + ridx + 1, -1 do
-                                    self:RemoveByIndex(j)
-                                end
-                            end
-                        else
-                            self:Insert(index + i, item)
-                        end
-                        i               = i + 1
+                        return idx, item
                     end
+                end))
 
-                    if i <= ridx then
-                        -- remove
-                        for j = last, index + i, -1 do
-                            self:RemoveByIndex(j)
-                        end
-                    end
-                else
-                    local i             = 0
-                    for key, item in iter, obj, idx do
-                        if item == nil then item = key end
-                        self:Insert(index + i, item)
-                        i               = i + 1
-                    end
+                if th then
+                    fireElementChange(self)
+                    return getkeepargs(th)
                 end
-
-                if th then                  return getkeepargs(th) end
             end
         end
 
@@ -381,125 +316,26 @@ PLoop(function(_ENV)
             return Splice(self, index, count, ipairs{...})
         end
 
-
-
-        --- Splice
-        __Arguments__{ Integer, NaturalNumber/nil, (lsttype or Any) * 0 }
-        function Splice(self, index, count, ...)
-            local raw                   = self[RawTable]
-            local reactives             = self[Reactive]
-            local insert                = raw.Insert or tinsert
-            local remove                = raw.RemoveByIndex or tremove
-
-            local total                 = raw.Count or #raw
-            index                       = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
-            local last                  = count and min(index + count - 1, total) or total
-            local addcnt                = select("#", ...)
-            local th
-
-            if index <= last then
-                th                      = keepargs(unpack(raw, index, last))
-
-                if addcnt > 0 then
-                    -- replace
-                    for i = 1, min(addcnt, last - index + 1) do
-                        raw[index+i-1]  = toraw(select(i, ...))
-                    end
-
-                    -- remove
-                    for i = last, index + addcnt, -1 do
-                        reactives[remove(raw, i)] = nil
-                    end
-
-                    -- add
-                    for i = last - index + 2, addcnt do
-                        raw:Insert(index + i - 1, toraw(select(i, ...)))
-                    end
-                else
-                    for i = last, index, -1 do
-                        reactives[remove(raw, i)] = nil
-                    end
-                end
-            else
-                for i = 1, addcnt do
-                    raw:Insert(index + i - 1, toraw(select(i, ...)))
-                end
-            end
-
-            if index <= last or addcnt > 0 then fireElementChange(self) end
-            if th then return getkeepargs(th) end
-        end
-
-        --- Splice
-        __Arguments__{ Integer, NaturalNumber/nil, Callable, System.Any/nil, System.Any/nil }
-        function Splice(self, index, count, ...)
-            local raw                   = self[RawTable]
-            local reactives             = self[Reactive]
-            local insert                = raw.Insert or tinsert
-            local remove                = raw.RemoveByIndex or tremove
-
-            local total                 = raw.Count or #raw
-            index                       = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
-            local last                  = count and min(index + count - 1, total) or total
-            local addcnt                = select("#", ...)
-            local th
-
-            if index <= last then
-                th                      = keepargs(unpack(raw, index, last))
-
-                if addcnt > 0 then
-                    -- replace
-                    for i = 1, min(addcnt, last - index + 1) do
-                        raw[index+i-1]  = toraw(select(i, ...))
-                    end
-
-                    -- remove
-                    for i = last, index + addcnt, -1 do
-                        reactives[remove(raw, i)] = nil
-                    end
-
-                    -- add
-                    for i = last - index + 2, addcnt do
-                        raw:Insert(index + i - 1, toraw(select(i, ...)))
-                    end
-                else
-                    for i = last, index, -1 do
-                        reactives[remove(raw, i)] = nil
-                    end
-                end
-            else
-                for i = 1, addcnt do
-                    raw:Insert(index + i - 1, toraw(select(i, ...)))
-                end
-            end
-
-            if index <= last or addcnt > 0 then fireElementChange(self) end
-            if th then return getkeepargs(th) end
-        end
-
         --- Insert an item to the list
-        __Arguments__{ Integer, elementtype or Any }
+        __Arguments__{ Integer, elementtype and validatetype or Any }
         function Insert(self, index, item)
-            item                        = toraw(item)
+            if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
             local raw                   = self[RawTable]
             local total                 = raw.Count or #raw
             local insert                = raw.Insert or tinsert
             index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
-            if index == total + 1 then
-                raw[index]              = item
-            else
-                insert(raw, index, item)
-            end
+            insert(raw, index, item)
             return fireElementChange(self) or self.Count
         end
 
-        __Arguments__{ elementtype or Any }
+        __Arguments__{ elementtype and validatetype  or Any }
         function Insert(self, item)
-            item                        = toraw(item)
+            if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
             local raw                   = self[RawTable]
-            raw[(raw.Count or #raw) + 1]= item
+            local insert                = raw.Insert or tinsert
+            insert(raw, item)
             return fireElementChange(self) or self.Count
         end
 
@@ -508,11 +344,12 @@ PLoop(function(_ENV)
 
         --- Get the index of the item if it existed in the list
         function IndexOf(self, item)
-            local raw                   = self[RawTable]
-            local reactives             = self[Reactive]
+            if item == nil then return end
+            if isobjecttype(item, IReactive) then item = item.Value end
 
+            local raw                   = self[RawTable]
             for i, v in (raw.GetIterator or ipairs)(raw) do
-                if v == item or reactives[v] == item then return i end
+                if v == item then return i end
             end
         end
 
@@ -528,6 +365,7 @@ PLoop(function(_ENV)
 
         --- Remove an item from the tail or the given index
         function RemoveByIndex(self, index)
+            if index ~= nil and type(index) ~= "number" then return end
             local raw                   = self[RawTable]
             local total                 = raw.Count or #raw
             index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
@@ -563,9 +401,27 @@ PLoop(function(_ENV)
         --                          constructor                          --
         -------------------------------------------------------------------
         function __ctor(self, list)
-            local reactives             = newtable(true, true)
-            rawset(self, RawTable,  list)
-            rawset(self, Reactive, reactives)
+            rawset(self, RawTable, type(list) == "table" and list or {})
+            rawset(self, Reactive, newtable(true, true))
+            if list then setReactiveMap(list, self) end
+        end
+
+        function __exist(_, list)
+            return type(list) == "table" and getReactiveMap(list) or nil
+        end
+
+        -------------------------------------------------------------------
+        --                        de-constructor                         --
+        -------------------------------------------------------------------4
+        function __dtor(self)
+            releaseAllSub()
+
+            for k, v in pairs(self[Reactive]) do
+                -- only reactive fields will be disposed with the parent
+                if v and isobjecttype(v, IReactive) then v:Dispose() end
+            end
+
+            return clearReactiveMap(self)
         end
 
         -------------------------------------------------------------------
@@ -575,8 +431,11 @@ PLoop(function(_ENV)
             if type(index) ~= "number" then return end
 
             local raw                   = rawget(self, RawTable)
+            local total                 = raw.Count or #raw
+            index                       = index < 0 and (index + total + 1) or index
+
             local value                 = raw[index]
-            if type(value) == "table" then
+            if value and type(value) == "table" then
                 local r                 = rawget(self, Reactive)[value]
                 if r ~= nil then return r or value end
                 return makeReactive(self, value) or value
@@ -585,7 +444,13 @@ PLoop(function(_ENV)
         end
 
         function __newindex(self, index, value)
-            if type(index) ~= "number" then return end
+            if type(index) ~= "number" then
+                error("Usage: reactiveList[index] = value - the index is must be number", 2)
+            end
+
+            local raw                   = rawget(self, RawTable)
+            local total                 = raw.Count or #raw
+            index                       = index < 0 and (index + total + 1) or index
 
             -- Convert to raw value
             if type(value) == "table" then
