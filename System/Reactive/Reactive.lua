@@ -445,19 +445,17 @@ PLoop(function(_ENV)
                     or  function(self, value)
                         local r         = self[Reactive][name]
 
-                        if not value then
-                            -- clear
-                            if r then
-                                self[Reactive][name]= nil
-                                releaseReactive(self, r)
-                                local sub   = rawget(self, Subject)
-                                return sub and sub:OnNext(name, nil)
-                            end
-                            return
+                        -- same
+                        if r and (r == value or r.Value == value) then return end
+
+                        -- clear
+                        if r then
+                            self[Reactive][name]= nil
+                            releaseReactive(self, r)
                         end
 
-                        if not r then
-                            -- create or use
+                        -- create or use
+                        if value then
                             if isobjecttype(value, IReactive) then
                                 self[RawTable][name]= value.Value
                                 self[Reactive][name]= value
@@ -466,13 +464,11 @@ PLoop(function(_ENV)
                                 self[RawTable][name]= value
                                 r       = makeReactive(self, name, value, ptype, rtype)
                             end
-                            local sub   = rawget(self, Subject)
-                            return sub and sub:OnNext(name, r)
                         end
 
-                        -- set value
-                        local ok, err   = pcall(setvalue, r, "Value", value)
-                        return ok or throw(format(name, err))
+                        -- notify
+                        local sub   = rawget(self, Subject)
+                        return sub and sub:OnNext(name, r)
                     end,
                     type                = ptype + rtype,
                     throwable           = true,
@@ -531,21 +527,21 @@ PLoop(function(_ENV)
                 end
 
                 -- update
-                local temp                  = {}
+                local temp              = {}
                 for k in self:GetIterator() do
-                    temp[k]                 = true
-                    self[k]                 = value[k]
+                    temp[k]             = true
+                    self[k]             = value[k]
                 end
 
                 -- add
                 for name in (value.GetIterator or pairs)(value) do
                     if not temp[name] then
-                        self[name]          = value[name]
+                        self[name]      = value[name]
                     end
                 end
 
                 -- release
-                temp                        = nil
+                temp                    = nil
             end,
             type                        = targettype + Reactive[targettype]
         }

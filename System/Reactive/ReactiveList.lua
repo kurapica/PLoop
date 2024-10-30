@@ -431,9 +431,6 @@ PLoop(function(_ENV)
             if type(index) ~= "number" then return end
 
             local raw                   = rawget(self, RawTable)
-            local total                 = raw.Count or #raw
-            index                       = index < 0 and (index + total + 1) or index
-
             local value                 = raw[index]
             if value and type(value) == "table" then
                 local r                 = rawget(self, Reactive)[value]
@@ -448,13 +445,9 @@ PLoop(function(_ENV)
                 error("Usage: reactiveList[index] = value - the index is must be number", 2)
             end
 
-            local raw                   = rawget(self, RawTable)
-            local total                 = raw.Count or #raw
-            index                       = index < 0 and (index + total + 1) or index
-
             -- Convert to raw value
-            if type(value) == "table" then
-                value                   = toraw(value)
+            if value and isobjecttype(value, IReactive) then
+                value                   = value.Value
             end
 
             local raw                   = self[RawTable]
