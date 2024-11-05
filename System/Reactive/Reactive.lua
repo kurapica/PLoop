@@ -214,21 +214,50 @@ PLoop(function(_ENV)
     --                              utility                              --
     -----------------------------------------------------------------------
     -- the reactive map
-    local reactiveMap                   = Toolset.newtable(true, true)
-    local getReactiveMap                = Platform.MULTI_OS_THREAD and function(obj) return rawget(obj, IReactive) end or function(obj) return reactiveMap[obj]  end
-    local setReactiveMap                = Platform.MULTI_OS_THREAD and function(obj, r) rawset(obj, IReactive, r)  end or function(obj, r) reactiveMap[obj] = r  end
-    local clearReactiveMap              = Platform.MULTI_OS_THREAD and function(r) rawset(r.Value, IReactive, nil) end or function(r) reactiveMap[r.Value] = nil end
+    local objectSubjectMap              = Toolset.newtable(true)
+    local getObjectSubject              = Platform.MULTI_OS_THREAD
+        and function(obj)
+            local subject               = rawget(obj, Reactive)
+            if not subject then
+                subject                 = Subject()
+                rawset(obj, Reactive, subject)
+            end
+            return subject
+        end
+        or  function(obj)
+            local subject               = objectSubjectMap[obj]
+            if not subject then
+                subject                 = Subject()
+                objectSubjectMap[obj]   = subject
+            end
+            return subject
+        end
 
-    -- Subscribe the children
+    -- push data
+    local onObjectNext                  = function(obj, ...) return getObjectSubject(obj):OnNext(...) end
+    local onObjectError                 = function(obj, ex)  return getObjectSubject(obj):OnError(ex) end
+    local onObjectCompleted             = function(obj)      return getObjectSubject(obj):OnCompleted() end
+
+    -- switch object value
+    local switchObject                  = function(self, new)
+        local subject                   = rawget(self, Subject)
+        if not subject then return end
+        subject.Observable              = new and getObjectSubject(new) or nil
+    end
+
+    -- subscribe the children
     local subscribeReactive             = function(self, k, r)
         local subject                   = rawget(self, Subject)
         if r and subject and not rawget(subject, r) then
-            rawset(subject, r, (r:Subscribe(function(...) return subject:OnNext(k, ...) end, function(ex) return subject:OnError(ex) end)))
+            rawset(subject, r, (r:Subscribe(
+                function(...) return onObjectNext( rawget(self, RawTable), k, ...) end,
+                function(ex)  return onObjectError(rawget(self, RawTable), ex) end)
+            ))
         end
         return r
     end
 
-    -- Release the children
+    -- release the children
     local releaseReactive               = function(self, r)
         local subject                   = rawget(self, Subject)
         if r and subject and rawget(subject, r) then
@@ -237,7 +266,7 @@ PLoop(function(_ENV)
         end
     end
 
-    -- Release all subscriptions
+    -- release all subscriptions
     local releaseAllSub                 = function(self)
         local subject                   = rawget(self, Subject)
         if subject then

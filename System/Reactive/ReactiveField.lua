@@ -32,6 +32,18 @@ PLoop(function(_ENV)
             IObservable
         }
 
+        local function refresh(self)
+            -- clear the observable since it binds in this for the old container field
+            self.Observable             = nil
+
+            -- update the value without data push
+            local value                 = self[1][self[2]]
+            if rawget(self, 3) == value then return end
+
+            rawset(self, 3, value)
+            return onnext(self, value)
+        end
+
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
@@ -45,11 +57,9 @@ PLoop(function(_ENV)
         --- Provides the observer with new data
         if not valtype or Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
             function OnNext(self, val)
+                -- save
                 self[3]                 = val
-
-                -- save to the container
-                self[1].Value[self[2]]  = val
-
+                self[1][self[2]]        = val
                 return onnext(self, val)
             end
         else
@@ -57,11 +67,10 @@ PLoop(function(_ENV)
             function OnNext(self, val)
                 local ret, msg          = valid(valtype, val)
                 if msg then return onerror(self, geterrormessage(msg, "value")) end
+
+                -- save
                 self[3]                 = ret
-
-                -- save to the container
-                self[1].Value[self[2]]  = ret
-
+                self[1][self[2]]        = ret
                 return onnext(self, ret)
             end
         end
@@ -70,38 +79,32 @@ PLoop(function(_ENV)
         --                             property                              --
         -----------------------------------------------------------------------
         --- Whether always connect the observable
-        property "KeepAlive"            { type = Boolean,  default = true }
+        property "KeepAlive"            { type = Boolean, default = true }
 
         --- The reactive container
-        property "Container"            { type = Reactive, field = 1, set = false }
+        property "Container"            { type = Table,   field = 1, handler = refresh, require = true }
 
         --- The field
-        property "Field"                { type = String,   field = 2, set = false }
+        property "Field"                { type = String,  field = 2, handler = refresh, require = true }
 
         --- The current value, use handler not set to detect the value change
-        property "Value"                { type = valtype,  field = 3, handler = "OnNext" }
+        property "Value"                { type = valtype, field = 3, handler = "OnNext" }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         -- Binding the behavior subject to a reactive object's field
-        __Arguments__{ Reactive, String, IObservable/nil }
-        function __ctor(self, react, field, observable)
-            rawset(self, 1, react)
+        __Arguments__{ Table, String, IObservable/nil }
+        function __ctor(self, container, field, observable)
+            -- init without observable
+            super(self)
+
+            rawset(self, 1, container)
             rawset(self, 2, field)
-            super(self, observable)
+            refresh(self)
 
-            -- Refresh
-            local container             = react.Value
-            if observable then
-                raw[field]              = rawget(self, 3)
-            else
-                local value             = raw[field]
-                if rawget(self, 3) == value then return end
-
-                rawset(self, 3, value)
-                return onnext(self, value)
-            end
+            -- binding later
+            self.Observable             = observable
         end
     end)
 end)
