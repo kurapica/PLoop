@@ -37,7 +37,13 @@ PLoop(function(_ENV)
             self.Observable             = nil
 
             -- update the value without data push
-            local value                 = self[1][self[2]]
+            local raw                   = self[1]
+            local value
+            if raw then
+                value                   = raw[self[2]]
+            else
+                value                   = nil
+            end
             if rawget(self, 3) == value then return end
 
             rawset(self, 3, value)
@@ -57,20 +63,26 @@ PLoop(function(_ENV)
         --- Provides the observer with new data
         if not valtype or Platform.TYPE_VALIDATION_DISABLED and getmetatable(valtype).IsImmutable(valtype) then
             function OnNext(self, val)
+                local raw               = self[1]
+                if not raw then return end
+
                 -- save
                 self[3]                 = val
-                self[1][self[2]]        = val
+                raw[self[2]]            = val
                 return onnext(self, val)
             end
         else
             local valid                 = getmetatable(valtype).ValidateValue
             function OnNext(self, val)
+                local raw               = self[1]
+                if not raw then return end
+
                 local ret, msg          = valid(valtype, val)
                 if msg then return onerror(self, geterrormessage(msg, "value")) end
 
                 -- save
                 self[3]                 = ret
-                self[1][self[2]]        = ret
+                raw[self[2]]            = ret
                 return onnext(self, ret)
             end
         end
@@ -82,10 +94,10 @@ PLoop(function(_ENV)
         property "KeepAlive"            { type = Boolean, default = true }
 
         --- The reactive container
-        property "Container"            { type = Table,   field = 1, handler = refresh, require = true }
+        property "Container"            { type = Table,   field = 1, handler = refresh }
 
         --- The field
-        property "Field"                { type = String,  field = 2, handler = refresh, require = true }
+        property "Field"                { type = String,  field = 2, set = false }
 
         --- The current value, use handler not set to detect the value change
         property "Value"                { type = valtype, field = 3, handler = "OnNext" }

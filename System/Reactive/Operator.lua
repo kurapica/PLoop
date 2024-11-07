@@ -1508,8 +1508,8 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                               Plan                                --
         -----------------------------------------------------------------------
-        Pattern                         = class "Pattern" {}
-        Plan                            = class "Plan" {}
+        Pattern                         = __Sealed__() class "Pattern" {}
+        Plan                            = __Sealed__() class "Plan"    {}
 
         __Arguments__{ IObservable * 1 }
         function And(self, ...)

@@ -421,22 +421,4 @@ PLoop(function(_ENV)
             super(self)
         end
     end)
-
-    --- Subject with weak Observable so it can be released
-    __Sealed__()
-    class "WeakObservableSubject"       (function(_ENV)
-        inherit "Subject"
-
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        --- The observable that the subject subscribed
-        __Set__(PropertySet.Weak)
-        property "Observable"           {
-            type                        = IObservable,
-            handler                     = function(self, new, old)
-                self.Subscription       = new and (self.KeepAlive or next(self.Observers)) and new:Subscribe(self, Subscription()) or nil
-            end
-        }
-    end)
 end)
