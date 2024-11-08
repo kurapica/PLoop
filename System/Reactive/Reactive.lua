@@ -49,8 +49,10 @@ PLoop(function(_ENV)
             getsuperclass               = Class.GetSuperClass,
             isenum                      = Enum.Validate,
             isstruct                    = Struct.Validate,
+            isstructtype                = Struct.IsSubType,
             getstructcategory           = Struct.GetStructCategory,
             getarrayelement             = Struct.GetArrayElement,
+            getdictionarykey            = Struct.GetDictionaryKey,
             isarray                     = Toolset.isarray,
 
             IList, IDictionary, IKeyValueDict, IObservable,
@@ -107,7 +109,10 @@ PLoop(function(_ENV)
                     local element       = getarrayelement(metatype)
                     return element and ReactiveList[element] or ReactiveList
 
-                -- member or dict
+                elseif cate == "DICTIONARY" then
+                    local keytype       = getdictionarykey(targettype)
+                    return (not keytype or isstructtype(keytype, String)) and Reactive[metatype] or nil
+
                 else
                     return Reactive[metatype]
                 end
@@ -137,7 +142,8 @@ PLoop(function(_ENV)
                 elseif issubtype(metatype, IDictionary) then
                     -- only key-value dict support
                     if issubtype(metatype, IKeyValueDict) then
-                        return Reactive[metatype]
+                        local keytype   = gettempparams(metatype)
+                        return (not keytype or isstructtype(keytype, String)) and Reactive[metatype] or nil
                     end
 
                 -- common class
@@ -260,20 +266,6 @@ PLoop(function(_ENV)
         end
     end
 
-    -- release all subscriptions
-    local releaseAllSub                 = function(self)
-        local subject                   = rawget(self, Subject)
-        if subject then
-            for k, r in pairs(self[Reactive]) do
-                local subscription      = r and rawget(subject, r)
-                if subscription then
-                    rawset(subject, r, nil)
-                    subscription:Dispose()
-                end
-            end
-        end
-    end
-
     -- wrap the table value as default
     local makeReactive                  = function(self, k, v, type, rtype)
         rtype                           = rtype or getreactivetype(v, type, true)
@@ -361,6 +353,7 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             isobjecttype                = Class.IsObjectType,
             issubtype                   = Class.IsSubType,
+            getobjectclass              = Class.GetObjectClass,
             properties                  = false,
             setvalue                    = Toolset.setvalue,
 
@@ -466,61 +459,77 @@ PLoop(function(_ENV)
             for name, ptype in pairs(properties) do
                 local rtype             = Reactive.GetReactiveType(nil, ptype, true)
 
-                property (name)         {
-                    -- gets the reactive value
-                    get                 = Class.IsSubType(rtype, ReactiveField)
-                    and function(self)
-                        return self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
-                    end
-                    or function(self)
-                        local r         = self[Reactive][name]
-                        if r then return r end
-                        local d         = self[RawTable][name]
-                        return d and makeReactive(self, name, d, ptype, rtype)
-                    end,
+                if Class.IsSubType(rtype, ReactiveField) then
+                    property (name)     {
+                        -- gets the reactive value
+                        get             = function(self)
+                            return self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
+                        end,
 
-                    -- sets the value
-                    set                 = Class.IsSubType(rtype, ReactiveField)
-                    and function(self, value)
-                        local r         = self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
-                        if isobjecttype(value, IReactive) then
-                            value       = value.Value
-                        end
+                        -- sets the value
+                        set             = function(self, value)
+                            local r     = self[Reactive][name] or makeReactive(self, name, nil, ptype, rtype)
+                            local type  = value and getobjectclass(value)
 
-                        local ok, err   = pcall(setvalue, r, "Value", value)
-                        return ok or throw(format(name, err))
-                    end
-                    or  function(self, value)
-                        local r         = self[Reactive][name]
+                            -- take reactive value
+                            if type and issubtype(type, IReactive) then
+                                value   = value.Value
 
-                        if r then
-                            -- same
-                            if r == value or r.Value == value then return end
+                            -- subscribe the observable
+                            elseif type and issubtype(type, IObservable) then
+                                r.Observable = value
+                                return
+                            end
 
-                            -- clear
-                            self[Reactive][name]= nil
-                            releaseReactive(self, r)
-                        end
+                            r.Observable= nil
 
-                        -- create or use
-                        if value then
+                            local ok, e = pcall(setvalue, r, "Value", value)
+                            return ok or throw(format(name, e))
+                        end,
+                        type            =  ptype + rtype + IObservable,
+                        throwable       = true,
+                    }
+                else
+                    property (name)     {
+                        -- gets the reactive value
+                        get             = function(self)
+                            local r     = self[Reactive][name]
+                            if r then return r end
+                            local d     = self[RawTable][name]
+                            return d and makeReactive(self, name, d, ptype, rtype)
+                        end,
+
+                        -- sets the value
+                        set             = function(self, value)
+                            local r     = self[Reactive][name]
                             if isobjecttype(value, IReactive) then
-                                self[RawTable][name]= value.Value
-                                self[Reactive][name]= value
-                                r       = subscribeReactive(self, name, value)
-                            else
+                                value   = value.Value
+                            end
+
+                            if r then
+                                -- same
+                                if r.Value == value then return end
+
+                                -- clear
+                                self[Reactive][name]= nil
+                                releaseReactive(self, r)
+                            end
+
+                            -- new
+                            if value then
                                 self[RawTable][name]= value
                                 r       = makeReactive(self, name, value, ptype, rtype)
+                            else
+                                r       =  nil
                             end
-                        end
 
-                        -- notify
-                        local sub   = rawget(self, Subject)
-                        return sub and sub:OnNext(name, r)
-                    end,
-                    type                = ptype + rtype,
-                    throwable           = true,
-                }
+                            -- only send it in this node
+                            local sub   = rawget(self, Subject)
+                            return sub and sub:OnNext(name, r)
+                        end,
+                        type            =  ptype + rtype,
+                    }
+                end
             end
         else
             extend "IKeyValueDict"
@@ -531,7 +540,7 @@ PLoop(function(_ENV)
                 local raw               = self[RawTable]
                 for k, v in (raw.GetIterator or pairs)(raw) do
                     local ty            = type(k)
-                    if ty == "string" or ty == "number" or ty == "boolean" then
+                    if ty == "string" then
                         yield(k, v)
                     end
                 end
@@ -560,8 +569,13 @@ PLoop(function(_ENV)
                 if isobjecttype(value, IReactive) then
                     value               = value.Value
                 end
+                if value == rawget(self, RawTable) then return end
                 rawset(self, RawTable, value)
                 switchObject(self, value)
+
+                -- notify
+                local subject           = rawget(self, Subject)
+                return subject and subject:OnNext(nil)
             end,
             type                        = targettype + Reactive[targettype]
         }
@@ -569,30 +583,34 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ targettype or RawTable/nil }
+        __Arguments__{ targettype or (RawTable/nil) }
         function __ctor(self, init)
             rawset(self, Reactive, {})          -- sub-reactives
             rawset(self, RawTable, init or {})  -- raw
-            if init then setReactiveMap(init, self) end
-        end
-
-        __Arguments__{ targettype or RawTable/nil }
-        function __exist(_, init)
-            return init and getReactiveMap(init) or nil
         end
 
         -------------------------------------------------------------------
         --                        de-constructor                         --
         -------------------------------------------------------------------4
         function __dtor(self)
-            releaseAllSub()
+            local subject               = rawget(self, Subject)
 
             for k, v in pairs(self[Reactive]) do
-                -- only reactive fields will be disposed with the parent
-                if v and isobjecttype(v, ReactiveField) then v:Dispose() end
+                if v then
+                    if subject then
+                        local subscription  = rawget(subject, v)
+                        if subscription then
+                            rawset(subject, v, nil)
+                            subscription:Dispose()
+                        end
+                    end
+
+                    -- only reactive fields will be disposed with the parent
+                    if isobjecttype(v, ReactiveField) then v:Dispose() end
+                end
             end
 
-            return clearReactiveMap(self)
+            return subject and subject:Dispose()
         end
 
         -------------------------------------------------------------------
@@ -633,9 +651,9 @@ PLoop(function(_ENV)
             end
         end
         function __newindex(self, key, value)
-            -- non-scalar value will be saved in self directly
+            -- non-string value will be saved in self directly
             local tkey                  = type(key)
-            if tkey ~= "string" and tkey ~= "number" and tkey ~= "boolean" then return rawset(self, key, value) end
+            if tkey ~= "string" then return rawset(self, key, value) end
 
             -- replace with the value
             if isobjecttype(value, IReactive) then
