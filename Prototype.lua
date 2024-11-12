@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2024/05/24                                               --
--- Version      :   1.9.4                                                    --
+-- Update Date  :   2024/11/12                                               --
+-- Version      :   1.9.5                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1913,7 +1913,13 @@ do
                     -- Don't cache global variables in the environment to avoid conflict
                     -- The cache should be full-hit during runtime after several operations
                     tinsert(body, [[
-                        value           = env["]] .. ENV_GLOBAL_CACHE .. [["][name]
+                        value       = rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[")
+                        if type(value) == "table" then
+                            value   = rawget(value, name)
+                            if value ~= nil then return value end
+                        else
+                            value   = nil
+                        end
                         if value ~= nil then return value end
                     ]])
                 end
@@ -1967,7 +1973,7 @@ do
 
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
                     uinsert(apis, "savestorage")
-                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = savestorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
+                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = savestorage(rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[") or {}, name, value)]])
                     if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
                         uinsert(apis, "Warn")
                         uinsert(apis, "tostring")
@@ -5386,6 +5392,7 @@ do
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
+                    if validateflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_STRUCT_TEMPDEF] then error(err) end
                 end
             else
@@ -6471,6 +6478,7 @@ end
 -- only care themselves.
 --
 -- @prototype   interface
+-- @prototype   class
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -6653,6 +6661,9 @@ do
     local _ICIndexMap                   = {}
     local _ICNewIdxMap                  = {}
     local _ClassCtorMap                 = {}
+
+    -- Object state
+    local _InitObjects                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and setmetatable({}, {__index = function(_, c) return rawget(c, newflags) end, __newindex = function(_, c, v) rawset(c, newflags, v or nil) end}) or newstorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -7282,6 +7293,7 @@ do
         local upval                     = _Cache()
         local meta                      = info[FLD_IC_OBJMTM]
 
+        tinsert(upval, _InitObjects)
         tinsert(upval, meta)
 
         if meta[IC_META_EXIST] or meta[IC_META_NEW] then
@@ -7327,6 +7339,7 @@ do
 
             uinsert(apis, "setmetatable")
 
+            tinsert(head, "initobjs")
             tinsert(head, "objmeta")
 
             tinsert(body, "")                       -- remain for shareable variables
@@ -7399,6 +7412,8 @@ do
                 tinsert(body, [[setmetatable(obj, objmeta)]])
             end
 
+            tinsert(body, [[initobjs[obj] = true]])
+
             if hasctor then
                 tinsert(head, "clinit")
                 if validateflags(FLG_IC_NEWOBJ, token) then
@@ -7411,7 +7426,7 @@ do
                 uinsert(apis, "loadinittable")
                 uinsert(apis, "strmatch")
                 uinsert(apis, "throw")
-                tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
+                tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then initobjs[obj] = nil; throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
             if validateflags(FLG_IC_OBJATR, token) then
@@ -7432,6 +7447,7 @@ do
                 ]])
             end
 
+            tinsert(body, [[initobjs[obj] = nil]])
             tinsert(body, [[return obj end end]])
 
             if #apis > 0 then
@@ -9395,6 +9411,13 @@ do
                 return otype and class.IsSubType(otype, type) or false
             end;
 
+            --- Whether the object is initing
+            -- @static
+            -- @method  IsObjectType
+            -- @owner   class
+            -- @param   target                      the object
+            ["IsObjectIniting"]         = function(target) return _InitObjects[target] or false end;
+
             --- Whether the class object will try to auto cache the object methods
             -- @static
             -- @method  IsMethodAutoCache
@@ -10102,6 +10125,7 @@ do
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
+                    if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
@@ -10172,10 +10196,11 @@ do
                     info[FLD_IC_TEMPENV]= environment.GetParent(self)
                 end
 
-                local ok, err = pcall(definition, self, class.GetTemplateParameters(owner))
+                local ok, err           = pcall(definition, self, class.GetTemplateParameters(owner))
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
+                    if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
@@ -11252,6 +11277,7 @@ do
     MOD_PROP_INDEXER                    = newflags()
     MOD_PROP_THROWABLE                  = newflags()
     MOD_PROP_REQUIRE                    = newflags()
+    MOD_PROP_INITONLY                   = newflags()
 
     -- PROPERTY FIELDS
     FLD_PROP_MOD                        = newindex(0)
@@ -11311,6 +11337,7 @@ do
     FLG_PROPSET_INDEXTYP                = newflags()
     FLG_PROPSET_THROWABLE               = newflags()
     FLG_PROPSET_REQUIRE                 = newflags()
+    FLG_PROPSET_INITONLY                = newflags()
 
     FLD_PROP_META                       = "__PLOOP_PROPERTY_META"
     FLD_PROP_OBJ_WEAK                   = "__PLOOP_PROPERTY_WEAK"
@@ -11662,7 +11689,14 @@ do
         local usename                   = false
         local upval                     = _Cache()
 
-        -- Calc the token
+        --- calc the token
+        -- init only
+        if validateflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD]) then
+            usename                     = true
+            token                       = turnonflags(FLG_PROPSET_INITONLY, token)
+            tinsert(upval, class.IsObjectIniting)
+        end
+
         if info[FLD_PROP_SET]  == false or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
             token                       = turnonflags(FLG_PROPSET_DISABLE, token)
             usename                     = true
@@ -11770,6 +11804,11 @@ do
                 tinsert(body, [[return function(self, idxname, value)]])
             else
                 tinsert(body, [[return function(_, self, value)]])
+            end
+
+            if validateflags(FLG_PROPSET_INITONLY, token) then
+                tinsert(head, "isiniting")
+                tinsert(body, [[if not isiniting(self) then error(strformat("the %s is init-only", name), 3) end]])
             end
 
             if validateflags(FLG_PROPSET_DISABLE, token) then
@@ -12276,6 +12315,17 @@ do
                 return info and validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property is init-only
+            -- @static
+            -- @method  IsInitOnly
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is init-only
+            ["IsInitOnly"]              = function(self)
+                local info              = _PropertyInfo[self]
+                return info and validateflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD]) or false
+            end;
+
             --- Whether the property is readable
             -- @static
             -- @method  IsReadable
@@ -12517,6 +12567,22 @@ do
                 end
             end;
 
+            --- Set the property whether it's init-only
+            -- @static
+            -- @method  SetInitOnly
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
+            ["SetInitOnly"]             = function(self, stack)
+                if _PropertyInDefine[self] then
+                    local info          = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                end
+            end;
+
             --- Set the property whether it should dispose the old value
             -- @static
             -- @method  SetRetainObject
@@ -12636,6 +12702,7 @@ do
             ["IsGetClone"]              = property.IsGetClone;
             ["IsGetDeepClone"]          = property.IsGetDeepClone;
             ["IsIndexer"]               = property.IsIndexer;
+            ["IsInitOnly"]              = property.IsInitOnly;
             ["IsReadable"]              = property.IsReadable;
             ["IsRetainObject"]          = property.IsRetainObject;
             ["IsSetClone"]              = property.IsSetClone;
@@ -12652,6 +12719,7 @@ do
             ["GetType"]                 = property.GetType;
             ["SetClone"]                = property.SetClone;
             ["SetIndexer"]              = property.SetIndexer;
+            ["SetInitOnly"]             = property.SetInitOnly;
             ["SetRetainObject"]         = property.SetRetainObject;
             ["SetStatic"]               = property.SetStatic;
             ["SetValueRequired"]        = property.SetValueRequired;
@@ -12760,6 +12828,10 @@ do
                     elseif k == "require" then
                         if v then
                             info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "initonly" then
+                        if v then
+                            info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD])
                         end
                     end
                 end
@@ -13263,7 +13335,7 @@ do
     --
     -- @attribute   System.__Abstract__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Abstract__",
+    __Abstract__                        = namespace.SaveNamespace("System.__Abstract__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13311,7 +13383,7 @@ do
     --
     -- @attribute   System.__AnonymousClass__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AnonymousClass__",
+    __AnonymousClass__                  = namespace.SaveNamespace("System.__AnonymousClass__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13333,7 +13405,7 @@ do
     --
     -- @attribute   System.__AutoCache__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoCache__",
+    __AutoCache__                       = namespace.SaveNamespace("System.__AutoCache__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13426,7 +13498,7 @@ do
     --              enum "Test" { "A", "B", "C", "D" }
     --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoIndex__",
+    __AutoIndex__                       = namespace.SaveNamespace("System.__AutoIndex__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13462,7 +13534,7 @@ do
     --              enum "Test" { A = 1, C = 2 } -- The value must in (0, 100)
     --              print(Test.A, Test.C) -- 1101, 1102
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__BaseIndex__",
+    __BaseIndex__                       = namespace.SaveNamespace("System.__BaseIndex__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13505,7 +13577,7 @@ do
     --
     -- @attribute   System.__Base__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Base__",
+    __Base__                            = namespace.SaveNamespace("System.__Base__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13524,7 +13596,7 @@ do
     --
     -- @attribute   System.__Default__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Default__",
+    __Default__                         = namespace.SaveNamespace("System.__Default__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13558,7 +13630,7 @@ do
     --
     -- @attribute   System.__EventChangeHandler__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__EventChangeHandler__",
+    __EventChangeHandler__              = namespace.SaveNamespace("System.__EventChangeHandler__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13582,7 +13654,7 @@ do
     --
     -- @attribute   System.__Final__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Final__",
+    __Final__                           = namespace.SaveNamespace("System.__Final__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13605,7 +13677,7 @@ do
     --
     -- @attribute   System.__Flags__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Flags__",
+    __Flags__                           = namespace.SaveNamespace("System.__Flags__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13720,7 +13792,7 @@ do
     --
     -- @attribute   System.__Shareable__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Shareable__",
+    __Shareable__                       = namespace.SaveNamespace("System.__Shareable__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13739,7 +13811,7 @@ do
     --
     -- @attribute   System.__Get__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Get__",
+    __Get__                             = namespace.SaveNamespace("System.__Get__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13765,7 +13837,7 @@ do
     --
     -- @attribute   System.__Indexer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Indexer__",
+    __Indexer__                         = namespace.SaveNamespace("System.__Indexer__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13784,7 +13856,7 @@ do
     --
     -- @attribute   System.__Namespace__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Namespace__",
+    __Namespace__                       = namespace.SaveNamespace("System.__Namespace__",
         prototype {
             __call                      = function(self, value) namespace.SetNamespaceForNext(value) end,
             __index                     = writeonly,
@@ -13796,7 +13868,7 @@ do
     -----------------------------------------------------------------------
     -- Make the target struct allow objects to pass its validation
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectAllowed__",
+    __ObjectAllowed__                   = namespace.SaveNamespace("System.__ObjectAllowed__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13815,7 +13887,7 @@ do
     --
     -- @attribute   System.__ObjectAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectAttr__",
+    __ObjectAttr__                      = namespace.SaveNamespace("System.__ObjectAttr__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13837,7 +13909,7 @@ do
     --
     -- @attribute   System.__ObjFuncAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjFuncAttr__",
+    __ObjFuncAttr__                     = namespace.SaveNamespace("System.__ObjFuncAttr__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13858,7 +13930,7 @@ do
     --
     -- @attribute   System.__ObjectSource__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectSource__",
+    __ObjectSource__                    = namespace.SaveNamespace("System.__ObjectSource__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13880,7 +13952,7 @@ do
     --
     -- @attribute   System.__Require__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Require__",
+    __Require__                         = namespace.SaveNamespace("System.__Require__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13899,7 +13971,7 @@ do
     --
     -- @attribute   System.__Sealed__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Sealed__",
+    __Sealed__                          = namespace.SaveNamespace("System.__Sealed__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13918,7 +13990,7 @@ do
     --
     -- @attribute   System.__Set__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Set__",
+    __Set__                             = namespace.SaveNamespace("System.__Set__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13953,7 +14025,7 @@ do
     --
     -- @attribute   System.__SingleVer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__SingleVer__",
+    __SingleVer__                       = namespace.SaveNamespace("System.__SingleVer__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13975,7 +14047,7 @@ do
     --
     -- @attribute   System.__Static__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Static__",
+    __Static__                          = namespace.SaveNamespace("System.__Static__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -14005,7 +14077,7 @@ do
     --
     -- @attribute   System.__Super__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Super__",
+    __Super__                           = namespace.SaveNamespace("System.__Super__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -14024,7 +14096,7 @@ do
     --
     -- @attribute   System.__Throwable__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Throwable__",
+    __Throwable__                       = namespace.SaveNamespace("System.__Throwable__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -14046,7 +14118,7 @@ do
     --
     -- @attribute   System.__ValueType__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ValueType__",
+    __ValueType__                       = namespace.SaveNamespace("System.__ValueType__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -16981,7 +17053,7 @@ do
     --- Represents the informations of the runtime
     __Final__() __Sealed__() __Abstract__()
     class "System.Runtime"              (function(_ENV)
-        export{ Enum, Struct, Class, Interface, __Arguments__, rebuildTemplateTypes }
+        export{ Enum, Struct, Class, Interface, __Arguments__, "rebuildTemplateTypes" }
 
         --- Fired when a new type is generated
         __Static__() event "OnTypeDefined"

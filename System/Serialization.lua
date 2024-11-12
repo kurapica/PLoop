@@ -615,7 +615,7 @@ PLoop(function(_ENV)
         class "__SerializeFormat__"     (function(_ENV)
             extend "IAttachAttribute"
 
-            export { saveTargetFormat   = saveTargetFormat, isSerializableType = isSerializableType, issubtype = Class.IsSubType, ISerializable, isclass = Class.Validate }
+            export { saveTargetFormat   = saveTargetFormat, isSerializableType = isSerializableType, issubtype = Class.IsSubType, ISerializable, isclass = Class.Validate, AttributeTargets }
 
             function AttachAttribute(self, target, targettype, owner, name, stack)
                 if targettype == AttributeTargets.Class then

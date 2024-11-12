@@ -70,6 +70,13 @@ PLoop(function(_ENV)
         end
 
         -----------------------------------------------------------------------
+        --                             property                              --
+        -----------------------------------------------------------------------
+        --- The observable
+        __Set__(PropertySet.Weak)
+        property "Observable"           { type = IObservable }
+
+        -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
@@ -1800,8 +1807,8 @@ PLoop(function(_ENV)
 
         --- Convert to a subject
         __Arguments__{ -Subject/Subject, System.Any * 0 }
-        function ToSubject(self, subject, ...)
-            return subject(self, ...)
+        function ToSubject(self, subjecttype, ...)
+            return subjecttype(self, ...)
         end
     end)
 end)

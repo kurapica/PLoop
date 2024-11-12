@@ -168,6 +168,7 @@ PLoop(function(_ENV)
         rawset                          = rawset,
         isclass                         = Class.Validate,
         issubtype                       = Class.IsSubType,
+        isobjecttype                    = Class.IsObjectType,
         getobjectclass                  = Class.GetObjectClass,
         getreactivetype                 = System.Reactive.GetReactiveType,
         istructvalue                    = Struct.ValidateValue,
@@ -306,7 +307,9 @@ PLoop(function(_ENV)
     local getSubject                    = function(self)
         local subject                   = rawget(self, Subject)
         if not subject then
+            local raw                   = rawget(self, RawTable)
             subject                     = Subject()
+            subject.Observable          = raw and getObjectSubject(raw) or nil
             rawset(self, Subject, subject)
 
             -- init
@@ -320,7 +323,7 @@ PLoop(function(_ENV)
         local subject                   = getSubject(self)
 
         -- subscribe
-        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...))
+        local ok, subscription, observer= pcall(subject.Subscribe, subject, ...)
         if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
 
         return subscription, observer
@@ -344,7 +347,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
-        extend "IReactive"
+        extend "IObservable" "IReactive"
 
         export                          {
             type                        = type,
@@ -595,7 +598,7 @@ PLoop(function(_ENV)
                 local subject           = rawget(self, Subject)
                 return subject and subject:OnNext(nil)
             end,
-            type                        = targettype + Reactive[targettype]
+            type                        = targettype and targettype ~= Any and (targettype + Reactive[targettype]) or RawTable
         }
 
         -------------------------------------------------------------------
@@ -603,13 +606,8 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         __Arguments__{ targettype or (RawTable/nil) }
         function __ctor(self, init)
-            print("constructor")
             rawset(self, Reactive, {})          -- sub-reactives
             rawset(self, RawTable, init or {})  -- raw
-        end
-
-        function __exist(_, init)
-            print("init", init)
         end
 
         -------------------------------------------------------------------
@@ -639,7 +637,6 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Gets the current value
         function __index(self, key)
-            print("index", key)
             local reactives             = rawget(self, Reactive)
             local r                     = reactives[key]
             if r then return r end
@@ -648,7 +645,6 @@ PLoop(function(_ENV)
             local raw                   = self[RawTable]
             if not raw then error("The object is not specified", 2) end
             local value                 = raw[key]
-            print("raw", key, value)
             return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
         end
 
@@ -718,16 +714,16 @@ PLoop(function(_ENV)
                         if not ok then error(format(key, e), 2) end
                     else
                         -- clear
-                        reactives[name] = nil
+                        reactives[key]  = nil
                         releaseReactive(self, r)
 
                         -- new
-                        raw[name]       = value
-                        r               = makeReactive(self, name, value, ptype, rtype)
+                        raw[key]        = value
+                        r               = makeReactive(self, key, value, ptype, rtype)
 
                         -- only send it in this node
                         local sub       = rawget(self, Subject)
-                        return sub and sub:OnNext(name, r)
+                        return sub and sub:OnNext(key, r)
                     end
                 else
                     -- Generate
