@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [1.9.5] - 2024-11-12 WangXH  <kurapica125@outlook.com>
 ### Added
 - `Class.IsObjectIniting(obj)` is added to check whether the object is during construction.
-- We can use `property "Name" { initOnly = true }` to declare init-only properties.
+- We can use `property "Name" { init = true }` or `property "Name" { initOnly = true }` to declare init-only properties.
 
 
 ## [1.9.4] - 2024-05-09 WangXH  <kurapica125@outlook.com>

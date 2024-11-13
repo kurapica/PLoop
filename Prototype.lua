@@ -12829,7 +12829,7 @@ do
                         if v then
                             info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD])
                         end
-                    elseif k == "initonly" then
+                    elseif k == "initonly" or k == "init" then
                         if v then
                             info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD])
                         end
