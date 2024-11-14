@@ -221,7 +221,7 @@ PLoop(function(_ENV)
     --                              utility                              --
     -----------------------------------------------------------------------
     -- the reactive map
-    local objectSubjectMap              = Toolset.newtable(true)
+    local objectSubjectMap              = not Platform.MULTI_OS_THREAD and Toolset.newtable(true) or nil
     local getObjectSubject              = Platform.MULTI_OS_THREAD
         and function(obj)
             local subject               = rawget(obj, Reactive)
@@ -283,16 +283,16 @@ PLoop(function(_ENV)
             if r then
                 if isobjecttype(r, ReactiveField) then
                     -- Field - Update only
-                    r.Container     = new
+                    r.Container         = new
                 else
                     -- Reactive - Replace with new
                     releaseReactive(self, r)
 
-                    local value     = new and new[k] or nil
+                    local value         = new and new[k] or nil
                     if value then
                         makeReactive(self, k, value)
                     else
-                        reactives[k]= false
+                        reactives[k]    = false
                     end
                 end
             end
