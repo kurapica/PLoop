@@ -318,17 +318,6 @@ PLoop(function(_ENV)
         return subject
     end
 
-    -- subscribe
-    local subscribe                     = function(self, ...)
-        local subject                   = getSubject(self)
-
-        -- subscribe
-        local ok, subscription, observer= pcall(subject.Subscribe, subject, ...)
-        if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
-
-        return subscription, observer
-    end
-
     local format                        = function(name, err)
         if type(err) == "string" then
             return err:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
@@ -462,7 +451,7 @@ PLoop(function(_ENV)
         --                           auto-gen                            --
         -------------------------------------------------------------------
         if properties then
-            -- already used
+            -- No Value property allowed
             if properties["Value"] then properties.Value = nil end
 
             for name, ptype in pairs(properties) do
@@ -566,18 +555,14 @@ PLoop(function(_ENV)
         --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
-        Subscribe                       = subscribe
-
-        --- Gets the subject
-        __Arguments__{ -Subject/Subject, System.Any * 0 }
-        function ToSubject(self, subjectType, ...)
+        function Subscribe(self, ...)
             local subject               = getSubject(self)
 
-            if subjectType == Subject then
-                return subject
-            else
-                return subjectType(subject, ...)
-            end
+            -- subscribe
+            local ok, sub, obs          = pcall(subject.Subscribe, subject, ...)
+            if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+
+            return sub, obs
         end
 
         -------------------------------------------------------------------
@@ -697,7 +682,17 @@ PLoop(function(_ENV)
 
                 -- create
                 else
-                    r                   = makeReactive(self, key, nil, Any, ReactiveField)
+                    if raw[key]         == nil then
+                        -- type unknown
+                        r               = makeReactive(self, key, nil, Any, ReactiveField)
+                    else
+                        r               = makeReactive(self, key, raw[key])
+
+                        if not isobjecttype(r, ReactiveField) then
+                            error("The " .. key .. " can't accept observable value", 2)
+                        end
+                    end
+
                     r.Observable        = value
                 end
                 return
@@ -708,6 +703,10 @@ PLoop(function(_ENV)
 
             -- raw value
             if value ~= nil then
+                if r == nil and raw[key] ~= nil then
+                    r                   = makeReactive(self, key, raw[key])
+                end
+
                 if r ~= nil then
                     if isobjecttype(r, ReactiveField) then
                         local ok, e     = pcall(setvalue, r, "Value", value)
