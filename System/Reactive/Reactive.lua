@@ -653,16 +653,17 @@ PLoop(function(_ENV)
             end
 
             if (keytype and keytype ~= Any) or (valtype and valtype ~= Any) then
-                __Arguments__{ keytype or Any, (valtype or Any)/nil }
+                __Arguments__{ keytype or Any, (valtype or Any)/nil, Integer/nil }
             end
         end
-        function __newindex(self, key, value)
+        function __newindex(self, key, value, stack)
             -- non-string value will be saved in self directly
             if type(key) ~= "string" then return rawset(self, key, value) end
+            stack                       = (stack or 1) + 1
 
             local reactives             = self[Reactive]
             local raw                   = self[RawTable]
-            if not raw then error("The object is not specified", 2) end
+            if not raw then error("The object is not specified", stack) end
 
             local r                     = reactives[key]
 
@@ -677,7 +678,7 @@ PLoop(function(_ENV)
                     if isobjecttype(r, ReactiveField) then
                         r.Observable    = value
                     else
-                        error("The " .. key .. " can't accept observable value", 2)
+                        error("The " .. key .. " can't accept observable value", stack)
                     end
 
                 -- create
@@ -689,7 +690,7 @@ PLoop(function(_ENV)
                         r               = makeReactive(self, key, raw[key])
 
                         if not isobjecttype(r, ReactiveField) then
-                            error("The " .. key .. " can't accept observable value", 2)
+                            error("The " .. key .. " can't accept observable value", stack)
                         end
                     end
 
@@ -710,7 +711,7 @@ PLoop(function(_ENV)
                 if r ~= nil then
                     if isobjecttype(r, ReactiveField) then
                         local ok, e     = pcall(setvalue, r, "Value", value)
-                        if not ok then error(format(key, e), 2) end
+                        if not ok then error(format(key, e), stack) end
                     else
                         -- clear
                         reactives[key]  = nil
@@ -738,7 +739,7 @@ PLoop(function(_ENV)
                 if r ~= nil then
                     if isobjecttype(r, ReactiveField) then
                         local ok, e     = pcall(setvalue, r, "Value", nil)
-                        if not ok then error(format(key, e), 2) end
+                        if not ok then error(format(key, e), stack) end
                     else
                         -- release the reactive object
                         raw[key]        = nil
