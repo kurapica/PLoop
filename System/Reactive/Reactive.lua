@@ -454,6 +454,7 @@ PLoop(function(_ENV)
             -- No Value property allowed
             if properties["Value"] then properties.Value = nil end
 
+            -- Generate the reactive properties
             for name, ptype in pairs(properties) do
                 local rtype             = Reactive.GetReactiveType(nil, ptype, true)
 
@@ -484,7 +485,7 @@ PLoop(function(_ENV)
                             local ok, e = pcall(setvalue, r, "Value", value)
                             return ok or throw(format(name, e))
                         end,
-                        type            =  ptype + rtype + IObservable,
+                        type            = ptype + rtype + IObservable,
                         throwable       = true,
                     }
                 else
@@ -493,7 +494,10 @@ PLoop(function(_ENV)
                         get             = function(self)
                             local r     = self[Reactive][name]
                             if r then return r end
-                            local d     = self[RawTable][name]
+
+                            -- Check if existed
+                            local raw   = self[RawTable]
+                            local d     = raw and raw[name]
                             return d and makeReactive(self, name, d, ptype, rtype)
                         end,
 
@@ -514,7 +518,10 @@ PLoop(function(_ENV)
                             end
 
                             -- new
-                            self[RawTable][name] = value
+                            local raw   = self[RawTable]
+                            if not raw then throw("the raw object is not specified") end
+
+                            raw[name]   = value
                             if value then
                                 r       = makeReactive(self, name, value, ptype, rtype)
                             else
@@ -525,7 +532,8 @@ PLoop(function(_ENV)
                             local sub   = rawget(self, Subject)
                             return sub and sub:OnNext(name, r)
                         end,
-                        type            =  ptype + rtype,
+                        type            = ptype + rtype,
+                        throwable       = true,
                     }
                 end
             end
@@ -536,9 +544,11 @@ PLoop(function(_ENV)
             function GetIterator(self)
                 local yield             = yield
                 local raw               = self[RawTable]
+                if not raw then return end
+
+                -- iter
                 for k, v in (raw.GetIterator or pairs)(raw) do
-                    local ty            = type(k)
-                    if ty == "string" then
+                    if type(k) == "string" then
                         yield(k, v)
                     end
                 end
@@ -570,9 +580,9 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Gets/Sets the raw value
         property "Value"                {
-            get                         = function(self) return rawget(self, RawTable) end,
+            field                       = RawTable,
             set                         = function(self, value)
-                if isobjecttype(value, IReactive) then
+                if value and isobjecttype(value, IReactive) then
                     value               = value.Value
                 end
                 if value == rawget(self, RawTable) then return end
@@ -621,14 +631,15 @@ PLoop(function(_ENV)
         --                          meta-method                          --
         -------------------------------------------------------------------
         --- Gets the current value
-        function __index(self, key)
+        function __index(self, key, stack)
             local reactives             = rawget(self, Reactive)
             local r                     = reactives[key]
-            if r then return r end
+            if r                        then return r end
 
-            -- wrap raw
-            local raw                   = self[RawTable]
-            if not raw then error("The object is not specified", 2) end
+            -- make field reactive
+            local raw                   = rawget(self, RawTable)
+            if not reactives            then error("The reactive is disposed", (stack or 1) + 1) end
+            if not raw                  then error("The raw is not specified", (stack or 1) + 1) end
             local value                 = raw[key]
             return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
         end
@@ -658,12 +669,13 @@ PLoop(function(_ENV)
         end
         function __newindex(self, key, value, stack)
             -- non-string value will be saved in self directly
-            if type(key) ~= "string" then return rawset(self, key, value) end
+            if type(key) ~= "string"    then return rawset(self, key, value) end
             stack                       = (stack or 1) + 1
 
-            local reactives             = self[Reactive]
-            local raw                   = self[RawTable]
-            if not raw then error("The object is not specified", stack) end
+            local reactives             = rawget(self, Reactive)
+            local raw                   = rawget(self, RawTable)
+            if not reactives            then error("The reactive is disposed", stack) end
+            if not raw                  then error("The raw object is not specified", stack) end
 
             local r                     = reactives[key]
 
