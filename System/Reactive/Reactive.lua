@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/09/20                                               --
+-- Update Date  :   2024/12/04                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -155,7 +155,7 @@ PLoop(function(_ENV)
     end)
 
     -----------------------------------------------------------------------
-    --                              Keyword                              --
+    --                              keyword                              --
     -----------------------------------------------------------------------
     Environment.RegisterGlobalNamespace("System.Reactive")
 
@@ -679,40 +679,43 @@ PLoop(function(_ENV)
 
             local r                     = reactives[key]
 
-            -- replace with the value
-            if isobjecttype(value, IReactive) then
-                value                   = value.Value
+            -- object value checker
+            if type(value) == "table" then
+                -- replace with the value
+                if isobjecttype(value, IReactive) then
+                    value               = value.Value
 
-            -- check the reactive
-            elseif isobjecttype(value, IObservable) then
-                -- check exists
-                if r then
-                    if isobjecttype(r, ReactiveField) then
-                        r.Observable    = value
-                    else
-                        error("The " .. key .. " can't accept observable value", stack)
-                    end
-
-                -- create
-                else
-                    if raw[key]         == nil then
-                        -- type unknown
-                        r               = makeReactive(self, key, nil, Any, ReactiveField)
-                    else
-                        r               = makeReactive(self, key, raw[key])
-
-                        if not isobjecttype(r, ReactiveField) then
+                -- check the reactive
+                elseif isobjecttype(value, IObservable) then
+                    -- check exists
+                    if r then
+                        if isobjecttype(r, ReactiveField) then
+                            r.Observable= value
+                        else
                             error("The " .. key .. " can't accept observable value", stack)
                         end
-                    end
 
-                    r.Observable        = value
+                    -- create
+                    else
+                        if raw[key]     == nil then
+                            -- type unknown
+                            r           = makeReactive(self, key, nil, Any, ReactiveField)
+                        else
+                            r           = makeReactive(self, key, raw[key])
+
+                            if not isobjecttype(r, ReactiveField) then
+                                error("The " .. key .. " can't accept observable value", stack)
+                            end
+                        end
+
+                        r.Observable    = value
+                    end
+                    return
                 end
-                return
             end
 
             -- Compare
-            if raw[key] == value then return end
+            if raw[key] == value        then return end
 
             -- raw value
             if value ~= nil then
@@ -723,7 +726,7 @@ PLoop(function(_ENV)
                 if r ~= nil then
                     if isobjecttype(r, ReactiveField) then
                         local ok, e     = pcall(setvalue, r, "Value", value)
-                        if not ok then error(format(key, e), stack) end
+                        if not ok       then error(format(key, e), stack) end
                     else
                         -- clear
                         reactives[key]  = nil
@@ -751,7 +754,7 @@ PLoop(function(_ENV)
                 if r ~= nil then
                     if isobjecttype(r, ReactiveField) then
                         local ok, e     = pcall(setvalue, r, "Value", nil)
-                        if not ok then error(format(key, e), stack) end
+                        if not ok       then error(format(key, e), stack) end
                     else
                         -- release the reactive object
                         raw[key]        = nil

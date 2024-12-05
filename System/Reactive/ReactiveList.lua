@@ -8,13 +8,13 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/10/25                                               --
--- Update Date  :   2024/09/20                                               --
+-- Update Date  :   2024/12/24                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     -----------------------------------------------------------------------
-    --                              Utility                              --
+    --                              utility                              --
     -----------------------------------------------------------------------
     export                              {
         rawset                          = rawset,
@@ -24,17 +24,36 @@ PLoop(function(_ENV)
         issubtype                       = Class.IsSubType,
         getreactivetype                 = System.Reactive.GetReactiveType,
 
-        ReactiveValue
+        ReactiveValue, Subject, Reactive
     }
 
     -- the reactive map
-    local reactiveMap                   = newtable(true, true)
-    local getReactiveMap                = Platform.MULTI_OS_THREAD and function(obj) return rawget(obj, IReactive) end or function(obj) return reactiveMap[obj]  end
-    local setReactiveMap                = Platform.MULTI_OS_THREAD and function(obj, r) rawset(obj, IReactive, r)  end or function(obj, r) reactiveMap[obj] = r  end
-    local clearReactiveMap              = Platform.MULTI_OS_THREAD and function(r) rawset(r.Value, IReactive, nil) end or function(r) reactiveMap[r.Value] = nil end
+    local objectSubjectMap              = not Platform.MULTI_OS_THREAD and Toolset.newtable(true) or nil
+    local getObjectSubject              = Platform.MULTI_OS_THREAD
+        and function(obj)
+            local subject               = rawget(obj, Reactive)
+            if not subject then
+                subject                 = Subject()
+                rawset(obj, Reactive, subject)
+            end
+            return subject
+        end
+        or  function(obj)
+            local subject               = objectSubjectMap[obj]
+            if not subject then
+                subject                 = Subject()
+                objectSubjectMap[obj]   = subject
+            end
+            return subject
+        end
+
+    -- push data
+    local onObjectNext                  = function(obj, ...) return obj and getObjectSubject(obj):OnNext(...) end
+    local onObjectError                 = function(obj, ex)  return obj and getObjectSubject(obj):OnError(ex) end
+    local onObjectCompleted             = function(obj)      return obj and getObjectSubject(obj):OnCompleted() end
 
     -- Subscribe the children
-    local subscribeReactive             = function(self, k, r)
+    local subscribeReactive             = function(self, r)
         local subject                   = rawget(self, Subject)
         -- no need to support scalar value
         if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
@@ -52,7 +71,7 @@ PLoop(function(_ENV)
                 if cache[r] then return subject:OnNext(cache[r], ...) end
 
                 for i = 1, raw.Count or #raw do
-                    if reactives[raw[i]] == r then
+                    if reactives[raw[i]]== r then
                         cache[r]        = i
                         return subject:OnNext(i, ...)
                     end
@@ -93,6 +112,49 @@ PLoop(function(_ENV)
         return r and subscribeReactive(self, k, r)
     end
 
+    -- switch object value
+    local switchObject                  = function(self, new)
+        -- switch for reactive fields
+        local reactives                 = self[Reactive]
+        for k, r in pairs(reactives) do
+            if r then
+                if isobjecttype(r, ReactiveField) then
+                    -- Field - Update only
+                    r.Container         = new
+                else
+                    -- Reactive - Replace with new
+                    releaseReactive(self, r)
+
+                    local value         = new and new[k] or nil
+                    if value then
+                        makeReactive(self, k, value)
+                    else
+                        reactives[k]    = false
+                    end
+                end
+            end
+        end
+
+        -- subscribe
+        local subject                   = rawget(self, Subject)
+        if not subject then return end
+        subject.Observable              = new and getObjectSubject(new) or nil
+    end
+
+    local getSubject                    = function(self)
+        local subject                   = rawget(self, Subject)
+        if not subject then
+            local raw                   = rawget(self, RawTable)
+            subject                     = Subject()
+            subject.Observable          = raw and getObjectSubject(raw) or nil
+            rawset(self, Subject, subject)
+
+            -- init
+            for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
+        end
+        return subject
+    end
+    
     -- subscribe
     local subscribe                     = function(self, ...)
         local subject                   = rawget(self, Subject)
@@ -152,7 +214,6 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isobjecttype                = Class.IsObjectType,
-            getreactivetype             = System.Reactive.GetReactiveType,
             splice                      = List.Splice,
 
             -- import types
@@ -161,22 +222,24 @@ PLoop(function(_ENV)
 
         if elementtype then
             export                      {
-                validatetype            = getreactivetype(elementtype) and (elementtype + getreactivetype(elementtype)) or elementtype,
                 valid                   = getmetatable(elementtype).ValidateValue,
                 geterrormessage         = Struct.GetErrorMessage,
                 parseindex              = Toolset.parseindex,
             }
+
+            local reactivetype          = GetReactiveType(elementtype)
+            validatetype                = reactivetype and (elementtype + reactivetype) or elementtype
         end
 
         -------------------------------------------------------------------
         --                           property                            --
         -------------------------------------------------------------------
         --- The item count
-        property "Count"                { get = function(self) local list = self[RawTable] return list.Count or #list end }
+        property "Count"                { get = function(self) local list = self[RawTable] return list and (list.Count or #list) or 0 end }
 
         --- Gets/Sets the raw value
         property "Value"                {
-            get                         = function(self) return self[RawTable] end,
+            field                       = RawTable,
             set                         = function(self, value)
                 if isobjecttype(value, IReactive) then
                     value               = value.Value
