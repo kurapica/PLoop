@@ -55,7 +55,8 @@ PLoop(function(_ENV)
     -- Subscribe the children
     local subscribeReactive             = function(self, r)
         local subject                   = rawget(self, Subject)
-        -- no need to support scalar value
+
+        -- no need to support scalar reactive value
         if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
             rawset(subject, r, (r:Subscribe(function(...)
                 local raw               = self[RawTable]
@@ -155,24 +156,6 @@ PLoop(function(_ENV)
         return subject
     end
     
-    -- subscribe
-    local subscribe                     = function(self, ...)
-        local subject                   = rawget(self, Subject)
-        if not subject then
-            subject                     = Subject()
-            rawset(self, Subject, subject)
-
-            -- init
-            for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
-        end
-
-        -- subscribe
-        local ok, subscription, observer= pcall(subject.Subscribe(subject, ...))
-        if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
-
-        return subscription, observer
-    end
-
     local format                        = function(name, err)
         if type(err) == "string" then
             return err:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
@@ -202,7 +185,9 @@ PLoop(function(_ENV)
             rawset                      = rawset,
             rawget                      = rawget,
             ipairs                      = ipairs,
+            pairs                       = pairs,
             error                       = error,
+            getmetatable                = getmetatable,
             pcall                       = pcall,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
@@ -214,10 +199,12 @@ PLoop(function(_ENV)
             tremove                     = table.remove,
             newtable                    = Toolset.newtable,
             isobjecttype                = Class.IsObjectType,
+            getobjectclass              = Class.GetObjectClass,
+            gettempparams               = Class.GetTemplateParameters,
             splice                      = List.Splice,
 
             -- import types
-            RawTable, Observable, Observer, Reactive, Watch, Subject, IList
+            RawTable, Reactive, IList, Subject
         }
 
         if elementtype then
@@ -240,20 +227,69 @@ PLoop(function(_ENV)
         --- Gets/Sets the raw value
         property "Value"                {
             field                       = RawTable,
-            set                         = function(self, value)
-                if isobjecttype(value, IReactive) then
+            set                         = elementtype and function(self, value)
+                if value and isobjecttype(value, IReactive) then
                     value               = value.Value
                 end
-                return self:Splice(1, self.Count, value)
+                if value == rawget(self, RawTable) then return end
+
+                -- Check with element type
+                if value then
+                    local cls           = getobjectclass(value)
+                    if cls then
+                        local eletype   = gettempparams(cls)
+                        if eletype and not getmetatable(elementtype).IsSubType(eletype, elementtype) then
+                            throw("The element type of the value doesn't match the reactive object")
+                        end
+                    end
+                end
+
+                -- switch object
+                rawset(self, RawTable, value)
+                switchObject(self, value)
+
+                -- notify
+                local subject           = rawget(self, Subject)
+                return subject and subject:OnNext(nil)
+
+            end or function(self, value)
+                if value and isobjecttype(value, IReactive) then
+                    value               = value.Value
+                end
+                if value == rawget(self, RawTable) then return end
+
+                -- switch object
+                rawset(self, RawTable, value)
+                switchObject(self, value)
+
+                -- notify
+                local subject           = rawget(self, Subject)
+                return subject and subject:OnNext(nil)
             end,
-            type                        = RawTable + IList, -- @TODO: more excatly type combination
+            type                        = RawTable + IIndexedList,
+            throwable                   = elementtype and true or nil,
         }
 
         -------------------------------------------------------------------
         --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
-        Subscribe                       = subscribe
+        function Subscribe(self, ...)
+            local subject               = rawget(self, Subject)
+            if not subject then
+                subject                 = Subject()
+                rawset(self, Subject, subject)
+
+                -- init
+                for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
+            end
+
+            -- subscribe
+            local ok, sub, observer     = pcall(subject.Subscribe(subject, ...))
+            if not ok then error("Usage: reactiveList:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+
+            return sub, observer
+        end
 
         --- Gets the iterator
         function GetIterator(self)
