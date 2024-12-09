@@ -24,7 +24,7 @@ PLoop(function(_ENV)
         issubtype                       = Class.IsSubType,
         getreactivetype                 = System.Reactive.GetReactiveType,
 
-        ReactiveValue, Subject, Reactive
+        ReactiveValue, Subject, Reactive, IList
     }
 
     -- the reactive map
@@ -61,6 +61,7 @@ PLoop(function(_ENV)
             rawset(subject, r, (r:Subscribe(function(...)
                 local raw               = self[RawTable]
                 local reactives         = self[Reactive]
+                if not raw then return end
 
                 -- index cache to boost, will be reset when element index changed
                 local cache             = rawget(self, IList)
@@ -69,15 +70,16 @@ PLoop(function(_ENV)
                     rawset(self, IList, cache)
                 end
 
-                if cache[r] then return subject:OnNext(cache[r], ...) end
+                if cache[r] then return onObjectNext(raw, cache[r], ...) end
 
                 for i = 1, raw.Count or #raw do
-                    if reactives[raw[i]]== r then
+                    local v             = raw[i]
+                    if v ~= nil and reactives[v] == r then
                         cache[r]        = i
-                        return subject:OnNext(i, ...)
+                        return onObjectNext(raw, i, ...)
                     end
                 end
-            end, function(ex) return subject:OnError(ex) end)))
+            end, function(ex) return onObjectError(rawget(self, RawTable), ex) end)))
         end
         return r
     end
@@ -85,23 +87,10 @@ PLoop(function(_ENV)
     -- Release the children
     local releaseReactive               = function(self, r)
         local subject                   = rawget(self, Subject)
-        if r and subject and rawget(subject, r) then
-            subject[r]:Dispose()
+        local subscription              = r and subject and rawget(subject, r)
+        if subscription then
             rawset(subject, r, nil)
-        end
-    end
-
-    -- Release all subscriptions
-    local releaseAllSub                 = function(self)
-        local subject                   = rawget(self, Subject)
-        if subject then
-            for k, r in pairs(self[Reactive]) do
-                local subscription      = r and rawget(subject, r)
-                if subscription then
-                    subscription:Dispose()
-                    rawset(subject, r, nil)
-                end
-            end
+            return subscription:Dispose()
         end
     end
 
@@ -109,37 +98,36 @@ PLoop(function(_ENV)
     local makeReactive                  = function(self, v)
         local rtype                     = getreactivetype(v)
         local r                         = rtype and not issubtype(rtype, ReactiveValue) and rtype(v)
-        self[Reactive][k]               = r or false
-        return r and subscribeReactive(self, k, r)
+        self[Reactive][v]               = r or false
+        return r and subscribeReactive(self, r)
     end
 
     -- switch object value
     local switchObject                  = function(self, new)
-        -- switch for reactive fields
+        if rawget(self, RawTable) == new then return end
+
+        -- clear
         local reactives                 = self[Reactive]
-        for k, r in pairs(reactives) do
-            if r then
-                if isobjecttype(r, ReactiveField) then
-                    -- Field - Update only
-                    r.Container         = new
-                else
-                    -- Reactive - Replace with new
-                    releaseReactive(self, r)
-
-                    local value         = new and new[k] or nil
-                    if value then
-                        makeReactive(self, k, value)
-                    else
-                        reactives[k]    = false
-                    end
-                end
-            end
+        rawset(self, IList, nil)
+        for _, r in pairs(reactives) do
+            if r then releaseReactive(self, r) end
         end
+        self[Reactive]                  = newtable(true)
 
-        -- subscribe
+        -- lazy subscribe
         local subject                   = rawget(self, Subject)
         if not subject then return end
-        subject.Observable              = new and getObjectSubject(new) or nil
+
+        -- reset
+        subject.Observable              = nil
+        if not new then return end
+
+        -- make reactives
+        for _, v in (new.GetIterator or ipairs)(new) do
+            makeReactive(self, v)
+        end
+
+        subject.Observable              = getObjectSubject(new)
     end
 
     local getSubject                    = function(self)
@@ -492,7 +480,7 @@ PLoop(function(_ENV)
                     raw[i]              = nil
                 end
             end
-            rawset(self, Reactive, newtable(true, true))
+            rawset(self, Reactive, newtable(true))
             return fireElementChange(self)
         end
 
@@ -501,7 +489,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         function __ctor(self, list)
             rawset(self, RawTable, type(list) == "table" and list or {})
-            rawset(self, Reactive, newtable(true, true))
+            rawset(self, Reactive, newtable(true))
             if list then setReactiveMap(list, self) end
         end
 
@@ -513,7 +501,16 @@ PLoop(function(_ENV)
         --                        de-constructor                         --
         -------------------------------------------------------------------4
         function __dtor(self)
-            releaseAllSub()
+            local subject               = rawget(self, Subject)
+            if subject then
+                for k, r in pairs(self[Reactive]) do
+                    local subscription  = r and rawget(subject, r)
+                    if subscription then
+                        subscription:Dispose()
+                        rawset(subject, r, nil)
+                    end
+                end
+            end
 
             for k, v in pairs(self[Reactive]) do
                 -- only reactive fields will be disposed with the parent
