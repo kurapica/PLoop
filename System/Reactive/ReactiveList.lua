@@ -70,7 +70,9 @@ PLoop(function(_ENV)
                     rawset(self, IList, cache)
                 end
 
-                if cache[r] then return onObjectNext(raw, cache[r], ...) end
+                local index             = cache[r]
+                if index then return onObjectNext(raw, cache[r], ...) end
+                if index == false then return end
 
                 for i = 1, raw.Count or #raw do
                     local v             = raw[i]
@@ -79,6 +81,7 @@ PLoop(function(_ENV)
                         return onObjectNext(raw, i, ...)
                     end
                 end
+                cache[r]                = false
             end, function(ex) return onObjectError(rawget(self, RawTable), ex) end)))
         end
         return r
@@ -97,7 +100,7 @@ PLoop(function(_ENV)
     -- wrap the table value as default
     local makeReactive                  = function(self, v)
         local rtype                     = getreactivetype(v)
-        local r                         = rtype and not issubtype(rtype, ReactiveValue) and rtype(v)
+        local r                         = rtype and not issubtype(rtype, ReactiveValue) and rtype(v) or nil
         self[Reactive][v]               = r or false
         return r and subscribeReactive(self, r)
     end
@@ -105,9 +108,9 @@ PLoop(function(_ENV)
     -- switch object value
     local switchObject                  = function(self, new)
         if rawget(self, RawTable) == new then return end
+        local reactives                 = self[Reactive]
 
         -- clear
-        local reactives                 = self[Reactive]
         rawset(self, IList, nil)
         for _, r in pairs(reactives) do
             if r then releaseReactive(self, r) end
@@ -139,7 +142,7 @@ PLoop(function(_ENV)
             rawset(self, Subject, subject)
 
             -- init
-            for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
+            for k, r in pairs(self[Reactive]) do subscribeReactive(self, r) end
         end
         return subject
     end
@@ -156,8 +159,7 @@ PLoop(function(_ENV)
     -- fire the element data changes
     local fireElementChange             = function(self, ...)
         rawset(self, IList, nil)
-        local subject                   = rawget(self, Subject)
-        return subject and subject:OnNext(...)
+        return onObjectNext(rawget(self, RawTable), ...)
     end
 
     --- Provide reactive feature for list or array
