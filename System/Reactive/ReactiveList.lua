@@ -162,6 +162,9 @@ PLoop(function(_ENV)
         return onObjectNext(rawget(self, RawTable), ...)
     end
 
+    -----------------------------------------------------------------------
+    --                          implementation                           --
+    -----------------------------------------------------------------------
     --- Provide reactive feature for list or array
     __Sealed__()
     __Arguments__{ AnyType/nil }
@@ -180,6 +183,7 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             pcall                       = pcall,
             select                      = select,
+            yield                       = coroutine.yield,
             unpack                      = _G.unpack or table.unpack,
             min                         = math.min,
             max                         = math.max,
@@ -265,14 +269,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Subscribe the observers
         function Subscribe(self, ...)
-            local subject               = rawget(self, Subject)
-            if not subject then
-                subject                 = Subject()
-                rawset(self, Subject, subject)
-
-                -- init
-                for k, r in pairs(self[Reactive]) do subscribeReactive(self, k, r) end
-            end
+            local subject               = getSubject(self)
 
             -- subscribe
             local ok, sub, observer     = pcall(subject.Subscribe(subject, ...))
@@ -282,12 +279,13 @@ PLoop(function(_ENV)
         end
 
         --- Gets the iterator
+        __Iterator__()
         function GetIterator(self)
-            return function(self, index)
-                index                   = (index or 0) + 1
-                local value             = self[index]
-                if value ~= nil then return index, value end
-            end, self, nil
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
+            for i, v in (raw.GetIterator or ipairs)(raw) do
+                yield(i, v)
+            end
         end
 
         --- Map the items to other datas, use collection operation instead of observable
@@ -307,6 +305,9 @@ PLoop(function(_ENV)
             end
             if item == nil then return end
             local raw                   = self[RawTable]
+            if not raw then return end
+
+            -- insert
             local insert                = raw.Insert or tinsert
             insert(raw, item)
             return fireElementChange(self) or self.Count
@@ -315,6 +316,8 @@ PLoop(function(_ENV)
         --- Pop
         function Pop(self)
             local raw                   = self[RawTable]
+            if not raw then return end
+
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw)
             if item == nil then return end
@@ -325,6 +328,8 @@ PLoop(function(_ENV)
         --- Shift
         function Shift(self)
             local raw                   = self[RawTable]
+            if not raw then return end
+
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw, 1)
             if item == nil then return end
@@ -340,6 +345,8 @@ PLoop(function(_ENV)
             end
             if item == nil then return end
             local raw                   = self[RawTable]
+            if not raw then return end
+            
             local insert                = raw.Insert or tinsert
             insert(raw, 1, item)
             return fireElementChange(self) or self.Count
