@@ -19,6 +19,8 @@ PLoop(function(_ENV)
     export                              {
         rawset                          = rawset,
         rawget                          = rawget,
+        ipairs                          = ipairs,
+        select                          = select,
         newtable                        = Toolset.newtable,
         isobjecttype                    = Class.IsObjectType,
         issubtype                       = Class.IsSubType,
@@ -81,20 +83,48 @@ PLoop(function(_ENV)
                         return onObjectNext(raw, i, ...)
                     end
                 end
-                cache[r]                = false
+
+                -- clear
+                local subscription      = rawget(subject, r)
+                if subscription then
+                    subject[r]          = nil
+                    subscription:Dispose()
+                end
             end, function(ex) return onObjectError(rawget(self, RawTable), ex) end)))
         end
         return r
     end
 
     -- Release the children
-    local releaseReactive               = function(self, r)
-        local subject                   = rawget(self, Subject)
-        local subscription              = r and subject and rawget(subject, r)
-        if subscription then
-            rawset(subject, r, nil)
-            return subscription:Dispose()
+    local releaseElement                = function(self, ...)
+        local count                     = select("#", ...)
+        local raw                       = rawget(self, RawTable)
+
+        for i = 1, select("#", ...) do
+            local k                     = select(i, ...)
+            if k ~= nil then
+                local r                 = self[Reactive][k]
+                if r then
+                    if raw then
+                        for i, v in (raw.GetIterator or ipairs) do
+                            
+                        end
+                    end
+
+                    self[Reactive][k]       = nil
+
+                    local subject                   = rawget(self, Subject)
+                    local subscription              = subject and rawget(subject, r)
+
+                    if subscription then
+                        rawset(subject, r, nil)
+                        subscription:Dispose()
+                    end
+                end
+            end
         end
+
+        return ...
     end
 
     -- wrap the table value as default
@@ -112,8 +142,8 @@ PLoop(function(_ENV)
 
         -- clear
         rawset(self, IList, nil)
-        for _, r in pairs(reactives) do
-            if r then releaseReactive(self, r) end
+        for k, r in pairs(reactives) do
+            if r then releaseElement(self, k) end
         end
         self[Reactive]                  = newtable(true)
 
@@ -142,7 +172,11 @@ PLoop(function(_ENV)
             rawset(self, Subject, subject)
 
             -- init
-            for k, r in pairs(self[Reactive]) do subscribeReactive(self, r) end
+            local reactives             = rawget(self, Reactive)
+            for i, v in (raw.GetIterator or ipairs)(raw) do
+                local r                 = reactives[v]
+                if r then subscribeReactive(self, r) end
+            end
         end
         return subject
     end
@@ -304,7 +338,7 @@ PLoop(function(_ENV)
                 item                    = item.Value
             end
             if item == nil then return end
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
             if not raw then return end
 
             -- insert
@@ -315,7 +349,7 @@ PLoop(function(_ENV)
 
         --- Pop
         function Pop(self)
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
             if not raw then return end
 
             local remove                = raw.RemoveByIndex or tremove
@@ -327,7 +361,7 @@ PLoop(function(_ENV)
 
         --- Shift
         function Shift(self)
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
             if not raw then return end
 
             local remove                = raw.RemoveByIndex or tremove
@@ -344,7 +378,7 @@ PLoop(function(_ENV)
                 item                    = item.Value
             end
             if item == nil then return end
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
             if not raw then return end
             
             local insert                = raw.Insert or tinsert
@@ -356,7 +390,10 @@ PLoop(function(_ENV)
         __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
         if elementtype then
             function Splice(self, index, count, iter, obj, idx)
-                local th                = keepargs(splice(self[RawTable], index, count, function()
+                local raw               = rawget(self, RawTable)
+                if not raw then return end
+
+                local th                = keepargs(splice(raw, index, count, function()
                     local item
                     idx, item           = iter(obj, idx)
                     while idx ~= nil do
@@ -377,7 +414,10 @@ PLoop(function(_ENV)
             end
         else
             function Splice(self, index, count, iter, obj, idx)
-                local th                = keepargs(splice(self[RawTable], index, count, function()
+                local raw               = rawget(self, RawTable)
+                if not raw then return end
+
+                local th                = keepargs(splice(raw, index, count, function()
                     local item
                     idx, item           = iter(obj, idx)
                     while idx ~= nil do
@@ -417,7 +457,9 @@ PLoop(function(_ENV)
         function Insert(self, index, item)
             if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
+
             local total                 = raw.Count or #raw
             local insert                = raw.Insert or tinsert
             index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
@@ -429,7 +471,9 @@ PLoop(function(_ENV)
         function Insert(self, item)
             if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
+
             local insert                = raw.Insert or tinsert
             insert(raw, item)
             return fireElementChange(self) or self.Count
@@ -440,10 +484,12 @@ PLoop(function(_ENV)
 
         --- Get the index of the item if it existed in the list
         function IndexOf(self, item)
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
+
             if item == nil then return end
             if isobjecttype(item, IReactive) then item = item.Value end
 
-            local raw                   = self[RawTable]
             for i, v in (raw.GetIterator or ipairs)(raw) do
                 if v == item then return i end
             end
@@ -462,7 +508,9 @@ PLoop(function(_ENV)
         --- Remove an item from the tail or the given index
         function RemoveByIndex(self, index)
             if index ~= nil and type(index) ~= "number" then return end
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
+
             local total                 = raw.Count or #raw
             index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
             local item
@@ -478,7 +526,8 @@ PLoop(function(_ENV)
 
         --- Clear the list
         function Clear(self)
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
+            if not raw then return end
             local total                 = raw.Count or #raw
             if total == 0 then return end
 
@@ -555,7 +604,7 @@ PLoop(function(_ENV)
                 value                   = value.Value
             end
 
-            local raw                   = self[RawTable]
+            local raw                   = rawget(self, RawTable)
             local oldval                = raw[index]
             if oldval == value then return end
 
