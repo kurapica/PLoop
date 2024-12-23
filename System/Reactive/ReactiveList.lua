@@ -62,7 +62,6 @@ PLoop(function(_ENV)
         if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
             rawset(subject, r, (r:Subscribe(function(...)
                 local raw               = self[RawTable]
-                local reactives         = self[Reactive]
                 if not raw then return end
 
                 -- index cache to boost, will be reset when element index changed
@@ -76,6 +75,7 @@ PLoop(function(_ENV)
                 if index then return onObjectNext(raw, cache[r], ...) end
                 if index == false then return end
 
+                local reactives         = self[Reactive]
                 for i = 1, raw.Count or #raw do
                     local v             = raw[i]
                     if v ~= nil and reactives[v] == r then
@@ -242,7 +242,7 @@ PLoop(function(_ENV)
                 parseindex              = Toolset.parseindex,
             }
 
-            local reactivetype          = GetReactiveType(elementtype)
+            local reactivetype          = Reactive.GetReactiveType(elementtype)
             validatetype                = reactivetype and (elementtype + reactivetype) or elementtype
         end
 
