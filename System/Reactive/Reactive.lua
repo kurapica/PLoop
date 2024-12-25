@@ -499,7 +499,7 @@ PLoop(function(_ENV)
             end
 
             -- switch value
-            function switchObject(self, new, clear)
+            switchObject                = function (self, new, clear)
                 -- switch for reactive fields
                 local reactives         = self[Reactive]
                 local subject           = rawget(self, Subject)
@@ -517,14 +517,14 @@ PLoop(function(_ENV)
                             releaseReactive(self, r)
                             reactives[k]= nil
 
-                            r           = self[k]
+                            r           = new and self[k]
                         end
                     elseif subject then
                         -- generate & subscribe
                         if r then
                             subscribeReactive(self, k, r)
                         else
-                            r           = self[k]
+                            r           = new and self[k]
                         end
                     end
                 end
@@ -540,11 +540,11 @@ PLoop(function(_ENV)
 
             __Iterator__()
             function GetIterator(self)
-                local yield             = yield
                 local raw               = self[RawTable]
                 if not raw then return end
 
                 -- iter
+                local yield             = yield
                 for k, v in (raw.GetIterator or pairs)(raw) do
                     if type(k) == "string" then
                         yield(k, v)
@@ -558,32 +558,42 @@ PLoop(function(_ENV)
             --- Used to filter the items with a check function
             Filter                      = IKeyValueDict.Filter
 
-
             -- switch value
-            function switchObject(self, new, clear)
+            switchObject                = function (self, new, clear)
                 -- switch for reactive fields
                 local reactives         = self[Reactive]
-                for k, r in pairs(reactives) do
-                    if r then
-                        if isobjecttype(r, ReactiveField) then
-                            -- Field - Update only
-                            r.Container = new
-                        else
-                            -- Reactive - Replace with new
-                            releaseReactive(self, r)
+                local subject           = rawget(self, Subject)
 
-                            local value = new and new[k] or nil
-                            if value then
-                                makeReactive(self, k, value)
+                if clear then                    
+                    for k, r in pairs(reactives) do
+                        if r then
+                            if isobjecttype(r, ReactiveField) then
+                                -- Field - Update only
+                                r.Container = new
                             else
-                                reactives[k] = false
+                                -- Reactive - Replace with new
+                                releaseReactive(self, r)
+
+                                local value = new and new[k] or nil
+                                if value then
+                                    makeReactive(self, k, value)
+                                else
+                                    reactives[k] = false
+                                end
                             end
                         end
                     end
                 end
 
+                if new and subject then
+                    for k, v in (raw.GetIterator or pairs)(new) do
+                        if type(k) == "string" and not reactives[k] then
+                            makeReactive(self, k, v)
+                        end
+                    end
+                end
+
                 -- subscribe
-                local subject               = rawget(self, Subject)
                 if not subject then return end
                 subject.Observable          = new and getObjectSubject(new) or nil
             end
