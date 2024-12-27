@@ -53,8 +53,6 @@ PLoop(function(_ENV)
             isstructtype                = Struct.IsSubType,
             getstructcategory           = Struct.GetStructCategory,
             getarrayelement             = Struct.GetArrayElement,
-            getdictionarykey            = Struct.GetDictionaryKey,
-            getdictionaryval            = Struct.GetDictionaryValue,
             isarray                     = Toolset.isarray,
 
             IList, IDictionary, IKeyValueDict, IObservable,
@@ -112,7 +110,7 @@ PLoop(function(_ENV)
                     return element and ReactiveList[element] or ReactiveList
 
                 elseif cate == "DICTIONARY" then                    
-                    return ReactiveDictionary[{ getdictionarykey(targettype) or Any, getdictionaryval(targettype) or Any }]
+                    return ReactiveDictionary[metatype]
 
                 elseif cate == "MEMBER" then
                     return Reactive[metatype]
@@ -143,8 +141,7 @@ PLoop(function(_ENV)
                 elseif issubtype(metatype, IDictionary) then
                     -- only key-value dict support
                     if issubtype(metatype, IKeyValueDict) then
-                        local k, v      = gettempparams(metatype)
-                        return ReactiveDictionary[{ k or Any, v or Any }]
+                        return ReactiveDictionary[metatype]
                     end
 
                 -- common class

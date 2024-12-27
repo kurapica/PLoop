@@ -45,15 +45,10 @@ PLoop(function(_ENV)
             return subject
         end
 
-    -- push data
-    local onObjectNext                  = function(obj, ...) return obj and getObjectSubject(obj):OnNext(...) end
-    local onObjectError                 = function(obj, ex)  return obj and getObjectSubject(obj):OnError(ex) end
-    local onObjectCompleted             = function(obj)      return obj and getObjectSubject(obj):OnCompleted() end
-
     --- Represents the reactive dictionary value
     __Sealed__()
-    __Arguments__{ AnyType/Any, AnyType/Any }
-    class"System.Reactive.ReactiveDictionary" (function(_ENV, ktype, vtype)
+    __Arguments__{ -IKeyValueDict + DictStructType }
+    class"System.Reactive.ReactiveDictionary" (function(_ENV, dictType)
         extend "IObservable" "IReactive" "IKeyValueDict"
 
         export                          {
@@ -63,21 +58,18 @@ PLoop(function(_ENV)
             error                       = error,
             yield                       = coroutine.yield,
 
-            issubtype                   = Class.IsSubType,
-            isvaluetype                 = Class.IsValueType,
-            gettempparams               = Class.GetTemplateParameters,
-            isclass                     = Class.Validate,
-            getsuperclass               = Class.GetSuperClass,
-            isstruct                    = Struct.Validate,
-            isstructtype                = Struct.IsSubType,
-            getstructcategory           = Struct.GetStructCategory,
-            getarrayelement             = Struct.GetArrayElement,
-            getdictionarykey            = Struct.GetDictionaryKey,
-            getdictionaryval            = Struct.GetDictionaryValue,
-            isarray                     = Toolset.isarray,
-
-            IKeyValueDict, Subject, RawTable
+            Subject, RawTable
         }
+
+        -- get the key value type
+        local ktype, vtype              = Any, Any
+        do
+            if Struct.Validate(dictType) then
+                ktype, vtype            = Struct.GetDictionaryKey(dictType) or Any, Struct.GetDictionaryValue(dictType) or Any
+            else
+                ktype, vtype            = Interface.GetTemplateParameters(dictType)
+            end
+        end
 
         -----------------------------------------------------------------------
         --                              method                               --
@@ -107,7 +99,6 @@ PLoop(function(_ENV)
             if not subject then
                 subject                 = Subject()
                 rawset(self, Subject, subject)
-
                 subject.Observable      = self.Value and getObjectSubject(self.Value) or nil       
             end
 
@@ -132,19 +123,21 @@ PLoop(function(_ENV)
                 if value == old then return end
 
                 rawset(self, RawTable, value)                
-                subject.Observable      = value and getObjectSubject(value) or nil       
+                subject.Observable      = value and getObjectSubject(value) or nil
+                subject:OnNext(nil)
             end,
-            type                        = valtype or RawTable
+            type                        = dictType + ReactiveDictionary[dictType],
+            throwable                   = true,
         }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
         -- Generate reactive value with init data
-        __Arguments__{ Table/nil }
+        __Arguments__{ dictType/nil }
         function __ctor(self, val)
             super(self)
-            self[1]                     = val
+            self.Value                  = val
         end
 
         -------------------------------------------------------------------
@@ -159,9 +152,21 @@ PLoop(function(_ENV)
         --                            meta-method                            --
         -----------------------------------------------------------------------
         function __index(self, key)
+            local raw                   = rawget(self, RawTable)
+            if raw then return raw[key] end
         end
 
+        if ktype ~= Any or vtype ~= Any then 
+            error                       = throw
+            __Arguments__{ ktype, vtype/nil }:Throwable() 
+        end
         function __newindex(self, key, value)
+            local raw                   = rawget(self, RawTable)
+            if not raw then error("The raw object is not specified", 2) end
+
+            if raw[key] == value then return end
+            raw[key]                    = value
+            return getObjectSubject(raw):OnNext(key, value)
         end
     end)
 end)
