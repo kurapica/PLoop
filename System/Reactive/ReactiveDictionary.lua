@@ -47,7 +47,7 @@ PLoop(function(_ENV)
 
     --- Represents the reactive dictionary value
     __Sealed__()
-    __Arguments__{ -IKeyValueDict + DictStructType }
+    __Arguments__{ (-IKeyValueDict + DictStructType)/nil }
     class"System.Reactive.ReactiveDictionary" (function(_ENV, dictType)
         extend "IObservable" "IReactive" "IKeyValueDict"
 
@@ -63,11 +63,13 @@ PLoop(function(_ENV)
 
         -- get the key value type
         local ktype, vtype              = Any, Any
-        do
+        if dictType then
             if Struct.Validate(dictType) then
                 ktype, vtype            = Struct.GetDictionaryKey(dictType) or Any, Struct.GetDictionaryValue(dictType) or Any
             else
                 ktype, vtype            = Interface.GetTemplateParameters(dictType)
+                ktype                   = ktype and Any
+                vtype                   = vtype and Any
             end
         end
 
@@ -99,7 +101,7 @@ PLoop(function(_ENV)
             if not subject then
                 subject                 = Subject()
                 rawset(self, Subject, subject)
-                subject.Observable      = self.Value and getObjectSubject(self.Value) or nil       
+                subject.Observable      = self.Value and getObjectSubject(self.Value) or nil
             end
 
             -- subscribe
@@ -126,15 +128,22 @@ PLoop(function(_ENV)
                 subject.Observable      = value and getObjectSubject(value) or nil
                 subject:OnNext(nil)
             end,
-            type                        = dictType + ReactiveDictionary[dictType],
+            type                        = dictType and (dictType + ReactiveDictionary[dictType]) or RawTable,
             throwable                   = true,
         }
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
+        -- Generate reactive value with reactive value
+        __Arguments__{ dictType and ReactiveDictionary[dictType] or ReactiveDictionary }
+        function __ctor(self, val)
+            super(self)
+            self.Value                  = val.Value
+        end
+
         -- Generate reactive value with init data
-        __Arguments__{ dictType/nil }
+        __Arguments__{ (dictType or RawTable)/nil }
         function __ctor(self, val)
             super(self)
             self.Value                  = val
