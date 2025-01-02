@@ -307,25 +307,25 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
-            properties                  = false,
             setvalue                    = Toolset.setvalue,
             fakefunc                    = Toolset.fakefunc,
+            properties                  = false,
+            switchObject                = false,
 
             Reactive, ReactiveField, IReactive, IObservable
         }
-
-        -- switch object value
-        local switchObject
 
         -------------------------------------------------------------------
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
         -- for common types
-        if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) and not Interface.IsSubType(targettype, IKeyValueDict) then
+        if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) then
             properties                  = {}
 
             -- simple parse value
-            local simpleparse           = function (val) if isobjecttype(val, IReactive) then return val.Value else return val end end
+            export {
+                simpleparse             = function (val) if isobjecttype(val, IReactive) then return val.Value else return val end end
+            }
 
             -- Binding object methods
             for name, func, isstatic in Class.GetMethods(targettype, true) do
@@ -389,6 +389,7 @@ PLoop(function(_ENV)
             switchObject                = function (self, new, clear)
                 -- switch for reactive fields
                 local reactives         = self[Reactive]
+                if not reactives then return end
                 local subject           = rawget(self, Subject)
 
                 -- for properties
@@ -423,12 +424,6 @@ PLoop(function(_ENV)
             end
 
         -------------------------------------------------------------------
-        --                  dict class/interface/struct                  --
-        -------------------------------------------------------------------
-        elseif targettype and (Interface.IsSubType(targettype, IKeyValueDict) or Struct.GetStructCategory(targettype) == "DICTIONARY") then
-            
-
-        -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
         elseif targettype and Struct.Validate(targettype) and Struct.GetStructCategory(targettype) == "MEMBER" then
@@ -461,6 +456,7 @@ PLoop(function(_ENV)
             switchObject                = function (self, new, clear)
                 -- switch for reactive fields
                 local reactives         = self[Reactive]
+                if not reactives then return end
                 local subject           = rawget(self, Subject)
 
                 -- for properties
@@ -506,7 +502,7 @@ PLoop(function(_ENV)
                 -- subscribe other fields
                 if new then
                     for k, v in pairs(new) do
-                        if not properties[k] and type(k) == "string" then
+                        if not reactives[k] and type(k) == "string" then
                             local r     = reactives[k]
                             if r then
                                 subscribeReactive(self, k, r)
@@ -526,7 +522,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                            default                            --
         -------------------------------------------------------------------
-        elseif not targettype then
+        else
             -- switch value
             switchObject                = function (self, new, clear)
                 -- switch for reactive fields
