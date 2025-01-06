@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/12/04                                               --
+-- Update Date  :   2025/01/06                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -23,6 +23,8 @@ PLoop(function(_ENV)
         --- Represents the reactive values
         __Sealed__()
         interface "IReactive"           (function(_ENV)
+            extend "IObservable"
+
             --- Gets/Sets the raw value
             __Abstract__()
             property "Value"            { type = Any }
@@ -91,7 +93,7 @@ PLoop(function(_ENV)
 
             -- get reactive type
             if metatype == nil then
-                return valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
+                return valtype == "table" and (isarray(value) and ReactiveList or ReactiveDictionary) or nil
 
             elseif metatype == Any then
                 return asfield and ReactiveField or ReactiveValue
@@ -188,18 +190,14 @@ PLoop(function(_ENV)
             end,
             __call                      = function(self, value, silent, recommendtype, stack)
                 -- default
-                if value == nil and recommendtype == nil then return Reactive() end
-
-                -- return reactive objects directly
-                local cls               = value and getobjectclass(value) or nil
-                if cls and (issubtype(cls, Reactive) or issubtype(cls, ReactiveList) or issubtype(cls, ReactiveField)) then return value end
-
-                if value == nil and isclass(recommendtype) then
-                    if not silent then
-                        error("Usage: reactive[type](object[, silent]) - the data object is not provided", (stack or 1) + 1)
-                    end
+                if value == nil then
+                    if recommendtype == nil then return ReactiveDictionary() end
+                    if not silent then  error("Usage: reactive[type](object[, silent]) - the data object is not provided", (stack or 1) + 1) end
                     return
                 end
+
+                -- return reactive objects directly
+                if isobjecttype(value, IReactive) then return value end
 
                 -- gets the reactive type
                 local rtype             = getreactivetype(value, recommendtype)
@@ -291,7 +289,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
-        extend "IObservable" "IReactive"
+        extend "IReactive"
 
         export                          {
             type                        = type,

@@ -205,7 +205,7 @@ PLoop(function(_ENV)
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive.ReactiveList"(function(_ENV, elementtype)
-        extend "IObservable" "IIndexedList" "IReactive"
+        extend "IIndexedList" "IReactive"
 
         export                          {
             type                        = type,

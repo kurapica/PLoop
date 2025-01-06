@@ -49,7 +49,7 @@ PLoop(function(_ENV)
     __Sealed__()
     __Arguments__{ (-IKeyValueDict + DictStructType)/nil }
     class"System.Reactive.ReactiveDictionary" (function(_ENV, dictType)
-        extend "IObservable" "IReactive" "IKeyValueDict"
+        extend "IReactive" "IKeyValueDict"
 
         export                          {
             rawset                      = rawset,
@@ -57,6 +57,7 @@ PLoop(function(_ENV)
             pcall                       = pcall,
             error                       = error,
             yield                       = coroutine.yield,
+            pairs                       = pairs,
 
             Subject, RawTable
         }
@@ -143,10 +144,10 @@ PLoop(function(_ENV)
         end
 
         -- Generate reactive value with init data
-        __Arguments__{ (dictType or RawTable)/nil }
+        __Arguments__{ dictType and dictType or RawTable/nil }
         function __ctor(self, val)
             super(self)
-            self.Value                  = val
+            self.Value                  = val or {}
         end
 
         -------------------------------------------------------------------
@@ -169,9 +170,9 @@ PLoop(function(_ENV)
             error                       = throw
             __Arguments__{ ktype, vtype/nil }:Throwable() 
         end
-        function __newindex(self, key, value)
+        function __newindex(self, key, value, stack)
             local raw                   = rawget(self, RawTable)
-            if not raw then error("The raw object is not specified", 2) end
+            if not raw then error("The raw object is not specified", (stack or 1) + 1) end
 
             if raw[key] == value then return end
             raw[key]                    = value
