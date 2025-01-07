@@ -285,7 +285,7 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- The references used to access reactive table/class field/property datas
     __Sealed__()
-    __Arguments__{ AnyType/nil }:WithRebuild()
+    __Arguments__{ AnyType }:WithRebuild()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
@@ -307,7 +307,7 @@ PLoop(function(_ENV)
             gettempparams               = Class.GetTemplateParameters,
             setvalue                    = Toolset.setvalue,
             fakefunc                    = Toolset.fakefunc,
-            properties                  = false,
+            properties                  = {},
             switchObject                = false,
 
             Reactive, ReactiveField, IReactive, IObservable
@@ -317,7 +317,7 @@ PLoop(function(_ENV)
         --                   non-dict class/interface                    --
         -------------------------------------------------------------------
         -- for common types
-        if targettype and (Class.Validate(targettype) or Interface.Validate(targettype)) then
+        if Class.Validate(targettype) or Interface.Validate(targettype) then
             properties                  = {}
 
             -- simple parse value
@@ -424,7 +424,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                         member struct                         --
         -------------------------------------------------------------------
-        elseif targettype and Struct.Validate(targettype) and Struct.GetStructCategory(targettype) == "MEMBER" then
+        elseif Struct.Validate(targettype) and Struct.GetStructCategory(targettype) == "MEMBER" then
             properties                  = {}
 
             -- Binding object methods
@@ -521,50 +521,13 @@ PLoop(function(_ENV)
         --                            default                            --
         -------------------------------------------------------------------
         else
-            -- switch value
-            switchObject                = function (self, new, clear)
-                -- switch for reactive fields
-                local reactives         = self[Reactive]
-                local subject           = rawget(self, Subject)
-
-                -- clear
-                if clear then
-                    for k, r in pairs(reactives) do
-                        if r then 
-                            releaseReactive(self, r) 
-                            if isobjecttype(r, ReactiveField) then
-                                r:Dispose()
-                            end
-                        end
-                        reactives[k]    = nil
-                    end
-                end
-
-                -- subscribe other fields
-                if new then
-                    for k, v in pairs(new) do
-                        if not properties[k] and type(k) == "string" then
-                            local r     = reactives[k]
-                            if r then
-                                subscribeReactive(self, k, r)
-                            else
-                                r       = self[k]
-                            end
-                        end
-                    end
-                end
-
-                -- subscribe
-                if not subject then return end
-                subject.Observable      = new and getObjectSubject(new) or nil
-                if clear then return subject:OnNext(nil) end
-            end
+            throw("the " .. tostring(targettype) .. " can't be used as Reactive template parameter")
         end
 
         -------------------------------------------------------------------
         --                           auto-gen                            --
         -------------------------------------------------------------------
-        if properties then
+        do
             -- No Value property allowed
             if properties["Value"]      then properties.Value = nil end
 
@@ -694,10 +657,10 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          constructor                          --
         -------------------------------------------------------------------
-        __Arguments__{ targettype or (RawTable/nil) }
+        __Arguments__{ targettype }
         function __ctor(self, init)
-            rawset(self, Reactive, {})          -- sub-reactives
-            rawset(self, RawTable, init or {})  -- raw
+            rawset(self, Reactive, {})
+            rawset(self, RawTable, init)
         end
 
         -------------------------------------------------------------------
@@ -719,154 +682,35 @@ PLoop(function(_ENV)
                 end
             end
 
+            rawset(self, RawTable, nil)
+            rawset(self, Reactive, nil)
             return subject and subject:Dispose()
         end
 
         -------------------------------------------------------------------
         --                          meta-method                          --
         -------------------------------------------------------------------
-        if properties then
+        if CLass.Validate(targettype) or Interface.Validate(targettype) then
             -- objects may have its private fields, block those access
             function __newindex(self, key, value, stack)
                 error("The " .. key .. " can't be written", (stack or 1) + 1)
             end
         else
-            --- Gets the current value
+            --- enable field access for non-member struct data
+            -- Gets the current value
             function __index(self, key, stack)
-                local reactives         = rawget(self, Reactive)
-                local r                 = reactives[key]
-                if r                        then return r end
-
-                -- make field reactive
                 local raw               = rawget(self, RawTable)
-                if not reactives        then error("The reactive is disposed", (stack or 1) + 1) end
-                if not raw              then error("The raw is not specified", (stack or 1) + 1) end
-                local value             = raw[key]
-                return r == nil and value ~= nil and type(key) == "string" and makeReactive(self, key, value) or value
+                return raw and raw[key]
             end
 
-            --- Set the new value
-            if targettype then
-                local keytype, valtype
-
-                -- for Dictionary class
-                if Class.Validate(targettype) and Interface.IsSubType(targettype, IKeyValueDict) then
-                    keytype, valtype    = Class.GetTemplateParameters(targettype)
-
-                -- for Dictionary struct
-                elseif Struct.GetStructCategory(targettype) == "DICTIONARY" then
-                    keytype, valtype    = Struct.GetDictionaryKey(targettype), Struct.GetDictionaryValue(targettype)
-                end
-
-                -- Check Platform settings
-                if Platform.TYPE_VALIDATION_DISABLED then
-                    if keytype and keytype ~= Any and getmetatable(keytype).IsImmutable(keytype) then keytype = nil end
-                    if valtype and valtype ~= Any and getmetatable(valtype).IsImmutable(valtype) then valtype = nil end
-                end
-
-                if (keytype and keytype ~= Any) or (valtype and valtype ~= Any) then
-                    __Arguments__{ keytype or Any, (valtype or Any)/nil, Integer/nil }
-                end
-            end
+            -- Set the new value
             function __newindex(self, key, value, stack)
-                -- non-string value will be saved in self directly
-                if type(key)~= "string" then return rawset(self, key, value) end
-                stack                   = (stack or 1) + 1
-
-                local reactives         = rawget(self, Reactive)
                 local raw               = rawget(self, RawTable)
-                if not reactives        then error("The reactive is disposed", stack) end
-                if not raw              then error("The raw object is not specified", stack) end
+                if not raw then error("The raw object is not specified", (stack or 1) + 1)) end
 
-                local r                 = reactives[key]
-
-                -- object value checker
-                if type(value) == "table" then
-                    -- replace with the value
-                    if isobjecttype(value, IReactive) then
-                        value           = value.Value
-
-                    -- check the reactive
-                    elseif isobjecttype(value, IObservable) then
-                        -- check exists
-                        if r then
-                            if isobjecttype(r, ReactiveField) then
-                                r.Observable= value
-                            else
-                                error("The " .. key .. " can't accept observable value", stack)
-                            end
-
-                        -- create
-                        else
-                            if raw[key] == nil then
-                                -- type unknown
-                                r       = makeReactive(self, key, nil, Any, ReactiveField)
-                            else
-                                r       = makeReactive(self, key, raw[key])
-
-                                if not isobjecttype(r, ReactiveField) then
-                                    error("The " .. key .. " can't accept observable value", stack)
-                                end
-                            end
-
-                            r.Observable= value
-                        end
-                        return
-                    end
-                end
-
-                -- Compare
-                if raw[key] == value    then return end
-
-                -- raw value
-                if value ~= nil then
-                    if r == nil and raw[key] ~= nil then
-                        r               = makeReactive(self, key, raw[key])
-                    end
-
-                    if r ~= nil then
-                        if isobjecttype(r, ReactiveField) then
-                            local ok, e = pcall(setvalue, r, "Value", value)
-                            if not ok   then error(format(key, e), stack) end
-                        else
-                            -- clear
-                            reactives[key]  = nil
-                            releaseReactive(self, r)
-
-                            -- new
-                            raw[key]    = value
-                            r           = makeReactive(self, key, value, ptype, rtype)
-
-                            -- only send it in this node
-                            local sub   = rawget(self, Subject)
-                            return sub and sub:OnNext(key, r)
-                        end
-                    else
-                        -- Generate
-                        raw[key] = value
-                        r               = makeReactive(self, key, value)
-
-                        local sub       = rawget(self, Subject)
-                        return sub and sub:OnNext(key, r)
-                    end
-
-                -- clear
-                else
-                    if r ~= nil then
-                        if isobjecttype(r, ReactiveField) then
-                            local ok, e = pcall(setvalue, r, "Value", nil)
-                            if not ok   then error(format(key, e), stack) end
-                        else
-                            -- release the reactive object
-                            raw[key]    = nil
-                            reactives[key] = nil
-                            releaseReactive(self, r)
-
-                            local sub   = rawget(self, Subject)
-                            return sub and sub:OnNext(key, nil)
-                        end
-                    end
-                end
+                if raw[key] == value then return end
+                raw[key]                = value
+                return onObjectNext(raw, key, value)
             end
         end
     end)
