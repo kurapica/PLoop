@@ -19,7 +19,7 @@ PLoop(function(_ENV)
         rawset                          = rawset,
         rawget                          = rawege,
 
-        Subject, Reactive, 
+        Subject, Reactive,
     }
 
     -----------------------------------------------------------------------
@@ -58,6 +58,7 @@ PLoop(function(_ENV)
             error                       = error,
             yield                       = coroutine.yield,
             pairs                       = pairs,
+            isobjecttype                = Class.IsObjectType,
 
             Subject, RawTable
         }
@@ -125,7 +126,9 @@ PLoop(function(_ENV)
                 local old               = rawget(self, RawTable)
                 if value == old then return end
 
-                rawset(self, RawTable, value)                
+                rawset(self, RawTable, value)
+                local subject           = rawget(self, Subject)
+                if not subject then return end
                 subject.Observable      = value and getObjectSubject(value) or nil
                 subject:OnNext(nil)
             end,
@@ -139,14 +142,12 @@ PLoop(function(_ENV)
         -- Generate reactive value with reactive value
         __Arguments__{ dictType and ReactiveDictionary[dictType] or ReactiveDictionary }
         function __ctor(self, val)
-            super(self)
             self.Value                  = val.Value
         end
 
         -- Generate reactive value with init data
         __Arguments__{ dictType and dictType or RawTable/nil }
         function __ctor(self, val)
-            super(self)
             self.Value                  = val or {}
         end
 

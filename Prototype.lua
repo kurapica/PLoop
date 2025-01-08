@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2024/11/12                                               --
--- Version      :   1.9.5                                                    --
+-- Update Date  :   2025/01/08                                               --
+-- Version      :   1.9.6                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -5392,7 +5392,6 @@ do
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
-                    if validateflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_STRUCT_TEMPDEF] then error(err) end
                 end
             else
@@ -10125,7 +10124,6 @@ do
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
-                    if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
@@ -10200,7 +10198,6 @@ do
                 if oldenv then setfenv(definition, oldenv) end
                 if not ok then
                     if type(err) == "string" then error(err, 0) end
-                    if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then error(tostring(err), stack) end
                     if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
