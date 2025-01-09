@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2023 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2025 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --
@@ -77,6 +77,7 @@ do
             tinsert                     = table.insert,
             tremove                     = table.remove,
             unpack                      = table.unpack or unpack,
+            tsort                       = table.sort,
             setmetatable                = setmetatable,
             getmetatable                = getmetatable,
             rawset                      = rawset,
@@ -365,7 +366,7 @@ do
     -----------------------------------------------------------------------
     --                              storage                              --
     -----------------------------------------------------------------------
-    newstorage                          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
+    newstorage                          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return weak and setmetatable({}, weak) or {} end
     savestorage                         = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
         local new
         if value == nil then
@@ -3115,7 +3116,8 @@ do
     local _ValidTypeCombine             = newstorage(WEAK_KEY)
     local _UnmSubTypeMap                = newstorage(WEAK_ALL)
     local _AnonyArrayType               = newstorage(WEAK_ALL)
-    local _AnonyHashType                = newstorage(WEAK_ALL)
+    local _AnonyHashType                = newstorage(WEAK_KEY)
+    local _AnonyMemType                 = newstorage()
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -4139,6 +4141,75 @@ do
         error("the " .. tostring(self) .. " can't be used as template", parsestack(stack) + 1)
     end
 
+    -- Get anonymous member struct hash key
+    local getAnonymousStruct
+    getAnonymousStruct                  = function(definition)
+        -- Array | Dict
+        local k, v                      = next(definition)
+        if not k then return end
+
+        if k and v and next(definition, k) == nil then
+            if type(k) == "number" then
+                if getprototypemethod(v, "ValidateValue") then
+                    return STRUCT_TYPE_ARRAY, _AnonyArrayType[v], v
+                end
+            else
+                if getprototypemethod(k, "ValidateValue") and getprototypemethod(v, "ValidateValue") then
+                    return STRUCT_TYPE_DICT, _AnonyHashType[k] and _AnonyHashType[k][v], k, v
+                end
+            end
+        end
+
+        -- Member
+        local map                       = _Cache()
+        local mems                      = _Cache()
+        local all                       = true
+        for k, v in pairs, definition do
+            if type(k) == "string" and type(v) ~= "function" then
+                mems[#mems + 1]         = k
+
+                -- validate the member type
+                if getprototypemethod(v, "ValidateValue") then
+                    map[k]              = v
+                elseif type(v) == "table" and getmetatable(v) == nil then
+                    local t, g          = getAnonymousStruct(v)
+                    if not t then _Cache(map) _Cache(mems) return end
+                    map[k]              = g
+                    if not g then all   = false end
+                else
+                    _Cache(map) _Cache(mems)
+                    return
+                end
+            else
+                _Cache(map) _Cache(mems)
+                return
+            end
+        end
+
+        if #mems == 0 then _Cache(map) _Cache(mems) return end
+
+        -- Build the key
+        tsort(mems)
+        local key                       = tblconcat(mems, "|")
+        if not (all and _AnonyMemType[key]) then return STRUCT_TYPE_MEMBER, nil, key end
+
+        -- Check existed
+        local match
+        for e in pairs, _AnonyMemType[key], nil do
+            match                       = e
+            for _, n in ipairs, mems, 0 do
+                local m                 = struct.GetMember(e, n)
+                if not m or m:GetType() ~= map[n] then
+                    match               = nil
+                    break
+                end
+            end
+            if match then break end
+        end
+        _Cache(map) _Cache(mems)
+        return STRUCT_TYPE_MEMBER, match, key
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -5127,37 +5198,27 @@ do
         __call                          = function(self, ...)
             -- For simple, only re-use anonymous type generated with one table and one key-value pairs
             local _arrayType
-            local _hashKeyType, _hashValType
+            local _hkType, _hvType
+            local _memKey
 
             if select("#", ...) == 1 then
                 local definition        = ...
                 if type(definition) == "table" then
-                    -- Check if only contains one pair
-                    local k, v          = next(definition)
+                    local c, t, a, b    = getAnonymousStruct(definition)
+                    if t then
+                        -- Clear the keyword accessor
+                        environment.GetKeywordVisitor(struct)
+                        return t
+                    end
 
-                    if k and v and next(definition, k) == nil then
-                        if type(k) == "number" then
-                            if getprototypemethod(v, "ValidateValue") then
-                                _arrayType  = v
-                                local stype = _AnonyArrayType[v]
-                                if stype then
-                                    -- Clear the keyword accessor
-                                    environment.GetKeywordVisitor(struct)
-                                    return stype
-                                end
-                            end
-                        else
-                            if getprototypemethod(k, "ValidateValue") and getprototypemethod(v, "ValidateValue") then
-                                _hashKeyType, _hashValType = k, v
-                                local stype = _AnonyHashType[k]
-                                stype       = stype and stype[v]
-                                if stype then
-                                    -- Clear the keyword accessor
-                                    environment.GetKeywordVisitor(struct)
-                                    return stype
-                                end
-                            end
-                        end
+                    if c == STRUCT_TYPE_ARRAY then
+                        _arrayType      = a
+
+                    elseif c == STRUCT_TYPE_DICT then
+                        _hkType, _hvType= a, b
+
+                    elseif c == STRUCT_TYPE_MEMBER then
+                        _memKey         = a
                     end
                 end
             end
@@ -5183,13 +5244,15 @@ do
             environment.SetDefinitionMode(builder, true)
 
             -- Seal the anonymous type directly
-            if _arrayType or _hashKeyType then
+            if _arrayType or _hkType or _memKey then
                 struct.SetSealed(target, stack)
 
                 if _arrayType then
                     _AnonyArrayType     = savestorage(_AnonyArrayType, _arrayType, target)
-                else
-                    _AnonyHashType      = savestorage(_AnonyHashType, _hashKeyType, savestorage(_AnonyHashType[_hashKeyType] or {}, _hashValType, target))
+                elseif _hkType then
+                    _AnonyHashType      = savestorage(_AnonyHashType, _hkType, savestorage(_AnonyHashType[_hkType] or {}, _hvType, target))
+                elseif _memKey then
+                    _AnonyMemType       = savestorage(_AnonyMemType,  _memKey, savestorage(_AnonyMemType[_memKey]  or {}, target, true))
                 end
             end
 
