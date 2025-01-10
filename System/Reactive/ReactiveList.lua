@@ -201,7 +201,7 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- Provide reactive feature for list or array
     __Sealed__()
-    __Arguments__{ AnyType/nil }
+    __Arguments__{ AnyType/Any }
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive.ReactiveList"(function(_ENV, elementtype)
@@ -232,10 +232,10 @@ PLoop(function(_ENV)
             splice                      = List.Splice,
 
             -- import types
-            RawTable, Reactive, IList, Subject
+            RawTable, Reactive, IList, Subject, IReactive
         }
 
-        if elementtype then
+        if elementtype ~= Any then
             export                      {
                 valid                   = getmetatable(elementtype).ValidateValue,
                 geterrormessage         = Struct.GetErrorMessage,
@@ -255,7 +255,7 @@ PLoop(function(_ENV)
         --- Gets/Sets the raw value
         property "Value"                {
             field                       = RawTable,
-            set                         = elementtype and function(self, value)
+            set                         = elementtype ~= Any and function(self, value)
                 if value and isobjecttype(value, IReactive) then
                     value               = value.Value
                 end
@@ -332,7 +332,7 @@ PLoop(function(_ENV)
         Range                           = IList.Range
 
         --- Push
-        if elementtype then __Arguments__{ validatetype } end
+        if elementtype ~= Any then __Arguments__{ validatetype } end
         function Push(self, item)
             if item and isobjecttype(item, IReactive) then
                 item                    = item.Value
