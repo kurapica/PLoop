@@ -306,20 +306,21 @@ PLoop(function(_ENV)
             local subject               = getSubject(self)
 
             -- subscribe
-            local ok, sub, observer     = pcall(subject.Subscribe(subject, ...))
+            local ok, sub, observer     = pcall(subject.Subscribe, subject, ...)
             if not ok then error("Usage: reactiveList:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
 
             return sub, observer
         end
 
         --- Gets the iterator
-        __Iterator__()
         function GetIterator(self)
-            local raw                   = rawget(self, RawTable)
-            if not raw then return end
-            for i, v in (raw.GetIterator or ipairs)(raw) do
-                yield(i, v)
-            end
+            return function(self, index)
+                index                   = (index or 1) + 1
+                local raw               = rawget(self, RawTable)
+                if not raw then return end
+                local value             = raw[index]
+                if value ~= nil then return index, value end
+            end, self, 0
         end
 
         --- Map the items to other datas, use collection operation instead of observable
@@ -334,7 +335,7 @@ PLoop(function(_ENV)
         --- Push
         if elementtype ~= Any then __Arguments__{ validatetype } end
         function Push(self, item)
-            if item and isobjecttype(item, IReactive) then
+            if type(item) == "table" and isobjecttype(item, IReactive) then
                 item                    = item.Value
             end
             if item == nil then return end
