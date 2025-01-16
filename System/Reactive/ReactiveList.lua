@@ -21,6 +21,7 @@ PLoop(function(_ENV)
         rawget                          = rawget,
         ipairs                          = ipairs,
         select                          = select,
+        type                            = type,
         newtable                        = Toolset.newtable,
         isobjecttype                    = Class.IsObjectType,
         issubtype                       = Class.IsSubType,
@@ -37,6 +38,7 @@ PLoop(function(_ENV)
             if not subject then
                 subject                 = Subject()
                 rawset(obj, Reactive, subject)
+                rawset(subject, "Cache", newtable(true))
             end
             return subject
         end
@@ -45,12 +47,39 @@ PLoop(function(_ENV)
             if not subject then
                 subject                 = Subject()
                 objectSubjectMap[obj]   = subject
+                rawset(subject, "Cache", newtable(true))
             end
             return subject
         end
 
+    -- value auto map
+    local resetObjectMap                = function(obj)
+        if not obj then return end
+        local subject                   = getObjectSubject(obj)
+        rawset(subject, "Indexes", newtable(true))
+    end
+
     -- push data
-    local onObjectNext                  = function(obj, ...) return obj and getObjectSubject(obj):OnNext(...) end
+    local onObjectNext                  = function(obj, i, v, ...)
+        if not obj then return end
+        local subject                   = getObjectSubject(obj)
+        if i then
+            -- index known
+            return subject:OnNext(i, ...)
+        elseif v then
+
+            -- index unknown
+            for j, l in (obj.GetIterator or ipairs)(obj) do
+                if l == v then
+                    subject:OnNext(j, ...)
+                end
+            end
+        end
+
+        -- all
+        return subject:OnNext()
+    end
+
     local onObjectError                 = function(obj, ex)  return obj and getObjectSubject(obj):OnError(ex) end
     local onObjectCompleted             = function(obj)      return obj and getObjectSubject(obj):OnCompleted() end
 
@@ -127,12 +156,23 @@ PLoop(function(_ENV)
         return ...
     end
 
-    -- wrap the table value as default
-    local makeReactive                  = function(self, v)
-        local rtype                     = getreactivetype(v)
-        local r                         = rtype and not issubtype(rtype, ReactiveValue) and rtype(v) or nil
-        self[Reactive][v]               = r or false
-        return r and subscribeReactive(self, r)
+    -- access element
+    local getElement                    = function(obj, index, rtype)
+        if not obj then return end
+        local value                     = obj[index]
+        if type(value) == "table" then
+            -- check cache
+            local subject               = getObjectSubject(obj)
+            local react                 = subject.Cache[value]
+            if react ~= nil then return react or value end
+
+            -- generate the reactive
+            rtype                       = rtype or getreactivetype(value)
+            react                       = rtype and not issubtype(rtype, ReactiveValue) and rtype(v) or false
+            subject.Cache[value]        = react
+            return react or value
+        end
+        return value
     end
 
     -- switch object value
@@ -230,6 +270,7 @@ PLoop(function(_ENV)
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
             splice                      = List.Splice,
+            isvaluetype                 = false,
 
             -- import types
             RawTable, Reactive, IList, Subject, IReactive
@@ -243,6 +284,9 @@ PLoop(function(_ENV)
             }
 
             local reactivetype          = Reactive.GetReactiveType(elementtype)
+            if not reactivetype or Class.IsSubType(reactivetype, ReactiveValue) then
+                isvaluetype             = true
+            end
             validatetype                = reactivetype and (elementtype + reactivetype) or elementtype
         end
 
