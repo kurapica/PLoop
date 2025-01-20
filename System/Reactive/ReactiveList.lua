@@ -89,50 +89,21 @@ PLoop(function(_ENV)
 
         -- no need to support scalar reactive value
         if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
-            rawset(subject, r, (r:Subscribe(function(...)
-                local raw               = self[RawTable]
-                if not raw then return end
 
-                -- index cache to boost, will be reset when element index changed
-                local cache             = rawget(self, IList)
-                if not cache then
-                    cache               = newtable(true)
-                    rawset(self, IList, cache)
-                end
-
-                local index             = cache[r]
-                if index then return onObjectNext(raw, cache[r], ...) end
-                if index == false then return end
-
-                local reactives         = self[Reactive]
-                for i = 1, raw.Count or #raw do
-                    local v             = raw[i]
-                    if v ~= nil and reactives[v] == r then
-                        cache[r]        = i
-                        return onObjectNext(raw, i, ...)
-                    end
-                end
-
-                -- clear
-                local subscription      = rawget(subject, r)
-                if subscription then
-                    subject[r]          = nil
-                    subscription:Dispose()
-                end
-            end, function(ex) return onObjectError(rawget(self, RawTable), ex) end)))
         end
         return r
     end
 
     -- Release the children
-    local releaseElement                = function(self, ...)
+    local releaseElement                = function(obj, ...)
         local count                     = select("#", ...)
-        local raw                       = rawget(self, RawTable)
+        if count == 0 then return end
+        local subject                   = getObjectSubject(obj)
 
         for i = 1, select("#", ...) do
             local k                     = select(i, ...)
             if k ~= nil then
-                local r                 = self[Reactive][k]
+                local r                 = obj.Cache[k]
                 if r then
                     if raw then
                         for i, v in (raw.GetIterator or ipairs) do
@@ -158,7 +129,7 @@ PLoop(function(_ENV)
 
     -- access element
     local getElement                    = function(obj, index, rtype)
-        if not obj then return end
+        if not (obj and index) then return end
         local value                     = obj[index]
         if type(value) == "table" then
             -- check cache
@@ -167,9 +138,21 @@ PLoop(function(_ENV)
             if react ~= nil then return react or value end
 
             -- generate the reactive
-            rtype                       = rtype or getreactivetype(value)
-            react                       = rtype and not issubtype(rtype, ReactiveValue) and rtype(v) or false
+            if not rtype then
+                rtype                   = getreactivetype(value)
+                if issubtype(rtype, ReactiveValue) then
+                    rtype               = nil
+                end
+            end
+            react                       = rtype and rtype(v) or false
             subject.Cache[value]        = react
+
+            -- subscribe element
+            rawset(subject, react, (react:Subscribe(
+                function(...) return onObjectNext (obj, nil, value, ...) end,
+                function(ex)  return onObjectError(obj, nil, value, ex)  end)
+            ))
+
             return react or value
         end
         return value
@@ -201,24 +184,6 @@ PLoop(function(_ENV)
         end
 
         subject.Observable              = getObjectSubject(new)
-    end
-
-    local getSubject                    = function(self)
-        local subject                   = rawget(self, Subject)
-        if not subject then
-            local raw                   = rawget(self, RawTable)
-            subject                     = Subject()
-            subject.Observable          = raw and getObjectSubject(raw) or nil
-            rawset(self, Subject, subject)
-
-            -- init
-            local reactives             = rawget(self, Reactive)
-            for i, v in (raw.GetIterator or ipairs)(raw) do
-                local r                 = reactives[v]
-                if r then subscribeReactive(self, r) end
-            end
-        end
-        return subject
     end
     
     local format                        = function(name, err)
@@ -347,7 +312,13 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --- Subscribe the observers
         function Subscribe(self, ...)
-            local subject               = getSubject(self)
+            local subject               = rawget(self, Subject)
+            if not subject then
+                local raw               = rawget(self, RawTable)
+                subject                 = Subject()
+                subject.Observable      = raw and getObjectSubject(raw) or nil
+                rawset(self, Subject, subject)
+            end
 
             -- subscribe
             local ok, sub, observer     = pcall(subject.Subscribe, subject, ...)
