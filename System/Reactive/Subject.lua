@@ -248,6 +248,8 @@ PLoop(function(_ENV)
             subscribe                   = Subject.Subscribe,
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
+            pcall                       = pcall,
+            error                       = error,
         }
 
         -----------------------------------------------------------------------
@@ -255,14 +257,15 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Subscribe the observer
         function Subscribe(self, ...)
-            local subscription, observer= subscribe(self, ...)
+            local ok, sub, observer     = pcall(subscribe, self, ...)
+            if not ok then error(sub, 2) end
             local length                = self[0] or 0
             if length > 0 then
                 observer:OnNext (unpack(self, 1, length))
             elseif length < 0 then
                 observer:OnError(self[1])
             end
-            return subscription, observer
+            return sub, observer
         end
 
         --- Provides the observer with new data
@@ -360,6 +363,8 @@ PLoop(function(_ENV)
             select                      = select,
             onnext                      = Subject.OnNext,
             subscribe                   = Subject.Subscribe,
+            pcall                       = pcall,
+            error                       = error,
 
             Queue
         }
@@ -380,19 +385,20 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local subscription, observer= subscribe(self, ...)
+            local ok, sub, observer     = pcall(subscribe, self, ...)
+            if not ok then error(sub, 2) end
             if self.Queue:Peek() then
                 local queue             = self.Queue
                 local index             = 1
 
                 local count             = queue:Peek(index, 1)
-                while count and not subscription.IsUnsubscribed do
+                while count and not sub.IsUnsubscribed do
                     observer:OnNext(queue:Peek(index + 1, count))
                     index               = index + 1 + count
                     count               = queue:Peek(index, 1)
                 end
             end
-            return subscription, observer
+            return sub, observer
         end
 
         --- Provides the observer with new data

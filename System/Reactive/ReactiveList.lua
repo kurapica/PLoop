@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/10/25                                               --
--- Update Date  :   2024/12/24                                               --
+-- Update Date  :   2025/02/22                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -66,8 +66,7 @@ PLoop(function(_ENV)
         if i then
             -- index known
             return subject:OnNext(i, ...)
-        elseif v then
-
+        elseif v ~= nil then
             -- index unknown
             for j, l in (obj.GetIterator or ipairs)(obj) do
                 if l == v then
@@ -81,7 +80,6 @@ PLoop(function(_ENV)
     end
 
     local onObjectError                 = function(obj, ex)  return obj and getObjectSubject(obj):OnError(ex) end
-    local onObjectCompleted             = function(obj)      return obj and getObjectSubject(obj):OnCompleted() end
 
     -- Subscribe the children
     local subscribeReactive             = function(self, r)

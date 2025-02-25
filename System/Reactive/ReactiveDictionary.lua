@@ -9,7 +9,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2024/12/26                                               --
--- Update Date  :   2024/12/26                                               --
+-- Update Date  :   2025/02/22                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
@@ -108,7 +108,7 @@ PLoop(function(_ENV)
 
             -- subscribe
             local ok, sub, obs          = pcall(subject.Subscribe, subject, ...)
-            if not ok then error("Usage: reactiveDictionary:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+            if not ok then error(sub, 2) end
 
             return sub, obs
         end
@@ -169,7 +169,7 @@ PLoop(function(_ENV)
 
         if ktype ~= Any or vtype ~= Any then 
             error                       = throw
-            __Arguments__{ ktype, vtype/nil }:Throwable() 
+            __Arguments__{ ktype, vtype/nil, Number/nil }:Throwable()
         end
         function __newindex(self, key, value, stack)
             local raw                   = rawget(self, RawTable)

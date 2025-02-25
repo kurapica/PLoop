@@ -9,7 +9,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2024/05/22                                               --
--- Update Date  :   2024/09/20                                               --
+-- Update Date  :   2025/02/22                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -26,6 +26,8 @@ PLoop(function(_ENV)
             onnext                      = Subject.OnNext,
             onerror                     = Subject.OnError,
             geterrormessage             = Struct.GetErrorMessage,
+            pcall                       = pcall,
+            error                       = error,
         }
 
         -----------------------------------------------------------------------
@@ -33,9 +35,10 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Subscribe the observer
         function Subscribe(self, ...)
-            local subscription, observer= subscribe(self, ...)
+            local ok, sub, observer     = pcall(subscribe, self, ...)
+            if not ok then error(sub, 2) end
             if self[1] ~= nil then observer:OnNext(self[1]) end
-            return subscription, observer
+            return sub, observer
         end
 
         --- Provides the observer with new data

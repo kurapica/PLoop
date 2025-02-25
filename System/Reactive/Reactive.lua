@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2025/01/06                                               --
+-- Update Date  :   2025/02/22                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -310,7 +310,7 @@ PLoop(function(_ENV)
             properties                  = {},
             switchObject                = function (self, new, clear)
                 -- switch for reactive fields
-                local reactives         = self[Reactive]
+                local reactives         = rawget(self, Reactive)
                 if not reactives then return end
                 local subject           = rawget(self, Subject)
 
