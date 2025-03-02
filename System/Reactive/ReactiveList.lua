@@ -21,8 +21,11 @@ PLoop(function(_ENV)
         rawget                          = rawget,
         ipairs                          = ipairs,
         select                          = select,
+        tinsert                         = table.insert,
+        tremove                         = table.remove,
         type                            = type,
         newtable                        = Toolset.newtable,
+        getobjectclass                  = Class.GetObjectClass,
         isobjecttype                    = Class.IsObjectType,
         issubtype                       = Class.IsSubType,
         getreactivetype                 = System.Reactive.GetReactiveType,
@@ -30,158 +33,141 @@ PLoop(function(_ENV)
         ReactiveValue, Subject, Reactive, IList
     }
 
-    -- the reactive map
+    -----------------------------------------------------------------------
+    --                           array subject                           --
+    -----------------------------------------------------------------------
+    local function insertElement(subject, i, v)
+        if type(v) == "table" then
+            local cache                 = subject.Cache
+            local r                     = cache[v]
+            if r ~= nil then
+                if r then
+                    local indexes       = r[subject]
+                    if type(indexes) == "table" then
+                        for j == 1, #indexes do if indexes[j] == i then return end end
+                        -- keep track indexes
+                        tinsert(indexes, i)
+                    elseif indexes ~= i then
+                        r[subject]      = { indexes, i }
+                    end
+                end
+            else
+                r                       = reactive(v)
+                if r and not isobjecttype(r, ReactiveValue) then
+                    rawset(r, subject, i)
+                    rawset(subject, r, (r:Subscribe(
+                        function(...) return subject:OnNext(r[subject], ...) end,
+                        function(ex)  return subject:OnError(ex) end
+                    )))
+                else
+                    r                   = false
+                end
+
+                cache[v]                = r
+            end
+            return r or v
+        end
+        return v
+    end
+
+    local function removeElement(subject, i, v)
+        local cache                     = subject.Cache
+        local r                         = cache[v]
+        if r then
+            local indexes               = r[subject]
+            local clear                 = type(indexes) ~= "table"
+            if not clear then
+                for j = #indexes, 1, -1 do
+                    if indexes[j] == i then
+                        tremove(indexes, j)
+                        break
+                    end
+                end
+                local remain            = #indexes
+                clear                   = remain == 0
+                if remain == 1 then
+                    r[subject]          = indexes[1]
+                end
+            elseif indexes ~= i then
+                return
+            end
+
+            -- release
+            if clear then
+                cache[v]                = nil
+                r[subject]              = nil
+                local subscription      = rawget(subject, r)
+                if subscription then
+                    subscription:Dispose()
+                    rawset(subject, r, nil)
+                end
+            end
+        end
+    end
+
+    local function moveElement(subject, i, oi, v)
+        if i == oi  then return end
+        if i == nil then return removeElement(subject, oi, v) end
+        if oi== nil then return insertElement(subject, i, v)  end
+
+        local cache                     = subject.Cache
+        local r                         = cache[v]
+        if r then
+            local indexes               = r[subject]
+            if type(indexes) == "table" then
+                for j = 1, #indexes do
+                    if indexes[j] == i then
+                        return removeElement(subject, oi, v)
+                    end
+                end
+                for j = #indexes, 1, -1 do
+                    if indexes[j] == oi then
+                        indexes[j]      = i
+                        break
+                    end
+                end
+            else
+                r[subject]              = i
+            end
+        end
+    end
+
+    local function initObjectSubject(obj)
+        local subject                   = Subject()
+        local cache                     = newtable(true)
+        rawset(subject, "Cache", cache)
+
+        -- init elements
+        for i, v in (obj.GetIterator or ipairs)(obj) do
+            insertElement(subject, i, v)
+        end
+    end
+
     local objectSubjectMap              = not Platform.MULTI_OS_THREAD and Toolset.newtable(true) or nil
     local getObjectSubject              = Platform.MULTI_OS_THREAD
         and function(obj)
             local subject               = rawget(obj, Reactive)
             if not subject then
-                subject                 = Subject()
+                subject                 = initObjectSubject(obj)
                 rawset(obj, Reactive, subject)
-                rawset(subject, "Cache", newtable(true))
             end
             return subject
         end
         or  function(obj)
             local subject               = objectSubjectMap[obj]
             if not subject then
-                subject                 = Subject()
+                subject                 = initObjectSubject(obj)
                 objectSubjectMap[obj]   = subject
-                rawset(subject, "Cache", newtable(true))
             end
             return subject
         end
 
-    -- value auto map
-    local resetObjectMap                = function(obj)
-        if not obj then return end
-        local subject                   = getObjectSubject(obj)
-        rawset(subject, "Indexes", newtable(true))
-    end
-
-    -- push data
-    local onObjectNext                  = function(obj, i, v, ...)
-        if not obj then return end
-        local subject                   = getObjectSubject(obj)
-        if i then
-            -- index known
-            return subject:OnNext(i, ...)
-        elseif v ~= nil then
-            -- index unknown
-            for j, l in (obj.GetIterator or ipairs)(obj) do
-                if l == v then
-                    subject:OnNext(j, ...)
-                end
-            end
-        end
-
-        -- all
-        return subject:OnNext()
-    end
-
-    local onObjectError                 = function(obj, ex)  return obj and getObjectSubject(obj):OnError(ex) end
-
-    -- Subscribe the children
-    local subscribeReactive             = function(self, r)
-        local subject                   = rawget(self, Subject)
-
-        -- no need to support scalar reactive value
-        if r and subject and not rawget(subject, r) and not isobjecttype(r, ReactiveValue) then
-
-        end
-        return r
-    end
-
-    -- Release the children
-    local releaseElement                = function(obj, ...)
-        local count                     = select("#", ...)
-        if count == 0 then return end
-        local subject                   = getObjectSubject(obj)
-
-        for i = 1, select("#", ...) do
-            local k                     = select(i, ...)
-            if k ~= nil then
-                local r                 = obj.Cache[k]
-                if r then
-                    if raw then
-                        for i, v in (raw.GetIterator or ipairs) do
-                            
-                        end
-                    end
-
-                    self[Reactive][k]       = nil
-
-                    local subject                   = rawget(self, Subject)
-                    local subscription              = subject and rawget(subject, r)
-
-                    if subscription then
-                        rawset(subject, r, nil)
-                        subscription:Dispose()
-                    end
-                end
-            end
-        end
-
-        return ...
-    end
 
     -- access element
-    local getElement                    = function(obj, index, rtype)
+    local getElement                    = function(obj, index)
         if not (obj and index) then return end
         local value                     = obj[index]
-        if type(value) == "table" then
-            -- check cache
-            local subject               = getObjectSubject(obj)
-            local react                 = subject.Cache[value]
-            if react ~= nil then return react or value end
-
-            -- generate the reactive
-            if not rtype then
-                rtype                   = getreactivetype(value)
-                if issubtype(rtype, ReactiveValue) then
-                    rtype               = nil
-                end
-            end
-            react                       = rtype and rtype(v) or false
-            subject.Cache[value]        = react
-
-            -- subscribe element
-            rawset(subject, react, (react:Subscribe(
-                function(...) return onObjectNext (obj, nil, value, ...) end,
-                function(ex)  return onObjectError(obj, nil, value, ex)  end)
-            ))
-
-            return react or value
-        end
-        return value
-    end
-
-    -- switch object value
-    local switchObject                  = function(self, new)
-        if rawget(self, RawTable) == new then return end
-        local reactives                 = self[Reactive]
-
-        -- clear
-        rawset(self, IList, nil)
-        for k, r in pairs(reactives) do
-            if r then releaseElement(self, k) end
-        end
-        self[Reactive]                  = newtable(true)
-
-        -- lazy subscribe
-        local subject                   = rawget(self, Subject)
-        if not subject then return end
-
-        -- reset
-        subject.Observable              = nil
-        if not new then return end
-
-        -- make reactives
-        for _, v in (new.GetIterator or ipairs)(new) do
-            makeReactive(self, v)
-        end
-
-        subject.Observable              = getObjectSubject(new)
+        return value and type(value) == "table" and getObjectSubject(obj).Cache[value] or value
     end
     
     local format                        = function(name, err)
@@ -191,12 +177,6 @@ PLoop(function(_ENV)
             err.Message = err.Message:gsub("^.*:%d+:%s*", ""):gsub("^the (%w+)", "the " .. name .. ".%1")
             return err
         end
-    end
-
-    -- fire the element data changes
-    local fireElementChange             = function(self, ...)
-        rawset(self, IList, nil)
-        return onObjectNext(rawget(self, RawTable), ...)
     end
 
     -----------------------------------------------------------------------
@@ -281,11 +261,11 @@ PLoop(function(_ENV)
 
                 -- switch object
                 rawset(self, RawTable, value)
-                switchObject(self, value)
-
-                -- notify
                 local subject           = rawget(self, Subject)
-                return subject and subject:OnNext(nil)
+                if subject then
+                    subject.Observable  = value and getObjectSubject(value) or nil
+                    return subject:OnNext(nil)
+                end
 
             end or function(self, value)
                 if value and isobjecttype(value, IReactive) then
@@ -295,11 +275,11 @@ PLoop(function(_ENV)
 
                 -- switch object
                 rawset(self, RawTable, value)
-                switchObject(self, value)
-
-                -- notify
                 local subject           = rawget(self, Subject)
-                return subject and subject:OnNext(nil)
+                if subject then
+                    subject.Observable  = value and getObjectSubject(value) or nil
+                    return subject:OnNext(nil)
+                end
             end,
             type                        = RawTable + IIndexedList,
             throwable                   = elementtype and true or nil,
@@ -320,8 +300,7 @@ PLoop(function(_ENV)
 
             -- subscribe
             local ok, sub, observer     = pcall(subject.Subscribe, subject, ...)
-            if not ok then error("Usage: reactiveList:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
-
+            if not ok then error(sub, 2) end
             return sub, observer
         end
 
@@ -329,9 +308,7 @@ PLoop(function(_ENV)
         function GetIterator(self)
             return function(self, index)
                 index                   = (index or 1) + 1
-                local raw               = rawget(self, RawTable)
-                if not raw then return end
-                local value             = raw[index]
+                local value             = getElement(rawget(self, RawTable), index)
                 if value ~= nil then return index, value end
             end, self, 0
         end
@@ -358,7 +335,12 @@ PLoop(function(_ENV)
             -- insert
             local insert                = raw.Insert or tinsert
             insert(raw, item)
-            return fireElementChange(self) or self.Count
+
+            -- publish
+            local count                 = raw.Count or #raw
+            local subject               = getObjectSubject(raw)
+            subject:OnNext(count, insertElement(subject, count, item))
+            return count
         end
 
         --- Pop
@@ -366,11 +348,16 @@ PLoop(function(_ENV)
             local raw                   = rawget(self, RawTable)
             if not raw then return end
 
+            local count                 = raw.Count or #raw
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw)
             if item == nil then return end
-            self[Reactive][item]        = nil
-            return fireElementChange(self) or item
+
+            -- publish
+            local subject               = getObjectSubject(raw)
+            removeElement(subject, count, item)
+            subject:OnNext(count, nil)
+            return item
         end
 
         --- Shift
@@ -381,8 +368,12 @@ PLoop(function(_ENV)
             local remove                = raw.RemoveByIndex or tremove
             local item                  = remove(raw, 1)
             if item == nil then return end
-            self[Reactive][item]        = nil
-            return fireElementChange(self) or item
+
+            -- publish
+            local subject               = getObjectSubject(raw)
+            removeElement(subject, 1, item)
+            subject:OnNext(1, nil)
+            return item
         end
 
         --- Unshift

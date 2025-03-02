@@ -247,8 +247,8 @@ PLoop(function(_ENV)
         if r and subject and not rawget(subject, r) then
             rawset(subject, r, (r:Subscribe(
                 function(...) return onObjectNext (self.Value, k, ...) end,
-                function(ex)  return onObjectError(self.Value, ex) end)
-            ))
+                function(ex)  return onObjectError(self.Value, ex) end
+            )))
         end
         return r
     end

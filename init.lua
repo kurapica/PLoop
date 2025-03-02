@@ -19,6 +19,7 @@ require "PLoop.System.Collections.Proxy"
 require "PLoop.System.Collections.IIndexedListSorter"
 require "PLoop.System.Collections.Array"
 require "PLoop.System.Collections.Queue"
+require "PLoop.System.Collections.Range"
 
 -- System.Threading
 require "PLoop.System.Threading.TaskScheduler"
