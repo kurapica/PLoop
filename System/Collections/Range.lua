@@ -191,13 +191,23 @@ PLoop(function(_ENV)
             end
         end
 
+        --- Contains the specific value
+        __Arguments__{ Integer }
+        function Contains(self, value)
+            if value >= self.start and value <= self.stop and value % self.step == self.start % self.step then
+                return true
+            elseif self.next then
+                return self.next:Contains(value)
+            end
+        end
+
         -----------------------------------------------------------
         --                      constructor                      --
         -----------------------------------------------------------
         __Arguments__{ Integer, Integer, Integer/1 }
         function __new(_, start, stop, step)
             local diff                  = (stop % step) - (start % step)
-            stop                        = diff >= 0 and stop - diff or stop - (step - diff)
+            stop                        = diff >= 0 and stop - diff or stop - (step + diff)
             return { start = start, stop = stop, step = step, next = false }
         end
 
