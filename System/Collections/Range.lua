@@ -7,17 +7,19 @@
 --===========================================================================--
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
--- Create Date  :   2018/03/20                                               --
--- Update Date  :   2018/03/20                                               --
+-- Create Date  :   2025/03/03                                               --
+-- Update Date  :   2025/03/03                                               --
 -- Version      :   1.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     namespace "System.Collections"
 
-    import "System.Serialization"
-
-    --- The range by steps
+    --- The ranges that with operation supports
+    --
+    -- Range(1, 5) + Range(9, 10) = [1,2,3,4,5,9,10]
+    -- Range(1, 5) * Range(3, 7)  = [3,4,5]
+    -- Range(1, 5) - Range(3, 10) = [1,2]
     __Sealed__()
     class "Range"                       (function(_ENV)
         extend "IIndexedList"
@@ -123,11 +125,41 @@ PLoop(function(_ENV)
             -- a - b
             complement                  = function(a, b)
                 local range
+                local current
                 if a.start < b.start then
-                    range               = Range(a.start, min(a.stop, b.start - a.step))
-                else
-
+                    range               = Range(a.start, min(a.stop, b.start - a.step), a.step)
+                    current             = range
+                    if b.next then
+                        range           = complement(range, b.next)
+                        current         = range
+                        while current.next do current = current.next end
+                    end
                 end
+
+                if a.stop > b.stop then
+                    local r             = Range(max(a.start, b.stop + a.step), a.stop, a.step)
+                    if b.next then
+                        r               = complement(r, b.next)
+                    end
+                    if current then
+                        current.next    = r
+                    else
+                        range           = r
+                        current         = range
+                    end
+                    while current.next do current = current.next end
+                end
+
+                if a.next then
+                    local r             = complement(a.next, b)
+                    if current then
+                        current.next    = r
+                    else
+                        range           = r
+                    end
+                end
+
+                return range and sortRanges(range) or Range(1, 0, a.step)
             end
         }
 
@@ -164,7 +196,9 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         __Arguments__{ Integer, Integer, Integer/1 }
         function __new(_, start, stop, step)
-            return { start = start, stop = stop, step = step }
+            local diff                  = (stop % step) - (start % step)
+            stop                        = diff >= 0 and stop - diff or stop - (step - diff)
+            return { start = start, stop = stop, step = step, next = false }
         end
 
         -----------------------------------------------------------
@@ -178,15 +212,14 @@ PLoop(function(_ENV)
         end
 
         function __newindex(self, index, value, stack)
-            if index ~= "next" then error("The range is readonly", (stack or 1) + 1) end
-            rawset(self, index, value)
+            error("The range is readonly", (stack or 1) + 1)
         end
 
         -- Range(1, 10) X Range(8, 12) = Range(8, 10)
         __Arguments__{ Range }:Throwable()
         function __mul(self, other)
             if self.step ~= other.step or self.start % self.step ~= other.start % other.step then
-                throw("Usage: RangeA * RangeB - those ranges must have the same step and module value")
+                throw("Usage: RangeA * RangeB - those ranges must have the same step and module value by the step")
             end
             return intersection(self, other)
         end
@@ -195,7 +228,7 @@ PLoop(function(_ENV)
         __Arguments__{ Range }:Throwable()
         function __add(self, other)
             if self.step ~= other.step or self.start % self.step ~= other.start % other.step then
-                throw("Usage: RangeA + RangeB - those ranges must have the same step and module value")
+                throw("Usage: RangeA + RangeB - those ranges must have the same step and module value by the step")
             end
             return union(self, other)
         end
@@ -204,7 +237,7 @@ PLoop(function(_ENV)
         __Arguments__{ Range }:Throwable()
         function __sub(self, other)
             if self.step ~= other.step or self.start % self.step ~= other.start % other.step then
-                throw("Usage: RangeA - RangeB - those ranges must have the same step and module value")
+                throw("Usage: RangeA - RangeB - those ranges must have the same step and module value by the step")
             end
             return complement(self, other)
         end
@@ -213,14 +246,15 @@ PLoop(function(_ENV)
         __Arguments__{ Range }:Throwable()
         function __concat(self, other)
             if self.step ~= other.step or self.start % self.step ~= other.start % other.step then
-                throw("Usage: RangeA .. RangeB - those ranges must have the same step and module value")
+                throw("Usage: RangeA .. RangeB - those ranges must have the same step and module value by the step")
             end
             return union(self, other)
         end
 
         function __tostring(self)
-            return self.next and ("[%d, %d, %d] .. %s"):format(self.start, self.stop, self.step, tostring(self.next))
-                or ("[%d, %d, %d]"):format(self.start, self.stop, self.step)
+            return self.next
+                and ("[%d, %d, %d] .. %s"):format(self.start, self.stop, self.step, tostring(self.next))
+                or  ("[%d, %d, %d]"):format(self.start, self.stop, self.step)
         end
     end)
 end)
