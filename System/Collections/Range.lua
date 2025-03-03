@@ -123,14 +123,14 @@ PLoop(function(_ENV)
             end,
 
             -- a - b
-            complement                  = function(a, b)
+            rcomplement                 = function(a, b)
                 local range
                 local current
                 if a.start < b.start then
                     range               = Range(a.start, min(a.stop, b.start - a.step), a.step)
                     current             = range
                     if b.next then
-                        range           = complement(range, b.next)
+                        range           = rcomplement(range, b.next)
                         current         = range
                         while current.next do current = current.next end
                     end
@@ -139,7 +139,7 @@ PLoop(function(_ENV)
                 if a.stop > b.stop then
                     local r             = Range(max(a.start, b.stop + a.step), a.stop, a.step)
                     if b.next then
-                        r               = complement(r, b.next)
+                        r               = rcomplement(r, b.next)
                     end
                     if current then
                         current.next    = r
@@ -151,7 +151,7 @@ PLoop(function(_ENV)
                 end
 
                 if a.next then
-                    local r             = complement(a.next, b)
+                    local r             = rcomplement(a.next, b)
                     if current then
                         current.next    = r
                     else
@@ -249,7 +249,7 @@ PLoop(function(_ENV)
             if self.step ~= other.step or self.start % self.step ~= other.start % other.step then
                 throw("Usage: RangeA - RangeB - those ranges must have the same step and module value by the step")
             end
-            return complement(self, other)
+            return rcomplement(self, other)
         end
 
         -- Range(1, 10) .. Range(8, 12) = Range(1, 12)
