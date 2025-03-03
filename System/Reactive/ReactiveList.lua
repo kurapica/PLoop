@@ -44,7 +44,7 @@ PLoop(function(_ENV)
                 if r then
                     local indexes       = r[subject]
                     if type(indexes) == "table" then
-                        for j == 1, #indexes do if indexes[j] == i then return end end
+                        for j = 1, #indexes do if indexes[j] == i then return end end
                         -- keep track indexes
                         tinsert(indexes, i)
                     elseif indexes ~= i then
