@@ -51,6 +51,7 @@ PLoop(function(_ENV)
             ipairs                      = ipairs,
             tinsert                     = table.insert,
             tremove                     = table.remove,
+            tblconcat                   = table.concat,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
             keepargs                    = Toolset.keepargs,
@@ -124,7 +125,7 @@ PLoop(function(_ENV)
         __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
         if lsttype then
             function Splice(self, index, count, iter, obj, idx)
-                local total             = self.Count
+                local total             = self.Count or #self
                 index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
                 local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
                 local th
@@ -177,7 +178,7 @@ PLoop(function(_ENV)
             end
         else
             function Splice(self, index, count, iter, obj, idx)
-                local total             = self.Count
+                local total             = self.Count or #self
                 index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
                 local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
                 local th
@@ -294,6 +295,12 @@ PLoop(function(_ENV)
         function Clear(self)
             for i = self.Count, 1, -1 do self[i] = nil end
             return self
+        end
+
+        --- Get the concatenation of the List
+        __Arguments__{ String/nil }
+        function Join(self, sep)
+            return tblconcat(self, sep)
         end
 
         -----------------------------------------------------------
@@ -1003,7 +1010,7 @@ PLoop(function(_ENV)
         --- Get the concatenation of the List
         __Arguments__{ String/nil }
         function Join(self, sep)
-            return tblconcat(isObjectType(self, IIndexedList) and self or self:ToList(), sep)
+            return tblconcat(self:ToTable(), sep)
         end
 
         --- Get the sum of the list

@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/10/25                                               --
--- Update Date  :   2025/02/22                                               --
+-- Update Date  :   2025/03/04                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -56,7 +56,16 @@ PLoop(function(_ENV)
                 if r and not isobjecttype(r, ReactiveValue) then
                     rawset(r, subject, i)
                     rawset(subject, r, (r:Subscribe(
-                        function(...) return subject:OnNext(r[subject], ...) end,
+                        function(...)
+                            local i     = r[subject]
+                            if type(i) == "table" then
+                                -- @TODO: reduce the creations, maybe a backup plan
+                                -- but normally there is no need to store the same object in the array
+                                return subject:OnNext(List(ipairs(r[subject])), ...)
+                            else
+                                return subject:OnNext(i, ...)
+                            end
+                        end,
                         function(ex)  return subject:OnError(ex) end
                     )))
                 else
@@ -132,6 +141,21 @@ PLoop(function(_ENV)
         end
     end
 
+    local function clearElements(subject)
+        local cache                     = subject.Cache
+        for v, r in pairs(cache) do
+            if r then
+                cache[v]                = nil
+                r[subject]              = nil
+                local subscription      = rawget(subject, r)
+                if subscription then
+                    subscription:Dispose()
+                    rawset(subject, r, nil)
+                end
+            end
+        end
+    end
+
     local function initObjectSubject(obj)
         local subject                   = Subject()
         local cache                     = newtable(true)
@@ -141,6 +165,7 @@ PLoop(function(_ENV)
         for i, v in (obj.GetIterator or ipairs)(obj) do
             insertElement(subject, i, v)
         end
+        return subject
     end
 
     local objectSubjectMap              = not Platform.MULTI_OS_THREAD and Toolset.newtable(true) or nil
@@ -213,13 +238,39 @@ PLoop(function(_ENV)
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
             splice                      = List.Splice,
+            setvalue                    = Toolset.setvalue,
             isvaluetype                 = false,
+            RangeType                   = System.Collections.Range,
+            AnyType                     = System.Any,
+
+            -- splice helper
+            handleSpliceResult          = function (raw, initcnt, index, count, ...)
+                local removecnt         = select("#", ...)
+                local currcnt           = raw.Count or #raw
+                local subject           = getObjectSubject(raw)
+                for i = index, index + removecnt - 1 do
+                    removeElement(subject, i, (select(i, ...)))
+                end
+                for i = index, index + currcnt - initcnt + removecnt - 1 do
+                    insertElement(subject, i, raw[i])
+                end
+                local diff              = currcnt - initcnt
+                if diff ~= 0 then
+                    for i = index + currcnt - initcnt + removecnt, currcnt do
+                        moveElement(subject, i, i + diff, raw[i])
+                    end
+                    subject:OnNext(RangeType(index, max(initcnt, currcnt)))
+                else
+                    subject:OnNext(RangeType(index, index + count - 1))
+                end
+                return ...
+            end,
 
             -- import types
             RawTable, Reactive, IList, Subject, IReactive
         }
 
-        if elementtype ~= Any then
+        if elementtype ~= AnyType then
             export                      {
                 valid                   = getmetatable(elementtype).ValidateValue,
                 geterrormessage         = Struct.GetErrorMessage,
@@ -242,7 +293,7 @@ PLoop(function(_ENV)
         --- Gets/Sets the raw value
         property "Value"                {
             field                       = RawTable,
-            set                         = elementtype ~= Any and function(self, value)
+            set                         = elementtype ~= AnyType and function(self, value)
                 if value and isobjecttype(value, IReactive) then
                     value               = value.Value
                 end
@@ -313,17 +364,13 @@ PLoop(function(_ENV)
             end, self, 0
         end
 
-        --- Map the items to other datas, use collection operation instead of observable
-        Map                             = IList.Map
-
-        --- Used to filter the items with a check function
-        Filter                          = IList.Filter
-
-        --- Used to select items with ranged index
-        Range                           = IList.Range
+        -- use collection operation instead of observable
+        for k, v in Interface.GetMethods(IList) do
+            _ENV[k]                     = v
+        end
 
         --- Push
-        if elementtype ~= Any then __Arguments__{ validatetype } end
+        if elementtype ~= AnyType then __Arguments__{ validatetype } end
         function Push(self, item)
             if type(item) == "table" and isobjecttype(item, IReactive) then
                 item                    = item.Value
@@ -370,14 +417,19 @@ PLoop(function(_ENV)
             if item == nil then return end
 
             -- publish
+            local count                 = raw.Count or #raw
             local subject               = getObjectSubject(raw)
             removeElement(subject, 1, item)
-            subject:OnNext(1, nil)
+            for i = 1, count do
+                moveElement(subject, i, i + 1, raw[i])
+            end
+            -- index changes use Range object
+            subject:OnNext(RangeType(1, count + 1))
             return item
         end
 
         --- Unshift
-        if elementtype then __Arguments__{ validatetype } end
+        if elementtype ~= AnyType then __Arguments__{ validatetype } end
         function Unshift(self, item)
             if item and isobjecttype(item, IReactive) then
                 item                    = item.Value
@@ -388,16 +440,26 @@ PLoop(function(_ENV)
             
             local insert                = raw.Insert or tinsert
             insert(raw, 1, item)
-            return fireElementChange(self) or self.Count
+
+            -- publish
+            local count                 = raw.Count or #raw
+            local subject               = getObjectSubject(raw)
+            insertElement(subject, 1, item)
+            for i = 2, count do
+                moveElement(subject, i, i - 1, raw[i])
+            end
+            subject:OnNext(RangeType(1, count))
+            return count
         end
 
         --- Splice
-        __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
-        if elementtype then
+        __Arguments__{ Integer, Integer, Callable, AnyType/nil, AnyType/nil }
+        if elementtype ~= AnyType then
             function Splice(self, index, count, iter, obj, idx)
                 local raw               = rawget(self, RawTable)
                 if not raw then return end
 
+                local initcnt           = raw.Count or #raw
                 local th                = keepargs(splice(raw, index, count, function()
                     local item
                     idx, item           = iter(obj, idx)
@@ -412,16 +474,14 @@ PLoop(function(_ENV)
                     end
                 end))
 
-                if th then
-                    fireElementChange(self)
-                    return getkeepargs(th)
-                end
+                return handleSpliceResult(raw, initcnt, index, count, getkeepargs(th))
             end
         else
             function Splice(self, index, count, iter, obj, idx)
                 local raw               = rawget(self, RawTable)
                 if not raw then return end
 
+                local initcnt           = raw.Count or #raw
                 local th                = keepargs(splice(raw, index, count, function()
                     local item
                     idx, item           = iter(obj, idx)
@@ -432,10 +492,7 @@ PLoop(function(_ENV)
                     end
                 end))
 
-                if th then
-                    fireElementChange(self)
-                    return getkeepargs(th)
-                end
+                return handleSpliceResult(raw, initcnt, index, count, getkeepargs(th))
             end
         end
 
@@ -452,13 +509,13 @@ PLoop(function(_ENV)
         end
 
         --- Splice
-        __Arguments__{ Integer, Integer, (lsttype or Any) * 0 }
+        __Arguments__{ Integer, Integer, (lsttype or AnyType) * 0 }
         function Splice(self, index, count, ...)
             return Splice(self, index, count, ipairs{...})
         end
 
         --- Insert an item to the list
-        __Arguments__{ Integer, elementtype and validatetype or Any }
+        __Arguments__{ Integer, elementtype and validatetype or AnyType }
         function Insert(self, index, item)
             if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
@@ -469,10 +526,19 @@ PLoop(function(_ENV)
             local insert                = raw.Insert or tinsert
             index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
             insert(raw, index, item)
-            return fireElementChange(self) or self.Count
+
+            -- publish
+            local count                 = raw.Count or #raw
+            local subject               = getObjectSubject(raw)
+            insertElement(subject, index, item)
+            for i = index + 1, count do
+                moveElement(subject, i, i - 1, raw[i])
+            end
+            subject:OnNext(RangeType(index, count))
+            return count
         end
 
-        __Arguments__{ elementtype and validatetype  or Any }
+        __Arguments__{ elementtype and validatetype  or AnyType }
         function Insert(self, item)
             if item and isobjecttype(item, IReactive) then item = item.Value end
             if item == nil then return end
@@ -481,7 +547,12 @@ PLoop(function(_ENV)
 
             local insert                = raw.Insert or tinsert
             insert(raw, item)
-            return fireElementChange(self) or self.Count
+
+            -- publish
+            local count                 = raw.Count or #raw
+            local subject               = getObjectSubject(raw)
+            subject:OnNext(count, insertElement(subject, count, item))
+            return count
         end
 
         --- Whether an item existed in the list
@@ -522,11 +593,21 @@ PLoop(function(_ENV)
             if index == total then
                 item                    = raw[index]
                 raw[index]              = nil
-            else
+            elseif index < total then
                 local remove            = raw.RemoveByIndex or tremove
                 item                    = remove(raw, index)
+            else
+                return
             end
-            return item ~= nil and fireElementChange(self) or item
+
+            -- publish
+            local subject               = getObjectSubject(raw)
+            removeElement(subject, index, item)
+            for i = index, total - 1 do
+                moveElement(subject, index, index + 1, raw[index])
+            end
+            subject:OnNext(RangeType(index, total))
+            return item
         end
 
         --- Clear the list
@@ -543,8 +624,10 @@ PLoop(function(_ENV)
                     raw[i]              = nil
                 end
             end
-            rawset(self, Reactive, newtable(true))
-            return fireElementChange(self)
+
+            local subject               = getObjectSubject(raw)
+            clearElements(subject)
+            return subject:OnNext(RangeType(1, total))
         end
 
         -------------------------------------------------------------------
@@ -552,35 +635,14 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         function __ctor(self, list)
             rawset(self, RawTable, type(list) == "table" and list or {})
-            rawset(self, Reactive, newtable(true))
-            if list then setReactiveMap(list, self) end
-        end
-
-        function __exist(_, list)
-            return type(list) == "table" and getReactiveMap(list) or nil
         end
 
         -------------------------------------------------------------------
         --                        de-constructor                         --
-        -------------------------------------------------------------------4
+        -------------------------------------------------------------------
         function __dtor(self)
             local subject               = rawget(self, Subject)
-            if subject then
-                for k, r in pairs(self[Reactive]) do
-                    local subscription  = r and rawget(subject, r)
-                    if subscription then
-                        subscription:Dispose()
-                        rawset(subject, r, nil)
-                    end
-                end
-            end
-
-            for k, v in pairs(self[Reactive]) do
-                -- only reactive fields will be disposed with the parent
-                if v and isobjecttype(v, IReactive) then v:Dispose() end
-            end
-
-            return clearReactiveMap(self)
+            if subject then subject:Dispose() end
         end
 
         -------------------------------------------------------------------
@@ -588,20 +650,12 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         function __index(self, index)
             if type(index) ~= "number" then return end
-
-            local raw                   = rawget(self, RawTable)
-            local value                 = raw[index]
-            if value and type(value) == "table" then
-                local r                 = rawget(self, Reactive)[value]
-                if r ~= nil then return r or value end
-                return makeReactive(self, value) or value
-            end
-            return value
+            return getElement(rawget(self, RawTable), index)
         end
 
-        function __newindex(self, index, value)
+        function __newindex(self, index, value, stack)
             if type(index) ~= "number" then
-                error("Usage: reactiveList[index] = value - the index is must be number", 2)
+                error("Usage: reactiveList[index] = value - the index is must be number", (stack or 1) + 1)
             end
 
             -- Convert to raw value
@@ -615,24 +669,21 @@ PLoop(function(_ENV)
 
             -- keep list
             if oldval == nil and index ~= self.Count + 1 then
-                error("Usage: reactiveList[index] = value - the index is out of range", 2)
+                error("Usage: reactiveList[index] = value - the index is out of range", (stack or 1) + 1)
             end
 
             if value == nil then
                 if index ~= self.Count then
-                    error("Usage: reactiveList[index] = nil - must use RemoveByIndex instead of assign directly", 2)
+                    error("Usage: reactiveList[index] = nil - must use RemoveByIndex instead of assign directly", (stack or 1) + 1)
                 end
                 return self:Pop()
             end
 
-            if oldval and self[Reactive][oldval] then
-                setraw(self[Reactive][oldval], value, 2)
-                return
-            end
-
             -- set directly
             raw[index]                  = value
-            return fireElementChange(self, index, value)
+            local subject               = getObjectSubject(raw)
+            removeElement(subject, index, oldval)
+            return subject:OnNext(index, insertElement(subject, index, value))
         end
 
         function __len(self)            return self.Count end

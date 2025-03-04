@@ -393,6 +393,6 @@ PLoop(function(_ENV)
 
     --- Gets the arguments from a coroutine
     function Toolset.getkeepargs(thread)
-        return getArgs(resume(thread))
+        if thread then return getArgs(resume(thread)) end
     end
 end)
