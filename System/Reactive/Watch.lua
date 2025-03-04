@@ -8,7 +8,7 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2023/04/20                                               --
--- Update Date  :   2024/05/09                                               --
+-- Update Date  :   2025/03/04                                               --
 -- Version      :   2.0.0                                                    --
 --===========================================================================--
 
@@ -44,16 +44,16 @@ PLoop(function(_ENV)
                     return ReactiveProxy(observer, value, parent)
 
                 -- Subscribe the list
-                elseif issubtype(cls, ReactiveList) then
-                    return ReactiveListProxy(observer, value, parent)
+                elseif issubtype(cls, ReactiveList) or issubtype(cls, ReactiveDictionary) then
+                    return value
 
                 -- Add proxy to acess the real value
-                elseif issubtype(cls, BehaviorSubject) then
+                elseif issubtype(cls, ReactiveValue) then
                     return value, true
 
-                -- convert the observable to behavior subject
+                -- convert the observable to reactive value
                 elseif not parent then
-                    return BehaviorSubject(value), true
+                    return ReactiveValue(value), true
                 end
             end,
 
@@ -225,7 +225,8 @@ PLoop(function(_ENV)
             end,
 
             IObservable, Watch,
-            Observer, Exception, BehaviorSubject, Reactive, ReactiveList, Subscription
+            Observer, Exception, BehaviorSubject, Subscription,
+            Reactive, ReactiveList, ReactiveDictionary, ReactiveValue
         }
 
         -----------------------------------------------------------------------
@@ -470,6 +471,7 @@ PLoop(function(_ENV)
                 type                    = type,
                 pcall                   = pcall,
                 getmetatable            = getmetatable,
+                isobjecttype            = Class.IsObjectType,
                 makeReactiveProxy       = makeReactiveProxy,
 
                 -- check the access value if observable
@@ -489,6 +491,12 @@ PLoop(function(_ENV)
                             rawset(self, key, nil)
                             return proxy.Value
                         else
+                            -- for reactive list, dict subscribe directly
+                            if not isobjecttype(proxy, ReactiveProxy) then
+                                proxy:Subscribe(observer, observer.Subscription)
+                                proxy   = proxy.Value
+                            end
+
                             -- override
                             rawset(self, key, proxy)
                             return proxy
@@ -596,7 +604,7 @@ PLoop(function(_ENV)
             type                        = type,
             error                       = error,
             getKeywordVisitor           = Environment.GetKeywordVisitor,
-            isObjectType                = Class.IsObjectType,
+            isobjecttype                = Class.IsObjectType,
             getmetatable                = getmetatable,
 
             IObservable
@@ -611,8 +619,8 @@ PLoop(function(_ENV)
                 error("Usage: watch([reactives, ]func) - The func must be a function", 2)
             end
 
-            if reactives and (type(reactives) ~= "table" or getmetatable(reactives) ~= nil and not isObjectType(reactives, IObservable)) then
-                error("Usage: watch([reactives, ]func) - The reactives must be a table or observable", 2)
+            if reactives and (type(reactives) ~= "table" or getmetatable(reactives) ~= nil and not isobjecttype(reactives, IObservable)) then
+                error("Usage: watch([reactives, ]func) - The reactives must be a table contains key-values or an observable", 2)
             end
 
             return Watch(func, getKeywordVisitor(watch), reactives)
