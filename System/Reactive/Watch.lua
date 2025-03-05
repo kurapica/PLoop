@@ -44,15 +44,15 @@ PLoop(function(_ENV)
                     return ReactiveProxy(observer, value, parent)
 
                 -- Subscribe the list
-                elseif issubtype(cls, ReactiveList) or issubtype(cls, ReactiveDictionary) then
-                    return value
+                elseif issubtype(cls, ReactiveList) then
+                    return ReactiveListProxy(observer, value, parent)
 
-                -- Add proxy to acess the real value
-                elseif issubtype(cls, ReactiveValue) then
+                -- Reactive Value & Dict access directly
+                elseif issubtype(cls, ReactiveValue) or  issubtype(cls, ReactiveDictionary) then
                     return value, true
 
                 -- convert the observable to reactive value
-                elseif not parent then
+                else
                     return ReactiveValue(value), true
                 end
             end,
@@ -239,15 +239,15 @@ PLoop(function(_ENV)
                 rawset                  = rawset,
                 rawget                  = rawget,
                 type                    = type,
+                pcall                   = pcall,
                 makeReactiveProxy       = makeReactiveProxy,
                 addDeepWatch            = addDeepWatch,
                 releaseDeepWatch        = releaseDeepWatch,
                 addWatch                = addWatch,
                 addProxy                = addProxy,
                 makeWritable            = makeWritable,
-                setraw                  = Reactive.SetRaw,
+                setvalue                = Toolset.setvalue,
                 isobjecttype            = Class.IsObjectType,
-                setvalue                = function(self, key, value) self[key] = value end,
 
                 IObservable, Observer, Reactive, ReactiveProxy, Watch
             }
@@ -287,7 +287,7 @@ PLoop(function(_ENV)
                 local subject           = proxyes and proxyes[key]
                 if subject then return subject end
 
-                -- check behaviour subjects
+                -- check value proxy
                 local react             = rawget(self, Reactive)
                 local watches           = rawget(self, Watch)
                 if watches and watches[key] ~= nil then return react[key].Value end
@@ -491,12 +491,6 @@ PLoop(function(_ENV)
                             rawset(self, key, nil)
                             return proxy.Value
                         else
-                            -- for reactive list, dict subscribe directly
-                            if not isobjecttype(proxy, ReactiveProxy) then
-                                proxy:Subscribe(observer, observer.Subscription)
-                                proxy   = proxy.Value
-                            end
-
                             -- override
                             rawset(self, key, proxy)
                             return proxy
