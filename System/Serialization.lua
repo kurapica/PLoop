@@ -159,7 +159,7 @@ PLoop(function(_ENV)
         if isenum (type) then return true end
         if isclass(type) then
             local template              = gettemplate(type)
-            if template and isSerializableType(template) then
+            if template and template ~= type and isSerializableType(template) then
                 for _,  par in ipairs{ gettemplatepars(type) } do if getnamespace(par) and not isSerializableType(par) then return false end end
                 return true
             end
@@ -615,7 +615,7 @@ PLoop(function(_ENV)
         class "__SerializeFormat__"     (function(_ENV)
             extend "IAttachAttribute"
 
-            export { saveTargetFormat   = saveTargetFormat, isSerializableType = isSerializableType, issubtype = Class.IsSubType, ISerializable, isclass = Class.Validate }
+            export { saveTargetFormat   = saveTargetFormat, isSerializableType = isSerializableType, issubtype = Class.IsSubType, ISerializable, isclass = Class.Validate, AttributeTargets }
 
             function AttachAttribute(self, target, targettype, owner, name, stack)
                 if targettype == AttributeTargets.Class then

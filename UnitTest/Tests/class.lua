@@ -236,7 +236,7 @@ __Test__() function event()
     obj.OnTest      = obj.OnTest + function(self) Assert.Step("Stack") end
 
     obj:Fire()
-    Assert.Same(Assert.GetSteps(), { "Change OnTest", "Change OnTest", "Stack", "Final" })
+    Assert.Same(Assert.GetSteps(), { "Change OnTest", "Change OnTest", "Change OnTest", "Stack", "Final" })
     Assert.ResetSteps()
 
     local blockhandler = function(self) Assert.Step("Block") return true end
@@ -360,7 +360,7 @@ __Test__() function template()
         inherit (Array[eletype])
     end)
 
-    Assert.Find("class.lua:366: Usage: Anonymous([... as System.Number]) - the 4th argument must be number, got string",
+    Assert.Find("the 4th argument must be number, got string",
         Assert.Error(
             function()
                 local o = NumberArray(1, 2, 3, "hi", 5)
@@ -368,7 +368,7 @@ __Test__() function template()
         )
     )
 
-    Assert.Find("class.lua:374: Usage: Anonymous([... as System.String]) - the 3rd argument must be string, got number",
+    Assert.Find("the 3rd argument must be string, got number",
         Assert.Error(
             function()
                 local o = Queue[String]("hi", "1", 2)

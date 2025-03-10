@@ -8,136 +8,193 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2024/05/09                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    --- A bridge or proxy that acts both as an observer and as an Observable
+    --- A bridge or proxy that acts as observer and observable
     __Sealed__()
+    __AutoCache__{ Inheritable = true }
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
     class "Subject"                     (function(_ENV)
         extend "System.IObservable" "System.IObserver"
 
-        export { Observer, Dictionary, next = next, type = type, pairs = pairs }
+        export                          {
+            next                        = next,
+            type                        = type,
+            pairs                       = pairs,
+            newtable                    = Toolset.newtable,
 
-        FIELD_NEW_SUBSCRIBE             = "__Subject_New"
+            -- the core subscribe
+            subscribe                   = function (self, observer, subscription)
+                -- check subscription
+                subscription            = subscription or observer.Subscription
+                if subscription.IsUnsubscribed then return subscription, observer end
+
+                -- check existed subscription
+                local obs               = self.Observers
+                local exist             = obs[observer]
+                if exist then
+                    obs[observer]       = subscription
+                    if exist ~= subscription and not exist.IsUnsubscribed then exist:Dispose() end
+                    return subscription, observer
+                end
+
+                local iscold            = not (self.KeepAlive or next(obs))
+
+                -- subscribe the subject
+                local newobs            = self.__newobs
+                if newobs then
+                    if newobs == true then
+                        newobs          = {}
+                        self.__newobs   = newobs
+                    end
+
+                    newobs[observer]    = subscription
+                else
+                    obs[observer]       = subscription
+                end
+
+                -- start the subscription if cold
+                if iscold and self.Observable then
+                    self.Subscription   = self.Observable:Subscribe(self, self.Subscription)
+                end
+
+                return subscription, observer
+            end,
+
+            Observer
+        }
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- The obervable that provides the items
-        property "Observable"           { type = IObservable }
+        --- Whether always connect the observable
+        __Abstract__()
+        property "KeepAlive"            { type = Boolean }
 
-        --- The observer that will consume the items
-        property "Observers"            { set = false, default = function() return Dictionary() end }
+        --- The observable that the subject subscribed
+        __Abstract__()
+        property "Observable"           {
+            type                        = IObservable,
+            handler                     = function(self, new, old)
+                self.Subscription       = new and (self.KeepAlive or next(self.Observers)) and new:Subscribe(self, Subscription()) or nil
+            end
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
-        local function subscribe(self, observer)
-            local obs                   = self.Observers
-            if obs[observer] then return observer end
-            local hasobs                = next(obs)
-
-            -- Bind the Unsubscribe event
-            local onUnsubscribe
-            onUnsubscribe               = function()
-                observer.OnUnsubscribe  = observer.OnUnsubscribe - onUnsubscribe
-
-                obs[observer]           = nil
-                if self.Observable and not next(obs) then self:Unsubscribe() end
-            end
-            observer.OnUnsubscribe      = observer.OnUnsubscribe + onUnsubscribe
-
-            -- Subscribe the subject
-            self:Resubscribe()
-            if self[FIELD_NEW_SUBSCRIBE] then
-                if self[FIELD_NEW_SUBSCRIBE] == true then
-                    self[FIELD_NEW_SUBSCRIBE] = {}
-                end
-
-                self[FIELD_NEW_SUBSCRIBE][observer] = true
-            else
-                obs[observer]           = true
-            end
-            if self.Observable and not hasobs then self.Observable:Subscribe(self) end
-
-            return observer
-        end
-
         --- Notifies the provider that an observer is to receive notifications.
-        __Arguments__{ IObserver }
+        __Arguments__{ IObserver, Subscription/nil }
         Subscribe                       = subscribe
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function Subscribe(self, onNext, onError, onCompleted)
-            return subscribe(self, Observer(onNext, onError, onCompleted))
+        __Arguments__{ Callable/nil, Callable/nil, Callable/nil, Subscription/nil }
+        function Subscribe(self, onNext, onError, onCompleted, subscription)
+            return subscribe(self, Observer(onNext, onError, onCompleted, subscription))
         end
-
-        function OnNextCore(self, ...) return self:OnNext(...) end
-        function OnErrorCore(self, e)  return self:OnError(e) end
-        function OnCompletedCore(self) return self:OnCompleted() end
 
         --- Provides the observer with new data
         function OnNext(self, ...)
-            if not self.IsUnsubscribed then
-                self[FIELD_NEW_SUBSCRIBE] = self[FIELD_NEW_SUBSCRIBE] or true
+            self.__newobs               = self.__newobs or true
 
-                local onNext            = self.OnNextCore
-                for k in self.Observers:GetIterator() do
-                    onNext(k, ...)
+            local obs                   = self.Observers
+            local becold                = false
+            for ob, sub in pairs(obs) do
+                if not sub.IsUnsubscribed then
+                    ob:OnNext(...)
+                else
+                    obs[ob]             = nil
+                    becold              = true
                 end
+            end
 
-                local newSubs           = self[FIELD_NEW_SUBSCRIBE]
-                if newSubs and type(newSubs) == "table" then
-                    for observer in pairs(newSubs) do
-                        self.Observers[observer] = true
+            -- Register the new observers
+            local newobs                = self.__newobs
+            self.__newobs               = false
+            if newobs and newobs ~= true then
+                for ob, sub in pairs(newobs) do
+                    if not sub.IsUnsubscribed then
+                        becold          = false
+                        obs[ob]         = sub
                     end
                 end
-                self[FIELD_NEW_SUBSCRIBE] = false
+            end
+
+            -- be cold
+            if becold and not (self.KeepAlive or next(obs)) then
+                self.Subscription       = nil
             end
         end
 
         --- Notifies the observer that the provider has experienced an error condition
-        function OnError(self, exception)
-            if self.IsUnsubscribed then return end
+        function OnError(self, ...)
+            self.__newobs           = self.__newobs or true
 
-            local onError               = self.OnErrorCore
-            for k in self.Observers:GetIterator() do
-                onError(k, exception)
+            local obs                   = self.Observers
+            local becold                = false
+            for ob, sub in pairs(obs) do
+                if not sub.IsUnsubscribed then
+                    ob:OnError(...)
+                else
+                    obs[ob]             = nil
+                    becold              = true
+                end
+            end
+
+            -- Register the new observers
+            local newsub                = self.__newobs
+            self.__newobs               = false
+            if newsub and newsub ~= true then
+                for ob, sub in pairs(newsub) do
+                    if not sub.IsUnsubscribed then
+                        becold          = false
+                        obs[ob]         = sub
+                    end
+                end
+            end
+
+            -- be cold
+            if becold and not (self.KeepAlive or next(obs)) then
+                self.Subscription       = nil
             end
         end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            if self.IsUnsubscribed then return end
+            local obs                   = self.Observers
+            self.Observers              = newtable(false, true)
+            for ob, sub in pairs(obs) do
+                if not sub.IsUnsubscribed then
+                    ob:OnCompleted()
+                end
+            end
 
-            local onComp                = self.OnCompletedCore
-            for k in self.Observers:GetIterator() do onComp(k) end
+            if not (self.KeepAlive or next(self.Observers)) then
+                self.Subscription       = nil
+            end
         end
 
         -----------------------------------------------------------------------
         --                            constructor                            --
         -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, observable, onNext, onError, onCompleted)
-            self[FIELD_NEW_SUBSCRIBE]   = false
-
+        __Arguments__{ IObservable/nil }
+        function __ctor(self, observable)
+            self.__newobs               = false
+            self.Observers              = newtable(false, true)
             self.Observable             = observable
-            self.OnNextCore             = onNext
-            self.OnErrorCore            = onError
-            self.OnCompletedCore        = onCompleted
         end
 
-        __Arguments__{ Callable/nil, Callable/nil, Callable/nil }
-        function __ctor(self, onNext, onError, onCompleted)
-            self[FIELD_NEW_SUBSCRIBE]   = false
-
-            self.OnNextCore             = onNext
-            self.OnErrorCore            = onError
-            self.OnCompletedCore        = onCompleted
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            self.Observable             = nil
+            self.Observers              = nil
         end
     end)
 
@@ -147,25 +204,34 @@ PLoop(function(_ENV)
     class "AsyncSubject"                (function(_ENV)
         inherit "Subject"
 
-        export { select = select, unpack = _G.unpack or table.unpack }
+        export                          {
+            max                         = math.max,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            onnext                      = Subject.OnNext,
+            oncompleted                 = Subject.OnCompleted
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
         function OnNext(self, ...)
-            if not self.IsUnsubscribed then
-                self[0]                 = select("#", ...)
-                for i = 1, self[0] do
-                    self[i]             = select(i, ...)
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+            if length <= 2 then
+                self[1], self[2]        = ...
+            else
+                for i = 1, length, 2 do
+                    self[i], self[i+1]  = select(i, ...)
                 end
             end
         end
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         function OnCompleted(self)
-            if self[0] > 0 then super.OnNext(self, unpack(self, 1, self[0])) end
-            super.OnCompleted(self)
+            if self[0] > 0 then onnext(self, unpack(self, 1, self[0])) end
+            return oncompleted(self)
         end
     end)
 
@@ -175,16 +241,31 @@ PLoop(function(_ENV)
     class "BehaviorSubject"             (function(_ENV)
         inherit "Subject"
 
-        export { select = select, max = math.max, unpack = _G.unpack or table.unpack, onNext = Subject.OnNext, subscribe = Subject.Subscribe, onError = Subject.OnError }
+        export                          {
+            max                         = math.max,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            subscribe                   = Subject.Subscribe,
+            onnext                      = Subject.OnNext,
+            onerror                     = Subject.OnError,
+            pcall                       = pcall,
+            error                       = error,
+        }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
+        --- Subscribe the observer
         function Subscribe(self, ...)
-            local observer              = subscribe(self, ...)
-            local length                = self[0]
-            return length > 0 and observer:OnNext(unpack(self, 1, length)) or
-                length < 0 and observer:OnError(unpack(self, 1, -length))
+            local ok, sub, observer     = pcall(subscribe, self, ...)
+            if not ok then error(sub, 2) end
+            local length                = self[0] or 0
+            if length > 0 then
+                observer:OnNext (unpack(self, 1, length))
+            elseif length < 0 then
+                observer:OnError(self[1])
+            end
+            return sub, observer
         end
 
         --- Provides the observer with new data
@@ -192,66 +273,44 @@ PLoop(function(_ENV)
             local length                = max(1, select("#", ...))
             self[0]                     = length
 
-            if length == 1 then
-                self[1]                 = ...
-            elseif length <= 3 then
-                self[1],self[2],self[3] = ...
+            if length <= 2 then
+                self[1], self[2]        = ...
             else
-                for i = 1, length do
-                    self[i]             = select(i, ...)
+                for i = 1, length, 2 do
+                    self[i], self[i+1]  = select(i, ...)
                 end
             end
-
-            return onNext(self, ...)
+            return onnext(self, ...)
         end
 
-        function OnError(self, ...)
-            local length                = max(1, select("#", ...))
-            self[0]                     = - length
-
-            if length == 1 then
-                self[1]                 = ...
-            elseif length <= 3 then
-                self[1],self[2],self[3] = ...
-            else
-                for i = 1, length do
-                    self[i]             = select(i, ...)
-                end
-            end
-            return onError(self, ...)
-        end
-
-        --- Gets the current value
-        function GetValue(self)
-            return unpack(self, 1, self[0])
+        -- Send the error message
+        function OnError(self, ex)
+            self[0]                     = -1
+            self[1]                     = ex
+            return onerror(self, ex)
         end
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- The current value
-        property "Value"                { get = GetValue, set = OnNext }
+        --- Whether always connect the observable
+        property "KeepAlive"            { type = Boolean, default = true }
 
-        -----------------------------------------------------------------------
-        --                            constructor                            --
-        -----------------------------------------------------------------------
-        __Arguments__{ IObservable, Any * 0 }
-        function __ctor(self, observable, ...)
-            self[0]                     = select("#", ...)
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
-            end
-
+        -- Generate behavior subject based on other observable
+        __Arguments__{ IObservable }
+        function __ctor(self, observable)
+            self[0]                     = 0
             super(self, observable)
         end
 
+        -- Generate behavior subject with init data
         __Arguments__{ Any * 0 }
         function __ctor(self, ...)
-            self[0]                     = select("#", ...)
-            for i = 1, self[0] do
-                self[i]                 = select(i, ...)
+            local length                = max(1, select("#", ...))
+            self[0]                     = length
+            for i = 1, length, 2 do
+                self[i], self[i + 1]    = select(i, ...)
             end
-
             super(self)
         end
     end)
@@ -259,26 +318,22 @@ PLoop(function(_ENV)
     --- Emits to an observers only when connect to the observable source
     __Sealed__()
     class "PublishSubject"              (function(_ENV)
-        inherit "Subject" extend "IConnectableObservable"
+        inherit "Subject"
+        extend "IConnectableObservable"
 
-        export { Observable, Subject }
-
-        -----------------------------------------------------------------------
-        --                             property                              --
-        -----------------------------------------------------------------------
-        property "PublishObservable"    { type = IObservable }
+        export { Subject, Subscription }
 
         -----------------------------------------------------------------------
         --                              method                               --
         -----------------------------------------------------------------------
         function Connect(self)
-            self.PublishObservable:Subscribe(self)
+            self.__pubsub               = self.__pubsub or self.__pubobs:Subscribe(self, Subscription())
             return self
         end
 
         --- Make a Connectable Observable behave like an ordinary Observable
         function RefCount(self)
-            return Subject(self.PublishObservable)
+            return Subject(self.__pubobs)
         end
 
         -----------------------------------------------------------------------
@@ -286,7 +341,16 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         __Arguments__{ IObservable }
         function __ctor(self, observable)
-            self.PublishObservable      = observable
+            self.__pubobs               = observable
+            self.__pubsub               = false
+            super(self)
+        end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            return self.__pubsub and self.__pubsub:Dispose()
         end
     end)
 
@@ -295,7 +359,15 @@ PLoop(function(_ENV)
     class "ReplaySubject"               (function(_ENV)
         inherit "Subject"
 
-        export { Queue, select = select }
+        export                          {
+            select                      = select,
+            onnext                      = Subject.OnNext,
+            subscribe                   = Subject.Subscribe,
+            pcall                       = pcall,
+            error                       = error,
+
+            Queue
+        }
 
         -----------------------------------------------------------------------
         --                             property                              --
@@ -304,7 +376,7 @@ PLoop(function(_ENV)
         property "QueueCount"           { type = Number, default = 0 }
 
         --- The last values from the source observable
-        property "Queue"                { set = false, default = function() return Queue() end }
+        property "Queue"                { set = false,   default = function() return Queue() end }
 
         --- The max length of the buff size
         property "QueueSize"            { type = Number, default = math.huge }
@@ -313,18 +385,20 @@ PLoop(function(_ENV)
         --                              method                               --
         -----------------------------------------------------------------------
         function Subscribe(self, ...)
-            local observer              = super.Subscribe(self, ...)
+            local ok, sub, observer     = pcall(subscribe, self, ...)
+            if not ok then error(sub, 2) end
             if self.Queue:Peek() then
                 local queue             = self.Queue
                 local index             = 1
 
                 local count             = queue:Peek(index, 1)
-                while count do
+                while count and not sub.IsUnsubscribed do
                     observer:OnNext(queue:Peek(index + 1, count))
                     index               = index + 1 + count
                     count               = queue:Peek(index, 1)
                 end
             end
+            return sub, observer
         end
 
         --- Provides the observer with new data
@@ -335,7 +409,7 @@ PLoop(function(_ENV)
             else
                 self.QueueCount         = self.QueueCount + 1
             end
-            super.OnNext(self, ...)
+            return onnext(self, ...)
         end
 
         -----------------------------------------------------------------------

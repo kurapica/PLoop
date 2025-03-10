@@ -8,19 +8,19 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2022/12/07                                               --
--- Version      :   1.1.0                                                    --
+-- Update Date  :   2024/05/09                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
     namespace "System.Reactive"
 
-    --- The attribute used to wrap a function or property that return operator to be an Observable, so could be re-used
+    --- The attribute used to wrap a function or property that return operator to be an Observable
     __Sealed__()
     class "__Observable__"              (function(_ENV)
         extend "IInitAttribute"
 
-        export {
+        export                          {
             _PropertyMap                = Toolset.newtable(true),
 
             pairs                       = pairs,
@@ -82,11 +82,13 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         --                    static  method                     --
         -----------------------------------------------------------
+        --- Whether the property is observable
         __Static__()
         function IsObservableProperty(prop)
             return _PropertyMap[prop] ~= nil
         end
 
+        --- Gets the observable from the property
         __Static__()
         function GetPropertyObservable(prop, obj)
             return _PropertyMap[prop] ~= nil and getSubject(prop, obj, true) or nil
@@ -188,24 +190,28 @@ PLoop(function(_ENV)
         end
     end)
 
+    -- Extend the Observable
     __Sealed__()
     class "Observable"                  (function(_ENV)
-        export {
-            Observer, Observable, IObservable, Subject, List, __Observable__,
-
+        export                          {
             tostring                    = tostring,
             select                      = select,
             unpack                      = _G.unpack or table.unpack,
             pcall                       = pcall,
             rawset                      = rawset,
+            rawget                      = rawget,
             loadsnippet                 = Toolset.loadsnippet,
-            IsObjectType                = Class.IsObjectType,
+            fakefunc                    = Toolset.fakefunc,
+            isobjecttype                = Class.IsObjectType,
             Exception                   = System.Exception,
-            RunAsync                    = Threading.RunAsync,
+            runasync                    = Threading.RunAsync,
 
-            getProperty                 = Class.GetFeature,
-            getObjectClass              = Class.GetObjectClass,
-            onNextIterKey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
+            getproperty                 = Class.GetFeature,
+            getobjectclass              = Class.GetObjectClass,
+            onnextiterkey               = function(observer, k, ...) if k == nil then return end observer:OnNext(k, ...) return k end,
+            onasyncnext                 = function(observer, subscription, ...) return not subscription.IsUnsubscribed and observer:OnNext(...) end,
+
+            Observer, Observable, IObservable, Subscription, Subject, List, __Observable__,
         }
 
         -----------------------------------------------------------------------
@@ -213,103 +219,81 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --- Creates a new Observable
         __Static__() __Arguments__{ Callable }
-        function Create(subscribe)
-            return Observable(subscribe)
-        end
+        function Create(subscribe)      return Observable(subscribe) end
 
-        --- Creates a new objservable with initstate, condition checker, iterate and a result selector
+        --- Creates a new observable with initstate, condition checker, iterate and a result selector
         __Static__() __Arguments__{ Any, Callable, Callable, Callable/nil}
         function Generate(init, condition, iterate, resultselector)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 local value             = init
                 if resultselector then
                     while value ~= nil and condition(value) do
+                        if subscription.IsUnsubscribed then return end
                         observer:OnNext(resultselector(value))
-                        if token:IsCancelled() then return end
                         value           = iterate(value)
                     end
                 else
                     while value ~= nil and condition(value) do
+                        if subscription.IsUnsubscribed then return end
                         observer:OnNext(value)
-                        if token:IsCancelled() then return end
                         value           = iterate(value)
                     end
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Returns an Observable that just provide one value
-        local _JustAutoGen              = setmetatable({
-            [0]                         = function() return Observable(function(observer) observer:OnCompleted() end) end
-        }, {
+        _JustAutoGen                    = setmetatable({},
+        {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(]] .. args .. [[)
-                        return Observable(function(observer)
-                            observer:OnNext(]] .. args .. [[)
-                            observer:OnCompleted()
+                        return Observable(function(observer, subscription)
+                            if subscription.IsUnsubscribed then return end
+                            observer:OnNext(]] .. (count == 0 and "nil" or args) .. [[)
+                            return not subscription.IsUnsubscribed and observer:OnCompleted()
                         end)
                     end
                 ]], "Just_Gen_" .. count, _ENV)()
                 rawset(self, count, func)
                 return func
             end
-            }
-        )
+        })
         __Static__()
-        function Just(...)
-            return _JustAutoGen[select("#", ...)](...)
-        end
+        function Just(...)              return _JustAutoGen[select("#", ...)](...) end
         __Static__() Return             = Just
 
         --- Returns and Observable that immediately completes without producing a value
         __Static__()
-        function Empty()
-            return Observable(function(observer)
-                observer:OnCompleted()
-            end)
-        end
+        function Empty()                return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnCompleted() end) end
 
         --- Returns an Observable that never produces values and never completes
         __Static__()
-        function Never()
-            return Observable(function() end)
-        end
+        function Never()                return Observable(fakefunc) end
 
         --- Returns an Observable that immediately produces an error
         __Static__()
         function Throw(exception)
-            if not (exception and IsObjectType(exception, Exception)) then
+            if not (exception and isobjecttype(exception, Exception)) then
                 exception               = Exception(exception and tostring(exception) or "Unknown error")
             end
-            return Observable(function(observer) return observer:OnError(exception) end)
+            return Observable(function(observer, subscription) return not subscription.IsUnsubscribed and observer:OnError(exception) end)
         end
 
         --- Creates the Observable only when the observer subscribes
-        local _DeferAutoGen             = setmetatable({
-            [0]                         = function(ctor)
-                return Observable(function(observer)
-                    local obs           = ctor()
-                    if not IsObjectType(obs, IObservable) then
-                        observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                    else
-                        return obs:Subscribe(observer)
-                    end
-                end)
-            end,
-        }, {
+        _DeferAutoGen                   = setmetatable({}, {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
-                    return function(ctor, ]] .. args .. [[)
-                        return Observable(function(observer)
+                    return function(ctor]] .. (count == 0 and "" or (", " .. args)) .. [[)
+                        return Observable(function(observer, subscription)
                             local obs   = ctor(]] .. args .. [[)
-                            if not IsObjectType(obs, IObservable) then
+                            if not isobjecttype(obs, IObservable) then
                                 observer:OnError(Exception("The defer function doesn't provide valid observable"))
-                            else
-                                return obs:Subscribe(observer)
+                            elseif not subscription.IsUnsubscribed then
+                                return obs:Subscribe(observer, subscription)
                             end
                         end)
                     end
@@ -320,53 +304,54 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
-        function Defer(ctor, ...)
-            return _DeferAutoGen[select("#", ...)](ctor, ...)
-        end
+        function Defer(ctor, ...)       return _DeferAutoGen[select("#", ...)](ctor, ...) end
 
         --- Converts list objects into Observables
         __Static__() __Arguments__{ IList }
         function From(list)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in list:GetIterator() do
+                    if subscription.IsUnsubscribed then return end
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Converts dictionary objects into Observables
         __Static__() __Arguments__{ IDictionary }
         function From(dict)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in dict:GetIterator() do
+                    if subscription.IsUnsubscribed then return end
                     observer:OnNext(key, value)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Converts collection objects into Observables
         __Static__() __Arguments__{ Iterable }
         function From(iter)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 local f, t, k           = iter:GetIterator()
                 repeat
-                    k                   = onNextIterKey(observer, f(t, k))
-                until k == nil or token:IsCancelled()
-                observer:OnCompleted()
+                    if subscription.IsUnsubscribed then return end
+                    k                   = onnextiterkey(observer, f(t, k))
+                until k == nil
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Converts event delegate objects into Observables
         __Static__() __Arguments__{ Delegate }
         function From(delegate)
-            local subject               = delegate[Observable]
+            local subject               =  rawget(delegate, Observable)
             if not subject then
                 subject                 = Subject()
                 delegate                = delegate + function(...) return subject:OnNext(...) end
-                delegate[Observable]    = subject
+                rawset(delegate, Observable, subject)
             end
             return subject
         end
@@ -374,74 +359,71 @@ PLoop(function(_ENV)
         --- Creates an Observable that emits the return value of a function-like directive
         __Static__() __Arguments__{ Callable, Any/nil, Any/nil }
         function From(func, t, k)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 repeat
-                    k                   = onNextIterKey(observer, func(t, k))
-                until k == nil or token:IsCancelled()
-                observer:OnCompleted()
+                    if subscription.IsUnsubscribed then return end
+                    k                   = onnextiterkey(observer, func(t, k))
+                until k == nil
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Converts tables into Observables
         __Static__() __Arguments__{ Table, Callable/nil }
         function From(table, iter)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for key, value in (iter or pairs)(table) do
-                    if token:IsCancelled() then return end
+                    if subscription.IsUnsubscribed then return end
                     if value == nil then value, key = key, nil end
                     observer:OnNext(value, key)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Create a subject based on observable property
         __Static__() __Arguments__{ PropertyType }
-        function From(prop)
-            return __Observable__.GetPropertyObservable(prop, nil, true)
-        end
+        function From(prop)             return __Observable__.GetPropertyObservable(prop, nil, true) end
 
         __Arguments__{ InterfaceType + ClassType, String }
         __Static__() function From(class, name)
-            local prop                  = getProperty(class, name)
+            local prop                  = getproperty(class, name)
             return prop and __Observable__.GetPropertyObservable(prop, nil, true)
         end
 
         __Static__() __Arguments__{ Table, String }
         function From(self, name)
-            local cls                   = getObjectClass(self)
-            local prop                  = cls and getProperty(cls, name, true)
-
+            local cls                   = getobjectclass(self)
+            local prop                  = cls and getproperty(cls, name, true)
             return prop and __Observable__.GetPropertyObservable(prop, self, true)
         end
 
         --- Creates an Observable that emits a particular range of sequential integers
         __Static__() __Arguments__{ Number, Number, Number/nil }
         function Range(start, stop, step)
-            return Observable(function(observer, token)
+            return Observable(function(observer, subscription)
                 for i = start, stop, step or 1 do
-                    if token:IsCancelled() then return end
+                    if subscription.IsUnsubscribed then return end
                     observer:OnNext(i)
                 end
-                observer:OnCompleted()
+                return not subscription.IsUnsubscribed and observer:OnCompleted()
             end)
         end
 
         --- Creates an Observable that emits a particular item multiple times
-        local _RepeatGen                = setmetatable({}, {
+        _RepeatGen                      = setmetatable({}, {
             __index                     = function(self, count)
                 local args              = List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
                     return function(count, ]] .. args .. [[)
-                        return Observable(function(observer, token)
+                        return Observable(function(observer, subscription)
                             local i     = 0
-
                             while i < count do
-                                if token:IsCancelled() then return end
+                                if subscription.IsUnsubscribed then return end
                                 observer:OnNext(]] .. args .. [[)
                                 i       = i + 1
                             end
-                            observer:OnCompleted()
+                            return not subscription.IsUnsubscribed and observer:OnCompleted()
                         end)
                     end
                 ]], "Repeat_Gen_" .. count, _ENV)()
@@ -451,29 +433,18 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Number, Any * 1 }
-        function Repeat(count, ...)
-            return _RepeatGen[select("#", ...)](count, ...)
-        end
+        function Repeat(count, ...)     return _RepeatGen[select("#", ...)](count, ...) end
 
         --- Creates an Observable that emits the return value of a function-like directive
-        local _StartGen                 = setmetatable({
-            [0]                         = function(func)
-                return Observable(function(observer)
-                    RunAsync(function()
-                        observer:OnNext(func())
-                        observer:OnCompleted()
-                    end)
-                end)
-            end
-        }, {
+        _StartGen                       = setmetatable({}, {
             __index                     = function(self, count)
-                local args              = List(count):Map("i=>'arg' .. i"):Join(",")
+                local args              = count == 0 and "" or List(count):Map("i=>'arg' .. i"):Join(",")
                 local func              = loadsnippet([[
-                    return function(func, ]] .. args .. [[)
-                        return Observable(function(observer)
-                            RunAsync(function()
-                                observer:OnNext(func(]] .. args .. [[))
-                                observer:OnCompleted()
+                    return function(func]] .. (count == 0 and "" or (", " .. args)) .. [[)
+                        return Observable(function(observer, subscription)
+                            runasync(function()
+                                onasyncnext(observer, subscription, func(]] .. args .. [[))
+                                return not subscription.IsUnsubscribed and observer:OnCompleted()
                             end)
                         end)
                     end
@@ -484,8 +455,6 @@ PLoop(function(_ENV)
             }
         )
         __Static__() __Arguments__{ Callable, Any * 0 }
-        function Start(func, ...)
-            return _StartGen[select("#", ...)](func, ...)
-        end
+        function Start(func, ...)       return _StartGen[select("#", ...)](func, ...) end
     end)
 end)

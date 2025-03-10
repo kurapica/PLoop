@@ -8,80 +8,110 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2019/12/01                                               --
--- Update Date  :   2019/12/01                                               --
--- Version      :   1.0.0                                                    --
+-- Update Date  :   2024/05/09                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 PLoop(function(_ENV)
-    --- Defines a provider for push-based notification
-    __Sealed__() __AnonymousClass__()
-    interface "System.IObservable"      (function(_ENV)
-        export {
-            pcall                       = pcall,
-            tostring                    = tostring,
-            Error                       = Logger.Default[Logger.LogLevel.Error],
-        }
+    --- The subscription that used to track the observer's subscription
+    __Sealed__() __Final__()
+    class "System.Subscription"         (function(_ENV)
+        export                          { rawset = rawset, rawget = rawget }
 
-        local function safeCall(func)
-            return function(...)
-                local ok, ret           = pcall(func, ...)
-                if not ok then Error(tostring(ret)) end
-            end
-        end
-
-        --- Notifies the provider that an observer is to receive notifications.
-        __Abstract__() function Subscribe(self, onNext, onError, onCompleted) end
-
-        -- Safe subscribe the handlers
-        __Arguments__{ Callable, Callable/nil, Callable/nil }
-        function SafeSubscribe(self, onNext, onError, onCompleted)
-            return self:Subscribe(safeCall(onNext), onError, onCompleted)
-        end
-    end)
-
-    --- Provides a mechanism for receiving push-based notifications
-    __Sealed__() __AnonymousClass__()
-    interface "System.IObserver"        (function(_ENV)
-        -----------------------------------------------------------------------
-        --                               event                               --
-        -----------------------------------------------------------------------
+        --- Fired when un-subscribed
         event "OnUnsubscribe"
 
         -----------------------------------------------------------------------
         --                             property                              --
         -----------------------------------------------------------------------
-        --- Whether the Subscriber is unsubscribed
-        property "IsUnsubscribed"       { type = Boolean, default = false, handler = function(self, val) if val then return OnUnsubscribe(self) end end }
+        --- Whether is unsubscribed
+        property "IsUnsubscribed"       { get = function(self) return rawget(self, "Disposed") or false end }
 
         -----------------------------------------------------------------------
-        --                              method                               --
+        --                            constructor                            --
         -----------------------------------------------------------------------
-        --- Indicate that the subscriber is no longer interested in any of the Observables it is currently subscribed to
-        function Unsubscribe(self) self.IsUnsubscribed = true end
+        -- As sub subscription that will be disposed when the root is disposed
+        __Arguments__{ Subscription/nil }
+        function __ctor(self, root)
+            if not root then return end
+            if root.IsUnsubscribed then throw("Usage: Subscription([root]) - The root is already unsubscribed") end
 
-        --- Indicate the subscriber should restart the subscribe, this is a dangerous action since the previous observable
-        -- may haven't check the IsUnsubscribed flag to stop the subscription, the observable should check the OnUnsubscribe
-        function Resubscribe(self) self.IsUnsubscribed = false end
+            local handler               = function() return self:Dispose() end
+            rawset(self, "__root",      root)
+            rawset(self, "__handler",   handler)
+            root.OnUnsubscribe          = root.OnUnsubscribe + handler
+        end
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            if self.IsUnsubscribed then return end
+
+            local root                  = rawget(self, "__root")
+            if root and not root.IsUnsubscribed then
+                local handler           = rawget(self, "__handler")
+                if handler then
+                    root.OnUnsubscribe  = root.OnUnsubscribe - handler
+                end
+            end
+
+            return OnUnsubscribe(self)
+        end
+    end)
+
+    --- Defines a provider for push-based notification
+    __Sealed__() __AnonymousClass__()
+    interface "System.IObservable"      (function(_ENV)
+        --- Notifies the provider that an observer is to receive notifications.
+        -- should return Subscription object for unsubscribe.
+        __Abstract__() function Subscribe(self, observer, subscription) return subscription, observer end
+    end)
+
+    --- Provides a mechanism for receiving push-based notifications
+    __Sealed__() __AnonymousClass__()
+    interface "System.IObserver"        (function(_ENV)
+        export                          { rawset = rawset, rawget = rawget, Subscription }
 
         -----------------------------------------------------------------------
         --                          abstract method                          --
         -----------------------------------------------------------------------
         --- Provides the observer with new data
         __Abstract__()
-        function OnNext(self, ...) end
+        OnNext                          = Toolset.fakefunc
 
         --- Notifies the observer that the provider has experienced an error condition
         __Abstract__()
-        function OnError(self, exception) end
+        OnError                         = Toolset.fakefunc
 
         --- Notifies the observer that the provider has finished sending push-based notifications
         __Abstract__()
-        function OnCompleted(self) end
+        OnCompleted                     = function (self) self.Subscription = nil end
 
         -----------------------------------------------------------------------
-        --                              dispose                              --
+        --                             property                              --
         -----------------------------------------------------------------------
-        __dtor                          = Unsubscribe
+        -- The subscription will be used by the observer
+        property "Subscription"         {
+            type                        = Subscription,
+            field                       = "__subscr",
+            default                     = function(self) return Subscription() end,
+            handler                     = function(self, new, old)
+                if new and not new.IsUnsubscribed then
+                    new.OnUnsubscribe   = new.OnUnsubscribe + function() return rawget(self, "__subscr") == new and rawset(self, "__subscr", nil) end
+                else
+                    rawset(self, "__subscr", nil)
+                end
+                return old and not old.IsUnsubscribed and old:Dispose()
+            end
+        }
+
+        -----------------------------------------------------------------------
+        --                          de-constructor                           --
+        -----------------------------------------------------------------------
+        function __dtor(self)
+            self.Subscription           = nil
+        end
     end)
 
     --- Provide the Connect mechanism for observable queues

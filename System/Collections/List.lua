@@ -18,10 +18,10 @@ PLoop(function(_ENV)
     import "System.Serialization"
 
     -- Helpers
-    export { yield = coroutine.yield }
+    export { yield = coroutine.yield, running = coroutine.running, unpack = _G.unpack or table.unpack }
 
-    __Iterator__() iterforstep  = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
-    __Iterator__() iterforlist  = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
+    __Iterator__() iterforstep          = function (start, stop, step) local yield = yield for i = start, stop, step do yield(i, i) end end
+    __Iterator__() iterforlist          = function (iter, tar, idx)    local yield = yield for k, v in iter, tar, idx do yield(k, v == nil and k or v) end end
 
     --- Represents the list collections that only elements has meanings
     interface "IList"                   { Iterable }
@@ -31,7 +31,7 @@ PLoop(function(_ENV)
     interface "ICountable"              { IList,
         --- Get the count of items in the object
         __Abstract__(),
-        Count = { set = false, get = function (self) return #self end },
+        Count                           = { set = false, get = function (self) return #self end },
     }
 
     --- Represents the indexed list collections that can use obj[idx] to access the its elements
@@ -39,19 +39,33 @@ PLoop(function(_ENV)
     interface "IIndexedList"            { ICountable }
 
     --- The default indexed list
-    __Sealed__() __Serializable__() __Arguments__{ AnyType }( Any )
-    __NoNilValue__(false):AsInheritable() __NoRawSet__(false):AsInheritable()
-    class "List" (function              (_ENV, lsttype)
+    __Sealed__() __Serializable__()
+    __Arguments__{ AnyType }( Any )
+    __NoNilValue__(false):AsInheritable()
+    __NoRawSet__(false):AsInheritable()
+    class "List"                        (function(_ENV, lsttype)
         extend "IIndexedList" "ISerializable"
 
-        export { type = type, ipairs = ipairs }
+        export                          {
+            type                        = type,
+            ipairs                      = ipairs,
+            tinsert                     = table.insert,
+            tremove                     = table.remove,
+            tblconcat                   = table.concat,
+            select                      = select,
+            unpack                      = _G.unpack or table.unpack,
+            keepargs                    = Toolset.keepargs,
+            getkeepargs                 = Toolset.getkeepargs,
+            min                         = math.min,
+            max                         = math.max,
+        }
 
         lsttype                         = lsttype ~= Any and lsttype or nil
 
         if lsttype then
             export                      {
                 valid                   = getmetatable(lsttype).ValidateValue,
-                GetErrorMessage         = Struct.GetErrorMessage,
+                geterrormessage         = Struct.GetErrorMessage,
                 parseindex              = Toolset.parseindex,
             }
         end
@@ -83,15 +97,168 @@ PLoop(function(_ENV)
         -----------------------------------------------------------
         GetIterator                     = ipairs
 
-        --- Insert an item to the list
-        if lsttype then
-            __Arguments__{ Integer, lsttype }
-            Insert                      = table.insert
+        --- Push
+        if lsttype then __Arguments__{ lsttype } end
+        function Push(self, item)
+            self:Insert(item)
+            return self.Count
+        end
 
-            __Arguments__{ lsttype }
-            Insert                      = table.insert
+        --- Pop
+        function Pop(self)
+            return self:Remove()
+        end
+
+        --- Shift
+        function Shift(self)
+            return self:RemoveByIndex(1)
+        end
+
+        --- Unshift
+        if lsttype then __Arguments__{ lsttype } end
+        function Unshift(self, item)
+            self:Insert(1, item)
+            return self.Count
+        end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, Callable, Any/nil, Any/nil }
+        if lsttype then
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count or #self
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    local i             = 0
+                    local ridx          = last - index
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        local ret, msg  = valid(lsttype, item, true)
+                        if not msg then
+                            -- replace
+                            if i <= ridx then
+                                self[index + i] = item
+
+                                if i == ridx then
+                                    -- remove
+                                    for j = last, index + ridx + 1, -1 do
+                                        tremove(self, j)
+                                    end
+                                end
+                            else
+                                tinsert(self, index + i, item)
+                            end
+                            i           = i + 1
+                        end
+                    end
+
+                    if i <= ridx then
+                        -- remove
+                        for j = last, index + i, -1 do
+                            tremove(self, j)
+                        end
+                    end
+                else
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        local ret, msg  = valid(lsttype, item, true)
+                        if not msg then
+                            tinsert(self, index + i, item)
+                            i           = i + 1
+                        end
+                    end
+                end
+
+                if th then                  return getkeepargs(th) end
+            end
         else
-            Insert                      = table.insert
+            function Splice(self, index, count, iter, obj, idx)
+                local total             = self.Count or #self
+                index                   = index <= 0 and max(index + total + 1, 1) or min(index, total + 1)
+                local last              = count <  0 and max(count + total + 1, index - 1) or min(index + count - 1, total)
+                local th
+
+                if index <= last then
+                    th                  = keepargs(unpack(self, index, last))
+
+                    local i             = 0
+                    local ridx          = last - index
+                    for key, item in iter, obj, idx do
+                        if item == nil  then item = key end
+                        -- replace
+                        if i <= ridx then
+                            self[index + i] = item
+
+                            if i == ridx then
+                                -- remove
+                                for j = last, index + ridx + 1, -1 do
+                                    tremove(self, j)
+                                end
+                            end
+                        else
+                            tinsert(self, index + i, item)
+                        end
+                        i               = i + 1
+                    end
+
+                    if i <= ridx then
+                        -- remove
+                        for j = last, index + i, -1 do
+                            tremove(self, j)
+                        end
+                    end
+                else
+                    local i             = 0
+                    for key, item in iter, obj, idx do
+                        if item == nil then item = key end
+                        tinsert(self, index + i, item)
+                        i               = i + 1
+                    end
+                end
+
+                if th then                  return getkeepargs(th) end
+            end
+        end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, RawTable }
+        function Splice(self, index, count, raw)
+            return Splice(index, count, ipairs(raw))
+        end
+
+        --- Spice
+        __Arguments__{ Integer, Integer, IList }
+        function Splice(self, index, count, list)
+            return Splice(self, index, count, list:GetIterator())
+        end
+
+        --- Splice
+        __Arguments__{ Integer, Integer, (lsttype or Any) * 0 }
+        function Splice(self, index, count, ...)
+            return Splice(self, index, count, ipairs{...})
+        end
+
+        __Arguments__{ Integer, lsttype or Any }
+        function Insert(self, index, item)
+            local total                 = self.Count
+            index                       = index < 0 and max(index + total + 1, 1) or min(index, total + 1)
+            if index == total + 1 then
+                self[index]             = item
+            else
+                tinsert(self, index, item)
+            end
+            return self.Count
+        end
+
+        __Arguments__{ lsttype or Any }
+        function Insert(self, item)
+            self[self.Count + 1]        = item
+            return self.Count
         end
 
         --- Whether an item existed in the list
@@ -101,10 +268,28 @@ PLoop(function(_ENV)
         function IndexOf(self, item) for i, chk in self:GetIterator() do if chk == item then return i end end end
 
         --- Remove an item
-        function Remove(self, item) local i = self:IndexOf(item) if i then return self:RemoveByIndex(i) end end
+        function Remove(self, item)
+            if item == nil then
+                return tremove(self)
+            else
+                local i                 = self:IndexOf(item)
+                return i and self:RemoveByIndex(i)
+            end
+        end
 
         --- Remove an item from the tail or the given index
-        RemoveByIndex                   = table.remove
+        __Arguments__{ Integer/nil }
+        function RemoveByIndex(self, index)
+            local total                 = self.Count
+            index                       = not index and total or index < 0 and max(index + total + 1, 1) or min(index, total)
+            if index == total then
+                local item              = self[index]
+                self[index]             = nil
+                return item
+            else
+                return tremove(self, index)
+            end
+        end
 
         --- Clear the list
         function Clear(self)
@@ -112,62 +297,10 @@ PLoop(function(_ENV)
             return self
         end
 
-        --- Extend the list
-        if lsttype then
-            __Arguments__{ RawTable }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in ipairs(lst) do
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-
-            __Arguments__{ IList }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in lst:GetIterator() do
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-
-            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-            function Extend(self, iter, obj, idx)
-                local ins               = self.Insert
-                for key, item in iter, obj, idx do
-                    if item == nil then item = key end
-                    local ret, msg      = valid(lsttype, item, true)
-                    if not msg then ins(self, item) end
-                end
-                return self
-            end
-        else
-            __Arguments__{ RawTable }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in ipairs(lst) do ins(self, item) end
-                return self
-            end
-
-            __Arguments__{ IList }
-            function Extend(self, lst)
-                local ins               = self.Insert
-                for _, item in lst:GetIterator() do ins(self, item) end
-                return self
-            end
-
-            __Arguments__{ Callable, System.Any/nil, System.Any/nil }
-            function Extend(self, iter, obj, idx)
-                local ins               = self.Insert
-                for key, item in iter, obj, idx do
-                    if item == nil then item = key end
-                    ins(self, item)
-                end
-                return self
-            end
+        --- Get the concatenation of the List
+        __Arguments__{ String/nil }
+        function Join(self, sep)
+            return tblconcat(self, sep)
         end
 
         -----------------------------------------------------------
@@ -237,7 +370,7 @@ PLoop(function(_ENV)
                 local msg
                 for k, v in self:GetIterator() do
                     v, msg              = valid(lsttype, v)
-                    if msg then throw(GetErrorMessage(msg, parseindex(k))) end
+                    if msg then throw(geterrormessage(msg, parseindex(k))) end
                     self[k]             = v
                 end
             end
@@ -260,7 +393,8 @@ PLoop(function(_ENV)
     end)
 
     --- The dynamic list
-    __Sealed__() __NoRawSet__(true)
+    __Sealed__()
+    __NoRawSet__(true)
     class "XList"                       (function(_ENV)
         extend "IList"
         export { ipairs = ipairs, type = type, iterforstep = iterforstep, iterforlist = iterforlist }
@@ -311,8 +445,10 @@ PLoop(function(_ENV)
 
     --- the list stream worker, used to provide stream filter, map and etc
     -- operations on a list without creating any temp caches
-    __Final__() __Sealed__() __SuperObject__(false)
-    __NoRawSet__(false) __NoNilValue__(false)
+    __Final__() __Sealed__()
+    __SuperObject__(false)
+    __NoRawSet__(false)
+    __NoNilValue__(false)
     class "ListStreamWorker"            (function (_ENV)
         extend "IList"
 
@@ -874,7 +1010,7 @@ PLoop(function(_ENV)
         --- Get the concatenation of the List
         __Arguments__{ String/nil }
         function Join(self, sep)
-            return tblconcat(isObjectType(self, IIndexedList) and self or self:ToList(), sep)
+            return tblconcat(self:ToTable(), sep)
         end
 
         --- Get the sum of the list
@@ -899,13 +1035,7 @@ PLoop(function(_ENV)
         Serialization
     }
 
-    --- Whether the data is a list object
-    __Static__() function Serialization.IsArrayData(data)
-        -- Check the data type
-        local objField                  = data[Serialization.ObjectTypeField]
-        if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
-
-        -- Check the data
+    local function isarray(data)
         local count                     = #data
 
         for k in pairs(data) do
@@ -920,4 +1050,47 @@ PLoop(function(_ENV)
 
         return true
     end
+
+    --- Whether the data is a list object
+    __Static__()
+    function Serialization.IsArrayData(data)
+        -- Check the data type
+        local objField                  = data[Serialization.ObjectTypeField]
+        if objField then return isListType(objField, IIndexedList) or isstruct(objField) and getstructcategory(objField) == "ARRAY" or false end
+
+        -- Check the data
+        return isarray(data)
+    end
+
+    -----------------------------------------------------------------------
+    --                          Toolset Extend                           --
+    -----------------------------------------------------------------------
+    local combineTableParams            = setmetatable(
+        {
+            [0]                         = function(_, ...) return ... end
+        },
+        {
+            __index = function(self, count)
+                local args              = XList(count):Map("i=>'arg'..i"):Join(",")
+                local func              = Toolset.loadsnippet([[
+                    return function(tbl, ...)
+                        local ]] .. args .. [[ = unpack(tbl)
+                        return ]] .. args .. [[, ...
+                    end
+                ]], "Combine_Array_" .. count, _ENV)()
+                rawset(self, count, func)
+                return func
+            end
+        }
+    )
+
+    --- Combine two index table without cache
+    __Static__()
+    function Toolset.combinearray(tbl1, tbl2)
+        local count                     = #tbl1
+        return combineTableParams[count](tbl1, unpack(tbl2))
+    end
+
+    --- Provide to the Toolset
+    __Static__() Toolset.isarray        = isarray
 end)

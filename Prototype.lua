@@ -1,5 +1,5 @@
 --===========================================================================--
--- Copyright (c) 2011-2023 WangXH <kurapica125@outlook.com>                  --
+-- Copyright (c) 2011-2025 WangXH <kurapica125@outlook.com>                  --
 --                                                                           --
 -- Permission is hereby granted, free of charge, to any person               --
 -- obtaining a copy of this software and associated Documentation            --
@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2022/08/31                                               --
--- Version      :   1.8.2                                                    --
+-- Update Date  :   2025/03/10                                               --
+-- Version      :   2.0.0                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -77,6 +77,7 @@ do
             tinsert                     = table.insert,
             tremove                     = table.remove,
             unpack                      = table.unpack or unpack,
+            tsort                       = table.sort,
             setmetatable                = setmetatable,
             getmetatable                = getmetatable,
             rawset                      = rawset,
@@ -92,6 +93,7 @@ do
             floor                       = math.floor,
             mlog                        = math.log,
             mpow                        = math.pow,
+            random                      = math.random,
 
             -- Safe
             pcall                       = pcall,
@@ -327,6 +329,9 @@ do
 
         --- Whether save the return definitions as attachment for __Return__
         ENABLE_RETURN_ATTACHMENT            = false,
+
+        --- Whether record the debug info for type definitions
+        ENABLE_DEBUG_INFO                   = false,
     }
 
     -- Special constraint
@@ -361,7 +366,7 @@ do
     -----------------------------------------------------------------------
     --                              storage                              --
     -----------------------------------------------------------------------
-    newstorage                          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return setmetatable({}, weak) end
+    newstorage                          = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function() return {} end or function(weak) return weak and setmetatable({}, weak) or {} end
     savestorage                         = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and function(self, key, value)
         local new
         if value == nil then
@@ -383,6 +388,14 @@ do
         if info then
             return "@" .. (info.short_src or "unknown") .. ":" .. (info.currentline or "?")
         end
+    end
+    getdebugcallinfo                    = not (debuginfo and PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO) and fakefunc or function(stack)
+        local info                      = debuginfo((stack or 2) + 1, "lS")
+        return info and { source = info.short_src, line = info.currentline }
+    end
+    getdebugfuncinfo                    =  not (debuginfo and PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO) and fakefunc or function(func)
+        local info                      = debuginfo(func, "lS")
+        return info and { source = info.short_src, line = info.linedefined, last = info.lastlinedefined }
     end
     parsestack                          = function (stack) return tonumber(stack) or 1 end
 
@@ -688,6 +701,8 @@ do
     -----------------------------------------------------------------------
     local NIL_HOLDER                    = fakefunc     -- no means
     local IMP_HOLDER                    = parsestack
+    local rebuildFunc                   = {}
+    local rebuildTree                   = {}
 
     local parseParams                   = function (keyword, ptype, ...)
         local visitor                   = keyword and environment.GetKeywordVisitor(keyword)
@@ -800,14 +815,16 @@ do
         return name and namespace.Validate(name)
     end
 
-    saveTemplateImplement               = function (implement, params, target, i)
+    saveTemplateImplement               = function (implement, params, target, rebuild, genfunc, i)
         i                               = i or 1
         if i > #params then
+            if rebuild then rebuildFunc = savestorage(rebuildFunc, getmetatable(target), genfunc) end
             return savestorage(implement, IMP_HOLDER, target)
         else
             local param                 = params[i]
+            if rebuild and Namespace.Validate(param) then rebuildTree = savestorage(rebuildTree, param, savestorage(rebuildTree[param] or {}, target, true)) end
             if param == nil then param  = NIL_HOLDER end
-            return savestorage(implement, param, saveTemplateImplement(implement[param] or {}, params, target, i + 1))
+            return savestorage(implement, param, saveTemplateImplement(implement[param] or {}, params, target, rebuild, genfunc, i + 1))
         end
     end
 
@@ -820,6 +837,15 @@ do
         end
 
         return implement and implement[IMP_HOLDER]
+    end
+
+    rebuildTemplateTypes                = function (type)
+        local genTypes                  = rebuildTree[type]
+        if genTypes then
+            for genType in pairs, genTypes do
+                attribute.IndependentCall(rebuildFunc[getmetatable(genType)], genType)
+            end
+        end
     end
 end
 
@@ -1684,10 +1710,12 @@ do
             ["Apply"]                   = function(env, func, ...)
                 -- Module "Test" (function(_ENV) ... end)
                 if type(func)  == "function" then
+                    local oldenv        = getfenv(func)
                     setfenv(func, env)
                     environment.SetDefinitionMode(env, true)
                     func(env, ...)
                     environment.SetDefinitionMode(env, false)
+                    if oldenv then setfenv(func, oldenv) end
                     return env
                 end
 
@@ -1886,7 +1914,13 @@ do
                     -- Don't cache global variables in the environment to avoid conflict
                     -- The cache should be full-hit during runtime after several operations
                     tinsert(body, [[
-                        value           = env["]] .. ENV_GLOBAL_CACHE .. [["][name]
+                        value       = rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[")
+                        if type(value) == "table" then
+                            value   = rawget(value, name)
+                            if value ~= nil then return value end
+                        else
+                            value   = nil
+                        end
                         if value ~= nil then return value end
                     ]])
                 end
@@ -1940,7 +1974,7 @@ do
 
                 if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and not PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_LUA_LOCK_APPLIED then
                     uinsert(apis, "savestorage")
-                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = savestorage(env["]] .. ENV_GLOBAL_CACHE .. [["], name, value)]])
+                    tinsert(body, [[env["]] .. ENV_GLOBAL_CACHE .. [["] = savestorage(rawget(env, "]] .. ENV_GLOBAL_CACHE .. [[") or {}, name, value)]])
                     if PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD_ENV_AUTO_CACHE_WARN then
                         uinsert(apis, "Warn")
                         uinsert(apis, "tostring")
@@ -2985,6 +3019,7 @@ do
     MOD_IMMUTABLE_STRUCT                = newflags()        -- IMMUTABLE
     MOD_TEMPLATE_STRUCT                 = newflags()        -- AS TEMPLATE
     MOD_ALLOWOBJ_STRUCT                 = newflags()        -- ALLOW OBJECT PASS VALIDATION
+    MOD_TEMPLATE_REBUILD_STRUCT         = newflags()        -- ALLOW TEMPLATE GEN TYPE REBUILD
 
     -- FIELD INDEX
     FLD_STRUCT_MOD                      = -newindex(1)      -- FIELD MODIFIER
@@ -3007,6 +3042,7 @@ do
     FLD_STRUCT_MAINTYPE                 = -newindex()       -- FIELD MAIN TYPE
     FLD_STRUCT_COMBTYPE1                = -newindex()       -- FIELD COMBO TYPE
     FLD_STRUCT_COMBTYPE2                = -newindex()       -- FIELD COMBO TYPE
+    FLD_STRUCT_DEBUG                    = -newindex()       -- FIELD DEBUG INFO
 
     FLD_STRUCT_ARRAY                    =  0                -- FIELD ARRAY ELEMENT
     FLD_STRUCT_MEMBERSTART              =  1                -- FIELD START INDEX OF MEMBER
@@ -3022,6 +3058,7 @@ do
     FLD_MEMBER_VALID                    =  newindex()       -- MEMBER FIELD TYPE VALIDATOR
     FLD_MEMBER_DEFAULT                  =  newindex()       -- MEMBER FIELD DEFAULT
     FLD_MEMBER_DEFTFACTORY              =  newindex()       -- MEMBER FIELD AS DEFAULT FACTORY
+    FLD_MEMBER_DEBUG                    =  newindex()       -- MEMBER DEBUG INFO
 
     -- TYPE FLAGS
     FLG_CUSTOM_STRUCT                   = newflags(true)    -- CUSTOM STRUCT FLAG
@@ -3079,7 +3116,8 @@ do
     local _ValidTypeCombine             = newstorage(WEAK_KEY)
     local _UnmSubTypeMap                = newstorage(WEAK_ALL)
     local _AnonyArrayType               = newstorage(WEAK_ALL)
-    local _AnonyHashType                = newstorage(WEAK_ALL)
+    local _AnonyHashType                = newstorage(WEAK_KEY)
+    local _AnonyMemType                 = newstorage()
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -4037,6 +4075,26 @@ do
     local saveStructMeta                = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and function (s, meta) rawset(s, FLD_STRUCT_META, meta) end or function (s, meta) _StructInfo = savestorage(_StructInfo, s, meta) end
     local saveMemberMeta                = PLOOP_PLATFORM_SETTINGS.UNSAFE_MODE and function (m, meta) rawset(m, FLD_MEMBER_META, meta) end or function (m, meta) _MemberInfo = savestorage(_MemberInfo, m, meta) end
 
+    -- Generate the template type
+    local genStructImplement            = function(implement)
+        local origin                    = getStructTargetInfo(implement)
+        local params                    = origin[FLD_STRUCT_TEMPPRM]
+        local template                  = origin[FLD_STRUCT_TEMPIMP]
+        local info                      = _StructInfo[template]
+
+        -- enable re-define
+        origin[FLD_STRUCT_MOD]          = turnoffflags(MOD_SEALED_STRUCT, origin[FLD_STRUCT_MOD])
+        origin                          = nil
+
+        local bder                      = struct (info[FLD_STRUCT_TEMPENV], implement, true)
+        struct.SetSealed(implement)
+        local tmp                       = getStructTargetInfo(implement)
+        tmp[FLD_STRUCT_TEMPPRM]         = params
+        tmp[FLD_STRUCT_TEMPIMP]         = template
+        attribute.InheritAttributes(implement, ATTRTAR_STRUCT, template)
+        bder(info[FLD_STRUCT_TEMPDEF])
+    end
+
     -- Get template implementation
     local getStructImplement            = function(self, key, stack)
         local info                      = _StructInfo[self]
@@ -4047,17 +4105,25 @@ do
             end
 
             local implement             = getTemplateImplement(implements, key)
-            if implement then return implement end
+            if implement then           return implement end
 
             local ok, err               = attribute.IndependentCall(function()
-                implement               = struct {}
-                local bder              = struct (info[FLD_STRUCT_TEMPENV], implement, true)
-                struct.SetSealed(implement)
+                local names             = { tostring(self) }
+                for _, v in ipairs, key, 0 do
+                    names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
+                end
+                names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+
+                -- save the implement first
+                implement               = struct (tblconcat(names, "_"), {})
+                info[FLD_STRUCT_TEMPIMP]= saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD]), genStructImplement)
+
+                -- Record the template and parameter
                 local tmp               = getStructTargetInfo(implement)
                 tmp[FLD_STRUCT_TEMPPRM] = key
                 tmp[FLD_STRUCT_TEMPIMP] = self
-                attribute.InheritAttributes(implement, ATTRTAR_STRUCT, self)
-                bder(info[FLD_STRUCT_TEMPDEF])
+
+                genStructImplement(implement)
             end)
 
             if not ok then
@@ -4068,12 +4134,80 @@ do
                 end
             end
 
-            info[FLD_STRUCT_TEMPIMP]    = saveTemplateImplement(implements, key, implement)
 
             return implement
         end
 
         error("the " .. tostring(self) .. " can't be used as template", parsestack(stack) + 1)
+    end
+
+    -- Get anonymous member struct hash key
+    local getAnonymousStruct
+    getAnonymousStruct                  = function(definition)
+        -- Array | Dict
+        local k, v                      = next(definition)
+        if not k then return end
+
+        if k and v and next(definition, k) == nil then
+            if type(k) == "number" then
+                if getprototypemethod(v, "ValidateValue") then
+                    return STRUCT_TYPE_ARRAY, _AnonyArrayType[v], v
+                end
+            else
+                if getprototypemethod(k, "ValidateValue") and getprototypemethod(v, "ValidateValue") then
+                    return STRUCT_TYPE_DICT, _AnonyHashType[k] and _AnonyHashType[k][v], k, v
+                end
+            end
+        end
+
+        -- Member
+        local map                       = _Cache()
+        local mems                      = _Cache()
+        local all                       = true
+        for k, v in pairs, definition do
+            if type(k) == "string" and type(v) ~= "function" then
+                mems[#mems + 1]         = k
+
+                -- validate the member type
+                if getprototypemethod(v, "ValidateValue") then
+                    map[k]              = v
+                elseif type(v) == "table" and getmetatable(v) == nil then
+                    local t, g          = getAnonymousStruct(v)
+                    if not t then _Cache(map) _Cache(mems) return end
+                    map[k]              = g
+                    if not g then all   = false end
+                else
+                    _Cache(map) _Cache(mems)
+                    return
+                end
+            else
+                _Cache(map) _Cache(mems)
+                return
+            end
+        end
+
+        if #mems == 0 then _Cache(map) _Cache(mems) return end
+
+        -- Build the key
+        tsort(mems)
+        local key                       = tblconcat(mems, "|")
+        if not (all and _AnonyMemType[key]) then return STRUCT_TYPE_MEMBER, nil, key end
+
+        -- Check existed
+        local match
+        for e in pairs, _AnonyMemType[key], nil do
+            match                       = e
+            for _, n in ipairs, mems, 0 do
+                local m                 = struct.GetMember(e, n)
+                if not m or m:GetType() ~= map[n] then
+                    match               = nil
+                    break
+                end
+            end
+            if match then break end
+        end
+        _Cache(map) _Cache(mems)
+        return STRUCT_TYPE_MEMBER, match, key
     end
 
     -----------------------------------------------------------------------
@@ -4127,6 +4261,7 @@ do
                     saveMemberMeta(mobj, minfo)
                     minfo[FLD_MEMBER_OBJ]   = mobj
                     minfo[FLD_MEMBER_NAME]  = name
+                    minfo[FLD_MEMBER_DEBUG] = getdebugcallinfo(stack)
 
                     -- Save attributes
                     attribute.SaveAttributes(mobj, ATTRTAR_MEMBER, stack)
@@ -4479,6 +4614,17 @@ do
             ["GetComboTypes"]           = function(target)
                 local info              = getStructTargetInfo(target)
                 if info and info[FLD_STRUCT_COMBTYPE1] then return info[FLD_STRUCT_COMBTYPE1], info[FLD_STRUCT_COMBTYPE2] end
+            end;
+
+            --- Gets the debug info of the target
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   struct
+            -- @param   structure                   the structure
+            -- @return  ...                         the debug info
+            ["GetDebugInfo"]            = function(target)
+                local info              = getStructTargetInfo(target)
+                return info and info[FLD_STRUCT_DEBUG]
             end;
 
             --- Get the dictionary key type of the target
@@ -4990,8 +5136,9 @@ do
             -- @format  (structure, params[, stack])
             -- @param   target                      the structure
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getStructTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -4999,6 +5146,9 @@ do
                     if not def then error(strformat("Usage: struct.SetAsTemplate(structure, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_STRUCT_MOD]    = turnonflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD])
                     info[FLD_STRUCT_MOD]    = turnonflags(MOD_SEALED_STRUCT,   info[FLD_STRUCT_MOD])
+                    if rebuildable then
+                        info[FLD_STRUCT_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_STRUCT, info[FLD_STRUCT_MOD])
+                    end
 
                     info[FLD_STRUCT_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_STRUCT_TEMPIMP]= saveTemplateImplement({}, info[FLD_STRUCT_TEMPPRM], target)
@@ -5048,37 +5198,27 @@ do
         __call                          = function(self, ...)
             -- For simple, only re-use anonymous type generated with one table and one key-value pairs
             local _arrayType
-            local _hashKeyType, _hashValType
+            local _hkType, _hvType
+            local _memKey
 
             if select("#", ...) == 1 then
                 local definition        = ...
                 if type(definition) == "table" then
-                    -- Check if only contains one pair
-                    local k, v          = next(definition)
+                    local c, t, a, b    = getAnonymousStruct(definition)
+                    if t then
+                        -- Clear the keyword accessor
+                        environment.GetKeywordVisitor(struct)
+                        return t
+                    end
 
-                    if k and v and next(definition, k) == nil then
-                        if type(k) == "number" then
-                            if getprototypemethod(v, "ValidateValue") then
-                                _arrayType  = v
-                                local stype = _AnonyArrayType[v]
-                                if stype then
-                                    -- Clear the keyword accessor
-                                    environment.GetKeywordVisitor(struct)
-                                    return stype
-                                end
-                            end
-                        else
-                            if getprototypemethod(k, "ValidateValue") and getprototypemethod(v, "ValidateValue") then
-                                _hashKeyType, _hashValType = k, v
-                                local stype = _AnonyHashType[k]
-                                stype       = stype and stype[v]
-                                if stype then
-                                    -- Clear the keyword accessor
-                                    environment.GetKeywordVisitor(struct)
-                                    return stype
-                                end
-                            end
-                        end
+                    if c == STRUCT_TYPE_ARRAY then
+                        _arrayType      = a
+
+                    elseif c == STRUCT_TYPE_DICT then
+                        _hkType, _hvType= a, b
+
+                    elseif c == STRUCT_TYPE_MEMBER then
+                        _memKey         = a
                     end
                 end
             end
@@ -5095,6 +5235,7 @@ do
             struct.BeginDefinition(target, stack)
 
             Debug("[struct] %s created", stack, tostring(target))
+            _StructBuilderInfo[target][FLD_STRUCT_DEBUG] = getdebugcallinfo()
 
             local builder               = prototype.NewObject(structbuilder)
             environment.Initialize  (builder)
@@ -5103,13 +5244,15 @@ do
             environment.SetDefinitionMode(builder, true)
 
             -- Seal the anonymous type directly
-            if _arrayType or _hashKeyType then
+            if _arrayType or _hkType or _memKey then
                 struct.SetSealed(target, stack)
 
                 if _arrayType then
                     _AnonyArrayType     = savestorage(_AnonyArrayType, _arrayType, target)
-                else
-                    _AnonyHashType      = savestorage(_AnonyHashType, _hashKeyType, savestorage(_AnonyHashType[_hashKeyType] or {}, _hashValType, target))
+                elseif _hkType then
+                    _AnonyHashType      = savestorage(_AnonyHashType, _hkType, savestorage(_AnonyHashType[_hkType] or {}, _hvType, target))
+                elseif _memKey then
+                    _AnonyMemType       = savestorage(_AnonyMemType,  _memKey, savestorage(_AnonyMemType[_memKey]  or {}, target, true))
                 end
             end
 
@@ -5300,17 +5443,19 @@ do
             definition                  = attribute.InitDefinition(owner, ATTRTAR_STRUCT, parseDefinition(definition, self, stack), nil, nil, stack)
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_STRUCT, info[FLD_STRUCT_MOD]) then
                     -- Save for template
                     info[FLD_STRUCT_TEMPDEF] = definition
                     info[FLD_STRUCT_TEMPENV] = environment.GetParent(self)
-
-                    local ok, err       = pcall(definition, self, struct.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, struct.GetTemplateParameters(owner))
+                end
+                local ok, err           = pcall(definition, self, struct.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_STRUCT_TEMPDEF] then error(err) end
                 end
             else
                 -- Check base struct first
@@ -5389,6 +5534,14 @@ do
             -- @param   target                      the member
             -- @return  default                     the member's default value
             ["GetDefault"]              = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEFAULT] end;
+
+            -- Get the debug info of the member
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   member
+            -- @param   target                      the member
+            -- @return  info                        the debug info
+            ["GetDebugInfo"]            = function(self) local info = _MemberInfo[self] return info and info[FLD_MEMBER_DEBUG] end;
         },
         __newindex                      = readonly,
         __call                          = function(self, ...)
@@ -5528,6 +5681,7 @@ do
     FLD_ENUM_ERRMSG                     = newindex()        -- FIELD ERROR MESSAGE
     FLD_ENUM_MAXVAL                     = newindex()        -- FIELD MAX VALUE(FOR FLAGS)
     FLD_ENUM_DEFAULT                    = newindex()        -- FIELD DEFAULT
+    FLD_ENUM_DEBUG                      = newindex()        -- FEILD DEBUG INFO
 
     -- Flags
     FLG_FLAGS_ENUM                      = newflags(true)
@@ -5675,6 +5829,17 @@ do
                 enumdefined(target)
 
                 return target
+            end;
+
+            --- Get the debug info from the enumeration
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   enum
+            -- @param   enumeration                 the enumeration
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = function(target)
+                local info              = getEnumTargetInfo(target)
+                return info and info[FLD_ENUM_DEBUG]
             end;
 
             --- Get the default value from the enumeration
@@ -5947,6 +6112,7 @@ do
             stack                       = stack + 1
 
             enum.BeginDefinition(target, stack)
+            _EnumBuilderInfo[target][FLD_ENUM_DEBUG] = getdebugcallinfo()
 
             Debug("[enum] %s created", stack, tostring(target))
 
@@ -6374,6 +6540,7 @@ end
 -- only care themselves.
 --
 -- @prototype   interface
+-- @prototype   class
 -------------------------------------------------------------------------------
 do
     -----------------------------------------------------------------------
@@ -6401,6 +6568,8 @@ do
     MOD_TEMPLATE_IC                     = newflags()                -- AS TEMPLATE INTERFACE/CLASS
     MOD_AUTOCACHE_OBJ                   = newflags()                -- OBJECT METHOD AUTO-CACHE
     MOD_RECYCLABLE_OBJ                  = newflags()                -- DO NOT WIPE OBJECT WHEN DISPOSE, SO THEY MAY BE RECYCLABLE
+    MOD_VALUETYPE_OBJ                   = newflags()                -- OBJECT AS VALUE
+    MOD_TEMPLATE_REBUILD_IC             = newflags()                -- TEMPLATE TYPE REBUILD
 
     MOD_INITVAL_CLS                     = (PLOOP_PLATFORM_SETTINGS.CLASS_NO_MULTI_VERSION_CLASS  and MOD_SINGLEVER_CLS or 0) +
                                           (PLOOP_PLATFORM_SETTINGS.CLASS_NO_SUPER_OBJECT_STYLE   and MOD_NOSUPER_OBJ   or 0) +
@@ -6430,6 +6599,7 @@ do
     FLD_IC_TEMPDEF                      = -newindex()               -- FIELD TEMPlATE DEFINITION
     FLD_IC_TEMPIMP                      = -newindex()               -- FIELD TEMPLATE IMPLEMENTATION OR THE BASIC TEMPLATE CLASS
     FLD_IC_TEMPENV                      = -newindex()               -- FIELD TEMPLATE ENVIRONMENT
+    FLD_IC_DEBUG                        = -newindex()               -- FIELD DEBUG INFO
 
     -- CACHE FIELDS
     FLD_IC_STAFTR                       = -newindex()               -- FIELD STATIC TYPE FEATURES
@@ -6553,6 +6723,9 @@ do
     local _ICIndexMap                   = {}
     local _ICNewIdxMap                  = {}
     local _ClassCtorMap                 = {}
+
+    -- Object state
+    local _InitObjects                  = PLOOP_PLATFORM_SETTINGS.MULTI_OS_THREAD and setmetatable({}, {__index = function(_, c) return rawget(c, newflags) end, __newindex = function(_, c, v) rawset(c, newflags, v or nil) end}) or newstorage(WEAK_KEY)
 
     -----------------------------------------------------------------------
     --                          private helpers                          --
@@ -6797,6 +6970,7 @@ do
             [FLD_IC_TEMPDEF]            = info and info[FLD_IC_TEMPDEF],
             [FLD_IC_TEMPIMP]            = info and info[FLD_IC_TEMPIMP],
             [FLD_IC_TEMPENV]            = info and info[FLD_IC_TEMPENV],
+            [FLD_IC_DEBUG]              = info and info[FLD_IC_DEBUG],
             -- CACHE FIELDS
             [FLD_IC_STAFTR]             = info and info[FLD_IC_STAFTR] and tblclone(info[FLD_IC_STAFTR], {}),
             [FLD_IC_OBJFTR]             = info and info[FLD_IC_OBJFTR] and tblclone(info[FLD_IC_OBJFTR], {}),
@@ -6820,6 +6994,11 @@ do
             tinsert(upval, info[FLD_IC_SUPINFO])
         end
 
+        if info[FLD_IC_OBJFTR] then
+            token                       = turnonflags(FLG_IC_OBJFTR, token)
+            tinsert(upval, info[FLD_IC_OBJFTR])
+        end
+
         if info[FLD_IC_OBJMTD] then
             token                       = turnonflags(FLG_IC_OBJMTD, token)
             tinsert(upval, info[FLD_IC_OBJMTD])
@@ -6828,11 +7007,6 @@ do
                 token                   = turnonflags(FLG_IC_ATCACH, token)
                 tinsert(upval, rawset)
             end
-        end
-
-        if info[FLD_IC_OBJFTR] then
-            token                       = turnonflags(FLG_IC_OBJFTR, token)
-            tinsert(upval, info[FLD_IC_OBJFTR])
         end
 
         local data                      = info[FLD_IC_TYPMTM] and info[FLD_IC_TYPMTM][IC_META_INDEX] or meta[META_KEYS[IC_META_INDEX]]
@@ -6891,6 +7065,14 @@ do
                 ]])
             end
 
+            if validateflags(FLG_IC_OBJFTR, token) then
+                tinsert(head, "features")
+                tinsert(body, [[
+                    local ftr           = features[key]
+                    if ftr then return ftr:Get(self) end
+                ]])
+            end
+
             if validateflags(FLG_IC_OBJMTD, token) then
                 tinsert(head, "methods")
                 if validateflags(FLG_IC_ATCACH, token) then
@@ -6905,14 +7087,6 @@ do
                         if mtd then return mtd end
                     ]])
                 end
-            end
-
-            if validateflags(FLG_IC_OBJFTR, token) then
-                tinsert(head, "features")
-                tinsert(body, [[
-                    local ftr           = features[key]
-                    if ftr then return ftr:Get(self) end
-                ]])
             end
 
             if validateflags(FLG_IC_IDXFUN, token) then
@@ -7181,6 +7355,7 @@ do
         local upval                     = _Cache()
         local meta                      = info[FLD_IC_OBJMTM]
 
+        tinsert(upval, _InitObjects)
         tinsert(upval, meta)
 
         if meta[IC_META_EXIST] or meta[IC_META_NEW] then
@@ -7226,6 +7401,7 @@ do
 
             uinsert(apis, "setmetatable")
 
+            tinsert(head, "initobjs")
             tinsert(head, "objmeta")
 
             tinsert(body, "")                       -- remain for shareable variables
@@ -7298,6 +7474,8 @@ do
                 tinsert(body, [[setmetatable(obj, objmeta)]])
             end
 
+            tinsert(body, [[initobjs[obj] = true]])
+
             if hasctor then
                 tinsert(head, "clinit")
                 if validateflags(FLG_IC_NEWOBJ, token) then
@@ -7310,7 +7488,7 @@ do
                 uinsert(apis, "loadinittable")
                 uinsert(apis, "strmatch")
                 uinsert(apis, "throw")
-                tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
+                tinsert(body, [[if init then local ok, msg = pcall(loadinittable, obj, init) if not ok then initobjs[obj] = nil; throw(strmatch(msg, "%d+:%s*(.-)$") or msg) end end]])
             end
 
             if validateflags(FLG_IC_OBJATR, token) then
@@ -7331,6 +7509,7 @@ do
                 ]])
             end
 
+            tinsert(body, [[initobjs[obj] = nil]])
             tinsert(body, [[return obj end end]])
 
             if #apis > 0 then
@@ -7731,6 +7910,11 @@ do
         attribute.ApplyAttributes (func, ATTRTAR_METHOD, nil, target, name, stack)
         attribute.AttachAttributes(func, ATTRTAR_METHOD, target, name, stack)
 
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack)
+        end
+
         typmtd                          = info[FLD_IC_TYPMTD]    -- Maybe generated after attribtues applied
 
         if def then
@@ -7779,6 +7963,11 @@ do
             attribute.AttachAttributes(data, ATTRTAR_METHOD, target, name, stack)
         end
 
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack)
+        end
+
         -- Save
         local metaFld                   = META_KEYS[name]
 
@@ -7809,6 +7998,11 @@ do
             info[FLD_IC_STAFTR][name]   = nil
         elseif info[FLD_IC_OBJFTR] and info[FLD_IC_OBJFTR][name] then
             info[FLD_IC_OBJFTR][name]   = nil
+        end
+
+        if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+            info[FLD_IC_DEBUG]          = info[FLD_IC_DEBUG] or {}
+            info[FLD_IC_DEBUG][name]    = getdebugcallinfo(stack + 2)
         end
     end
 
@@ -7999,6 +8193,27 @@ do
     end
 
     -- Get template implementation
+    local genICImplement                = function (implement)
+        local ninfo                     = getICTargetInfo(implement)
+        local template                  = ninfo[FLD_IC_TEMPIMP]
+        local params                    = ninfo[FLD_IC_TEMPPRM]
+        local info                      = getICTargetInfo(template)
+
+        -- turn off for rebuild
+        ninfo[FLD_IC_MOD]               = turnoffflags(MOD_SEALED_IC, ninfo[FLD_IC_MOD])
+
+        -- build
+        local ptype                     = getmetatable(implement)
+        local bder                      = ptype (info[FLD_IC_TEMPENV], implement, true)
+        ptype.SetSealed(implement)
+        ninfo                           = getICTargetInfo(implement)
+        ninfo[FLD_IC_TEMPPRM]           = params
+        ninfo[FLD_IC_TEMPIMP]           = template
+
+        attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, template)
+        bder(info[FLD_IC_TEMPDEF])
+    end
+
     local getICImplement                = function(self, key, stack)
         local info                      = _ICInfo[self]
         if info[FLD_IC_TEMPDEF] then
@@ -8012,14 +8227,22 @@ do
 
             local ok, err               = attribute.IndependentCall(function()
                 local ptype             = getmetatable(self)
-                implement               = ptype {}
-                local bder              = ptype (info[FLD_IC_TEMPENV], implement, true)
-                ptype.SetSealed(implement)
+                local names             = { tostring(self) }
+                for _, v in ipairs, key, 0 do
+                    names[#names + 1]   = tostring(v):gsub("[%p%s]+", "_")
+                end
+                names[#names + 1]       = strformat("%04X%04X", random(0xffff), random(0xffff))
+
+                -- save the implement first
+                implement               = ptype (tblconcat(names, "_"), {})
+                info[FLD_IC_TEMPIMP]    = saveTemplateImplement(implements, key, implement, validateflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD]), genICImplement)
+
+                -- Record template & params
                 local ninfo             = getICTargetInfo(implement)
                 ninfo[FLD_IC_TEMPPRM]   = key
                 ninfo[FLD_IC_TEMPIMP]   = self
-                attribute.InheritAttributes(implement, ptype == class and ATTRTAR_CLASS or ATTRTAR_INTERFACE, self)
-                bder(info[FLD_IC_TEMPDEF])
+
+                genICImplement(implement)
             end)
 
             if not ok then
@@ -8029,8 +8252,6 @@ do
                     error(tostring(err), parsestack(stack) + 1)
                 end
             end
-
-            info[FLD_IC_TEMPIMP]        = saveTemplateImplement(implements, key, implement)
 
             return implement
         end
@@ -8044,7 +8265,6 @@ do
     interface                           = prototype {
         __tostring                      = "interface",
         __index                         = {
-            Get = function(self) return _ICInfo[self] end,
             --- Add an interface to be extended
             -- @static
             -- @method  AddExtend
@@ -8190,6 +8410,18 @@ do
                 interfacedefined(target)
 
                 return target
+            end;
+
+            --- Get the debug info of the interface
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   interface
+            -- @param   target                      the target interface
+            -- @param   feature                     the target feature name, optional
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = function(target, feature)
+                local info              = getICTargetInfo(target)
+                return info and info[FLD_IC_DEBUG] and info[FLD_IC_DEBUG][feature or 0]
             end;
 
             --- Get the definition context of the interface
@@ -8345,7 +8577,7 @@ do
                     if typm then
                         return function(self, n)
                             local m     = next(typm, n)
-                            while m and not META_KEYS[m] do m = next(typm, m) end
+                            while m and not (META_KEYS[m] and typm[META_KEYS[m]]) do m = next(typm, m) end
                             if m then return m, typm[META_KEYS[m]] end
                         end, target
                     end
@@ -8675,8 +8907,9 @@ do
             -- @format  (target, params[, stack])
             -- @param   target                      the target interface
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getICTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -8684,6 +8917,9 @@ do
                     if not def then error(strformat("Usage: interface.SetAsTemplate(target, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_IC_MOD]    = turnonflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD])
                     info[FLD_IC_MOD]    = turnonflags(MOD_SEALED_IC,   info[FLD_IC_MOD])
+                    if rebuildable then
+                        info[FLD_IC_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD])
+                    end
 
                     info[FLD_IC_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_IC_TEMPIMP]= saveTemplateImplement({}, info[FLD_IC_TEMPPRM], target)
@@ -8748,6 +8984,10 @@ do
                 interface.BeginDefinition(target, stack)
 
                 Debug("[interface] %s created", stack, tostring(target))
+                if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+                    _ICBuilderInfo[target][FLD_IC_DEBUG] = _ICBuilderInfo[target][FLD_IC_DEBUG] or {}
+                    _ICBuilderInfo[target][FLD_IC_DEBUG][0] = getdebugcallinfo()
+                end
 
                 local builder           = prototype.NewObject(interfacebuilder)
                 environment.Initialize  (builder)
@@ -8917,6 +9157,14 @@ do
 
                 return target
             end;
+
+            --- Get the debug info of the class
+            -- @static
+            -- @method  GetDebugInfo
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  debug                       the debug info
+            ["GetDebugInfo"]            = interface.GetDebugInfo;
 
             --- Get the definition context of the class
             -- @static
@@ -9225,6 +9473,13 @@ do
                 return otype and class.IsSubType(otype, type) or false
             end;
 
+            --- Whether the object is initing
+            -- @static
+            -- @method  IsObjectType
+            -- @owner   class
+            -- @param   target                      the object
+            ["IsObjectIniting"]         = function(target) return _InitObjects[target] or false end;
+
             --- Whether the class object will try to auto cache the object methods
             -- @static
             -- @method  IsMethodAutoCache
@@ -9323,6 +9578,17 @@ do
                     end
                 end
                 return false
+            end;
+
+            --- Whether the object of the type should be treated as value
+            -- @static
+            -- @method  IsValueType
+            -- @owner   class
+            -- @param   target                      the target class
+            -- @return  boolean                     true if the object of the type should be treated as value
+            ["IsValueType"]             = function(target)
+                local info              = getICTargetInfo(target)
+                return info and validateflags(MOD_VALUETYPE_OBJ, info[FLD_IC_MOD]) or false
             end;
 
             --- Refresh the class's definition
@@ -9614,8 +9880,9 @@ do
             -- @format  (target[, stack])
             -- @param   target                      the target class
             -- @param   params                      the parameters for the template
+            -- @param   rebuildable                 whether rebuild the generated type
             -- @param   stack                       the stack level
-            ["SetAsTemplate"]           = function(target, params, stack)
+            ["SetAsTemplate"]           = function(target, params, rebuildable, stack)
                 local info, def         = getICTargetInfo(target)
                 stack                   = parsestack(stack) + 1
 
@@ -9623,11 +9890,33 @@ do
                     if not def then error(strformat("Usage: class.SetAsTemplate(target, params[, stack]) - The %s's definition is finished", tostring(target)), stack) end
                     info[FLD_IC_MOD]    = turnonflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD])
                     info[FLD_IC_MOD]    = turnonflags(MOD_SEALED_IC,   info[FLD_IC_MOD])
+                    if rebuildable then
+                        info[FLD_IC_MOD]= turnonflags(MOD_TEMPLATE_REBUILD_IC, info[FLD_IC_MOD])
+                    end
 
                     info[FLD_IC_TEMPPRM]= type(params) == "table" and getmetatable(params) == nil and params or { params }
                     info[FLD_IC_TEMPIMP]= saveTemplateImplement({}, info[FLD_IC_TEMPPRM], target)
                 else
                     error("Usage: class.SetAsTemplate(target, params[, stack]) - The target is not valid", stack)
+                end
+            end;
+
+            --- Mark the class as value type
+            -- @static
+            -- @method  SetAsValueType
+            -- @owner   class
+            -- @format  (target[, stack])
+            -- @param   target                      the target class
+            -- @param   stack
+            ["SetAsValueType"]          = function(target, stack)
+                local info, def         = getICTargetInfo(target)
+                stack                   = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: class.SetAsValueType(target[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    info[FLD_IC_MOD]    = turnonflags(MOD_VALUETYPE_OBJ, info[FLD_IC_MOD])
+                else
+                    error("Usage: class.SetAsValueType(target[, stack]) - The target is not valid", stack)
                 end
             end;
 
@@ -9687,6 +9976,10 @@ do
                 class.BeginDefinition(target, stack)
 
                 Debug("[class] %s created", stack, tostring(target))
+                if PLOOP_PLATFORM_SETTINGS.ENABLE_DEBUG_INFO then
+                    _ICBuilderInfo[target][FLD_IC_DEBUG] = _ICBuilderInfo[target][FLD_IC_DEBUG] or {}
+                    _ICBuilderInfo[target][FLD_IC_DEBUG][0] = getdebugcallinfo()
+                end
 
                 local builder           = prototype.NewObject(classbuilder)
                 environment.Initialize  (builder)
@@ -9874,23 +10167,27 @@ do
             if not (owner and _ICBuilderInDefine[self] and info) then error("The interface's definition is finished", stack) end
 
             definition                  = attribute.InitDefinition(owner, ATTRTAR_INTERFACE, parseDefinition(definition, self, stack), nil, nil, stack)
+
             -- Save template env
             if info[FLD_IC_TEMPDEF] then
                 info[FLD_IC_TEMPENV]    = environment.GetParent(self)
             end
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then
                     -- Save for template
                     info[FLD_IC_TEMPDEF]= definition
                     info[FLD_IC_TEMPENV]= environment.GetParent(self)
+                end
 
-                    local ok, err       = pcall(definition, self, interface.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, interface.GetTemplateParameters(owner))
+                local ok, err           = pcall(definition, self, interface.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
                 -- Index key
@@ -9951,17 +10248,20 @@ do
             end
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
 
                 if validateflags(MOD_TEMPLATE_IC, info[FLD_IC_MOD]) then
                     -- Save for template
                     info[FLD_IC_TEMPDEF]= definition
                     info[FLD_IC_TEMPENV]= environment.GetParent(self)
+                end
 
-                    local ok, err = pcall(definition, self, class.GetTemplateParameters(owner))
-                    if not ok and type(err) == "string" then error(err, 0) end
-                else
-                    definition(self, class.GetTemplateParameters(owner))
+                local ok, err           = pcall(definition, self, class.GetTemplateParameters(owner))
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    if not info[FLD_IC_TEMPDEF] then error(err) end
                 end
             else
                 -- Index key
@@ -9987,7 +10287,7 @@ do
             local super                 = class.GetSuperRefer(owner)
             if super then rawset(self, IC_KEYWORD_SUPER, super) end
 
-            if getfenv(stack)  == self then
+            if getfenv(stack) == self then
                 safesetfenv(stack, environment.GetParent(self) or _G)
             end
 
@@ -10061,8 +10361,14 @@ do
             definition                  = parseDefinition(definition, self, stack)
 
             if type(definition) == "function" then
+                local oldenv            = getfenv(definition)
                 setfenv(definition, self)
-                definition(self)
+                local ok, err           = pcall(definition, self)
+                if oldenv then setfenv(definition, oldenv) end
+                if not ok then
+                    if type(err) == "string" then error(err, 0) end
+                    error(tostring(err), stack)
+                end
             else
                 if getmetatable(owner) == class then
                     error("Usage: class([env, ][name, ][stack]) (definition) - the definition must be a function", stack)
@@ -10340,7 +10646,7 @@ end
 -- the other details, let's focus on the event two-way binding :
 --
 --              class "Frame" (function(_ENV)
---                  __EventChangeHandler__(function(delegate, owner, eventname)
+--                  __EventChangeHandler__(function(delegate, owner, eventname, init)
 --                      -- owner is the frame object
 --                      -- eventname is the OnEnter for this case
 --                      if delegate:IsEmpty() then
@@ -10584,6 +10890,7 @@ do
                                         return handler(self, owner, name)
                                     end
                                 end)
+                                handler(delegate, owner, name, true)
                             end
                         end
                         return delegate
@@ -10603,6 +10910,7 @@ do
                                         return handler(self, obj, name)
                                     end
                                 end)
+                                handler(delegate, obj, name, true)
                             end
                         end
                         return delegate
@@ -11029,6 +11337,7 @@ do
     MOD_PROP_INDEXER                    = newflags()
     MOD_PROP_THROWABLE                  = newflags()
     MOD_PROP_REQUIRE                    = newflags()
+    MOD_PROP_INITONLY                   = newflags()
 
     -- PROPERTY FIELDS
     FLD_PROP_MOD                        = newindex(0)
@@ -11088,6 +11397,7 @@ do
     FLG_PROPSET_INDEXTYP                = newflags()
     FLG_PROPSET_THROWABLE               = newflags()
     FLG_PROPSET_REQUIRE                 = newflags()
+    FLG_PROPSET_INITONLY                = newflags()
 
     FLD_PROP_META                       = "__PLOOP_PROPERTY_META"
     FLD_PROP_OBJ_WEAK                   = "__PLOOP_PROPERTY_WEAK"
@@ -11439,7 +11749,14 @@ do
         local usename                   = false
         local upval                     = _Cache()
 
-        -- Calc the token
+        --- calc the token
+        -- init only
+        if validateflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD]) then
+            usename                     = true
+            token                       = turnonflags(FLG_PROPSET_INITONLY, token)
+            tinsert(upval, class.IsObjectIniting)
+        end
+
         if info[FLD_PROP_SET]  == false or (info[FLD_PROP_SET] == nil and info[FLD_PROP_SETMETHOD] == nil and info[FLD_PROP_FIELD] == nil) then
             token                       = turnonflags(FLG_PROPSET_DISABLE, token)
             usename                     = true
@@ -11547,6 +11864,11 @@ do
                 tinsert(body, [[return function(self, idxname, value)]])
             else
                 tinsert(body, [[return function(_, self, value)]])
+            end
+
+            if validateflags(FLG_PROPSET_INITONLY, token) then
+                tinsert(head, "isiniting")
+                tinsert(body, [[if not isiniting(self) then error(strformat("the %s is init-only", name), 3) end]])
             end
 
             if validateflags(FLG_PROPSET_DISABLE, token) then
@@ -12053,6 +12375,17 @@ do
                 return info and validateflags(MOD_PROP_INDEXER, info[FLD_PROP_MOD]) or false
             end;
 
+            --- Whether the property is init-only
+            -- @static
+            -- @method  IsInitOnly
+            -- @owner   property
+            -- @param   target                      the target property
+            -- @return  boolean                     true if the property is init-only
+            ["IsInitOnly"]              = function(self)
+                local info              = _PropertyInfo[self]
+                return info and validateflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD]) or false
+            end;
+
             --- Whether the property is readable
             -- @static
             -- @method  IsReadable
@@ -12294,6 +12627,22 @@ do
                 end
             end;
 
+            --- Set the property whether it's init-only
+            -- @static
+            -- @method  SetInitOnly
+            -- @owner   property
+            -- @format  (target[, stack]])
+            -- @param   target                      the target property
+            -- @param   stack                       the stack level
+            ["SetInitOnly"]             = function(self, stack)
+                if _PropertyInDefine[self] then
+                    local info          = _PropertyInfo[self]
+                    info[FLD_PROP_MOD]  = turnonflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD])
+                else
+                    error("Usage: property:SetRetainObject([stack]) - the property's definition is finished", parsestack(stack) + 1)
+                end
+            end;
+
             --- Set the property whether it should dispose the old value
             -- @static
             -- @method  SetRetainObject
@@ -12390,7 +12739,6 @@ do
             if not name or name == "" then error([[Usage: property "name" { ... } - the name must be a string]], stack) end
 
             local owner                 = visitor and environment.GetNamespace(visitor)
-
             if owner and (interface.Validate(owner) or class.Validate(owner)) then
                 local prop              = genProperty(owner, name, stack)
                 return prop
@@ -12414,6 +12762,7 @@ do
             ["IsGetClone"]              = property.IsGetClone;
             ["IsGetDeepClone"]          = property.IsGetDeepClone;
             ["IsIndexer"]               = property.IsIndexer;
+            ["IsInitOnly"]              = property.IsInitOnly;
             ["IsReadable"]              = property.IsReadable;
             ["IsRetainObject"]          = property.IsRetainObject;
             ["IsSetClone"]              = property.IsSetClone;
@@ -12430,6 +12779,7 @@ do
             ["GetType"]                 = property.GetType;
             ["SetClone"]                = property.SetClone;
             ["SetIndexer"]              = property.SetIndexer;
+            ["SetInitOnly"]             = property.SetInitOnly;
             ["SetRetainObject"]         = property.SetRetainObject;
             ["SetStatic"]               = property.SetStatic;
             ["SetValueRequired"]        = property.SetValueRequired;
@@ -12538,6 +12888,10 @@ do
                     elseif k == "require" then
                         if v then
                             info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_REQUIRE, info[FLD_PROP_MOD])
+                        end
+                    elseif k == "initonly" or k == "init" then
+                        if v then
+                            info[FLD_PROP_MOD]          = turnonflags(MOD_PROP_INITONLY, info[FLD_PROP_MOD])
                         end
                     end
                 end
@@ -13041,7 +13395,7 @@ do
     --
     -- @attribute   System.__Abstract__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Abstract__",
+    __Abstract__                        = namespace.SaveNamespace("System.__Abstract__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13089,7 +13443,7 @@ do
     --
     -- @attribute   System.__AnonymousClass__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AnonymousClass__",
+    __AnonymousClass__                  = namespace.SaveNamespace("System.__AnonymousClass__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13111,7 +13465,7 @@ do
     --
     -- @attribute   System.__AutoCache__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoCache__",
+    __AutoCache__                       = namespace.SaveNamespace("System.__AutoCache__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13204,7 +13558,7 @@ do
     --              enum "Test" { "A", "B", "C", "D" }
     --              print(Test.A, Test.B, Test.C, Test.D) -- 0, 1, 10, 11
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__AutoIndex__",
+    __AutoIndex__                       = namespace.SaveNamespace("System.__AutoIndex__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13240,7 +13594,7 @@ do
     --              enum "Test" { A = 1, C = 2 } -- The value must in (0, 100)
     --              print(Test.A, Test.C) -- 1101, 1102
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__BaseIndex__",
+    __BaseIndex__                       = namespace.SaveNamespace("System.__BaseIndex__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13283,7 +13637,7 @@ do
     --
     -- @attribute   System.__Base__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Base__",
+    __Base__                            = namespace.SaveNamespace("System.__Base__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13302,7 +13656,7 @@ do
     --
     -- @attribute   System.__Default__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Default__",
+    __Default__                         = namespace.SaveNamespace("System.__Default__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13336,7 +13690,7 @@ do
     --
     -- @attribute   System.__EventChangeHandler__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__EventChangeHandler__",
+    __EventChangeHandler__              = namespace.SaveNamespace("System.__EventChangeHandler__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13360,7 +13714,7 @@ do
     --
     -- @attribute   System.__Final__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Final__",
+    __Final__                           = namespace.SaveNamespace("System.__Final__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13383,7 +13737,7 @@ do
     --
     -- @attribute   System.__Flags__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Flags__",
+    __Flags__                           = namespace.SaveNamespace("System.__Flags__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13498,7 +13852,7 @@ do
     --
     -- @attribute   System.__Shareable__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Shareable__",
+    __Shareable__                       = namespace.SaveNamespace("System.__Shareable__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13517,7 +13871,7 @@ do
     --
     -- @attribute   System.__Get__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Get__",
+    __Get__                             = namespace.SaveNamespace("System.__Get__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13543,7 +13897,7 @@ do
     --
     -- @attribute   System.__Indexer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Indexer__",
+    __Indexer__                         = namespace.SaveNamespace("System.__Indexer__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13562,7 +13916,7 @@ do
     --
     -- @attribute   System.__Namespace__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Namespace__",
+    __Namespace__                       = namespace.SaveNamespace("System.__Namespace__",
         prototype {
             __call                      = function(self, value) namespace.SetNamespaceForNext(value) end,
             __index                     = writeonly,
@@ -13574,7 +13928,7 @@ do
     -----------------------------------------------------------------------
     -- Make the target struct allow objects to pass its validation
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectAllowed__",
+    __ObjectAllowed__                   = namespace.SaveNamespace("System.__ObjectAllowed__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13593,7 +13947,7 @@ do
     --
     -- @attribute   System.__ObjectAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectAttr__",
+    __ObjectAttr__                      = namespace.SaveNamespace("System.__ObjectAttr__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13615,7 +13969,7 @@ do
     --
     -- @attribute   System.__ObjFuncAttr__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjFuncAttr__",
+    __ObjFuncAttr__                     = namespace.SaveNamespace("System.__ObjFuncAttr__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13636,7 +13990,7 @@ do
     --
     -- @attribute   System.__ObjectSource__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__ObjectSource__",
+    __ObjectSource__                    = namespace.SaveNamespace("System.__ObjectSource__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13658,7 +14012,7 @@ do
     --
     -- @attribute   System.__Require__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Require__",
+    __Require__                         = namespace.SaveNamespace("System.__Require__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13677,7 +14031,7 @@ do
     --
     -- @attribute   System.__Sealed__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Sealed__",
+    __Sealed__                          = namespace.SaveNamespace("System.__Sealed__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13696,7 +14050,7 @@ do
     --
     -- @attribute   System.__Set__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Set__",
+    __Set__                             = namespace.SaveNamespace("System.__Set__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13731,7 +14085,7 @@ do
     --
     -- @attribute   System.__SingleVer__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__SingleVer__",
+    __SingleVer__                       = namespace.SaveNamespace("System.__SingleVer__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13753,7 +14107,7 @@ do
     --
     -- @attribute   System.__Static__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Static__",
+    __Static__                          = namespace.SaveNamespace("System.__Static__",
         prototype {
             __index                     = {
                 ["InitDefinition"]      = function(self, target, targettype, definition, owner, name, stack)
@@ -13783,7 +14137,7 @@ do
     --
     -- @attribute   System.__Super__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Super__",
+    __Super__                           = namespace.SaveNamespace("System.__Super__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13802,7 +14156,7 @@ do
     --
     -- @attribute   System.__Throwable__
     -----------------------------------------------------------------------
-    namespace.SaveNamespace("System.__Throwable__",
+    __Throwable__                       = namespace.SaveNamespace("System.__Throwable__",
         prototype {
             __index                     = {
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
@@ -13816,6 +14170,27 @@ do
             __call                      = attribute.Register,
             __newindex                  = readonly,
             __tostring                  = namespace.GetNamespaceName
+        }
+    )
+
+    -----------------------------------------------------------------------
+    -- Set the class as value type
+    --
+    -- @attribute   System.__ValueType__
+    -----------------------------------------------------------------------
+    __ValueType__                       = namespace.SaveNamespace("System.__ValueType__",
+        prototype {
+            __index                     = {
+                ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
+                    if targettype == ATTRTAR_CLASS then
+                        class.SetAsValueType(target, parsestack(stack) + 1)
+                    end
+                end,
+                ["AttributeTarget"]     = ATTRTAR_CLASS,
+            },
+            __call                      = regSelfOrObject,
+            __newindex                  = readonly,
+            __tostring                  = getAttributeName
         }
     )
 
@@ -14162,7 +14537,7 @@ do
     end)
 
     -----------------------------------------------------------------------
-    --                             interface                             --
+    --                               types                               --
     -----------------------------------------------------------------------
     --- Represents the interface of attribute
     __Sealed__() __ObjectSource__{ Inheritable = true }
@@ -14481,11 +14856,11 @@ do
 
         --- A function used to return an empty table with weak settings
         newtable                        = function(weakKey, weakVal) return weakKey and setmetatable({}, weakVal and WEAK_ALL or WEAK_KEY) or weakVal and setmetatable({}, WEAK_VALUE) or {} end,
+
+        --- A common set value func, combine with pcall
+        setvalue                        = function(self, key, value) self[key] = value end,
     }
 
-    -----------------------------------------------------------------------
-    --                              classes                              --
-    -----------------------------------------------------------------------
     --- the attribute to build the overload system, also can be used to set
     -- the target struct, class or interface as template
     __Sealed__() __Final__() __NoRawSet__(false) __NoNilValue__(false)
@@ -14830,7 +15205,6 @@ do
                     uinsert(apis, "throw")
 
                     tinsert(body, [[local error = throw]])
-                    tinsert(body, [[setfenv(func, getfenv(1))]])
                 end
 
                 tinsert(body, [[local stack = 2]])
@@ -15031,7 +15405,9 @@ do
                     body[1]             = strformat("local %s = %s", declare, declare)
                 end
 
-                if vars[FLD_VAR_THRABL] then
+                if isbuilder then
+                    _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "local oldenv = getfenv(func)\nsetfenv(func, getfenv(1))\nlocal ok, err = pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. ")\nif oldenv then setfenv(func, oldenv) end\nif not ok then error(err) end" end), "Argument_Validate_" .. token, _ENV)()
+                elseif vars[FLD_VAR_THRABL] then
                     _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"):gsub("return func(%b())", function(arg) arg = strsub(arg, 2, -2) or "" return "return chkandret(stack, pcall(func" .. (#arg > 0 and (", " .. arg) or "") .. "))" end), "Argument_Validate_" .. token, _ENV)()
                 else
                     _ArgValdMap[token]  = loadsnippet(tblconcat(body, "\n"), "Argument_Validate_" .. token, _ENV)()
@@ -15230,6 +15606,13 @@ do
         --- Mark the overload must use this keyword
         function UseThis(self)
             self.IsThisUsable           = true
+            return self
+        end
+
+        --- Mark the type generatd by the template will be rebuilt when parameter type re-defined
+        function WithRebuild(self)
+            self.IsRebuildable          = true
+            return self
         end
 
         --- modify the target's definition
@@ -15402,11 +15785,11 @@ do
                 genArgumentValid(vars, false, owner, name, isbuilder, isbuilder)
 
                 if targettype == AttributeTargets.Class then
-                    Class.SetAsTemplate(target, self.Template, stack)
+                    Class.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 elseif targettype == AttributeTargets.Interface then
-                    Interface.SetAsTemplate(target, self.Template, stack)
+                    Interface.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 elseif targettype == AttributeTargets.Struct then
-                    Struct.SetAsTemplate(target, self.Template, stack)
+                    Struct.SetAsTemplate(target, self.Template, self.IsRebuildable, stack)
                 end
 
                 return vars[FLD_VAR_VARVLD] or nil
@@ -15497,8 +15880,11 @@ do
         --- whether must use the this keyword
         property "IsThisUsable"         { type = Boolean }
 
-        --- The template parameter
+        --- the template parameter
         property "Template"             { type = Any }
+
+        --- whether the generated type need be rebuild when type in parameters redefined
+        property "IsRebuildable"        { type = Boolean }
 
         -----------------------------------------------------------
         --                      constructor                      --
@@ -16654,7 +17040,6 @@ do
         }
 
         local customGetContext          = fakefunc
-        local customSaveContext         = fakefunc
 
         local getStackContext           = getlocal and function(stack)
             local n, v                  = getlocal(stack, 1)
@@ -16685,16 +17070,9 @@ do
         -----------------------------------------------------------
         --                   static property                     --
         -----------------------------------------------------------
-        --- The API used to save the current context
-        __Static__() property "SaveCurrentContext" {
-            type                        = Function,
-            set                         = function(_, func) customSaveContext = func end,
-            get                         = function() return customSaveContext end,
-            require                     = true,
-        }
-
         --- The API used to get the current context
-        __Static__() property "GetCurrentContext" {
+        __Static__()
+        property "GetCurrentContext"    {
             type                        = Function,
             set                         = function(_, func) customGetContext = func end,
             get                         = function() return getCurrentContext end,
@@ -16706,22 +17084,15 @@ do
         -----------------------------------------------------------
         --- Process the operations under the context
         __Abstract__() function Process(self) end
-
-        -----------------------------------------------------------
-        --                      initializer                      --
-        -----------------------------------------------------------
-        __Sealed__()
-        local contextSaver              = interface { __init = function(self) return customSaveContext(self) end }
-        extend (contextSaver)
     end)
 
-    --- Represents the interface of thread related context, which will
-    -- cache all sharable datas in the same os-thread
+    --- Represents the objects that need context support
     __Sealed__()
     interface "System.IContext"         (function(_ENV)
         -----------------------------------------------------------
         --                       property                        --
         -----------------------------------------------------------
+        --- Gets the current context
         property "Context"              { type = Context }
 
         -----------------------------------------------------------
@@ -16742,15 +17113,15 @@ do
     --- Represents the informations of the runtime
     __Final__() __Sealed__() __Abstract__()
     class "System.Runtime"              (function(_ENV)
-        export{ Enum, Struct, Class, Interface, __Arguments__ }
+        export{ Enum, Struct, Class, Interface, __Arguments__, "rebuildTemplateTypes" }
 
         --- Fired when a new type is generated
         __Static__() event "OnTypeDefined"
 
-        _PLoopEnv.enumdefined           = function(target) OnTypeDefined(Enum, target) end
-        _PLoopEnv.structdefined         = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Struct, target) end
-        _PLoopEnv.interfacedefined      = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Interface, target) end
-        _PLoopEnv.classdefined          = function(target) __Arguments__.ClearOverloads(target) return OnTypeDefined(Class, target) end
+        _PLoopEnv.enumdefined           = function(target) rebuildTemplateTypes(target) return OnTypeDefined(Enum, target) end
+        _PLoopEnv.structdefined         = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Struct, target) end
+        _PLoopEnv.interfacedefined      = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Interface, target) end
+        _PLoopEnv.classdefined          = function(target) __Arguments__.ClearOverloads(target) rebuildTemplateTypes(target) return OnTypeDefined(Class, target) end
     end)
 end
 

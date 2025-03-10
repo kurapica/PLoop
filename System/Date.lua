@@ -68,7 +68,7 @@ PLoop(function(_ENV)
     class "Date"                {}
 
     --- Represents a time interval
-    __Final__() __Sealed__() __Serializable__() __SerializeFormat__(TargetFormat.NUMBER)
+    __Final__() __Sealed__() __ValueType__() __Serializable__() __SerializeFormat__(TargetFormat.NUMBER)
     class "TimeSpan"                    (function(_ENV)
         extend "ICloneable" "ISerializable"
 
@@ -258,7 +258,7 @@ PLoop(function(_ENV)
     end)
 
     --- Represents the date object
-    __Final__() __Sealed__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
+    __Final__() __Sealed__() __ValueType__() __Serializable__() __NoRawSet__(false) __NoNilValue__(false) __SerializeFormat__(TargetFormat.NUMBER)
     class "Date"                        (function (_ENV)
         extend "ICloneable" "ISerializable"
 
@@ -349,25 +349,25 @@ PLoop(function(_ENV)
         --                       property                        --
         -----------------------------------------------------------
         --- The year of the date
-        property "Year"                 { type = Integer, field = "year", handler = r2Time }
+        property "Year"                 { field = "year", set = false }
 
         --- The month of the year, 1-12
-        property "Month"                { type = Integer,  field = "month",handler = function(self, value) r2Time(self) if value < 1 or value > 12 then r4Time(self) end end }
+        property "Month"                { field = "month", set = false }
 
         --- The day of the month, 1-31
-        property "Day"                  { type = Integer, field = "day",  handler = function(self, value) r2Time(self) if value < 1 or value > 28 then r4Time(self) end end }
+        property "Day"                  { field = "day",   set = false }
 
         --- The hour of the day, 0-23
-        property "Hour"                 { type = Integer, field = "hour", handler = function(self, value) r2Time(self) if value < 0 or value > 23 then r4Time(self) end end }
+        property "Hour"                 { field = "hour",  set = false }
 
         --- The minute of the hour, 0-59
-        property "Minute"               { type = Integer, field = "min",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Minute"               { field = "min",   set = false }
 
         --- The Second of the minute, 0-61
-        property "Second"               { type = Integer, field = "sec",  handler = function(self, value) r2Time(self) if value < 0 or value > 59 then r4Time(self) end end }
+        property "Second"               { field = "sec",   set = false }
 
         --- Gets the milliseconds of date, 0-999
-        property "Milliseconds"         { type = Integer, field = "msec", default = 0, handler = handleMilliseconds }
+        property "Milliseconds"         { field = "msec", default = 0,  set = false }
 
         --- The week number, with the mondy is the first day
         property "Week"                 { get = function(self) return tonumber(date("%W", self.time)) end}
@@ -376,13 +376,13 @@ PLoop(function(_ENV)
         property "DayOfWeek"            { get = function(self) return self.wday -1 end }
 
         --- The day of the year
-        property "DayOfYear"            { set = false, field = "yday" }
+        property "DayOfYear"            { field = "yday", set = false }
 
         --- Indicates whether this instance of DateTime is within the daylight saving time range for the current time zone.
-        property "IsDaylightSavingTime" { set = false, field = "isdst" }
+        property "IsDaylightSavingTime" { field = "isdst", set = false }
 
         --- Gets the time that represent the date and time of this instance.
-        property "Time"                 { type = Integer, field = "time", handler = r4Time }
+        property "Time"                 { field = "time",  set = false }
 
         -----------------------------------------------------------
         --                     static method                     --

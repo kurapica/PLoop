@@ -8,9 +8,9 @@ require "PLoop.System.Threading"
 require "PLoop.System.Text"
 require "PLoop.System.Serialization"
 require "PLoop.System.Date"
-require "PLoop.System.Context"
 require "PLoop.System.Logger"
 require "PLoop.System.Recycle"
+require "PLoop.System.ValueWrapper"
 
 -- System.Collections
 require "PLoop.System.Collections.List"
@@ -19,6 +19,10 @@ require "PLoop.System.Collections.Proxy"
 require "PLoop.System.Collections.IIndexedListSorter"
 require "PLoop.System.Collections.Array"
 require "PLoop.System.Collections.Queue"
+require "PLoop.System.Collections.Range"
+
+-- System.Threading
+require "PLoop.System.Threading.TaskScheduler"
 
 -- System Configuration
 require "PLoop.System.Configuration"
@@ -46,14 +50,12 @@ require "PLoop.System.Observer"
 require "PLoop.System.Reactive.Reactive"
 require "PLoop.System.Reactive.Observer"
 require "PLoop.System.Reactive.Subject"
+require "PLoop.System.Reactive.ReactiveValue"
+require "PLoop.System.Reactive.ReactiveField"
+require "PLoop.System.Reactive.ReactiveList"
+require "PLoop.System.Reactive.ReactiveDictionary"
 require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Operator"
 require "PLoop.System.Reactive.Watch"
-
--- System.Message
-require "PLoop.System.Message"
-
--- System.DependencyInjection
-require "PLoop.System.Service"
 
 return root

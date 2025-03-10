@@ -1,6 +1,90 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [2.0.0] - 2025-03-10 WangXH  <kurapica125@outlook.com>
+### Added
+- `System.Collections.Range` is added, check 025.range.md for more informations.
+- new reactive-watch system is finished, check 026.watch_reactive.md for more informations.
+
+
+## [1.9.5] - 2024-11-12 WangXH  <kurapica125@outlook.com>
+### Added
+- `Class.IsObjectIniting(obj)` is added to check whether the object is during construction.
+- We can use `property "Name" { init = true }` or `property "Name" { initOnly = true }` to declare init-only properties.
+
+
+## [1.9.4] - 2024-05-09 WangXH  <kurapica125@outlook.com>
+### Changed
+- Fix the environment change for type template definition, will cause template type generation fails.
+- The anonynmous types will have unique namespace name based on its template type and arguments.
+- The event/property will be accessed before the methods.
+- The System.ISubscription is replaced by System.Subscription class, it's a final class so can't be inherited.
+- The System.IObserver provide a new Subscription property used to manage the subscription for the observer.
+
+### Added
+- The reactive & watch system is re-designed. See [watch & reactive](Docs\025.watch_reactive.md) for more details.
+
+
+## [1.9.3] - 2024-01-24 WangXH  <kurapica125@outlook.com>
+### Added
+- Add Push/Pop/Shift/Unshift/Splice to List types.
+- Add keepargs/getkeepargs to Toolset, used to keep temp arguments in a re-usable coroutine, no require table to store them:
+
+	```lua
+	require "PLoop" (function(_ENV)
+		-- return the coroutine to keep them
+	    local th = Toolset.keepargs("hello", "world")
+
+	    -- gets the argument and recycle the coroutine
+	    -- don't re-use th variable again
+	    --
+	    -- hello world
+	    print(Toolset.getkeepargs(th))
+	end)
+	```
+
+### Changed
+- The event change handler will receive a new argument means if the delegate is just created: (delegate, owner, name, init)
+
+
+## [1.9.2] - 2023-11-14 WangXH <kurapica125@outlook.com>
+### Changed
+- Can use `__Arguments__{...}:WithRebuild()` for template struct/interface/class types, so when types used in parameters re-defined, the generate types will be rebuilt.
+
+
+## [1.9.1] - 2023-10-27 WangXH <kurapica125@outlook.com>
+### Changed
+- The reactive system is re-designed, `System.ISubscription` is added for disposing the subscription, it provide features like `OnUnsubscribe` event, `IsUnsubscribed` property, those features all removed form the `System.IObserver`.
+
+- `ENABLE_DEBUG_INFO` is added to `PLOOP_PLATFORM_SETTINGS`, if enabled, the struct, struct member, enum, interface, class and interface(class) features like method, property, event can record the debug info of its definition, like
+
+	```lua
+	PLOOP_PLATFORM_SETTINGS = { ENABLE_DEBUG_INFO = true }
+
+	require "PLoop" (function(_ENV)
+		class "A" (function(_ENV)
+			event "OnNameChanged"
+
+			property "Name" { type = Name, event = OnNameChanged }
+
+			__Arguments__{ String }
+			function Hello()
+			end
+
+			__Arguments__{ String }
+			function __ctor(self)
+			end
+		end)
+
+		print(Toolset.tostring(Class.GetDebugInfo(A))) -- {["source"]="path",["line"]=4}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "Name"))) -- {["source"]="path",["line"]=7}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "OnNameChanged"))) -- {["source"]="path",["line"]=5}
+		print(Toolset.tostring(Class.GetDebugInfo(A, "__ctor"))) --{["source"]="path",["line"]=14}
+	end)
+	```
+
+
 ## [1.6.37] - 2021-08-09 WangXH <kurapica125@outlook.com>
 ### Changed
 - `System.Web.JsonFormatProvider` is moved to `System.Serialization.JsonFormatProvider`
