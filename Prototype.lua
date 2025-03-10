@@ -3020,6 +3020,7 @@ do
     MOD_TEMPLATE_STRUCT                 = newflags()        -- AS TEMPLATE
     MOD_ALLOWOBJ_STRUCT                 = newflags()        -- ALLOW OBJECT PASS VALIDATION
     MOD_TEMPLATE_REBUILD_STRUCT         = newflags()        -- ALLOW TEMPLATE GEN TYPE REBUILD
+    MOD_VALUETYPE_STRUCT                = newflags()        -- AS VALUE
 
     -- FIELD INDEX
     FLD_STRUCT_MOD                      = -newindex(1)      -- FIELD MODIFIER
@@ -3077,7 +3078,7 @@ do
     FLG_STRUCT_ALLOW_OBJ                = newflags()        -- ALLOW  OBjECT FLAG
     FLG_STRUCT_VALID_KEY                = newflags()        -- KEY    VALID  FLAG
     FLG_STRUCT_VALID_VAL                = newflags()        -- VALUE  VALID  FLAG
-    FLG_STRUCT_IMTBL_KEY                = newflags()        -- IMMUTBL KEY   LFAG
+    FLG_STRUCT_IMTBL_KEY                = newflags()        -- IMMUTBL KEY   FLAG
 
     STRUCT_KEYWORD_ARRAY                = "__array"
     STRUCT_KEYWORD_BASE                 = "__base"
@@ -4896,6 +4897,17 @@ do
                 return info and type(name) == "string" and info[FLD_STRUCT_TYPEMETHOD] and info[FLD_STRUCT_TYPEMETHOD][name] == false or false
             end;
 
+            --- Whether the object of the type should be treated as value
+            -- @static
+            -- @method  IsValueType
+            -- @owner   struct
+            -- @param   target                      the target struct
+            -- @return  boolean                     true if the object of the type should be treated as value
+            ["IsValueType"]             = function(target)
+                local info              = getStructTargetInfo(target)
+                return info and validateflags(MOD_VALUETYPE_STRUCT, info[FLD_STRUCT_MOD]) or false
+            end;
+
             --- Set the structure's array element type
             -- @static
             -- @method  SetArrayElement
@@ -5057,6 +5069,27 @@ do
                     info[FLD_STRUCT_VALIDSTART] = func
                 else
                     error("Usage: struct.SetValidator(structure, validator[, stack]) - The structure is not valid", stack)
+                end
+            end;
+
+            --- Mark the struct as value type
+            -- @static
+            -- @method  SetAsValueType
+            -- @owner   struct
+            -- @format  (target[, stack])
+            -- @param   target                      the target struct
+            -- @param   stack
+            ["SetAsValueType"]          = function(target, stack)
+                local info, def         = getStructTargetInfo(target)
+                stack                   = parsestack(stack) + 1
+
+                if info then
+                    if not def then error(strformat("Usage: struct.SetValidator(structure, validator[, stack]) - The %s's definition is finished", tostring(target)), stack) end
+                    if not validateflags(MOD_VALUETYPE_STRUCT, info[FLD_STRUCT_MOD]) then
+                        info[FLD_STRUCT_MOD] = turnonflags(MOD_VALUETYPE_STRUCT, info[FLD_STRUCT_MOD])
+                    end
+                else
+                    error("Usage: struct.SetAsValueType(target[, stack]) - The target is not valid", stack)
                 end
             end;
 
@@ -14174,7 +14207,7 @@ do
     )
 
     -----------------------------------------------------------------------
-    -- Set the class as value type
+    -- Set the class|struct as value type
     --
     -- @attribute   System.__ValueType__
     -----------------------------------------------------------------------
@@ -14184,9 +14217,11 @@ do
                 ["ApplyAttribute"]      = function(self, target, targettype, manager, owner, name, stack)
                     if targettype == ATTRTAR_CLASS then
                         class.SetAsValueType(target, parsestack(stack) + 1)
+                    elseif targettype == ATTRTAR_STRUCT then
+                        struct.SetAsValueType(target, parsestack(stack) + 1)
                     end
                 end,
-                ["AttributeTarget"]     = ATTRTAR_CLASS,
+                ["AttributeTarget"]     = ATTRTAR_CLASS + ATTRTAR_STRUCT,
             },
             __call                      = regSelfOrObject,
             __newindex                  = readonly,

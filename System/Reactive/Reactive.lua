@@ -46,6 +46,7 @@ PLoop(function(_ENV)
             getmetatable                = getmetatable,
             issubtype                   = Class.IsSubType,
             isvaluetype                 = Class.IsValueType,
+            isvaluestruct               = Struct.IsValueType,
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
             isclass                     = Class.Validate,
@@ -102,6 +103,10 @@ PLoop(function(_ENV)
                 return asfield and ReactiveField[metatype] or ReactiveValue[metatype]
 
             elseif isstruct(metatype) then
+                if isvaluestruct(metatype) then
+                    return asfield and ReactiveField[metatype] or ReactiveValue[metatype]
+                end
+
                 local cate              = getstructcategory(metatype)
 
                 if cate == "CUSTOM" then
