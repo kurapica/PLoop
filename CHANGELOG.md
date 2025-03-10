@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+
+## [2.0.0] - 2025-03-10 WangXH  <kurapica125@outlook.com>
+### Added
+- `System.Collections.Range` is added, check 025.range.md for more informations.
+- new reactive-watch system is finished, check 026.watch_reactive.md for more informations.
+
+
 ## [1.9.5] - 2024-11-12 WangXH  <kurapica125@outlook.com>
 ### Added
 - `Class.IsObjectIniting(obj)` is added to check whether the object is during construction.
