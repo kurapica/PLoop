@@ -42,7 +42,7 @@ PLoop(function(_ENV)
             -- the core subscribe
             subscribe                   = function (self, observer, subscription)
                 subscription            = subscription or observer.Subscription
-                if not subscription.IsUnsubscribed then self[1](observer, subscription) end
+                if not subscription.IsUnsubscribed then self[0](observer, subscription) end
                 return subscription, observer
             end,
 
@@ -65,6 +65,6 @@ PLoop(function(_ENV)
         --                            constructor                            --
         -----------------------------------------------------------------------
         __Arguments__{ Callable }
-        function __new(_, subscribe)    return { subscribe }, true end
+        function __new(_, subscribe)    return { [0] = subscribe }, true end
     end)
 end)
