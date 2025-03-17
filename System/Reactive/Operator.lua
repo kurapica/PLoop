@@ -43,7 +43,8 @@ PLoop(function(_ENV)
                 subscription            = self:HandleSubscription(subscription, observer) or subscription
 
                 -- Keep using the same subscription
-                self.Subscription       = self.Observable:Subscribe(self, subscription)
+                self.Subscription       = subscription
+                self.Observable:Subscribe(self, subscription)
                 return subscription, observer
             end,
 
