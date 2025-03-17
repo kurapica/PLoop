@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 
+## [2.0.1] - 2025-03-17 WangXH   <kurapica125@outlook.com>
+### Fixed
+- Fix the Operator's Subscription assign order, that'll cancel the subscription in some case.
+
+
 ## [2.0.0] - 2025-03-10 WangXH  <kurapica125@outlook.com>
 ### Added
 - `System.Collections.Range` is added, check 025.range.md for more informations.
