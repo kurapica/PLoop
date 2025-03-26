@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2025/03/17                                               --
--- Version      :   2.0.1                                                    --
+-- Update Date  :   2025/03/26                                               --
+-- Version      :   2.0.2                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -2319,6 +2319,33 @@ do
             end;
         },
         __newindex                      = readonly,
+        __call                          = function(_, ...)
+            local visitor               = environment.GetKeywordVisitor(environment)
+            local definition, init, base
+            for i = 1, select("#", ...) do
+                local v                 = select(i, ...)
+                local tv                = type(v)
+                if tv == "function" then
+                    definition          = v
+                elseif tv == "table" then
+                    if getmetatable(v) == nil and not init then
+                        init            = v
+                    elseif not base or getmetatable(base) == nil then
+                        base            = v
+                    end
+                end
+            end
+            if base == nil then base = visitor end
+
+            local env                   = prototype.NewObject(tenvironment, init)
+            environment.Initialize(env)
+            if base then environment.SetParent(env, base) end
+            if definition then
+                return env(definition)
+            else
+                return env
+            end
+        end,
     }
 
     tenvironment                        = prototype {
@@ -13240,6 +13267,7 @@ do
         struct                          = struct,
         class                           = class,
         interface                       = interface,
+        environment                     = environment,
     }
 
     -----------------------------------------------------------------------

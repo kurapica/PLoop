@@ -2,7 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 
-## [2.0.1] - 2025-03-17 WangXH   <kurapica125@outlook.com>
+## [2.0.2] - 2025-03-26 Wangxh  <kurapica125@outlook.com>
+### Changed
+- The `environment` is registered as keyword, we can use it to declare custom environments like
+	`env = environment([init][, parent])` or call a function with custom environment
+	`env = environment(func, [init][, parent])`
+- `watch([reactives, ]func[, environment])` support custom environment to the watch function, could provide special observable features by it.
+
+
+## [2.0.1] - 2025-03-17 WangXH  <kurapica125@outlook.com>
 ### Fixed
 - Fix the Operator's Subscription assign order, that'll cancel the subscription in some case.
 

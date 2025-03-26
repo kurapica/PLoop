@@ -906,27 +906,39 @@ PLoop(function(_ENV)
         export {
             type                        = type,
             error                       = error,
+            pairs                       = pairs,
+            rawset                      = rawset,
             getKeywordVisitor           = Environment.GetKeywordVisitor,
             isobjecttype                = Class.IsObjectType,
             getmetatable                = getmetatable,
+            _G                          = _G,
 
-            IObservable
+            IObservable, Watch.RawEnvironment, Watch.WatchEnvironment, Environment
         }
 
-        function watch(reactives, func)
+        function watch(reactives, func, env)
             if type(reactives) == "function" then
-                func, reactives         = reactives, nil
+                func, env, reactives    = reactives, func, nil
             end
 
             if type(func) ~= "function" then
-                error("Usage: watch([reactives, ]func) - The func must be a function", 2)
+                error("Usage: watch([reactives, ]func[, environment]) - The func must be a function", 2)
             end
 
             if reactives and (type(reactives) ~= "table" or getmetatable(reactives) ~= nil and not isobjecttype(reactives, IObservable)) then
-                error("Usage: watch([reactives, ]func) - The reactives must be a table contains key-values or an observable", 2)
+                error("Usage: watch([reactives, ]func[, environment]) - The reactives must be a table contains key-values or an observable", 2)
             end
 
-            return Watch(func, getKeywordVisitor(watch), reactives)
+            local visitor               = getKeywordVisitor(watch)
+            if isobjecttype(visitor, RawEnvironment) or isobjecttype(visitor, WatchEnvironment) then
+                error("Usage: watch([reactives, ]func[, environment]) - watch can't be used inside another watch", 2)
+            end
+
+            if type(env) == "table" and env ~= visitor and env ~= _G then
+                visitor                 = Environment(env, visitor)
+            end
+
+            return Watch(func, visitor, reactives)
         end
 
         Environment.RegisterGlobalKeyword { watch = watch }
