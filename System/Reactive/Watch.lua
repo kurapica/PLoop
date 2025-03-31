@@ -392,7 +392,7 @@ PLoop(function(_ENV)
             --- Gets the iterator
             __Iterator__()
             function GetIterator(self)
-                local list                  = rawget(self, ReactiveList)
+                local list                  = rawget(self, Reactive)
                 for i, v in list:GetIterator() do
                     if isobjecttype(v, IReactive) then
                         yield(i, v.Value)

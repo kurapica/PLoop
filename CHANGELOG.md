@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 
+## [2.0.3] - 2025-03-31 WangxH  <kurapica125@outlook.com>
+### Fixed
+- Fix the reactive list can't wrap the elements with the given element type.
+
+
 ## [2.0.2] - 2025-03-26 Wangxh  <kurapica125@outlook.com>
 ### Changed
 - The `environment` is registered as keyword, we can use it to declare custom environments like

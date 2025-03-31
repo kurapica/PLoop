@@ -52,8 +52,9 @@ PLoop(function(_ENV)
                     end
                 end
             else
-                r                       = reactive(v)
-                if r and not isobjecttype(r, ReactiveValue) then
+                local rtype             = getreactivetype(v, rawget(subject, "ElementType"))
+                if rtype and not issubtype(rtype, ReactiveValue) then
+                    r                   = rtype(v)
                     rawset(r, subject, i)
                     rawset(subject, r, (r:Subscribe(
                         function(...)
@@ -156,10 +157,11 @@ PLoop(function(_ENV)
         end
     end
 
-    local function initObjectSubject(obj)
+    local function initObjectSubject(obj, elementtype)
         local subject                   = Subject()
         local cache                     = newtable(true)
         rawset(subject, "Cache", cache)
+        rawset(subject, "ElementType", elementtype)
 
         -- init elements
         for i, v in (obj.GetIterator or ipairs)(obj) do
@@ -170,18 +172,18 @@ PLoop(function(_ENV)
 
     local objectSubjectMap              = not Platform.MULTI_OS_THREAD and Toolset.newtable(true) or nil
     local getObjectSubject              = Platform.MULTI_OS_THREAD
-        and function(obj)
+        and function(obj, elementtype)
             local subject               = rawget(obj, Reactive)
             if not subject then
-                subject                 = initObjectSubject(obj)
+                subject                 = initObjectSubject(obj, elementtype)
                 rawset(obj, Reactive, subject)
             end
             return subject
         end
-        or  function(obj)
+        or  function(obj, elementtype)
             local subject               = objectSubjectMap[obj]
             if not subject then
-                subject                 = initObjectSubject(obj)
+                subject                 = initObjectSubject(obj, elementtype)
                 objectSubjectMap[obj]   = subject
             end
             return subject
@@ -314,7 +316,7 @@ PLoop(function(_ENV)
                 rawset(self, RawTable, value)
                 local subject           = rawget(self, Subject)
                 if subject then
-                    subject.Observable  = value and getObjectSubject(value) or nil
+                    subject.Observable  = value and getObjectSubject(value, elementtype) or nil
                     return subject:OnNext(nil)
                 end
 
@@ -345,7 +347,7 @@ PLoop(function(_ENV)
             if not subject then
                 local raw               = rawget(self, RawTable)
                 subject                 = Subject()
-                subject.Observable      = raw and getObjectSubject(raw) or nil
+                subject.Observable      = raw and getObjectSubject(raw, elementtype) or nil
                 rawset(self, Subject, subject)
             end
 
@@ -634,7 +636,9 @@ PLoop(function(_ENV)
         --                          constructor                          --
         -------------------------------------------------------------------
         function __ctor(self, list)
-            rawset(self, RawTable, type(list) == "table" and list or {})
+            list                        = type(list) == "table" and list or {}
+            rawset(self, RawTable, list)
+            getObjectSubject(list, elementtype)
         end
 
         -------------------------------------------------------------------
