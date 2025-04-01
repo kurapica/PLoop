@@ -349,7 +349,7 @@ PLoop(function(_ENV)
                 type                    = type,
                 isobjecttype            = Class.IsObjectType,
                 yield                   = coroutine.yield,
-                setvalue                = Toolset.setvalue,
+                safesetvalue            = Toolset.safesetvalue,
                 stackmod                = Platform.ENABLE_TAIL_CALL_OPTIMIZATIONS and 0 or 1,
 
                 unwrap                  = function(value)
@@ -495,7 +495,7 @@ PLoop(function(_ENV)
 
             function __newindex(self, index, value, stack)
                 makeWritable(self)
-                local ok, err               = pcall(setvalue, rawget(self, Reactive), index, value)
+                local ok, err               = safesetvalue(rawget(self, Reactive), index, value)
                 if not ok then error(err, (stack or 1) + 1) end
             end
 
@@ -512,7 +512,7 @@ PLoop(function(_ENV)
                 rawget                  = rawget,
                 pcall                   = pcall,
                 error                   = error,
-                setvalue                = Toolset.setvalue,
+                safesetvalue            = Toolset.safesetvalue,
 
                 addDeepWatch            = addDeepWatch,
                 makeWritable            = makeWritable,
@@ -549,7 +549,7 @@ PLoop(function(_ENV)
 
             function __newindex(self, key, value, stack)
                 makeWritable(self)
-                local ok, err           = pcall(setvalue, rawget(self, Reactive), key, value)
+                local ok, err           = safesetvalue(rawget(self, Reactive), key, value)
                 if not ok then error(err, (stack or 1) + 1) end
             end
         end)
@@ -563,7 +563,7 @@ PLoop(function(_ENV)
                 type                    = type,
                 pcall                   = pcall,
                 pairs                   = pairs,
-                setvalue                = Toolset.setvalue,
+                safesetvalue            = Toolset.safesetvalue,
                 isobjecttype            = Class.IsObjectType,
 
                 makeReactiveProxy       = makeReactiveProxy,
@@ -642,7 +642,7 @@ PLoop(function(_ENV)
                 end
 
                 -- assignment
-                local ok, err           = pcall(setvalue, react, key, value)
+                local ok, err           = safesetvalue(react, key, value)
                 if not ok then error(err, (stack or 1) + 1) end
 
                 -- add proxy or watch

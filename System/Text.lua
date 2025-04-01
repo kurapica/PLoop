@@ -228,7 +228,7 @@ PLoop(function(_ENV)
         local block                     = settings.block
 
         if not name:find(".", 1, true)  then name = "System.Text." .. name end
-        if Namespace.GetNamespace(name) then error("The " .. name .. " is already existed", 3) end
+        if Namespace.GetNamespace(name) then error("The " .. name .. " already used", 3) end
 
         local usageDecode               = "Usage: " .. name .. ".Decode([TextWriter,] String + TextReader, ...)"
         local usageEncode               = "Usage: " .. name .. ".Encode([TextWriter,] String + TextReader, ...)"
