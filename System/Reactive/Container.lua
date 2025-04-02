@@ -45,15 +45,17 @@ PLoop(function(_ENV)
         },
         __newindex                      = Toolset.readonly,
         __call                          = function(self, name)
-            if name then
-                if type(name) ~= "string" then error("Usage: System.Reactive.Container \"name\"", 2) end
-
+            if type(name) == "string" then
                 if not name:find(".", 1, true)  then name = "System.Reactive.Container." .. name end
                 if Namespace.GetNamespace(name) then error("Usage: System.Reactive.Container \"name\" - the name already used", 2) end
 
                 local object            = Prototype.NewObject(gcontainer)
                 containerMap            = safeset(containerMap, object, {})
                 return Namespace.SaveNamespace(name, object)
+            elseif type(name) == "table" then
+                local object            = Prototype.NewObject(tcontainer)
+                rawset(object, container, {})
+                return object(name)
             else
                 local object            = Prototype.NewObject(tcontainer)
                 rawset(object, container, {})
@@ -67,17 +69,21 @@ PLoop(function(_ENV)
     tcontainer                          = Prototype {
         __metatable                     = container,
         __index                         = function(self, key)
-            local raw                   = rawget(self, container) or containerMap[self]
-            return raw[key]
+            return (rawget(self, container) or containerMap[self])[key]
         end,
         __newindex                      = function(self, key, value, stack)
+            if type(key) ~= "string" then error("The field can only be string", (stack or 1) + 1) end
             local raw                   = rawget(self, container) or containerMap[self]
             local react                 = raw[key]
             if react then
-                local ok, err           = safesetvalue(react, "Value", value)
-                if not ok then error(err, (stack or 1) + 1) end
+                if isobjecttype(react, IReactive) then
+                    local ok, err       = safesetvalue(react, "Value", value)
+                    if not ok then error(err:gsub("Value", key), (stack or 1) + 1) end
+                else
+                    error("The " .. key .. " is readonly", (stack or 1) + 1)
+                end
             else
-                rawset(raw, key, isobjecttype(value, IReactive) and value or reactive(value))
+                rawset(raw, key, isobjecttype(value, IObservable) and value or reactive(value))
             end
         end,
         __call                          = function(self, init)
@@ -89,11 +95,13 @@ PLoop(function(_ENV)
                     end
                 end
             end
+            return self
         end,
     }
 
     --- The global observable container can be used to store reactive values
     gcontainer                          = Prototype (tcontainer, {
+        __metatable                     = container,
         __tostring                      = Namespace.GetNamespaceName
     })
 
