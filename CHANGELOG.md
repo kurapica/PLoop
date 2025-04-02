@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 2025-04-02 WangxH  <kurapica125@outlook.com>
+### Added
+- The reactive container is added, check 026.watch_reactive.md for more details.
+
 
 ## [2.0.3] - 2025-03-31 WangxH  <kurapica125@outlook.com>
 ### Fixed

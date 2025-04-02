@@ -310,7 +310,7 @@ PLoop(function(_ENV)
             issubtype                   = Class.IsSubType,
             getobjectclass              = Class.GetObjectClass,
             gettempparams               = Class.GetTemplateParameters,
-            setvalue                    = Toolset.setvalue,
+            safesetvalue                = Toolset.safesetvalue,
             fakefunc                    = Toolset.fakefunc,
             properties                  = {},
             switchObject                = function (self, new, clear)
@@ -494,7 +494,7 @@ PLoop(function(_ENV)
 
                             r.Observable= nil
 
-                            local ok, e = pcall(setvalue, r, "Value", value)
+                            local ok, e = safesetvalue(r, "Value", value)
                             return ok or throw(format(name, e))
                         end,
                         type            = ptype + rtype + IObservable,

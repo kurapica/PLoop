@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2025/03/31                                               --
--- Version      :   2.0.3                                                    --
+-- Update Date  :   2025/04/02                                               --
+-- Version      :   2.0.4                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -347,6 +347,7 @@ do
     writeonly                           = function (self) error(strformat("The %s can't be read",    tostring(self)), 2) end
     wipe                                = function (t)    for k in pairs, t do t[k] = nil end return t end
     getfield                            = function (self, key) return self[key] end
+    setfield                            = function (self, key, value) self[key] = value end
     safeget                             = function (self, key) local ok, ret = pcall(getfield, self, key) if ok then return ret end end
     loadinittable                       = function (obj, initTable) for name, value in pairs, initTable do obj[name] = value end end
     getprototypemethod                  = function (target, method) local func = safeget(getmetatable(target), method) return type(func) == "function" and func or nil end
@@ -14921,7 +14922,10 @@ do
         newtable                        = function(weakKey, weakVal) return weakKey and setmetatable({}, weakVal and WEAK_ALL or WEAK_KEY) or weakVal and setmetatable({}, WEAK_VALUE) or {} end,
 
         --- A common set value func, combine with pcall
-        setvalue                        = function(self, key, value) self[key] = value end,
+        setvalue                        = setfield,
+
+        --- Safe call setvalue and return the error
+        safesetvalue                    = function(self, key, value) local ok, err = pcall(setfield, self, key, value) return ok, not ok and tostring(err):gsub("^.-:%d+:%s*", "") or nil end,
     }
 
     --- the attribute to build the overload system, also can be used to set
