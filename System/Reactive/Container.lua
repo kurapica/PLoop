@@ -25,11 +25,17 @@ PLoop(function(_ENV)
         rawset                          = rawset,
         rawget                          = rawget,
         pairs                           = pairs,
+        getfenv                         = _G.getfenv and _G.getfenv or _G.debug and _G.debug.getfenv or Toolset.fakefunc,
         safeset                         = Toolset.safeset,
         getreactivetype                 = System.Reactive.GetReactiveType,
         issubtype                       = Class.IsSubType,
         isobjecttype                    = Class.IsObjectType,
         safesetvalue                    = Toolset.safesetvalue,
+        getkeywordvisitor               = Environment.GetKeywordVisitor,
+        getenvnamespace                 = Environment.GetNamespace,
+        getnamespace                    = Namespace.GetNamespace,
+        getnamespacename                = Namespace.GetNamespaceName,
+        isanonymousnamespace            = Namespace.IsAnonymousNamespace,
 
         Reactive, ReactiveValue, IReactive, IObservable
     }
@@ -45,13 +51,28 @@ PLoop(function(_ENV)
         },
         __newindex                      = Toolset.readonly,
         __call                          = function(self, name)
+            local visitor               = getkeywordvisitor(container) or getfenv(2)
+
             if type(name) == "string" then
-                if not name:find(".", 1, true)  then name = "System.Reactive.Container." .. name end
-                if Namespace.GetNamespace(name) then error("Usage: System.Reactive.Container \"name\" - the name already used", 2) end
+                if not name:find(".", 1, true)  then
+                    local ns            = visitor and getenvnamespace(visitor)
+                    if ns and not isanonymousnamespace(ns) then
+                        name            = getnamespacename(ns) .. "." .. name
+                    else
+                        name            = "System.Reactive.Container." .. name
+                    end
+                end
+                if getnamespace(name) then error("The " .. name .. " already used", 2) end
 
                 local object            = Prototype.NewProxy(gcontainer)
                 containerMap            = safeset(containerMap, object, {})
-                return Namespace.SaveNamespace(name, object)
+                Namespace.SaveNamespace(name, object)
+
+                local last              = getnamespacename(object, true)
+                if visitor and rawget(visitor, last) == nil then
+                    rawset(visitor, last, object)
+                end
+                return object
             elseif type(name) == "table" then
                 local object            = Prototype.NewObject(tcontainer)
                 rawset(object, container, {})
@@ -109,4 +130,7 @@ PLoop(function(_ENV)
 
     -- Save to the namespace
     Namespace.SaveNamespace("System.Reactive.Container", container)
+
+    -- Add a keyword for any Lua version
+    Environment.RegisterGlobalKeyword({ reactive_container = container })
 end)
