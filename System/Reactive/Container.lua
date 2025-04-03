@@ -37,7 +37,9 @@ PLoop(function(_ENV)
         getnamespacename                = Namespace.GetNamespaceName,
         isanonymousnamespace            = Namespace.IsAnonymousNamespace,
 
-        Reactive, ReactiveValue, IReactive, IObservable
+        ATTRTAR_FUNCTION                = AttributeTargets.Function,
+
+        Reactive, ReactiveValue, IReactive, IObservable, Attribute
     }
 
     local containerMap                  = {}
@@ -101,8 +103,23 @@ PLoop(function(_ENV)
                 else
                     error("The " .. key .. " is readonly", (stack or 1) + 1)
                 end
-            elseif type(value) == "function" or isobjecttype(value, IObservable) then
+
+            elseif type(value) == "function" then
+                if Attribute.HaveRegisteredAttributes() then
+                    Attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
+                    local final = Attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, key, stack)
+                    if final ~= value then
+                        Attribute.ToggleTarget(value, final)
+                        value   = final
+                    end
+                    Attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, self, key, stack)
+                    Attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, stack)
+                end
                 rawset(raw, key, value)
+
+            elseif isobjecttype(value, IObservable) then
+                rawset(raw, key, value)
+
             else
                 react                   = reactive(value, true)
                 if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end
