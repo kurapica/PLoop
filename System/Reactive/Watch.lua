@@ -774,18 +774,13 @@ PLoop(function(_ENV)
                 rawset                  = rawset,
                 rawget                  = rawget,
                 type                    = type,
-                pcall                   = pcall,
                 pairs                   = pairs,
-                safesetvalue            = Toolset.safesetvalue,
-                isobjecttype            = Class.IsObjectType,
+                getobjectclass          = Class.GetObjectClass,
+                getnamespacename        = Namespace.GetNamespaceName,
 
                 makeReactiveProxy       = makeReactiveProxy,
-                addProxy                = addProxy,
-                addWatch                = addWatch,
-                addDeepWatch            = addDeepWatch,
-                makeWritable            = makeWritable,
 
-                IObservable, Observer, Watch, Reactive, ReactiveProxy
+                Observer, Reactive, ReactiveContainerProxy, Watch
             }
 
             -------------------------------------------------------------------
@@ -802,17 +797,11 @@ PLoop(function(_ENV)
             function __index(self, key)
                 if type(key) ~= "string" then return end
 
-                -- check value proxy
-                local react             = rawget(self, Reactive)
-
                 -- get from the source
-                local value             = react[key]
+                local value             = rawget(self, Reactive)[key]
                 if value ~= nil then
-                    local r             = makeReactiveProxy(rawget(self, Observer), value)
-                    if r then
-                        rawset(self, key, r)
-                        return r
-                    end
+                    value               = makeReactiveProxy(rawget(self, Observer), value) or value
+                    rawset(self, key, value)
                 end
                 return value
             end
@@ -821,7 +810,9 @@ PLoop(function(_ENV)
 
             function __dtor(self)
                 for k, v in pairs(self) do
-                    if type(key) == "string" then
+                    local cls           = getobjectclass(v)
+                    -- classes defined in Watch
+                    if cls and getnamespacename(cls):match("^System.Reactive.Watch") then
                         v:Dispose()
                     end
                 end
@@ -851,13 +842,16 @@ PLoop(function(_ENV)
                     local proxy, isvalue= makeReactiveProxy(observer, value)
 
                     if proxy then
+                        -- record
+                        local map       = rawget(self, Watch)
+                        if not map then
+                            map         = {}
+                            rawset(self, Watch, map)
+                        end
+                        map[key]        = proxy
+
+                        -- non-value will be used directly
                         if isvalue then
-                            local map   = rawget(self, Watch)
-                            if not map then
-                                map     = {}
-                                rawset(self, Watch, map)
-                            end
-                            map[key]    = proxy
                             proxy:Subscribe(observer, observer.Subscription)
                             rawset(self, key, nil)
                             return proxy.Value
@@ -903,6 +897,14 @@ PLoop(function(_ENV)
 
                 -- gets from the base env
                 return parseValue(self, key, getValue(self, key))
+            end
+
+            function __dtor(self)
+                local map               = rawget(self, Watch)
+                if not map then return end
+                for k, v in pairs(map) do
+                    v:Dispose()
+                end
             end
         end)
 
@@ -1035,6 +1037,7 @@ PLoop(function(_ENV)
 
             -- apply and call for subscription
             rawset(self,     Observer, observer)
+            rawset(self, WatchEnvironment, watchEnv)
             rawset(watchEnv, Observer, observer)
 
             -- install the reactives
@@ -1049,7 +1052,10 @@ PLoop(function(_ENV)
         -----------------------------------------------------------------------
         --                          de-constructor                           --
         -----------------------------------------------------------------------
-        function __dtor(self) return rawget(self, Observer):Dispose() end
+        function __dtor(self)
+            rawget(self, Observer):Dispose()
+            rawget(self, WatchEnvironment):Dispose()
+        end
     end)
 
     --- The watch keyword
