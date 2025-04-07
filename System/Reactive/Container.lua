@@ -117,16 +117,16 @@ PLoop(function(_ENV)
         __index                         = function(self, key)
             local map                   = containerMap[self] or self[container]
             local ret                   = map[key]
-            if ret ~= nil or not map[0] or type(key) ~= "string" then return ret end
+            if ret ~= nil or not map[0] then return ret end
 
             ret                         = map[0](key)
             if ret ==  nil then return end
 
-            -- Only allow observable
-            if isobjecttype(ret, IObservable) then
+            -- cache
+            if type(key) == "string" and isobjecttype(ret, IObservable) then
                 rawset(map, key, ret)
-                return ret
             end
+            return ret
         end,
         __newindex                      = function(self, key, value, stack)
             if type(key) ~= "string" then error("The field can only be string", (stack or 1) + 1) end
