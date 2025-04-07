@@ -37,26 +37,41 @@ PLoop(function(_ENV)
             -- check the access value if observable
             makeReactiveProxy           = function (observer, value, parent)
                 local cls               = value and getmetatable(value)
+
+                -- Reactive Container
                 if cls == Container     then return ReactiveContainerProxy(observer, value) end
+
+                -- Namespace to access the reactive container
                 if isnamesapce(value)   then return ReactiveNamespaceProxy(observer, value) end
+
+                -- Reactive or Observable
                 if not cls or not isclass(cls) then return end
 
-                -- deep watch check
+                -- Parent already subscribed, no deep watch
                 if observer and parent and rawget(parent, Subscription) then
                     observer            = nil
                 end
 
                 -- Subscribe for reactive field
                 if issubtype(cls, IReactive) then
+                    -- Reactive Object
                     if issubtype(cls, Reactive) then
                         return ReactiveProxy(observer, value, parent)
+
+                    -- Reactive List
                     elseif issubtype(cls, ReactiveList) then
                         return ReactiveListProxy(observer, value, parent)
+
+                    -- Reactive Dict
                     elseif issubtype(cls, ReactiveDictionary) then
                         return ReactiveDictionaryProxy(observer, value, parent)
+
+                    -- Reactive Value
                     else
                         return value, true
                     end
+
+                -- Observable Proxy
                 elseif issubtype(cls, IObservable) then
                     return ReactiveValue(value), true
                 end
